@@ -99,7 +99,14 @@
       "homepage": "https://github.com/tenequm/claude-plugins",
       "repository": "https://github.com/tenequm/claude-plugins",
       "license": "MIT",
-      "keywords": ["founder", "startup", "coaching", "web3", "solana", "decision-making"],
+      "keywords": [
+        "founder",
+        "startup",
+        "coaching",
+        "web3",
+        "solana",
+        "decision-making"
+      ],
       "skills": [
         "./founder-playbook/skill"
       ]
@@ -117,7 +124,7 @@
       "name": "impactful-writing",
       "source": "./",
       "description": "Skill: Write clear, emotionally resonant, and well-structured content across any platform - research-backed principles for Twitter, articles, docs, emails, and more",
-      "version": "0.0.0",
+      "version": "0.1.0",
       "skills": [
         "./impactful-writing/skill"
       ]
