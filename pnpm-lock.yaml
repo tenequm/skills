@@ -28,6 +28,8 @@ importers:
 
   gh-cli: {}
 
+  impactful-writing: {}
+
   skill-factory: {}
 
   skill-finder: {}
