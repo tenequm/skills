@@ -112,6 +112,15 @@
       "skills": [
         "./foundry-solidity/skill"
       ]
+    },
+    {
+      "name": "impactful-writing",
+      "source": "./",
+      "description": "Skill: Write clear, emotionally resonant, and well-structured content across any platform - research-backed principles for Twitter, articles, docs, emails, and more",
+      "version": "0.0.0",
+      "skills": [
+        "./impactful-writing/skill"
+      ]
     }
   ]
 }

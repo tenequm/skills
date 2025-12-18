@@ -1,0 +1,10 @@
+{
+  "name": "impactful-writing",
+  "root": "impactful-writing",
+  "targets": {
+    "validate": {
+      "command": "python3 ../.claude/skills/skill-creator/scripts/quick_validate.py ./skill",
+      "options": { "cwd": "impactful-writing" }
+    }
+  }
+}
