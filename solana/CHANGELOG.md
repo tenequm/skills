@@ -1,3 +1,9 @@
+## 0.4.0 (2025-12-23)
+
+### 🚀 Features
+
+- **solana:** add ZK compression skill for Light Protocol ([fd70477](https://github.com/tenequm/claude-plugins/commit/fd70477))
+
 ## 0.3.0 (2025-11-21)
 
 ### 🚀 Features
