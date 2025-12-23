@@ -31,7 +31,7 @@ Public repository of production-ready Claude Code skills. Owner: @opwizardx
 | gh-cli | 1.1.0 | GitHub CLI for remote repos |
 | skill-factory | 0.1.0 | Autonomous skill creation |
 | skill-finder | 1.1.0 | Find and evaluate skills |
-| solana | 0.3.0 | Solana dev + security auditing |
+| solana | 0.4.0 | Solana dev, security auditing, ZK compression |
 | uv-ruff-python-tools | 0.1.0 | Python with uv and ruff |
 
 ## Quick Reference
@@ -62,12 +62,15 @@ pnpm nx release --dry-run        # Preview changes
 
 **Non-interactive (for Claude Code / CI):**
 ```bash
-# MUST use version specifier to bypass version prompt
-pnpm nx release patch --projects=name
-pnpm nx release minor --projects=name
+# MUST use version specifier AND pipe 'N' to skip publish prompt
+echo "N" | pnpm nx release patch --projects=name
+echo "N" | pnpm nx release minor --projects=name
 
-# Publishing is disabled in nx.json (publish: false)
-# Only version specifier is needed to bypass prompts
+# After release, sync marketplace manually (hook may not run):
+bash scripts/sync-marketplace.sh
+git add .claude-plugin/marketplace.json
+git commit -m "chore: sync marketplace after name@version release"
+git push
 ```
 
 ## Critical Rules
