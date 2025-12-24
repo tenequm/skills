@@ -67,7 +67,7 @@
       "name": "solana",
       "source": "./solana",
       "description": "Comprehensive Solana development toolkit: build programs with Anchor/native Rust and audit for security vulnerabilities",
-      "version": "0.4.0"
+      "version": "0.5.0"
     },
     {
       "name": "styling-with-tailwind",
