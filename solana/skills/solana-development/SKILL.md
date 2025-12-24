@@ -132,6 +132,7 @@ Essential knowledge for all Solana developers, regardless of framework:
 - **[testing-overview.md](references/testing-overview.md)** - Test pyramid and strategy
 - **[testing-frameworks.md](references/testing-frameworks.md)** - Mollusk, Anchor test, Native Rust
 - **[testing-practices.md](references/testing-practices.md)** - Best practices and patterns
+- **[surfpool.md](references/surfpool.md)** - Local development with Surfpool: mainnet forking, cheatcodes, IaC
 - **[deployment.md](references/deployment.md)** - Deploy, upgrade, verify, and manage programs
 - **[production-deployment.md](references/production-deployment.md)** - Verified builds for production (Anchor 0.32.1 workflow)
 
@@ -174,6 +175,15 @@ Essential knowledge for all Solana developers, regardless of framework:
 **Test your program:**
 - Both: Mollusk for fast unit tests → [testing-frameworks.md#mollusk-testing](references/testing-frameworks.md)
 - Anchor: `anchor test` for integration tests → [testing-frameworks.md#anchor-specific-testing](references/testing-frameworks.md)
+
+**Local development with mainnet forking:**
+- Both: `surfpool start` for mainnet-forked local network → [surfpool.md](references/surfpool.md)
+
+**Test with mainnet state (Jupiter, Raydium CPIs):**
+- Both: Use Surfpool JIT forking → [surfpool.md#mainnet-forking](references/surfpool.md)
+
+**Profile compute units in detail:**
+- Both: `surfnet_profileTransaction` cheatcode → [surfpool.md#transaction-profiling](references/surfpool.md)
 
 **Deploy to devnet:**
 - Anchor: `anchor deploy` → [deployment.md#anchor](references/deployment.md)
