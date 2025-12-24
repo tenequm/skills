@@ -1,3 +1,9 @@
+## 0.5.0 (2025-12-24)
+
+### 🚀 Features
+
+- **solana:** add Surfpool local development reference ([6f3fd86](https://github.com/tenequm/claude-plugins/commit/6f3fd86))
+
 ## 0.4.0 (2025-12-23)
 
 ### 🚀 Features
