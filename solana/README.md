@@ -1,6 +1,6 @@
 # Solana
 
-Two skills: **solana-development** (Anchor + native Rust) and **solana-security** (auditing).
+Three skills for Solana development: **solana-development** (Anchor + native Rust), **solana-security** (auditing), and **solana-compression** (ZK compression via Light Protocol).
 
 ## Install
 
@@ -25,7 +25,15 @@ Two skills: **solana-development** (Anchor + native Rust) and **solana-security*
 "Check for PDA seed collisions and signer validation"
 ```
 
+### ZK Compression
+```
+"Create a compressed token mint with Light Protocol"
+"Build an Anchor program with compressed PDAs"
+"Set up local development with light test-validator"
+```
+
 ## Contents
 
-- `solana-development`: 18 references (accounts, PDAs, CPIs, tokens, testing, deployment)
+- `solana-development`: 26 references (accounts, PDAs, CPIs, tokens, testing, deployment, compute optimization)
 - `solana-security`: 7 references (vulnerability patterns, checklists, framework-specific guides)
+- `solana-compression`: 4 references (compressed tokens, compressed PDAs, client integration)
