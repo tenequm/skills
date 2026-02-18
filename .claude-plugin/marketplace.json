@@ -32,7 +32,7 @@
       "name": "cloudflare-workers",
       "source": "./",
       "description": "Skill: Rapid development with Cloudflare Workers - build and deploy serverless applications",
-      "version": "2.0.0",
+      "version": "3.0.0",
       "skills": [
         "./cloudflare-workers/skill"
       ]
@@ -83,7 +83,7 @@
       "name": "tanstack-query",
       "source": "./",
       "description": "Skill: Master TanStack Query (React Query) v5 for server state management in React applications",
-      "version": "0.1.0",
+      "version": "0.2.0",
       "skills": [
         "./tanstack-query/skill"
       ]
