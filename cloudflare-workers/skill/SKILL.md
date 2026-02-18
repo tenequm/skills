@@ -12,7 +12,7 @@ Cloudflare Workers is a serverless execution environment that runs JavaScript, T
 **Key Benefits:**
 - **Zero cold starts** - Workers run in V8 isolates, not containers
 - **Global deployment** - Code runs in 300+ cities worldwide
-- **Rich ecosystem** - Bindings to D1, KV, R2, Durable Objects, Queues, and more
+- **Rich ecosystem** - Bindings to D1, KV, R2, Durable Objects, Queues, Containers, Workflows, and more
 - **Full-stack capable** - Build APIs and serve static assets in one project
 - **Standards-based** - Uses Web APIs (fetch, crypto, streams, WebSockets)
 
@@ -26,6 +26,9 @@ Use Cloudflare Workers for:
 - **Background processing** - Scheduled jobs (cron), queue consumers, webhooks
 - **Data transformation** - ETL pipelines, real-time data processing
 - **AI applications** - RAG systems, chatbots, image generation with Workers AI
+- **Durable workflows** - Multi-step long-running tasks with automatic retries (Workflows)
+- **Container workloads** - Run Docker containers alongside Workers (Containers)
+- **MCP servers** - Host remote Model Context Protocol servers
 - **Proxy and gateway** - API gateways, content transformation, protocol translation
 
 ## Quick Start Workflow
@@ -242,6 +245,27 @@ export default {
 };
 ```
 
+### Top-level Environment Access
+
+Since March 2025, you can import `env` at the module level instead of passing it through handlers:
+
+```typescript
+import { env } from "cloudflare:workers";
+
+// Access bindings outside of handlers
+const apiClient = new ApiClient({ apiKey: env.API_KEY });
+
+export default {
+  async fetch(request: Request): Promise<Response> {
+    // env is also available here without the parameter
+    const data = await env.MY_KV.get("config");
+    return Response.json({ data });
+  },
+};
+```
+
+This eliminates prop-drilling `env` through function signatures and enables module-level initialization.
+
 ## Rapid Development Patterns
 
 ### Wrangler Configuration
@@ -251,7 +275,7 @@ export default {
 ```toml
 name = "my-worker"
 main = "src/index.ts"
-compatibility_date = "2025-01-01"
+compatibility_date = "2025-09-01"
 
 # Custom domain
 routes = [
@@ -414,8 +438,6 @@ binding = "ASSETS"
 ```
 
 ```typescript
-import { getAssetFromKV } from "@cloudflare/kv-asset-handler";
-
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url);
@@ -425,15 +447,8 @@ export default {
       return handleAPI(request, env);
     }
 
-    // Serve static assets
-    try {
-      return await getAssetFromKV(
-        { request, waitUntil: () => {} },
-        { ASSET_NAMESPACE: env.ASSETS }
-      );
-    } catch {
-      return new Response("Not found", { status: 404 });
-    }
+    // Serve static assets via the ASSETS binding
+    return env.ASSETS.fetch(request);
   },
 };
 ```
@@ -493,10 +508,10 @@ export default app;
 
 For detailed information on advanced features, see the reference files:
 
-- **Complete Bindings Guide**: `references/bindings-complete-guide.md` - Deep dive into all binding types (Durable Objects, Queues, Vectorize, AI, Hyperdrive, etc.)
-- **Deployment & CI/CD**: `references/wrangler-and-deployment.md` - Wrangler commands, GitHub Actions, GitLab CI/CD, gradual rollouts, versions
-- **Development Best Practices**: `references/development-patterns.md` - Testing strategies, debugging, error handling, performance optimization
-- **Advanced Features**: `references/advanced-features.md` - Workers for Platforms, Smart Placement, WebSockets, streaming, custom domains
+- **Complete Bindings Guide**: `references/bindings-complete-guide.md` - All binding types (D1, KV, R2, Durable Objects, Queues, Workers AI, Vectorize, Workflows, Containers, Secrets Store, Pipelines, AutoRAG)
+- **Deployment & CI/CD**: `references/wrangler-and-deployment.md` - Wrangler v4 migration, commands, GitHub Actions, GitLab CI/CD, gradual rollouts, remote bindings
+- **Development Best Practices**: `references/development-patterns.md` - Testing, debugging, error handling, performance, top-level env access patterns
+- **Advanced Features**: `references/advanced-features.md` - Containers, Workflows, MCP servers, Workers for Platforms, WebSockets, Node.js compat, streaming
 - **Observability**: `references/observability.md` - Logging (tail, Logpush, Workers Logs), metrics, traces, debugging
 
 ## Resources
@@ -506,6 +521,9 @@ For detailed information on advanced features, see the reference files:
 - Wrangler CLI: https://developers.cloudflare.com/workers/wrangler/
 - Runtime APIs: https://developers.cloudflare.com/workers/runtime-apis/
 - Examples: https://developers.cloudflare.com/workers/examples/
+
+- Workflows: https://developers.cloudflare.com/workflows/
+- Containers: https://developers.cloudflare.com/containers/
 
 **Templates & Quick Starts:**
 - Templates: https://developers.cloudflare.com/workers/get-started/quickstarts/

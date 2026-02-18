@@ -82,7 +82,7 @@ Persistent logs stored in Cloudflare (Enterprise feature).
 curl -X POST https://api.cloudflare.com/client/v4/graphql \
   -H "Authorization: Bearer $TOKEN" \
   -d '{
-    "query": "query { viewer { accounts(filter: {accountTag: \"$ACCOUNT_ID\"}) { workersLogsData(filter: {datetime_gt: \"2025-01-01T00:00:00Z\"}) { logs { timestamp message } } } } }"
+    "query": "query { viewer { accounts(filter: {accountTag: \"$ACCOUNT_ID\"}) { workersLogsData(filter: {datetime_gt: \"2025-09-01T00:00:00Z\"}) { logs { timestamp message } } } } }"
   }'
 ```
 
@@ -242,7 +242,7 @@ const query = `
       accounts(filter: {accountTag: "${accountId}"}) {
         workersInvocationsAdaptive(
           filter: {
-            datetime_gt: "2025-01-01T00:00:00Z"
+            datetime_gt: "2025-09-01T00:00:00Z"
             datetime_lt: "2025-01-02T00:00:00Z"
             scriptName: "my-worker"
           }

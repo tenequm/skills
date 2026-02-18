@@ -103,8 +103,24 @@ const user = await env.DB.prepare(
 ).bind(userId).first();
 ```
 
+**Read Replication (GA April 2025):**
+
+D1 supports global read replicas for low-latency reads. Use the Sessions API for sequential consistency:
+
+```typescript
+// Consistent reads after writes
+const bookmark = request.headers.get("x-d1-bookmark") ?? "first-unconstrained";
+const session = env.DB.withSession(bookmark);
+const result = await session.prepare("SELECT * FROM users").all();
+
+// Return bookmark for subsequent requests
+const responseBookmark = result.meta?.bookmark;
+```
+
+Session modes: `"first-primary"` (always read primary), `"first-unconstrained"` (read any replica).
+
 **Features:**
-- Read replication (low latency reads globally)
+- Read replication (global read replicas, no extra cost)
 - Time Travel (restore to any point in last 30 days)
 - Backups
 - Migrations via Wrangler
@@ -201,7 +217,7 @@ await upload.complete([part]);
 
 ### Durable Objects
 
-Strongly consistent, coordinated stateful objects with SQLite storage.
+Strongly consistent, coordinated stateful objects with SQLite storage. Available on Free and Paid plans (free tier added April 2025).
 
 **Best for:**
 - Real-time collaboration
@@ -296,11 +312,12 @@ const result = await this.state.storage.sql.exec(
 ```
 
 **Features:**
-- SQLite-backed storage
+- SQLite-backed storage (GA)
 - Automatic persistence
 - Alarms (scheduled actions)
 - WebSocket Hibernation
 - Point-in-time recovery
+- Available on Free plan (April 2025)
 
 ### Queues
 
@@ -368,6 +385,121 @@ export default {
 - Batch processing
 - Pull consumers (API-based)
 
+### Workflows
+
+Durable execution engine for multi-step, long-running tasks (GA April 2025).
+
+**Best for:**
+- Multi-step processes with automatic retries
+- Human-in-the-loop approvals
+- Long-running background jobs
+- Tasks that need state persistence across failures
+
+**Configuration:**
+
+```toml
+[[workflows]]
+name = "order-workflow"
+binding = "ORDER_WORKFLOW"
+class_name = "OrderWorkflow"
+```
+
+**Workflow Class:**
+
+```typescript
+import { WorkflowEntrypoint, WorkflowStep, WorkflowEvent } from "cloudflare:workers";
+
+export class OrderWorkflow extends WorkflowEntrypoint<Env, Params> {
+  async run(event: WorkflowEvent<Params>, step: WorkflowStep) {
+    // Each step is durable - survives restarts
+    const order = await step.do("validate-order", async () => {
+      return validateOrder(event.payload);
+    });
+
+    // Sleep without holding compute
+    await step.sleep("wait-for-processing", "1 hour");
+
+    // Wait for external event (human approval, webhook, etc.)
+    const approval = await step.waitForEvent("await-approval", {
+      timeout: "24 hours",
+    });
+
+    await step.do("fulfill-order", async () => {
+      return fulfillOrder(order, approval);
+    });
+  }
+}
+```
+
+**Worker Usage:**
+
+```typescript
+export default {
+  async fetch(request: Request, env: Env): Promise<Response> {
+    // Create workflow instance
+    const instance = await env.ORDER_WORKFLOW.create({
+      params: { orderId: "123", items: ["item-1"] },
+    });
+
+    // Get status
+    const status = await instance.status();
+
+    // Send event to waiting workflow
+    await instance.sendEvent({ approved: true });
+
+    return Response.json({ id: instance.id, status });
+  },
+};
+```
+
+### Containers
+
+Run Docker containers alongside Workers (public beta June 2025). Built on Durable Objects.
+
+**Best for:**
+- Porting existing Docker applications
+- Running any language/runtime
+- Multi-GB memory workloads
+- CLI tools and code sandboxes
+
+**Configuration:**
+
+```toml
+[[containers]]
+class_name = "MyContainer"
+image = "./Dockerfile"
+max_instances = 5
+
+[[durable_objects.bindings]]
+class_name = "MyContainer"
+name = "MY_CONTAINER"
+```
+
+**Container Class:**
+
+```typescript
+import { Container } from "cloudflare:workers";
+
+export class MyContainer extends Container {
+  defaultPort = 8080;
+
+  // Optional: auto-sleep after inactivity
+  sleepAfter = "5 minutes";
+}
+```
+
+**Worker Usage:**
+
+```typescript
+export default {
+  async fetch(request: Request, env: Env): Promise<Response> {
+    const id = env.MY_CONTAINER.idFromName("my-instance");
+    const container = env.MY_CONTAINER.get(id);
+    return container.fetch(request);
+  },
+};
+```
+
 ## AI & ML Bindings
 
 ### Workers AI
@@ -391,17 +523,23 @@ binding = "AI"
 **API:**
 
 ```typescript
-// Text generation
-const response = await env.AI.run("@cf/meta/llama-3-8b-instruct", {
+// Text generation (with speculative decoding for 2-4x speed)
+const response = await env.AI.run("@cf/meta/llama-3.3-70b-instruct-fp8-fast", {
   messages: [
     { role: "system", content: "You are a helpful assistant" },
     { role: "user", content: "What is Cloudflare?" }
   ],
 });
 
-// Embeddings
-const embeddings = await env.AI.run("@cf/baai/bge-base-en-v1.5", {
+// Embeddings (multilingual with bge-m3, or English with bge-base-en-v1.5)
+const embeddings = await env.AI.run("@cf/baai/bge-m3", {
   text: "The quick brown fox jumps over the lazy dog",
+});
+
+// Reranking (for RAG post-processing)
+const reranked = await env.AI.run("@cf/baai/bge-reranker-base", {
+  query: "What is Workers?",
+  documents: ["Workers runs on V8", "R2 is object storage"],
 });
 
 // Image generation
@@ -410,16 +548,23 @@ const image = await env.AI.run("@cf/stabilityai/stable-diffusion-xl-base-1.0", {
 });
 
 // Speech to text
-const result = await env.AI.run("@cf/openai/whisper", {
+const result = await env.AI.run("@cf/openai/whisper-large-v3-turbo", {
   audio: audioData,
 });
 
+// Text to speech
+const audio = await env.AI.run("@cf/myshell-ai/melotts", {
+  text: "Hello from Cloudflare Workers",
+});
+
 // Streaming
-const stream = await env.AI.run("@cf/meta/llama-3-8b-instruct", {
+const stream = await env.AI.run("@cf/meta/llama-3.3-70b-instruct-fp8-fast", {
   messages: [{ role: "user", content: "Tell me a story" }],
   stream: true,
 });
 ```
+
+**Async Batch API:** Submit large workloads asynchronously instead of waiting for each inference call synchronously. Useful for batch processing embeddings or large document sets.
 
 ### Vectorize
 
@@ -504,7 +649,7 @@ await client.end();
 
 ## Service Bindings
 
-Call other Workers via RPC or HTTP.
+Call other Workers via RPC or HTTP. For private network access, see Workers VPC Service Bindings below.
 
 **Configuration:**
 
@@ -605,6 +750,98 @@ const response = await fetch("https://api.example.com", {
 });
 ```
 
+### AI Gateway
+
+Proxy and manage AI API calls with logging, caching, and rate limiting.
+
+```toml
+[ai.gateway]
+binding = "AI_GATEWAY"
+gateway_id = "my-gateway"
+```
+
+```typescript
+// Universal request to any AI provider via gateway
+const response = await env.AI_GATEWAY.run("openai/chat/completions", {
+  model: "gpt-4",
+  messages: [{ role: "user", content: "Hello" }],
+});
+
+// Retrieve log information
+const log = await env.AI_GATEWAY.getLog(logId);
+
+// Send feedback and update metadata
+await env.AI_GATEWAY.patchLog(logId, { feedback: "good", metadata: { user: "123" } });
+```
+
+### Secrets Store
+
+Account-level centralized secrets shared across Workers (April 2025).
+
+```toml
+[[secrets_store_secrets]]
+binding = "API_KEY"
+store_id = "abc123"
+secret_name = "open_ai_key"  # pragma: allowlist secret
+```
+
+```typescript
+const key = await env.API_KEY.get();
+```
+
+Unlike per-Worker secrets, Secrets Store entries are managed centrally and reusable across all Workers in your account.
+
+### AutoRAG / AI Search
+
+Managed RAG pipeline - upload docs to R2, AutoRAG handles embeddings, indexing, retrieval, and generation (open beta April 2025).
+
+```toml
+[[autorag]]
+binding = "AI_SEARCH"
+name = "my-autorag-instance"
+```
+
+```typescript
+const answer = await env.AI_SEARCH.aiSearch("What is the refund policy?");
+// Returns generated answer with source citations
+```
+
+AutoRAG continuously syncs with your R2 data source, so updates are automatic.
+
+### Pipelines
+
+Streaming data ingestion to R2 as Apache Iceberg or Parquet/JSON files (beta).
+
+```toml
+[[pipelines]]
+binding = "MY_PIPELINE"
+pipeline = "my-clickstream-pipeline"
+```
+
+```typescript
+await env.MY_PIPELINE.send({
+  event: "page_view",
+  path: "/pricing",
+  timestamp: Date.now(),
+});
+```
+
+Supports up to 100 MB/second per pipeline. Data is auto-batched and delivered to R2.
+
+### Workers VPC Service Bindings
+
+Connect Workers to private APIs inside AWS, GCP, Azure, or on-premise via Cloudflare Tunnel (beta November 2025).
+
+```toml
+[[vpc_services]]
+binding = "PRIVATE_API"
+service_id = "<your-vpc-service-id>"
+```
+
+```typescript
+const response = await env.PRIVATE_API.fetch("https://internal-api/data");
+```
+
 ## Best Practices
 
 ### Binding Selection
@@ -614,8 +851,11 @@ const response = await fetch("https://api.example.com", {
 - **R2**: Large files, media, backups
 - **Durable Objects**: Real-time, strong consistency, coordination
 - **Queues**: Background jobs, async processing
+- **Workflows**: Multi-step durable processes, long-running tasks
+- **Containers**: Docker workloads, any language/runtime
 - **Workers AI**: AI/ML inference
 - **Vectorize**: Similarity search, RAG
+- **AutoRAG**: Managed RAG pipeline over R2 documents
 
 ### Performance
 
@@ -643,14 +883,15 @@ try {
 Use Wrangler for local testing with bindings:
 
 ```bash
-# KV
-wrangler kv:namespace create MY_KV --preview
-
-# D1
+# Create resources
 wrangler d1 create my-database
+wrangler kv:namespace create MY_KV
 
-# Local dev with bindings
+# Local dev (uses local storage by default in Wrangler v4)
 wrangler dev
+
+# Local dev with real remote bindings (GA September 2025)
+wrangler dev --remote
 ```
 
 ## Additional Resources
@@ -663,3 +904,5 @@ wrangler dev
 - **Queues**: https://developers.cloudflare.com/queues/
 - **Workers AI**: https://developers.cloudflare.com/workers-ai/
 - **Vectorize**: https://developers.cloudflare.com/vectorize/
+- **Workflows**: https://developers.cloudflare.com/workflows/
+- **Containers**: https://developers.cloudflare.com/containers/

@@ -672,6 +672,50 @@ export default {
 };
 ```
 
+### Top-level Env Access
+
+Since March 2025, `import { env } from "cloudflare:workers"` enables accessing bindings outside of handlers. This eliminates prop-drilling `env` through function signatures:
+
+```typescript
+import { env } from "cloudflare:workers";
+
+// Module-level initialization using bindings
+const config = {
+  async getFeatureFlags() {
+    return env.CONFIG_KV.get("feature-flags", "json");
+  },
+};
+
+// Utility functions without env parameter
+export async function logEvent(event: string, data: Record<string, unknown>) {
+  await env.LOGS_QUEUE.send({ event, data, timestamp: Date.now() });
+}
+```
+
+This works alongside the traditional `env` parameter approach. Use whichever pattern fits your codebase.
+
+### Runtime Feature Detection
+
+Modern V8 features available in Workers (compat date `2025-09-01`+):
+
+```typescript
+// Explicit Resource Management (using keyword)
+{
+  using handle = getResource();
+  // Automatically disposed when scope exits
+}
+
+// Uint8Array Base64/Hex encoding
+const encoded = new Uint8Array([72, 101, 108, 108, 111]).toBase64(); // "SGVsbG8="
+const decoded = Uint8Array.fromBase64("SGVsbG8=");
+const hex = new Uint8Array([255, 0]).toHex(); // "ff00"
+
+// MessageChannel / MessagePort for structured communication
+const channel = new MessageChannel();
+channel.port1.onmessage = (e) => console.log(e.data);
+channel.port2.postMessage("hello");
+```
+
 ## Security Best Practices
 
 ### Input Validation

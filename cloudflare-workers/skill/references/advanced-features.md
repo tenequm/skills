@@ -122,6 +122,235 @@ parameters = {
 }
 ```
 
+## Containers
+
+Run Docker containers alongside Workers (public beta June 2025). Containers are built on Durable Objects, giving them global deployment, automatic scaling, and persistent state.
+
+**Use cases:**
+- Port existing Docker applications to Cloudflare
+- Run any language or runtime (Python, Java, Go, etc.)
+- Multi-GB memory workloads
+- CLI tools and code sandboxes
+
+### Container Class
+
+```typescript
+import { Container } from "cloudflare:workers";
+
+export class MyContainer extends Container {
+  // Port your container listens on
+  defaultPort = 8080;
+
+  // Auto-sleep after inactivity (saves costs)
+  sleepAfter = "5 minutes";
+
+  // Optional: override to run setup before container starts
+  override async onStart(): Promise<void> {
+    console.log("Container starting...");
+  }
+}
+```
+
+### Configuration
+
+```toml
+[[containers]]
+class_name = "MyContainer"
+image = "./Dockerfile"
+max_instances = 5
+
+[[durable_objects.bindings]]
+class_name = "MyContainer"
+name = "MY_CONTAINER"
+
+[[migrations]]
+tag = "v1"
+new_classes = ["MyContainer"]
+```
+
+### Worker Usage
+
+Workers act as orchestrator, service mesh, and API gateway to containers:
+
+```typescript
+export default {
+  async fetch(request: Request, env: Env): Promise<Response> {
+    // Route to named container instance
+    const id = env.MY_CONTAINER.idFromName("my-instance");
+    const container = env.MY_CONTAINER.get(id);
+
+    // Forward request - container receives it on defaultPort
+    return container.fetch(request);
+  },
+};
+```
+
+## Workflows
+
+Durable execution engine for multi-step, long-running tasks (GA April 2025). Steps automatically persist state and retry on failure.
+
+**Use cases:**
+- Order processing pipelines
+- Human-in-the-loop approval flows
+- Scheduled multi-step batch jobs
+- Any process that needs to survive failures
+
+### Workflow Class
+
+```typescript
+import { WorkflowEntrypoint, WorkflowStep, WorkflowEvent } from "cloudflare:workers";
+
+interface OrderParams {
+  orderId: string;
+  items: string[];
+}
+
+export class OrderWorkflow extends WorkflowEntrypoint<Env, OrderParams> {
+  async run(event: WorkflowEvent<OrderParams>, step: WorkflowStep) {
+    // Step 1: Validate (durable - retries on failure)
+    const order = await step.do("validate", async () => {
+      const result = await this.env.DB.prepare(
+        "SELECT * FROM orders WHERE id = ?"
+      ).bind(event.payload.orderId).first();
+      if (!result) throw new Error("Order not found");
+      return result;
+    });
+
+    // Step 2: Sleep without holding compute
+    await step.sleep("processing-delay", "30 minutes");
+
+    // Step 3: Wait for external event (webhook, human approval)
+    const approval = await step.waitForEvent("await-approval", {
+      timeout: "24 hours",
+    });
+
+    if (!approval.payload.approved) {
+      await step.do("cancel", async () => {
+        await this.env.DB.prepare(
+          "UPDATE orders SET status = 'cancelled' WHERE id = ?"
+        ).bind(event.payload.orderId).run();
+      });
+      return;
+    }
+
+    // Step 4: Fulfill
+    await step.do("fulfill", async () => {
+      await this.env.DB.prepare(
+        "UPDATE orders SET status = 'fulfilled' WHERE id = ?"
+      ).bind(event.payload.orderId).run();
+    });
+  }
+}
+```
+
+### Configuration
+
+```toml
+[[workflows]]
+name = "order-workflow"
+binding = "ORDER_WORKFLOW"
+class_name = "OrderWorkflow"
+```
+
+### Managing Workflow Instances
+
+```typescript
+export default {
+  async fetch(request: Request, env: Env): Promise<Response> {
+    // Create instance
+    const instance = await env.ORDER_WORKFLOW.create({
+      params: { orderId: "123", items: ["item-1"] },
+    });
+
+    // Check status
+    const status = await instance.status();
+
+    // Send event to waiting step
+    await instance.sendEvent({ approved: true });
+
+    // List all instances
+    const instances = await env.ORDER_WORKFLOW.list();
+
+    return Response.json({ id: instance.id, status });
+  },
+};
+```
+
+## MCP Server Support
+
+Host remote Model Context Protocol (MCP) servers on Workers using the Agents SDK.
+
+```typescript
+import { McpAgent } from "agents/mcp";
+
+export class MyMcpServer extends McpAgent {
+  server = new Server({ name: "my-mcp-server", version: "1.0.0" });
+
+  async init() {
+    this.server.setRequestHandler(ListToolsRequestSchema, async () => ({
+      tools: [{
+        name: "get_weather",
+        description: "Get weather for a city",
+        inputSchema: { type: "object", properties: { city: { type: "string" } } },
+      }],
+    }));
+
+    this.server.setRequestHandler(CallToolRequestSchema, async (request) => {
+      if (request.params.name === "get_weather") {
+        return { content: [{ type: "text", text: "Sunny, 72F" }] };
+      }
+    });
+  }
+}
+```
+
+MCP servers on Workers support Streamable HTTP transport and can be secured with OAuth via the `workers-oauth-provider` package.
+
+## Node.js Compatibility Expansion
+
+Workers now supports a much broader set of Node.js APIs via the `nodejs_compat` flag:
+
+| Module | Available Since | Notes |
+|--------|----------------|-------|
+| `node:net` | Jan 2025 | TCP `Socket` connections |
+| `node:dns` | Jan 2025 | DNS resolution |
+| `node:timers` | Jan 2025 | Node-compatible timers |
+| `node:fs` | Sep 2025 | Virtual per-request file system (ephemeral) |
+| `node:http` | Sep 2025 | Port Express-style apps with minimal changes |
+
+**Compat flags:**
+- `nodejs_compat` - enables all Node.js built-in modules
+- `nodejs_compat_populate_process_env` - auto-populates `process.env` with text bindings
+- `enable_nodejs_fs_module` - enables `node:fs` on compat dates before `2025-09-01`
+
+With compat date `2025-09-01` or later, `node:fs` is enabled by default under `nodejs_compat`.
+
+```typescript
+// Example: Using node:fs (per-request virtual filesystem)
+import { writeFileSync, readFileSync } from "node:fs";
+
+export default {
+  async fetch(request: Request): Promise<Response> {
+    writeFileSync("/tmp/data.json", JSON.stringify({ key: "value" }));
+    const data = readFileSync("/tmp/data.json", "utf-8");
+    return new Response(data);
+  },
+};
+```
+
+## Cloudflare Realtime
+
+Managed SFU (Selective Forwarding Unit) and TURN service for WebRTC audio/video (April 2025).
+
+**Use cases:**
+- Video/audio calls
+- AI-powered voice agents
+- Live streaming
+
+Workers integrates with the RealtimeKit SDK for building real-time communication features. TURN service is global anycast and free when used with Realtime SFU.
+
+- **Realtime Docs**: https://developers.cloudflare.com/realtime/
+
 ## Smart Placement
 
 Automatically place Workers near data sources to reduce latency.
@@ -152,7 +381,7 @@ mode = "smart"
 
 ## WebSockets
 
-Build real-time applications with WebSockets.
+Build real-time applications with WebSockets. Maximum message size is 32 MiB.
 
 ### Basic WebSocket Server
 
@@ -417,7 +646,7 @@ routes = [
 
 ## Static Assets
 
-Serve static files with Workers.
+Serve static files with Workers. Limits: 100,000 assets per Worker version on Paid plans (20,000 on Free), 25 MiB per file.
 
 ### Configuration
 
@@ -682,8 +911,12 @@ export default {
 
 ## Additional Resources
 
+- **Containers**: https://developers.cloudflare.com/containers/
+- **Workflows**: https://developers.cloudflare.com/workflows/
+- **MCP Servers**: https://developers.cloudflare.com/agents/model-context-protocol/
 - **Workers for Platforms**: https://developers.cloudflare.com/cloudflare-for-platforms/workers-for-platforms/
 - **Smart Placement**: https://developers.cloudflare.com/workers/configuration/smart-placement/
 - **WebSockets**: https://developers.cloudflare.com/workers/runtime-apis/websockets/
 - **Static Assets**: https://developers.cloudflare.com/workers/static-assets/
 - **Scheduled Events**: https://developers.cloudflare.com/workers/configuration/cron-triggers/
+- **Node.js Compat**: https://developers.cloudflare.com/workers/runtime-apis/nodejs/

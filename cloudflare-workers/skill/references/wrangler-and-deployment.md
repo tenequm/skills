@@ -25,19 +25,39 @@ wrangler login
 export CLOUDFLARE_API_TOKEN=your-token
 ```
 
+## Wrangler v4 Migration
+
+Wrangler v4 shipped March 2025 with breaking changes. If upgrading from v3:
+
+| Change | Migration |
+|--------|-----------|
+| `kv`/`r2` commands default to **local** | Add `--remote` to CLI commands targeting your Cloudflare account |
+| `wrangler generate` removed | Use `npm create cloudflare@latest` |
+| `wrangler publish` removed | Use `wrangler deploy` |
+| `wrangler pages publish` removed | Use `wrangler pages deploy` |
+| `wrangler version` removed | Use `wrangler --version` |
+| `legacy_assets` config removed | Migrate to `[assets]` (Workers Static Assets) |
+| `node_compat` flag removed | Use `nodejs_compat` compatibility flag |
+| `usage_model` config removed | Delete from config (no longer has any effect) |
+| `getBindingsProxy()` removed | Use `getPlatformProxy()` (same arguments) |
+| Workers Sites deprecated | Migrate to Workers Static Assets |
+| Service environments deprecated | Use separate Workers with service bindings |
+| Node.js v16 no longer supported | Upgrade to Node.js 20+ |
+
+**esbuild upgrade (v0.17 to v0.24):** Dynamic wildcard imports (e.g., `import('./data/' + kind + '.json')`) now automatically bundle all matching files. Audit existing dynamic imports to avoid unexpected bundling.
+
+**Support timeline:** Wrangler v3 receives critical security fixes only until Q1 2027.
+
 ## Essential Commands
 
 ### Project Initialization
 
 ```bash
-# Initialize new project
-wrangler init my-worker
-
-# With template
-wrangler init my-worker --template cloudflare/workers-sdk
-
-# Interactive setup with C3
+# Interactive setup with C3 (recommended)
 npm create cloudflare@latest my-worker
+
+# Initialize in current directory
+wrangler init
 ```
 
 ### Development
@@ -106,7 +126,7 @@ wrangler versions deploy <version-id> --percentage 10
 #:schema node_modules/wrangler/config-schema.json
 name = "my-worker"
 main = "src/index.ts"
-compatibility_date = "2025-01-01"
+compatibility_date = "2025-09-01"
 
 # Account/Zone (usually auto-detected)
 account_id = "your-account-id"
@@ -248,13 +268,15 @@ not_found_handling = "single-page-application"  # or "404-page", "none"
 
 ```toml
 # Compatibility date (required)
-compatibility_date = "2025-01-01"
+compatibility_date = "2025-09-01"
 
 # Compatibility flags
 compatibility_flags = [
   "nodejs_compat",
-  "transformstream_enable_standard_constructor"
+  "nodejs_compat_populate_process_env"  # Auto-populate process.env with text bindings
 ]
+# With compat date 2025-09-01+, node:fs is enabled by default under nodejs_compat.
+# Use "enable_nodejs_fs_module" flag to enable it on earlier compat dates.
 ```
 
 ### Custom Builds
@@ -278,7 +300,7 @@ main = "./index.js"
 # Global settings
 name = "my-worker"
 main = "src/index.ts"
-compatibility_date = "2025-01-01"
+compatibility_date = "2025-09-01"
 
 # Default/production
 [vars]
@@ -338,12 +360,12 @@ jobs:
     runs-on: ubuntu-latest
     name: Deploy
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
 
       - name: Setup Node.js
-        uses: actions/setup-node@v3
+        uses: actions/setup-node@v4
         with:
-          node-version: '18'
+          node-version: '20'
 
       - name: Install dependencies
         run: npm ci
@@ -368,12 +390,12 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
 
       - name: Setup Node.js
-        uses: actions/setup-node@v3
+        uses: actions/setup-node@v4
         with:
-          node-version: '18'
+          node-version: '20'
 
       - name: Install dependencies
         run: npm ci
@@ -404,7 +426,7 @@ stages:
 
 deploy_production:
   stage: deploy
-  image: node:18
+  image: node:20
   script:
     - npm ci
     - npx wrangler deploy
@@ -494,10 +516,11 @@ wrangler versions deploy <previous-version-id>
 
 ### KV Namespaces
 
+**Wrangler v4:** `kv` and `r2` commands default to local storage. Add `--remote` to operate on your Cloudflare account.
+
 ```bash
 # Create namespace
 wrangler kv:namespace create "MY_KV"
-wrangler kv:namespace create "MY_KV" --preview
 
 # List namespaces
 wrangler kv:namespace list
@@ -505,21 +528,21 @@ wrangler kv:namespace list
 # Delete namespace
 wrangler kv:namespace delete --namespace-id=<id>
 
-# Put key-value
-wrangler kv:key put "key" "value" --namespace-id=<id>
+# Put key-value (--remote for production data)
+wrangler kv:key put "key" "value" --namespace-id=<id> --remote
 
 # Get value
-wrangler kv:key get "key" --namespace-id=<id>
+wrangler kv:key get "key" --namespace-id=<id> --remote
 
 # List keys
-wrangler kv:key list --namespace-id=<id>
+wrangler kv:key list --namespace-id=<id> --remote
 
 # Delete key
-wrangler kv:key delete "key" --namespace-id=<id>
+wrangler kv:key delete "key" --namespace-id=<id> --remote
 
 # Bulk operations
-wrangler kv:bulk put data.json --namespace-id=<id>
-wrangler kv:bulk delete keys.json --namespace-id=<id>
+wrangler kv:bulk put data.json --namespace-id=<id> --remote
+wrangler kv:bulk delete keys.json --namespace-id=<id> --remote
 ```
 
 ### D1 Databases
@@ -561,17 +584,17 @@ wrangler r2 bucket list
 # Delete bucket
 wrangler r2 bucket delete my-bucket
 
-# Put object
-wrangler r2 object put my-bucket/file.txt --file=./file.txt
+# Put object (--remote for production data in Wrangler v4)
+wrangler r2 object put my-bucket/file.txt --file=./file.txt --remote
 
 # Get object
-wrangler r2 object get my-bucket/file.txt --file=./downloaded.txt
+wrangler r2 object get my-bucket/file.txt --file=./downloaded.txt --remote
 
 # List objects
-wrangler r2 object list my-bucket
+wrangler r2 object list my-bucket --remote
 
 # Delete object
-wrangler r2 object delete my-bucket/file.txt
+wrangler r2 object delete my-bucket/file.txt --remote
 ```
 
 ### Queues
@@ -589,6 +612,17 @@ wrangler queues delete my-queue
 # Send test message
 wrangler queues send my-queue '{"test": "message"}'
 ```
+
+## Remote Bindings for Local Dev
+
+Connect local `wrangler dev` to real production bindings (GA September 2025). Replaces the removed `getBindingsProxy()` API.
+
+```bash
+# Run local dev with remote bindings
+wrangler dev --remote
+```
+
+This connects to your actual KV, D1, R2, and other bindings on Cloudflare, while still running your Worker code locally. Useful for debugging against production data without deploying.
 
 ## Debugging & Troubleshooting
 
