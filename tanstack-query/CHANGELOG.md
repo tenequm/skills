@@ -1,3 +1,10 @@
+## 0.2.0 (2026-02-18)
+
+### 🚀 Features
+
+- **tanstack-query:** add streamed queries, prefetch in render, tRPC v11 ([074cdde](https://github.com/tenequm/claude-plugins/commit/074cdde))
+- migrate from Changesets to Nx Release ([06aaeb3](https://github.com/tenequm/claude-plugins/commit/06aaeb3))
+
 # tanstack-query-skill
 
 ## 0.1.0
