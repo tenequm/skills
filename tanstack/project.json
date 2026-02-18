@@ -1,18 +1,18 @@
 {
-  "name": "tanstack-query",
+  "name": "tanstack",
   "$schema": "../node_modules/nx/schemas/project-schema.json",
-  "sourceRoot": "tanstack-query",
+  "sourceRoot": "tanstack",
   "projectType": "library",
   "targets": {
     "validate": {
       "executor": "nx:run-commands",
       "options": {
         "command": "pnpm validate",
-        "cwd": "tanstack-query"
+        "cwd": "tanstack"
       },
       "cache": true,
       "inputs": [
-        "{projectRoot}/skill/**/*.md",
+        "{projectRoot}/skills/**/*.md",
         "{projectRoot}/package.json"
       ]
     }

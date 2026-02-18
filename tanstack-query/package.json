@@ -1,9 +1,0 @@
-{
-  "name": "tanstack-query-skill",
-  "version": "0.2.0",
-  "private": true,
-  "description": "Master TanStack Query (React Query) v5 for server state management in React applications",
-  "scripts": {
-    "validate": "python3 ../.claude/skills/skill-creator/scripts/quick_validate.py ./skill"
-  }
-}

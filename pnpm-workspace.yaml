@@ -7,7 +7,7 @@ packages:
   - 'uv-ruff-python-tools'
   - 'solana'
   - 'styling-with-tailwind'
-  - 'tanstack-query'
+  - 'tanstack'
   - 'founder-playbook'
   - 'foundry-solidity'
   - 'impactful-writing'
