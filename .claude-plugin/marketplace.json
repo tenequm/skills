@@ -68,7 +68,7 @@
       "name": "solana",
       "source": "./solana",
       "description": "Comprehensive Solana development toolkit: build programs with Anchor/native Rust and audit for security vulnerabilities",
-      "version": "0.5.0"
+      "version": "0.5.1"
     },
     {
       "name": "styling-with-tailwind",
@@ -80,13 +80,10 @@
       ]
     },
     {
-      "name": "tanstack-query",
-      "source": "./",
-      "description": "Skill: Master TanStack Query (React Query) v5 for server state management in React applications",
-      "version": "0.2.0",
-      "skills": [
-        "./tanstack-query/skill"
-      ]
+      "name": "tanstack",
+      "source": "./tanstack",
+      "description": "TanStack toolkit: Query (server state management), Router (type-safe file-based routing), and Start (full-stack React framework)",
+      "version": "0.0.0"
     },
     {
       "name": "founder-playbook",
