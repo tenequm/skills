@@ -329,7 +329,7 @@ await program.methods
 
 ```toml
 [dependencies]
-light-client = "0.12"
+light-client = "0.22"
 solana-sdk = "2.2"
 tokio = { version = "1", features = ["full"] }
 ```

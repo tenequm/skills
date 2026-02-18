@@ -94,9 +94,12 @@ Compressed accounts are stored in concurrent Merkle trees:
 
 | Tree Type | Purpose | Contents |
 |-----------|---------|----------|
-| State Tree | Store account hashes | Compressed account leaves |
+| State Tree (V1) | Store account hashes | Compressed account leaves (individual updates) |
+| State Tree (V2) | Store account hashes | Compressed account leaves (batched updates, ~70% less CU) |
 | Address Tree | Track unique addresses | Address leaves (indexed) |
 | Nullifier Queue | Track spent accounts | Nullified account hashes |
+
+V2 batched Merkle trees (mainnet January 2026) batch multiple insertions and verify them with ZK proofs, reducing state root update costs by ~250x. New deployments use V2 trees by default. Tree type is tracked via a `TreeType` enum in the SDK (`StateV1` or `StateV2`); tree selection is handled automatically by SDK helpers like `selectStateTreeInfo()`.
 
 ## Account Operations
 

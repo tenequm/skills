@@ -68,6 +68,8 @@ const transactionSignature = await createTokenPool(
 );
 ```
 
+> **Note**: `createTokenPool` is being renamed to `createSplInterface` in newer SDK versions. Both work currently; prefer `createSplInterface` in new code.
+
 ### Mint Compressed Tokens
 
 ```typescript
@@ -329,13 +331,14 @@ use light_compressed_token::{
     InputTokenDataWithContext,
     PackedTokenTransferOutputData,
 };
+use light_sdk::instruction::ValidityProof;
 
 // Transfer compressed tokens in your program
 pub fn transfer_compressed_tokens(
     ctx: Context<MyContext>,
     inputs: Vec<InputTokenDataWithContext>,
     outputs: Vec<PackedTokenTransferOutputData>,
-    proof: CompressedProof,
+    proof: ValidityProof,
 ) -> Result<()> {
     // ... validation logic
 

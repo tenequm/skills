@@ -15,10 +15,10 @@ Build Solana programs with compressed Program Derived Addresses (PDAs) for rent-
 
 ### Required Versions
 
-- Rust: 1.86.0+
-- Solana CLI: 2.2.15+
-- Anchor CLI: 0.31.1+
-- ZK Compression CLI: 0.27.0+
+- Rust: 1.89.0+
+- Solana CLI: 2.3.0+
+- Anchor CLI: 0.32.1+
+- ZK Compression CLI: latest (`npm install -g @lightprotocol/zk-compression-cli`)
 - Node.js: 23.5.0+
 
 ### Installation
@@ -52,13 +52,15 @@ my-program/
 
 ```toml
 [dependencies]
-anchor-lang = "0.31.1"
-light-sdk = "0.12"
+anchor-lang = "0.32.1"
+light-sdk = "0.22"
 
 [dev-dependencies]
-light-program-test = "0.12"
-light-client = "0.12"
+light-program-test = "1.2"
+light-client = "0.22"
 ```
+
+> **Note**: Light Protocol SDK versions change frequently. Check [crates.io](https://crates.io/crates/light-sdk) for the latest compatible versions.
 
 ## Program Structure
 

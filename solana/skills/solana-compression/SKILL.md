@@ -197,6 +197,8 @@ Compressed accounts are stored in concurrent Merkle trees using Poseidon hashing
 - Leaves contain compressed account hashes
 - Validity proofs prove account inclusion in tree
 
+**V2 Batched Merkle Trees** (mainnet, January 2026): State root updates are batched and verified with ZK proofs, reducing costs by ~250x per update and overall CU usage by ~70% compared to V1 trees. V1 trees remain supported for existing deployments. New deployments automatically use V2 trees.
+
 ### Validity Proofs
 
 ZK proofs (Groth16) validate state transitions:
@@ -300,7 +302,7 @@ photon-snapshot-loader --snapshot-dir=~/snapshot --snapshot-server-url=https://p
 | **Per-write cost** | Each write nullifies old state, appends new |
 | **Indexer dependency** | Requires Photon RPC (or self-host) for queries |
 
-**Break-even analysis**: Compressed account becomes more expensive than regular account after ~1000 writes.
+**Break-even analysis**: With V2 batched trees, compressed accounts are cost-effective for significantly more writes than V1's ~1000 write threshold due to 250x cheaper state root updates. Exact break-even depends on tree utilization and batch sizes.
 
 ## Reference Documentation
 

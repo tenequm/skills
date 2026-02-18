@@ -122,7 +122,7 @@ Contact `0xmorph` in Cantina Discord for read access:
 - [Rust Playground](https://play.rust-lang.org/) - Test Rust snippets
 
 ### Security & Analysis
-- [Trident](https://github.com/Ackee-Blockchain/trident) - Fuzz testing framework
+- [Trident](https://github.com/Ackee-Blockchain/trident) - Fuzz testing framework (v0.12.0+: Token-2022 program support, Manually Guided Fuzzing for targeted instruction sequences, solana-sdk 2.3+ compatibility)
 - [Certora Prover](https://docs.certora.com/en/latest/docs/solana/index.html) - Formal verification
 - [Sec3 IDL Guesser](https://github.com/sec3-service/IDLGuesser) - Reverse engineer IDLs
 - [Anchor X-ray](https://github.com/crytic/anchorx-ray) - Visualize accounts (Trail of Bits)
@@ -168,9 +168,9 @@ Top firms for Solana security audits:
 
 ## Version Information
 
-- Latest Anchor version (as of 2025): 0.30+
-- Recommended Solana CLI: Latest stable
-- Rust minimum version: 1.70+
+- Latest Anchor version: 0.32.1
+- Recommended Solana CLI: 2.3.0+ (Agave)
+- Rust minimum version: 1.89.0+ (required for Anchor 0.32.0+)
 
 ---
 
