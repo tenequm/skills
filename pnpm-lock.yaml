@@ -22,6 +22,8 @@ importers:
 
   cloudflare-workers: {}
 
+  erc-8004: {}
+
   founder-playbook: {}
 
   foundry-solidity: {}
@@ -41,6 +43,8 @@ importers:
   tanstack-query: {}
 
   uv-ruff-python-tools: {}
+
+  x402: {}
 
 packages:
 
