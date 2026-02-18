@@ -1,0 +1,12 @@
+{
+  "name": "x402",
+  "projectType": "library",
+  "release": {
+    "version": {
+      "generatorOptions": {
+        "packageRoot": "x402",
+        "currentVersionResolver": "disk"
+      }
+    }
+  }
+}

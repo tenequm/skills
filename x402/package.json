@@ -1,0 +1,9 @@
+{
+  "name": "x402-skill",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Build internet-native payments with the x402 open protocol - HTTP 402 Payment Required for APIs, AI agents, and web services",
+  "scripts": {
+    "validate": "python3 ../.claude/skills/skill-creator/scripts/quick_validate.py ./skill"
+  }
+}

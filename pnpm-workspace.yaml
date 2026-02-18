@@ -11,3 +11,5 @@ packages:
   - 'founder-playbook'
   - 'foundry-solidity'
   - 'impactful-writing'
+  - 'erc-8004'
+  - 'x402'

@@ -1,0 +1,12 @@
+{
+  "name": "erc-8004",
+  "projectType": "library",
+  "release": {
+    "version": {
+      "generatorOptions": {
+        "packageRoot": "erc-8004",
+        "currentVersionResolver": "disk"
+      }
+    }
+  }
+}
