@@ -572,11 +572,35 @@ function Posts() {
 }
 ```
 
+## Streaming with Infinite Queries
+
+`experimental_streamedQuery` can be combined with infinite patterns for streaming paginated data:
+
+```tsx
+import { experimental_streamedQuery as streamedQuery } from '@tanstack/react-query';
+
+const { data, fetchStatus } = useInfiniteQuery({
+  queryKey: ['stream-feed'],
+  queryFn: streamedQuery({
+    streamFn: ({ pageParam }) => fetchStreamedFeed(pageParam),
+    refetchMode: 'append',
+  }),
+  initialPageParam: 0,
+  getNextPageParam: (lastPage) => lastPage?.nextCursor,
+});
+
+// Each page streams in chunks while fetchStatus === 'fetching'
+```
+
+See the Streamed Queries section in the main SKILL.md for the full `streamedQuery` API.
+
 ## Common Issues and Solutions
 
 ### Duplicate Data After Invalidation
 
-When invalidating an infinite query, it refetches all pages. To avoid duplicates:
+When invalidating an infinite query, it refetches all pages. To avoid duplicates.
+
+**SSR note:** v5.90.3 fixed unhandled promise rejections during dehydration/rehydration of pending infinite queries. Ensure you're on v5.90.3+ if using SSR with infinite queries.
 
 ```tsx
 // Option 1: Use refetchPage to only refetch specific pages

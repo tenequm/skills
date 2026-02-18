@@ -425,7 +425,7 @@ socket.on('update', () => {
 
 ## Query Filters
 
-Use query filters for more complex matching:
+Use query filters for more complex matching. v5.90.8+ supports partial query keys and preserves `readonly` from `as const` assertions:
 
 ```tsx
 import { QueryFilters } from '@tanstack/react-query';
@@ -434,7 +434,7 @@ const filters: QueryFilters = {
   queryKey: ['todos'],
   type: 'active',        // 'active' | 'inactive' | 'all'
   stale: true,           // Only stale queries
-  exact: false,          // Prefix matching
+  exact: false,          // Prefix matching (supports partial keys)
   predicate: (query) => {
     // Custom logic
     return query.state.dataUpdatedAt > Date.now() - 60000;
@@ -442,6 +442,10 @@ const filters: QueryFilters = {
 };
 
 queryClient.invalidateQueries(filters);
+
+// Partial key matching with as const (v5.90.8+)
+const todoKeys = { all: ['todos'] as const };
+queryClient.invalidateQueries({ queryKey: todoKeys.all }); // readonly works
 ```
 
 ### Filter by State
@@ -586,6 +590,14 @@ useQuery({
   refetchInterval: 5000, // Auto-refetch every 5 seconds
 });
 ```
+
+### Known Issues (Fixed)
+
+These bugs can manifest as invalidation-related surprises. They're fixed in latest versions but worth knowing:
+
+- **`combine` stable reference bug (fixed v5.90.19):** When passing a stable (non-inline) `combine` function to `useQueries`, it was not called with correct parameters when queries changed dynamically. Workaround: pass `combine` inline until fix is applied.
+- **`useSuspenseQueries` duplicate keys (fixed v5.90.11):** Passing duplicate `queryKeys` to `useSuspenseQueries` caused infinite render loops instead of an error.
+- **SSR dehydration (fixed v5.90.3):** Unhandled promise rejections during de/rehydration of pending queries.
 
 ## Best Practices
 

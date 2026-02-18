@@ -323,6 +323,17 @@ if (todos) {
   // TypeScript knows todos is Todo[] here
   console.log(todos.length);
 }
+
+// v5.80.0+: When using queryOptions(), getQueryData infers types automatically
+import { queryOptions } from '@tanstack/react-query';
+
+const todosOptions = queryOptions({
+  queryKey: ['todos'],
+  queryFn: fetchTodos, // returns Todo[]
+});
+
+const cached = queryClient.getQueryData(todosOptions.queryKey);
+// cached is typed as Todo[] | undefined - no manual generic needed
 ```
 
 ### invalidateQueries
@@ -457,6 +468,28 @@ const { data } = useQuery({
 // data is typed as { id: number; name: string } | undefined
 ```
 
+## isPlaceholderData Type Narrowing
+
+Since v5.65.0, `isPlaceholderData` properly narrows the data type:
+
+```tsx
+const { data, isPlaceholderData } = useQuery({
+  queryKey: ['todos', page],
+  queryFn: () => fetchTodos(page),
+  placeholderData: (previousData) => previousData,
+});
+
+if (isPlaceholderData) {
+  // data is narrowed to the placeholder type
+  // TypeScript knows this is stale/previous data
+}
+
+if (!isPlaceholderData && data) {
+  // data is narrowed to the fresh query result type
+  // Safe to use without additional type guards
+}
+```
+
 ## Custom Hooks with Types
 
 ### Reusable Typed Hooks
@@ -533,6 +566,15 @@ queryClient.invalidateQueries({ queryKey: todoKeys.all });
 queryClient.invalidateQueries({ queryKey: todoKeys.detail(todoId) });
 ```
 
+**QueryFilters with partial keys and readonly (v5.90.8+):**
+
+`QueryFilters` now supports partial query keys and preserves `readonly` from `as const` assertions, so you can filter by key prefix without losing type safety:
+
+```tsx
+// as const works seamlessly with QueryFilters
+queryClient.invalidateQueries({ queryKey: todoKeys.all }); // readonly ['todos']
+```
+
 ### QueryKey Type Helper
 
 ```tsx
@@ -606,7 +648,37 @@ const mutation = useMutation<
 
 ## Type-Safe Query Options
 
-### Shared Query Options
+### queryOptions() Helper (Recommended)
+
+The `queryOptions()` helper creates reusable, fully type-safe query configurations:
+
+```tsx
+import { queryOptions, useQuery, useQueryClient } from '@tanstack/react-query';
+
+function todoQueryOptions(id: number) {
+  return queryOptions({
+    queryKey: ['todo', id] as const,
+    queryFn: () => fetchTodo(id),
+    staleTime: 1000 * 60 * 5,
+  });
+}
+
+// Full type inference - no manual generics needed
+const { data } = useQuery(todoQueryOptions(todoId));
+// data is typed as Todo | undefined
+
+// Works with prefetching
+queryClient.prefetchQuery(todoQueryOptions(todoId));
+
+// Works with getQueryData
+const cached = queryClient.getQueryData(todoQueryOptions(todoId).queryKey);
+// cached is typed as Todo | undefined
+
+// Works with invalidation
+queryClient.invalidateQueries({ queryKey: todoQueryOptions(todoId).queryKey });
+```
+
+### Manual Query Options (Alternative)
 
 ```tsx
 import { UseQueryOptions } from '@tanstack/react-query';

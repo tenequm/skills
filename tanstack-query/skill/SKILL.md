@@ -1,6 +1,6 @@
 ---
 name: tanstack-query
-description: Master TanStack Query (React Query) v5 for server state management in React applications. Use when fetching data from APIs, managing server state, caching, or handling mutations. Triggers on phrases like "react query", "tanstack query", "data fetching", "cache management", "server state", or file patterns like *query*.ts, *Query*.tsx, queryClient.ts.
+description: Master TanStack Query (React Query) v5 for server state management in React applications. Use when fetching data from APIs, managing server state, caching, handling mutations, streaming AI responses, or integrating with tRPC v11. Triggers on phrases like "react query", "tanstack query", "data fetching", "cache management", "server state", "streamed query", "streaming data", or file patterns like *query*.ts, *Query*.tsx, queryClient.ts.
 ---
 
 # TanStack Query (React Query) v5
@@ -14,6 +14,8 @@ Powerful asynchronous state management for React. TanStack Query makes fetching,
 - Implementing mutations (create, update, delete operations)
 - Building infinite scroll or load-more patterns
 - Handling optimistic UI updates
+- Rendering streaming/chunked data from AI or SSE endpoints
+- Integrating with tRPC v11 queryOptions pattern
 - Synchronizing data across components
 - Implementing background data refetching
 - Managing complex async state without Redux or other state managers
@@ -291,6 +293,92 @@ function App() {
 }
 ```
 
+### Streamed Queries (Experimental)
+
+Consume `AsyncIterable` streams as query data - ideal for AI chat, SSE, and streaming responses:
+
+```tsx
+import { useQuery, queryOptions } from '@tanstack/react-query';
+import { experimental_streamedQuery as streamedQuery } from '@tanstack/react-query';
+
+async function* fetchChatStream(sessionId: string): AsyncIterable<string> {
+  const response = await fetch(`/api/chat/${sessionId}`, { method: 'POST' });
+  const reader = response.body!.getReader();
+  const decoder = new TextDecoder();
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    yield decoder.decode(value);
+  }
+}
+
+function ChatMessages({ sessionId }: { sessionId: string }) {
+  const { data: chunks, status, fetchStatus } = useQuery(
+    queryOptions({
+      queryKey: ['chat', sessionId],
+      queryFn: streamedQuery({
+        streamFn: () => fetchChatStream(sessionId),
+        // Optional: customize how chunks accumulate
+        // reducer: (acc, chunk) => [...acc, chunk],
+        // initialValue: [],
+        refetchMode: 'reset',  // 'reset' | 'append' | 'replace'
+      }),
+    })
+  );
+
+  // status === 'pending' until first chunk arrives
+  // status === 'success' after first chunk, fetchStatus === 'fetching' until stream ends
+  if (status === 'pending') return <div>Waiting for response...</div>;
+
+  return (
+    <div>
+      {chunks?.map((chunk, i) => <span key={i}>{chunk}</span>)}
+      {fetchStatus === 'fetching' && <span className="cursor" />}
+    </div>
+  );
+}
+```
+
+**`refetchMode` options:**
+- `'reset'` - clear data and start fresh on refetch
+- `'append'` - keep existing chunks and add new ones
+- `'replace'` - replace data chunk-by-chunk on refetch
+
+**Note:** The API stabilized at v5.86.0. Earlier versions used `queryFn` instead of `streamFn` and `maxChunks` instead of `reducer`.
+
+### Prefetch in Render (Experimental)
+
+Use React 19's `React.use()` with TanStack Query for "render-as-you-fetch":
+
+```tsx
+// Enable the feature flag
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      experimental_prefetchInRender: true,
+    },
+  },
+});
+
+// Component that suspends with React.use()
+function TodoList({ query }: { query: UseQueryResult<Todo[]> }) {
+  const data = React.use(query.promise); // Suspends until resolved
+  return <ul>{data.map(todo => <li key={todo.id}>{todo.title}</li>)}</ul>;
+}
+
+function App() {
+  const query = useQuery({ queryKey: ['todos'], queryFn: fetchTodos });
+  return (
+    <React.Suspense fallback={<div>Loading...</div>}>
+      <TodoList query={query} />
+    </React.Suspense>
+  );
+}
+```
+
+**Known limitations:** queries may run twice on unsuspend, incompatible with `useQueries`, `skipToken` and `refetch()` cannot be used together.
+
 ## Advanced Topics
 
 For detailed information on advanced patterns, see the reference files:
@@ -368,6 +456,7 @@ function App() {
 - Manually trigger refetches
 - Invalidate queries
 - Monitor cache lifecycle
+- Visual indicator for `staleTime: Infinity` ("static") queries (v5.80.0+)
 
 ## Common Patterns
 
@@ -490,7 +579,40 @@ const { data } = useQuery({
   queryFn: fetchTodos,
   placeholderData: { items: [], total: 0 },
 });
+
+// TypeScript: isPlaceholderData now narrows data type (v5.65.0+)
+// When isPlaceholderData is true, data is typed as the placeholder type
 ```
+
+### tRPC v11 Integration
+
+tRPC v11 exposes `queryOptions` and `mutationOptions` directly, removing the need for custom hook wrappers:
+
+```tsx
+import { useTRPC } from '@trpc/tanstack-react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+
+function TodoList() {
+  const trpc = useTRPC();
+  const queryClient = useQueryClient();
+
+  // Direct queryOptions pattern (replaces trpc.todo.list.useQuery())
+  const { data } = useQuery(trpc.todo.list.queryOptions());
+
+  const createTodo = useMutation(
+    trpc.todo.create.mutationOptions({
+      onSuccess: () => {
+        queryClient.invalidateQueries(trpc.todo.list.queryOptions());
+      },
+    })
+  );
+
+  // Prefetching also works
+  queryClient.prefetchQuery(trpc.todo.list.queryOptions());
+}
+```
+
+Requires `@tanstack/react-query@5.62.8+` and `@trpc/tanstack-react-query`.
 
 ## Error Handling
 
@@ -511,21 +633,23 @@ if (isError) {
 
 ### Global Error Handling
 
+Use `QueryCache` and `MutationCache` callbacks for global error handling:
+
 ```tsx
+import { QueryClient, QueryCache, MutationCache } from '@tanstack/react-query';
+
 const queryClient = new QueryClient({
-  defaultOptions: {
-    queries: {
-      onError: (error) => {
-        console.error('Query error:', error);
-        // Show toast notification, etc.
-      },
+  queryCache: new QueryCache({
+    onError: (error, query) => {
+      console.error(`Query ${query.queryKey} failed:`, error);
+      // Show toast notification, etc.
     },
-    mutations: {
-      onError: (error) => {
-        console.error('Mutation error:', error);
-      },
+  }),
+  mutationCache: new MutationCache({
+    onError: (error, _variables, _context, mutation) => {
+      console.error('Mutation failed:', error);
     },
-  },
+  }),
 });
 ```
 
@@ -609,4 +733,5 @@ If you're upgrading from React Query v4:
 - `useInfiniteQuery` pageParam changes
 - New `useSuspenseQuery` hooks
 - Improved TypeScript inference
+- v4.42.0 added React 19 support for teams not yet migrated to v5
 - See official migration guide: https://tanstack.com/query/latest/docs/framework/react/guides/migrating-to-v5

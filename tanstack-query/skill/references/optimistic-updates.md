@@ -565,6 +565,10 @@ function QuickEdit({ todo }) {
 }
 ```
 
+### Known Issues (Fixed)
+
+- **initialData mount timing (fixed v5.87.1):** When using `initialData` with optimistic updates, a race condition could cause the optimistic value to be overwritten by `initialData` on component remount during the mutation. Fixed in v5.87.1 - if you see stale data flash after optimistic updates, upgrade to this version or later.
+
 ## Best Practices
 
 1. **Always Cancel Queries**
@@ -614,3 +618,18 @@ function QuickEdit({ todo }) {
    - Verify rollback works correctly
    - Test network failures
    - Test validation errors from server
+
+9. **Use queryOptions() for Type Safety**
+   ```tsx
+   const todosOptions = queryOptions({
+     queryKey: ['todos'],
+     queryFn: fetchTodos,
+   });
+
+   // Reuse in mutation callbacks for consistent types
+   onMutate: async () => {
+     const previous = queryClient.getQueryData(todosOptions.queryKey);
+     // TypeScript knows the exact type of previous
+     return { previous };
+   }
+   ```

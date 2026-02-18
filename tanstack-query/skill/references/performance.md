@@ -129,6 +129,8 @@ useQuery({
 });
 ```
 
+**Note:** v5.85.7 improved the internal `replaceEqualDeep` function to use `Set` for O(1) lookups instead of `Array.indexOf`, improving performance for queries returning large arrays.
+
 ## Prefetching
 
 Load data before it's needed:
@@ -559,26 +561,51 @@ function App() {
 }
 ```
 
-### Custom Logger
+### Query/Mutation Cache Callbacks
+
+Use cache-level callbacks for global logging (the `logger` property was removed in v5):
 
 ```tsx
+import { QueryClient, QueryCache, MutationCache } from '@tanstack/react-query';
+
 const queryClient = new QueryClient({
-  logger: {
-    log: (...args) => console.log(...args),
-    warn: (...args) => console.warn(...args),
-    error: (...args) => console.error(...args),
-  },
-  defaultOptions: {
-    queries: {
-      onSuccess: (data, query) => {
-        console.log(`Query ${query.queryKey} succeeded`, data);
-      },
-      onError: (error, query) => {
-        console.error(`Query ${query.queryKey} failed`, error);
-      },
+  queryCache: new QueryCache({
+    onError: (error, query) => {
+      console.error(`[Query Error] ${query.queryKey}:`, error);
     },
-  },
+    onSuccess: (data, query) => {
+      console.log(`[Query Success] ${query.queryKey}`);
+    },
+  }),
+  mutationCache: new MutationCache({
+    onError: (error) => {
+      console.error('[Mutation Error]:', error);
+    },
+  }),
 });
+```
+
+DevTools now shows a visual indicator for queries with `staleTime: Infinity` ("static" queries), making it easier to distinguish intentionally never-refetched queries (v5.80.0+).
+
+### timeoutManager (Testing)
+
+Replace `setTimeout`/`setInterval` with custom implementations for testing or non-browser environments (v5.87.0+):
+
+```tsx
+import { timeoutManager } from '@tanstack/query-core';
+
+// In test setup - use fake timers
+timeoutManager.setTimeout = vi.fn(setTimeout);
+timeoutManager.clearTimeout = vi.fn(clearTimeout);
+```
+
+### defaultScheduler
+
+The internal notification batching scheduler is now a public export (v5.70.0+), enabling custom scheduling strategies:
+
+```tsx
+import { defaultScheduler } from '@tanstack/query-core';
+// Use for advanced batching customization
 ```
 
 ### Performance Metrics
