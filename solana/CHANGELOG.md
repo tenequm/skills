@@ -1,3 +1,9 @@
+## 0.5.1 (2026-02-18)
+
+### 🩹 Fixes
+
+- **solana:** update ZK compression for V2 SDK, fix outdated versions ([09eef91](https://github.com/tenequm/claude-plugins/commit/09eef91))
+
 ## 0.5.0 (2025-12-24)
 
 ### 🚀 Features

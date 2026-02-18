@@ -40,7 +40,7 @@ importers:
 
   styling-with-tailwind: {}
 
-  tanstack-query: {}
+  tanstack: {}
 
   uv-ruff-python-tools: {}
 
