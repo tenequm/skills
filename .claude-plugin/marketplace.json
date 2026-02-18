@@ -133,7 +133,7 @@
       "name": "erc-8004",
       "source": "./",
       "description": "Skill: Build with ERC-8004 Trustless Agents - on-chain agent identity, reputation, and discovery using the Agent0 SDK",
-      "version": "0.0.0",
+      "version": "0.1.0",
       "skills": [
         "./erc-8004/skill"
       ]
@@ -142,7 +142,7 @@
       "name": "x402",
       "source": "./",
       "description": "Skill: Build internet-native payments with the x402 open protocol - HTTP 402 for APIs, AI agents, and web services across EVM and Solana",
-      "version": "0.0.0",
+      "version": "0.1.0",
       "skills": [
         "./x402/skill"
       ]
