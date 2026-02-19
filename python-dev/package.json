@@ -1,6 +1,6 @@
 {
   "name": "python-dev-skill",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "private": true,
   "description": "Skill: Opinionated Python development setup with uv, ty, ruff, pytest, and just",
   "scripts": {
