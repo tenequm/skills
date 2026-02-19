@@ -1,0 +1,25 @@
+{
+  "name": "python-dev",
+  "$schema": "../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "python-dev",
+  "projectType": "library",
+  "targets": {
+    "validate": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "pnpm validate",
+        "cwd": "python-dev"
+      },
+      "cache": true,
+      "inputs": [
+        "{projectRoot}/skill/**/*.md",
+        "{projectRoot}/package.json"
+      ]
+    }
+  },
+  "release": {
+    "version": {
+      "generator": "@nx/js:release-version"
+    }
+  }
+}

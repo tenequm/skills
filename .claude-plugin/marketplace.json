@@ -144,6 +144,15 @@
       "skills": [
         "./x402/skill"
       ]
+    },
+    {
+      "name": "python-dev",
+      "source": "./",
+      "description": "Skill: Opinionated Python development setup with uv, ty, ruff, pytest, and just",
+      "version": "0.0.0",
+      "skills": [
+        "./python-dev/skill"
+      ]
     }
   ]
 }
