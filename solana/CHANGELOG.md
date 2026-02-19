@@ -1,3 +1,9 @@
+## 0.5.2 (2026-02-19)
+
+### 🩹 Fixes
+
+- **solana:** correct compressed account reinitialization info ([8d2ee96](https://github.com/tenequm/claude-plugins/commit/8d2ee96))
+
 ## 0.5.1 (2026-02-18)
 
 ### 🩹 Fixes
