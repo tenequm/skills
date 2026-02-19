@@ -149,7 +149,7 @@
       "name": "python-dev",
       "source": "./",
       "description": "Skill: Opinionated Python development setup with uv, ty, ruff, pytest, and just",
-      "version": "0.0.0",
+      "version": "0.1.0",
       "skills": [
         "./python-dev/skill"
       ]
