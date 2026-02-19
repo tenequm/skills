@@ -181,7 +181,7 @@ LightSystemProgramCpi::new_cpi(CPI_SIGNER, proof)
     .invoke(cpi_accounts)?;
 ```
 
-**Note**: Closed account addresses cannot be reused.
+**Note**: Closed account addresses can be reinitialized. Use `LightAccount::new_empty()` to reconstruct the closed account hash, then optionally chain `LightAccount::new_mut()` to set custom values in the same transaction. See [reinitialize guide](https://www.zkcompression.com/compressed-pdas/guides/how-to-reinitialize-compressed-accounts).
 
 ## Account Metadata
 
