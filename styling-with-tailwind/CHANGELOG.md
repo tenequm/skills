@@ -1,3 +1,11 @@
+## 0.3.0 (2026-02-20)
+
+### 🚀 Features
+
+- **styling-with-tailwind:** add critical rules, pitfalls, and v4-only enforcement ([6fbd4bc](https://github.com/tenequm/claude-plugins/commit/6fbd4bc))
+- migrate from Changesets to Nx Release ([06aaeb3](https://github.com/tenequm/claude-plugins/commit/06aaeb3))
+- add styling-with-tailwind plugin ([7e81b47](https://github.com/tenequm/claude-plugins/commit/7e81b47))
+
 # styling-with-tailwind-skill
 
 ## 0.1.0
