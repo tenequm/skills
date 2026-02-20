@@ -1,6 +1,6 @@
 {
   "name": "styling-with-tailwind-skill",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "private": true,
   "description": "Creates UIs using Tailwind CSS utility classes and shadcn/ui patterns. Covers CSS variables with OKLCH colors, component variants with CVA, responsive design, dark mode, and Tailwind v4.2 features. Supports Radix UI and Base UI primitives, CLI 3.0, and visual styles.",
   "scripts": {

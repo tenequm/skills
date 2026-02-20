@@ -1,3 +1,10 @@
+## 0.3.1 (2026-02-20)
+
+### 🩹 Fixes
+
+- **styling-with-tailwind:** use semantic tokens in user-valid/user-invalid example ([f7f0090](https://github.com/tenequm/claude-plugins/commit/f7f0090))
+- **styling-with-tailwind:** use semantic text-success instead of text-green-500 ([92c65e8](https://github.com/tenequm/claude-plugins/commit/92c65e8))
+
 ## 0.3.0 (2026-02-20)
 
 ### 🚀 Features
