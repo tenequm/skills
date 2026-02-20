@@ -113,10 +113,13 @@ Comprehensive collection of official documentation, development tools, learning 
 - [spl-token-2022](https://docs.rs/spl-token-2022) - Token Extensions program
 
 ### TypeScript/JavaScript
-- [@solana/web3.js](https://solana-labs.github.io/solana-web3.js/) - Solana JavaScript SDK
-- [@coral-xyz/anchor](https://www.npmjs.com/package/@coral-xyz/anchor) - Anchor TypeScript client
+- [@solana/kit](https://solanakit.org) - Solana JavaScript SDK (functional, tree-shakeable, WebCrypto-native)
+- [@solana/compat](https://www.npmjs.com/package/@solana/compat) - Bridge between Kit and legacy `@solana/web3.js` v1 types
+- [@coral-xyz/anchor](https://www.npmjs.com/package/@coral-xyz/anchor) - Anchor TypeScript client (still requires `@solana/web3.js` v1 as peer dependency)
 - [@solana/spl-token](https://www.npmjs.com/package/@solana/spl-token) - SPL Token JS library
 - [Umi Framework](https://github.com/metaplex-foundation/umi) - Modular framework by Metaplex
+
+> **Note:** `@solana/web3.js` v1 is in maintenance mode (last release July 2025). Use `@solana/kit` for all new client code. The only reason to install `@solana/web3.js` is as a peer dependency required by Anchor or Light Protocol SDKs.
 
 ### Python
 - [solana-py](https://github.com/michaelhly/solana-py) - Solana Python SDK
@@ -163,10 +166,11 @@ Comprehensive collection of official documentation, development tools, learning 
 
 ## Version Information
 
-**Current versions (as of 2025):**
-- Latest Anchor: 0.30+
-- Recommended Solana CLI: Latest stable (check with `solana --version`)
-- Rust minimum: 1.70+
+**Current versions (as of February 2026):**
+- Latest Anchor: 0.32.1
+- Recommended Solana CLI: 2.3.0+ (Agave)
+- Rust minimum: 1.89.0+ (required for Anchor 0.32.0+)
+- @solana/kit: 6.1.0
 - Solana program library: 2.0+
 
 **Updating tools:**

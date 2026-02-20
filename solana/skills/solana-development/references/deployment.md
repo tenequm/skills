@@ -1229,7 +1229,7 @@ anchor test --skip-deploy --provider.cluster devnet
 anchor run test-on-devnet
 ```
 
-**Native Rust / TypeScript client:**
+**Native Rust / TypeScript client (Anchor - requires legacy `@solana/web3.js` v1):**
 ```typescript
 import { Connection, PublicKey } from '@solana/web3.js';
 

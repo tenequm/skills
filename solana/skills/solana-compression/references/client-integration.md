@@ -245,6 +245,8 @@ const slot = await rpc.getIndexerSlot();
 
 ### Transaction with Compressed Accounts
 
+> Light Protocol SDK uses `@solana/web3.js` v1 types internally. These imports are required by the SDK - for non-Light client code, use [`@solana/kit`](https://solanakit.org) instead.
+
 ```typescript
 import {
     createRpc,
@@ -255,7 +257,7 @@ import {
     TransactionInstruction,
     PublicKey,
     Keypair,
-} from '@solana/web3.js';
+} from '@solana/web3.js'; // Required by Light SDK
 
 async function executeCompressedTransaction(
     rpc: Rpc,

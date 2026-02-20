@@ -372,9 +372,11 @@ mod tests {
 
 ### Integration Tests (TypeScript)
 
+> Light Protocol SDK uses `@solana/web3.js` v1 types. For non-Light client code, use [`@solana/kit`](https://solanakit.org).
+
 ```typescript
 import { createRpc } from '@lightprotocol/stateless.js';
-import { Keypair } from '@solana/web3.js';
+import { Keypair } from '@solana/web3.js'; // Required by Light SDK
 
 describe('My Program', () => {
     const rpc = createRpc();

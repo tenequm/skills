@@ -618,7 +618,7 @@ npm install @coral-xyz/anchor @solana/web3.js
 yarn add @coral-xyz/anchor @solana/web3.js
 ```
 
-**Note:** Only compatible with `@solana/web3.js` v1, not v2.
+> **Legacy dependency:** Anchor's TS client requires `@solana/web3.js` v1 as a peer dependency. This is the only reason to install web3.js - it is in maintenance mode. For non-Anchor client code, use [`@solana/kit`](https://solanakit.org) instead. Use [`@solana/compat`](https://www.npmjs.com/package/@solana/compat) to bridge between Kit and legacy web3.js types when needed.
 
 ### Setup Program Instance
 
