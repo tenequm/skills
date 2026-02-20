@@ -322,38 +322,66 @@ import { InputGroup, InputGroupText } from "@/components/ui/input-group"
 </InputGroup>
 ```
 
-## Data-Slot Composition
+## Component Authoring Pattern
 
-Components use `data-slot` attributes for styling child elements:
+All shadcn/ui components use plain functions with `data-slot` attributes (React 19):
 
 ```tsx
-// Button automatically styles icons with data-slot
+// Modern pattern - no forwardRef, no displayName
+function AccordionItem({
+  className,
+  ...props
+}: React.ComponentProps<typeof AccordionPrimitive.Item>) {
+  return (
+    <AccordionPrimitive.Item
+      data-slot="accordion-item"
+      className={cn("border-b last:border-b-0", className)}
+      {...props}
+    />
+  )
+}
+
+// Parent-level styling via data-slot selectors
+<div className="*:data-[slot=avatar]:ring-2 *:data-[slot=description]:text-sm">
+  <Avatar data-slot="avatar" />
+  <p data-slot="description">Styled by parent</p>
+</div>
+```
+
+**Key changes from older patterns:**
+- `React.forwardRef` removed (React 19 passes ref as regular prop)
+- `React.ComponentPropsWithoutRef` replaced by `React.ComponentProps`
+- `displayName` removed
+- Every primitive gets a `data-slot` attribute
+
+**Common data-slot values:**
+- `icon` - Icons within components
+- `button`, `trigger` - Interactive elements
+- `title`, `description` - Text elements
+- `content`, `header`, `footer` - Layout sections
+
+## Data-Icon Attributes
+
+Buttons use `data-icon` for automatic icon spacing:
+
+```tsx
+// Icons get correct spacing automatically
+<Button>
+  <Spinner data-icon="inline-start" />
+  Generating...
+</Button>
+
+<Button>
+  Submit
+  <ArrowRight data-icon="inline-end" />
+</Button>
+
+// data-slot="icon" also works for simple icon buttons
 <Button>
   <CheckIcon data-slot="icon" />
   Save Changes
 </Button>
-
-// Custom component using data-slot pattern
-function CustomCard({ children }: { children: React.ReactNode }) {
-  return (
-    <div className="rounded-lg border p-4 [&>[data-slot=icon]]:size-5 [&>[data-slot=icon]]:text-muted-foreground">
-      {children}
-    </div>
-  )
-}
-
-// Usage
-<CustomCard>
-  <AlertCircle data-slot="icon" />
-  <p>This icon is automatically styled</p>
-</CustomCard>
 ```
-
-**Common data-slot values:**
-- `icon` - Icons within components
-- `title` - Heading elements
-- `description` - Descriptive text
-- `action` - Action buttons or triggers
 
 ## Select Component
 
@@ -621,15 +649,26 @@ export function DataTable<TData, TValue>({
 ## CLI Commands Reference
 
 ```bash
-# Initialize project
+# Create new project (interactive - choose style, primitives, colors)
+npx shadcn create
+
+# Initialize in existing project
 pnpm dlx shadcn@latest init
 
-# Add specific components
+# Add components
 pnpm dlx shadcn@latest add button
 pnpm dlx shadcn@latest add card form input
 
 # Add all components
 pnpm dlx shadcn@latest add --all
+
+# Add from community registries
+npx shadcn add @acme/button @internal/auth-system
+
+# View/search/list registries
+npx shadcn view @acme/auth-system
+npx shadcn search @tweakcn -q "dark"
+npx shadcn list @acme
 
 # Update/overwrite existing components
 pnpm dlx shadcn@latest add button --overwrite
@@ -638,34 +677,45 @@ pnpm dlx shadcn@latest add --all --overwrite
 # Show component diff (see what changed)
 pnpm dlx shadcn@latest diff button
 
-# List available components
-pnpm dlx shadcn@latest add
+# Add MCP server for AI agent integration
+npx shadcn@latest mcp init
+```
 
-# Use canary release (for Tailwind v4 + React 19)
-pnpm dlx shadcn@canary init
-pnpm dlx shadcn@canary add button
+### Namespaced Registries
+
+Configure private or community registries in `components.json`:
+
+```json
+{
+  "registries": {
+    "@acme": "https://acme.com/r/{name}.json",
+    "@internal": {
+      "url": "https://registry.company.com/{name}",
+      "headers": {
+        "Authorization": "Bearer ${REGISTRY_TOKEN}"
+      }
+    }
+  }
+}
 ```
 
 ## Field Component (October 2025)
 
-Simplified form field wrapper without React Hook Form:
+Composable form field wrapper - works with React Hook Form, TanStack Form, Server Actions, or any form library:
 
 ```tsx
-import { Field, FieldLabel, FieldDescription, FieldError } from "@/components/ui/field"
+import {
+  Field, FieldLabel, FieldDescription, FieldError,
+  FieldSet, FieldGroup, FieldLegend, FieldSeparator,
+  FieldContent, FieldTitle,
+} from "@/components/ui/field"
 
+// Basic field
 <Field>
   <FieldLabel>Email address</FieldLabel>
-  <Input
-    type="email"
-    placeholder="m@example.com"
-    aria-describedby="email-description email-error"
-  />
-  <FieldDescription id="email-description">
-    We'll never share your email.
-  </FieldDescription>
-  <FieldError id="email-error">
-    {errors.email?.message}
-  </FieldError>
+  <Input type="email" placeholder="m@example.com" />
+  <FieldDescription>We'll never share your email.</FieldDescription>
+  <FieldError>{errors.email?.message}</FieldError>
 </Field>
 
 // With validation state
@@ -675,54 +725,98 @@ import { Field, FieldLabel, FieldDescription, FieldError } from "@/components/ui
   <FieldError>{errors.password?.message}</FieldError>
 </Field>
 
-// Inline field
-<Field orientation="horizontal">
-  <FieldLabel>Subscribe</FieldLabel>
-  <Checkbox />
-  <FieldDescription>Get updates via email</FieldDescription>
+// Responsive orientation (auto-switches by container width)
+<Field orientation="responsive">
+  <FieldContent>
+    <FieldLabel htmlFor="msg">Message</FieldLabel>
+    <FieldDescription>Keep it short</FieldDescription>
+  </FieldContent>
+  <Textarea id="msg" placeholder="Hello" />
+</Field>
+
+// Field sets for grouped fields
+<FieldSet>
+  <FieldLegend>Payment Method</FieldLegend>
+  <FieldDescription>All transactions are secure</FieldDescription>
+  <FieldGroup>
+    <Field>
+      <FieldLabel htmlFor="name">Name on Card</FieldLabel>
+      <Input id="name" placeholder="Evil Rabbit" required />
+    </Field>
+    <Field>
+      <FieldLabel htmlFor="number">Card Number</FieldLabel>
+      <Input id="number" placeholder="4242..." required />
+    </Field>
+  </FieldGroup>
+</FieldSet>
+
+// Selectable choice cards (FieldLabel wrapping)
+<Field>
+  <FieldLabel className="flex cursor-pointer items-center gap-3 rounded-lg border p-4 has-[:checked]:border-primary">
+    <RadioGroupItem value="card" />
+    <div>
+      <FieldTitle>Credit Card</FieldTitle>
+      <FieldDescription>Pay with Visa or Mastercard</FieldDescription>
+    </div>
+  </FieldLabel>
 </Field>
 ```
 
 ## Item Component (October 2025)
 
-Flex container for list items with consistent spacing:
+Flexible container for lists, cards, and navigation:
 
 ```tsx
-import { Item, ItemIcon, ItemLabel, ItemDescription } from "@/components/ui/item"
+import {
+  Item, ItemMedia, ItemContent, ItemTitle,
+  ItemDescription, ItemActions, ItemGroup, ItemSeparator,
+} from "@/components/ui/item"
 
-// List item with icon
+// List item with icon and actions
 <Item>
-  <ItemIcon>
+  <ItemMedia variant="icon">
     <FileIcon className="size-4" />
-  </ItemIcon>
-  <div>
-    <ItemLabel>document.pdf</ItemLabel>
+  </ItemMedia>
+  <ItemContent>
+    <ItemTitle>document.pdf</ItemTitle>
     <ItemDescription>2.4 MB</ItemDescription>
-  </div>
+  </ItemContent>
+  <ItemActions>
+    <Button variant="ghost" size="icon">
+      <MoreHorizontal className="size-4" />
+    </Button>
+  </ItemActions>
 </Item>
 
-// Card-style items
+// Card-style navigation
 <Item asChild>
   <a href="/dashboard" className="rounded-lg border p-4 hover:bg-accent">
-    <ItemIcon>
+    <ItemMedia variant="icon">
       <LayoutDashboard className="size-5" />
-    </ItemIcon>
-    <div>
-      <ItemLabel>Dashboard</ItemLabel>
+    </ItemMedia>
+    <ItemContent>
+      <ItemTitle>Dashboard</ItemTitle>
       <ItemDescription>View your analytics</ItemDescription>
-    </div>
+    </ItemContent>
   </a>
 </Item>
 
-// Navigation items
-<nav className="space-y-1">
+// Grouped items with separators
+<ItemGroup>
   <Item asChild>
     <a href="/home" className="px-3 py-2 rounded-md hover:bg-accent">
-      <ItemIcon><Home className="size-4" /></ItemIcon>
-      <ItemLabel>Home</ItemLabel>
+      <ItemMedia variant="icon"><Home className="size-4" /></ItemMedia>
+      <ItemContent><ItemTitle>Home</ItemTitle></ItemContent>
     </a>
   </Item>
-</nav>
+  <ItemSeparator />
+  <Item asChild>
+    <a href="/settings" className="px-3 py-2 rounded-md hover:bg-accent">
+      <ItemMedia variant="icon"><Settings className="size-4" /></ItemMedia>
+      <ItemContent><ItemTitle>Settings</ItemTitle></ItemContent>
+    </a>
+  </Item>
+</ItemGroup>
 ```
 
 ## Spinner Component (October 2025)
@@ -816,15 +910,150 @@ import { Kbd } from "@/components/ui/kbd"
 ## Empty State
 
 ```tsx
-import { Empty } from "@/components/ui/empty"
+import { Empty, EmptyMedia, EmptyTitle, EmptyDescription, EmptyContent, EmptyHeader } from "@/components/ui/empty"
 import { FileIcon } from "lucide-react"
 
 <Empty>
-  <FileIcon className="size-10 text-muted-foreground" />
-  <h3 className="mt-4 text-lg font-semibold">No files uploaded</h3>
-  <p className="mb-4 mt-2 text-sm text-muted-foreground">
-    Upload your first file to get started
-  </p>
-  <Button>Upload File</Button>
+  <EmptyMedia>
+    <FileIcon className="size-10 text-muted-foreground" />
+  </EmptyMedia>
+  <EmptyHeader>
+    <EmptyTitle>No files uploaded</EmptyTitle>
+    <EmptyDescription>Upload your first file to get started</EmptyDescription>
+  </EmptyHeader>
+  <EmptyContent>
+    <Button>Upload File</Button>
+  </EmptyContent>
 </Empty>
+```
+
+## RTL / Direction Support (January 2026)
+
+```tsx
+import { Direction } from "@/components/ui/direction"
+
+// Wrap app or section for RTL support
+<Direction dir="rtl">
+  <App />
+</Direction>
+
+// Components automatically adapt layout direction
+// Use Tailwind logical properties for RTL-aware styling:
+<div className="ps-4 pe-2 ms-auto">  {/* start/end instead of left/right */}
+```
+
+Tailwind v4.2 logical properties (`pbs-*`, `pbe-*`, `mbs-*`, `mbe-*`, `inset-s-*`, `inset-e-*`) provide full RTL support at the utility level.
+
+## Common Pitfalls
+
+### Form `defaultValues` Required
+
+Always provide `defaultValues` in `useForm()` - omitting them causes uncontrolled-to-controlled warnings and broken validation:
+
+```tsx
+// CORRECT
+const form = useForm({
+  resolver: zodResolver(schema),
+  defaultValues: { name: "", email: "", age: 0 },
+})
+
+// WRONG - missing defaultValues
+const form = useForm({ resolver: zodResolver(schema) })
+```
+
+Use `z.coerce.number()` for numeric inputs (HTML inputs always return strings):
+```tsx
+const schema = z.object({
+  age: z.coerce.number().min(0).max(150),
+  price: z.coerce.number().positive(),
+})
+```
+
+### Select and Switch in Forms
+
+Select uses `onValueChange` (not `onChange`). Switch uses `onCheckedChange` and `checked`:
+
+```tsx
+// Select - wire onChange to onValueChange
+<Select onValueChange={field.onChange} defaultValue={field.value}>
+
+// Switch - wire both checked and onCheckedChange
+<Switch checked={field.value} onCheckedChange={field.onChange} />
+```
+
+### Never Nest Dialogs
+
+Nested `<Dialog>` components break focus trapping. Use state machine pattern instead:
+
+```tsx
+// WRONG - nested dialogs
+<Dialog>
+  <DialogContent>
+    <Dialog>  {/* breaks focus trap */}
+      <DialogContent>...</DialogContent>
+    </Dialog>
+  </DialogContent>
+</Dialog>
+
+// CORRECT - state machine
+const [view, setView] = useState<"list" | "confirm" | null>(null)
+
+<Dialog open={view === "list"} onOpenChange={() => setView(null)}>
+  <DialogContent>
+    <Button onClick={() => { setView("confirm") }}>Delete</Button>
+  </DialogContent>
+</Dialog>
+
+<Dialog open={view === "confirm"} onOpenChange={() => setView(null)}>
+  <DialogContent>Are you sure?</DialogContent>
+</Dialog>
+```
+
+### Sticky Positioning
+
+`position: sticky` fails silently if any ancestor has `overflow: hidden` or `overflow: auto`:
+
+```tsx
+// WRONG - sticky won't work inside overflow container
+<div className="overflow-auto">
+  <div className="sticky top-0">Never sticks</div>
+</div>
+
+// CORRECT - sticky element must be direct child of scroll container
+<div className="overflow-auto">
+  <div className="sticky top-0 z-10 bg-background">Table header</div>
+  <div>Scrollable content</div>
+</div>
+```
+
+### Server vs Client Components
+
+Never add `"use client"` to shadcn/ui source files. Instead, wrap interactive parts:
+
+```tsx
+// WRONG - making the whole page client-side
+"use client"
+export default function Page() { ... }
+
+// CORRECT - isolate client components, pass server data as children
+export default function Page() {
+  const data = await getData()
+  return (
+    <ClientWrapper>
+      <ServerContent data={data} />
+    </ClientWrapper>
+  )
+}
+```
+
+### Tooling
+
+Install these for consistent code quality:
+
+```bash
+# Auto-sorts Tailwind classes in canonical order
+pnpm add -D prettier-plugin-tailwindcss
+
+# Lints class usage (no contradictions, no deprecated utilities)
+pnpm add -D eslint-plugin-tailwindcss
 ```

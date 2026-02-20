@@ -340,3 +340,120 @@ Examples:
 - `bg-primary` + `text-primary-foreground`
 - `bg-muted` + `text-muted-foreground`
 - `bg-destructive` + `text-destructive-foreground`
+
+## `@theme` vs `@theme inline`
+
+Critical difference for dark mode and dynamic theming:
+
+**`@theme`** creates static design tokens. Values are baked in at build time and can be overridden by plugins:
+```css
+@theme {
+  --color-brand: oklch(0.6 0.2 250);
+  --font-sans: "Inter", system-ui;
+}
+```
+
+**`@theme inline`** references CSS variables that change at runtime (dark mode, user preferences):
+```css
+@theme inline {
+  --color-primary: var(--primary);
+  --color-background: var(--background);
+}
+```
+
+**Rule:** Use `@theme inline` for any color that changes between light/dark mode. Use `@theme` for static values like fonts or fixed brand colors.
+
+**Common mistake:** Using `@theme` (not `inline`) for shadcn/ui colors. This bakes in the light mode value and dark mode never updates:
+```css
+/* WRONG - dark mode won't work */
+@theme {
+  --color-primary: var(--primary);
+}
+
+/* CORRECT - follows CSS variable changes */
+@theme inline {
+  --color-primary: var(--primary);
+}
+```
+
+## Extended Status Colors
+
+shadcn/ui includes `destructive` by default. Add success, warning, and info for complete status coverage:
+
+```css
+:root {
+  --success: oklch(0.62 0.19 145);
+  --success-foreground: oklch(0.985 0 0);
+  --warning: oklch(0.84 0.16 84);
+  --warning-foreground: oklch(0.28 0.07 46);
+  --info: oklch(0.62 0.15 250);
+  --info-foreground: oklch(0.985 0 0);
+}
+
+.dark {
+  --success: oklch(0.52 0.15 145);
+  --success-foreground: oklch(0.985 0 0);
+  --warning: oklch(0.41 0.11 46);
+  --warning-foreground: oklch(0.99 0.02 95);
+  --info: oklch(0.52 0.13 250);
+  --info-foreground: oklch(0.985 0 0);
+}
+
+@theme inline {
+  --color-success: var(--success);
+  --color-success-foreground: var(--success-foreground);
+  --color-warning: var(--warning);
+  --color-warning-foreground: var(--warning-foreground);
+  --color-info: var(--info);
+  --color-info-foreground: var(--info-foreground);
+}
+```
+
+Usage:
+```tsx
+<Badge className="bg-success text-success-foreground">Active</Badge>
+<Badge className="bg-warning text-warning-foreground">Pending</Badge>
+<Badge className="bg-info text-info-foreground">Draft</Badge>
+```
+
+## Z-Index Scale
+
+Define a named z-index scale to prevent stacking context wars:
+
+```css
+@theme {
+  --z-dropdown: 50;
+  --z-sticky: 100;
+  --z-overlay: 200;
+  --z-modal: 300;
+  --z-popover: 400;
+  --z-toast: 500;
+}
+```
+
+```tsx
+// Use `isolate` to scope stacking contexts and prevent z-index leaking
+<div className="isolate">
+  <header className="sticky top-0 z-[var(--z-sticky)]">
+  <Dialog className="z-[var(--z-modal)]">
+</div>
+```
+
+## Animation Tokens
+
+```css
+@theme {
+  --duration-fast: 150ms;
+  --duration-normal: 200ms;
+  --duration-slow: 300ms;
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+}
+```
+
+Rules:
+- Never use `transition-all` - animate only `colors`, `transform`, `opacity`, or `shadow`
+- Use `motion-safe:` prefix for all non-essential animations
+- Use `motion-reduce:transition-none` as fallback
+- Only animate compositor properties (transform, opacity) for 60fps
+- Use `will-change-transform` sparingly and only during active animation

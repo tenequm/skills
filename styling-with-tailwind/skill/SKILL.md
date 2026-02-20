@@ -1,11 +1,78 @@
 ---
 name: styling-with-tailwind
-description: Creates UIs using Tailwind CSS utility classes and shadcn/ui patterns. Covers CSS variables with OKLCH colors, component variants with CVA, responsive design, dark mode, and Tailwind v4 features. Use when building interfaces with Tailwind, styling shadcn/ui components, implementing themes, or working with utility-first CSS.
+description: Creates UIs using Tailwind CSS utility classes and shadcn/ui patterns. Covers CSS variables with OKLCH colors, component variants with CVA, responsive design, dark mode, and Tailwind v4.2 features. Supports Radix UI and Base UI primitives, CLI 3.0, and visual styles. Use when building interfaces with Tailwind, styling shadcn/ui components, implementing themes, or working with utility-first CSS.
 ---
 
 # Styling with Tailwind CSS
 
-Build accessible UIs using Tailwind utility classes and shadcn/ui component patterns.
+Build accessible UIs using Tailwind CSS v4 utility classes and shadcn/ui component patterns. **Tailwind v4 uses CSS-first configuration only - never create or modify `tailwind.config.js`/`tailwind.config.ts`.** Supports Radix UI (default) or Base UI as primitive libraries.
+
+## Critical Rules
+
+### No `tailwind.config.js` - CSS-First Only
+
+Tailwind v4 configures everything in CSS. Migrate any JS/TS config:
+- `theme.extend.colors` → `@theme { --color-*: ... }`
+- `plugins` → `@plugin "..."` or `@utility`
+- `content` → `@source "..."`
+- `tailwindcss-animate` → `@import "tw-animate-css"`
+- `@layer utilities` → `@utility name { ... }`
+
+### Always Use Semantic Color Tokens
+
+```tsx
+// CORRECT - respects themes and dark mode
+<div className="bg-primary text-primary-foreground">
+
+// WRONG - breaks theming
+<div className="bg-blue-500 text-white">
+```
+
+Always pair `bg-*` with `text-*-foreground`. Extend with success/warning/info in [theming.md](theming.md).
+
+### Never Build Class Names Dynamically
+
+```tsx
+// WRONG - breaks Tailwind scanner
+<div className={`bg-${color}-500`}>
+
+// CORRECT - complete strings via lookup
+const colorMap = { red: "bg-red-500", blue: "bg-blue-500" } as const
+<div className={colorMap[color]}>
+```
+
+### cn() Merge Order
+
+Defaults first, consumer `className` last (tailwind-merge last-wins):
+```tsx
+className={cn(buttonVariants({ variant, size }), className)}  // correct
+className={cn(className, buttonVariants({ variant, size }))}  // wrong
+```
+
+### Animation Performance
+
+```tsx
+// WRONG - transition-all causes layout thrashing
+<div className="transition-all duration-300">
+
+// CORRECT - transition only what changes
+<div className="transition-colors duration-200">
+
+// CORRECT - respect reduced motion
+<div className="motion-safe:animate-fade-in">
+```
+
+### `@theme` vs `@theme inline`
+
+- `@theme` - static tokens, overridable by plugins
+- `@theme inline` - references CSS variables, follows dark mode changes
+
+```css
+@theme { --color-brand: oklch(0.6 0.2 250); }          /* static */
+@theme inline { --color-primary: var(--primary); }       /* dynamic */
+```
+
+See [components.md](components.md) for more pitfalls and [theming.md](theming.md) for color system reference.
 
 ## Core Patterns
 
@@ -50,12 +117,13 @@ shadcn/ui uses semantic CSS variables mapped to Tailwind utilities:
 <div className="bg-destructive text-destructive-foreground">
 ```
 
-### Component Variants with CVA
+### Component Authoring Pattern
 
-Use `class-variance-authority` for component variants:
+Components use plain functions with `data-slot` attributes (React 19 - no `forwardRef`):
 
 ```tsx
-import { cva } from "class-variance-authority"
+import { cva, type VariantProps } from "class-variance-authority"
+import { cn } from "@/lib/utils"
 
 const buttonVariants = cva(
   "inline-flex items-center justify-center gap-2 rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-1 disabled:pointer-events-none disabled:opacity-50",
@@ -75,15 +143,41 @@ const buttonVariants = cva(
         icon: "size-9",
       },
     },
-    defaultVariants: {
-      variant: "default",
-      size: "default",
-    },
+    defaultVariants: { variant: "default", size: "default" },
   }
 )
 
+// Plain function with React.ComponentProps (not forwardRef)
+function Button({
+  className,
+  variant,
+  size,
+  ...props
+}: React.ComponentProps<"button"> & VariantProps<typeof buttonVariants>) {
+  return (
+    <button
+      data-slot="button"
+      className={cn(buttonVariants({ variant, size, className }))}
+      {...props}
+    />
+  )
+}
+
 // Usage
 <Button variant="outline" size="sm">Click me</Button>
+```
+
+**Icon spacing with `data-icon`:**
+```tsx
+<Button>
+  <Spinner data-icon="inline-start" />
+  Generating...
+</Button>
+
+<Button>
+  <CheckIcon data-slot="icon" />
+  Save Changes
+</Button>
 ```
 
 ### Responsive Design
@@ -107,27 +201,31 @@ Mobile-first breakpoints:
 <h1 className="text-3xl md:text-4xl lg:text-5xl">
 ```
 
+### Container Queries
+
+First-class in Tailwind v4, no plugin needed:
+
+```tsx
+<div className="@container">
+  <div className="grid gap-4 @sm:grid-cols-2 @lg:grid-cols-3">
+    Responds to container width, not viewport
+  </div>
+</div>
+
+// Named containers
+<div className="@container/sidebar">
+  <nav className="hidden @md/sidebar:block">
+```
+
 ### Dark Mode
 
 ```tsx
-// Use dark: prefix for dark mode styles
-<div className="bg-white dark:bg-black text-black dark:text-white">
+// Use dark: prefix - but prefer semantic colors over manual dark: overrides
+<div className="bg-background text-foreground">          // auto dark mode
+<div className="bg-white dark:bg-black">                 // manual override
 
-// Theme toggle component
-"use client"
-import { Moon, Sun } from "lucide-react"
-import { useTheme } from "next-themes"
-
-export function ThemeToggle() {
-  const { theme, setTheme } = useTheme()
-
-  return (
-    <button onClick={() => setTheme(theme === "dark" ? "light" : "dark")}>
-      <Sun className="rotate-0 scale-100 dark:-rotate-90 dark:scale-0" />
-      <Moon className="absolute rotate-90 scale-0 dark:rotate-0 dark:scale-100" />
-    </button>
-  )
-}
+// Use next-themes for toggle: useTheme() → setTheme("dark" | "light")
+// Always add suppressHydrationWarning to <html> to prevent flash
 ```
 
 ## Common Component Patterns
@@ -178,25 +276,6 @@ const badgeVariants = cva(
 )
 ```
 
-### Alert
-
-```tsx
-<div className="relative w-full rounded-lg border px-4 py-3 text-sm [&>svg]:absolute [&>svg]:left-4 [&>svg]:top-4 [&>svg+div]:translate-y-[-3px] [&:has(svg)]:pl-11">
-  <AlertCircle className="size-4" />
-  <div className="font-medium">Alert Title</div>
-  <div className="text-sm text-muted-foreground">Description</div>
-</div>
-```
-
-### Loading Skeleton
-
-```tsx
-<div className="space-y-2">
-  <div className="h-4 w-[250px] animate-pulse rounded bg-muted" />
-  <div className="h-4 w-[200px] animate-pulse rounded bg-muted" />
-</div>
-```
-
 ## Layout Patterns
 
 ### Centered Layout
@@ -229,16 +308,6 @@ const badgeVariants = cva(
 </div>
 ```
 
-### Container with Max Width
-
-```tsx
-<div className="container mx-auto px-4 md:px-6 lg:px-8">
-  <div className="max-w-2xl mx-auto">
-    {/* Centered content */}
-  </div>
-</div>
-```
-
 ## Accessibility Patterns
 
 ### Focus Visible
@@ -259,41 +328,35 @@ const badgeVariants = cva(
 <button className="disabled:cursor-not-allowed disabled:opacity-50" disabled>
 ```
 
-### ARIA-friendly Alert
-
-```tsx
-<div role="alert" className="rounded-lg border p-4">
-  <div className="flex items-start gap-3">
-    <AlertCircle className="size-5 text-destructive" />
-    <div className="flex-1 space-y-1">
-      <h5 className="font-medium">Error</h5>
-      <p className="text-sm text-muted-foreground">Message</p>
-    </div>
-  </div>
-</div>
-```
-
 ## Tailwind v4 Features
 
-### Size Utility
+### CSS-First Configuration
 
-```tsx
-// New syntax (replaces w-* h-*)
-<div className="size-4">
-<div className="size-8">
-<div className="size-full">
+```css
+@import "tailwindcss";
+
+/* Custom utilities (replaces @layer utilities) */
+@utility tab-highlight-none {
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Custom variants */
+@custom-variant pointer-fine (@media (pointer: fine));
+
+/* Source control */
+@source inline("{hover:,}bg-red-{50,100,200}");
+@source not "./legacy";
 ```
 
 ### @theme Directive
 
 ```css
-/* Tailwind v4 syntax */
 @theme {
   --color-primary: oklch(0.205 0 0);
   --font-sans: "Inter", system-ui;
 }
 
-/* With CSS variables */
+/* With CSS variables (shadcn/ui pattern) */
 @theme inline {
   --color-primary: var(--primary);
 }
@@ -302,97 +365,55 @@ const badgeVariants = cva(
 ### Animation
 
 ```css
-/* globals.css */
 @import "tw-animate-css";
 ```
 
 ```tsx
 <div className="animate-fade-in">
 <div className="animate-slide-in-from-top">
-<div className="animate-spin">
 ```
 
-### Tailwind v4.1 Features (April 2025)
+### v4.1 Features
 
-**Text Shadow:**
 ```tsx
-// Subtle text shadows for depth
+// Text shadows
 <h1 className="text-shadow-sm text-4xl font-bold">
-<h2 className="text-shadow-md text-2xl">
-<div className="text-shadow-lg text-xl">
 
-// Custom text shadows
-<div className="text-shadow-[0_2px_4px_rgb(0_0_0_/_0.1)]">
-```
-
-**Mask Utilities:**
-```tsx
 // Gradient masks for fade effects
-<div className="mask-linear-to-b from-black to-transparent">
-  Fades to transparent at bottom
-</div>
+<div className="mask-linear-to-b">Fades to transparent at bottom</div>
 
-// Image masks
-<div className="mask-[url('/mask.svg')]">
-  Masked content
-</div>
+// Pointer-aware sizing
+<button className="pointer-fine:py-1 pointer-coarse:py-3">
 
-// Common patterns
-<div className="mask-radial-gradient">Spotlight effect</div>
+// Form validation after user interaction
+<input className="user-valid:border-green-500 user-invalid:border-red-500" />
+
+// Overflow wrap for long strings
+<p className="overflow-wrap-anywhere">verylongwordthatneedstowrap</p>
 ```
 
-**Colored Drop Shadow:**
+### v4.2 Features (February 2026)
+
 ```tsx
-// Brand-colored shadows
-<div className="drop-shadow-[0_4px_12px_oklch(0.488_0.243_264.376)]">
+// Logical block properties (RTL/writing-mode aware)
+<div className="pbs-4 pbe-8 mbs-2">
+<div className="border-bs-2 border-be">
 
-// Use with semantic colors
-<Button className="drop-shadow-lg drop-shadow-primary/50">
-  Glowing button
-</Button>
+// Logical sizing (replaces w-*/h-* for logical layouts)
+<div className="inline-full block-screen">
+
+// Font feature settings
+<p className="font-features-['tnum','liga']">Tabular numbers</p>
+
+// New color palettes: mauve, olive, mist, taupe
+<div className="bg-mauve-100 text-olive-900">
 ```
 
-**Overflow Wrap:**
-```tsx
-// Break long words
-<p className="overflow-wrap-anywhere">
-  verylongwordthatneedstowrap
-</p>
-
-<p className="overflow-wrap-break-word">
-  URLs and long strings
-</p>
-```
+**Deprecation:** `start-*`/`end-*` deprecated in favor of `inset-s-*`/`inset-e-*`.
 
 ## OKLCH Colors
 
-Use OKLCH for better color perception:
-
-```css
-/* Format: oklch(lightness chroma hue) */
---primary: oklch(0.205 0 0);
---destructive: oklch(0.577 0.245 27.325);
-
-/* Benefits: perceptually uniform, consistent lightness across hues */
-```
-
-## Base Color Palettes
-
-shadcn/ui provides multiple base colors:
-
-```css
-/* Neutral (default) - pure grayscale */
---primary: oklch(0.205 0 0);
-
-/* Zinc - cooler, blue-gray */
---primary: oklch(0.21 0.006 285.885);
-
-/* Slate - balanced blue-gray */
---primary: oklch(0.208 0.042 265.755);
-
-/* Stone - warmer, brown-gray */
---primary: oklch(0.216 0.006 56.043);
-```
+All shadcn/ui colors use OKLCH format: `oklch(lightness chroma hue)`. Lightness 0-1, chroma 0-0.4 (0 = gray), hue 0-360. Base palettes: Neutral, Zinc, Slate, Stone, Gray. See [theming.md](theming.md) for complete palettes and OKLCH reference.
 
 ## Best Practices
 
@@ -428,63 +449,88 @@ shadcn/ui provides multiple base colors:
 <div className="p-[17px] text-[13px]">
 ```
 
-## Installation
+## Installation & CLI
 
 ```bash
-# Initialize shadcn/ui
+# Create new project with visual style + primitive selection
+npx shadcn create
+
+# Initialize in existing project
 pnpm dlx shadcn@latest init
 
 # Add components
 pnpm dlx shadcn@latest add button card form
 
-# Add all components
-pnpm dlx shadcn@latest add --all
+# Add from community registries
+npx shadcn add @acme/button @internal/auth-system
+
+# View/search registries
+npx shadcn view @acme/auth-system
+npx shadcn search @tweakcn -q "dark"
+npx shadcn list @acme
+
+# Add MCP server for AI integration
+npx shadcn@latest mcp init
+
+# Update existing components
+pnpm dlx shadcn@latest add button --overwrite
 ```
+
+### Visual Styles
+
+`npx shadcn create` offers 5 built-in visual styles:
+- **Vega** - Classic shadcn/ui look
+- **Nova** - Compact, reduced padding
+- **Maia** - Soft and rounded, generous spacing
+- **Lyra** - Boxy and sharp, pairs with mono fonts
+- **Mira** - Dense, for data-heavy interfaces
+
+These rewrite component code (not just CSS variables) to match the selected style.
 
 ## Troubleshooting
 
-**Colors not updating:**
-1. Check CSS variable in globals.css
-2. Verify @theme inline includes variable
-3. Clear build cache
+**Colors not updating:** Check CSS variable in globals.css → verify `@theme inline` includes the mapping → clear build cache.
 
-**Dark mode not working:**
-1. Verify ThemeProvider wraps app
-2. Check suppressHydrationWarning on html tag
-3. Ensure dark: variants defined
+**Dark mode flash on load:** Add `suppressHydrationWarning` to `<html>` tag and ensure ThemeProvider wraps app with `attribute="class"`.
 
-**Tailwind v4 migration:**
-1. Run `@tailwindcss/upgrade@next` codemod
-2. Update CSS variables with hsl() wrappers
-3. Change @theme to @theme inline
-4. Install tw-animate-css
+**Found `tailwind.config.js`:** Delete it. Run `npx @tailwindcss/upgrade` to auto-migrate to CSS-first config. All customization belongs in your CSS file via `@theme`, `@utility`, `@plugin`.
+
+**Classes not detected:** Check `@source` directives cover your component paths. Never construct class names dynamically (see Critical Rules).
 
 ## Component Patterns
 
 For detailed component patterns see [components.md](components.md):
-- **Composition**: asChild pattern for wrapping elements
+- **Composition**: asChild pattern, data-slot attributes
 - **Typography**: Heading scales, prose styles, inline code
-- **Forms**: React Hook Form with Zod validation
-- **Icons**: Lucide icons integration and sizing
+- **Forms**: React Hook Form + Zod, Field component with FieldSet/FieldGroup
+- **Icons**: Lucide icons with data-icon attributes
 - **Inputs**: OTP, file, grouped inputs
 - **Dialogs**: Modal patterns and composition
 - **Data Tables**: TanStack table integration
 - **Toasts**: Sonner notifications
-- **CLI**: Complete command reference
+- **Pitfalls**: cn() order, form defaultValues, dialog nesting, sticky, server/client
 
 ## Resources
 
-See [theming.md](theming.md) for complete color system reference and examples.
+See [theming.md](theming.md) for complete color system reference:
+- `@theme` vs `@theme inline` (critical for dark mode)
+- Status color extensions (success, warning, info)
+- Z-index scale and animation tokens
+- All base palettes (Neutral, Zinc, Slate, Stone, Gray)
 
 ## Summary
 
 Key concepts:
-- Use semantic CSS variables for theming
+- **v4 CSS-first only** - no `tailwind.config.js`, all config in CSS
+- **Semantic colors only** - never use raw palette (`bg-blue-500`), always `bg-primary`
+- **Always pair** `bg-*` with `text-*-foreground`
+- **Never build class names dynamically** - use object lookup with complete strings
+- **cn() order** - defaults first, consumer `className` last
+- **No `transition-all`** - transition only specific properties
+- **`@theme inline`** for dynamic theming, `@theme` for static tokens
+- Author components as plain functions with `data-slot` (React 19)
 - Apply CVA for component variants
-- Follow mobile-first responsive patterns
-- Implement dark mode with next-themes
-- Use OKLCH for modern color handling
-- Prefer Tailwind v4 features (size-*, @theme)
-- Always ensure accessibility with focus-visible, sr-only
+- Use `motion-safe:` / `motion-reduce:` for animations
+- Choose Radix UI or Base UI as primitive library
 
-This skill focuses on shadcn/ui patterns with Tailwind CSS. For component-specific examples, refer to the official shadcn/ui documentation.
+This skill targets Tailwind CSS v4.2 with shadcn/ui. For component-specific examples, see [components.md](components.md). For color system, see [theming.md](theming.md).
