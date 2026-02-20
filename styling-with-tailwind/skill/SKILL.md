@@ -386,7 +386,7 @@ const badgeVariants = cva(
 <button className="pointer-fine:py-1 pointer-coarse:py-3">
 
 // Form validation after user interaction
-<input className="user-valid:border-green-500 user-invalid:border-red-500" />
+<input className="user-valid:border-success user-invalid:border-destructive" />
 
 // Overflow wrap for long strings
 <p className="overflow-wrap-anywhere">verylongwordthatneedstowrap</p>
