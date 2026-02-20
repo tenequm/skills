@@ -1,6 +1,6 @@
 {
   "name": "solana",
-  "version": "0.5.2",
+  "version": "0.5.3",
   "private": true,
   "description": "Comprehensive Solana development toolkit with skills for building programs (Anchor/native Rust) and security auditing, plus proactive security review agent",
   "scripts": {

@@ -1,3 +1,9 @@
+## 0.5.3 (2026-02-20)
+
+### 🩹 Fixes
+
+- **solana:** replace @solana/web3.js references with @solana/kit ([2daefbe](https://github.com/tenequm/claude-plugins/commit/2daefbe))
+
 ## 0.5.2 (2026-02-19)
 
 ### 🩹 Fixes
