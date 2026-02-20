@@ -129,7 +129,7 @@ import { ChevronRight, Check, X, AlertCircle, Loader2 } from "lucide-react"
 
 // Icon with semantic colors
 <AlertCircle className="size-4 text-destructive" />
-<Check className="size-4 text-green-500" />
+<Check className="size-4 text-success" />
 
 // In alerts
 <Alert>
