@@ -74,7 +74,7 @@
       "name": "styling-with-tailwind",
       "source": "./",
       "description": "Skill: Build beautiful UIs with Tailwind CSS and shadcn/ui - modern utility-first styling, component patterns, and Tailwind v4.1 features",
-      "version": "0.3.0",
+      "version": "0.3.1",
       "skills": [
         "./styling-with-tailwind/skill"
       ]
