@@ -1,3 +1,9 @@
+## 0.6.0 (2026-02-21)
+
+### 🚀 Features
+
+- **solana:** add framework-kit client-side development reference ([f7734f5](https://github.com/tenequm/claude-plugins/commit/f7734f5))
+
 ## 0.5.3 (2026-02-20)
 
 ### 🩹 Fixes
