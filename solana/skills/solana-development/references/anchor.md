@@ -619,10 +619,14 @@ yarn add @coral-xyz/anchor @solana/web3.js
 ```
 
 > **Legacy dependency:** Anchor's TS client requires `@solana/web3.js` v1 as a peer dependency. This is the only reason to install web3.js - it is in maintenance mode. For non-Anchor client code, use [`@solana/kit`](https://solanakit.org) instead. Use [`@solana/compat`](https://www.npmjs.com/package/@solana/compat) to bridge between Kit and legacy web3.js types when needed.
+>
+> **For new dApps:** Use framework-kit (`@solana/client` + `@solana/react-hooks`) instead of `@solana/wallet-adapter-react` for wallet connections. Anchor's `.methods()` API works with either approach. See [client-development.md](client-development.md).
 
 ### Setup Program Instance
 
 #### With Wallet (Frontend)
+
+> **Legacy pattern** - uses `@solana/wallet-adapter-react`. For new projects, use framework-kit for wallet management. See [client-development.md](client-development.md). The Anchor `.methods()` API below works the same regardless.
 
 ```typescript
 import { Program, AnchorProvider, setProvider } from "@coral-xyz/anchor";

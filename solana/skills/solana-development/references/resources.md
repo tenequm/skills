@@ -113,13 +113,21 @@ Comprehensive collection of official documentation, development tools, learning 
 - [spl-token-2022](https://docs.rs/spl-token-2022) - Token Extensions program
 
 ### TypeScript/JavaScript
-- [@solana/kit](https://solanakit.org) - Solana JavaScript SDK (functional, tree-shakeable, WebCrypto-native)
-- [@solana/compat](https://www.npmjs.com/package/@solana/compat) - Bridge between Kit and legacy `@solana/web3.js` v1 types
-- [@coral-xyz/anchor](https://www.npmjs.com/package/@coral-xyz/anchor) - Anchor TypeScript client (still requires `@solana/web3.js` v1 as peer dependency)
+
+**dApp Client (recommended for frontends):**
+- [@solana/client](https://www.npmjs.com/package/@solana/client) + [@solana/react-hooks](https://www.npmjs.com/package/@solana/react-hooks) - Framework-kit: wallet connection, React hooks, SOL/SPL transfers, transaction pool ([GitHub](https://github.com/solana-foundation/framework-kit))
+- [@solana/web3-compat](https://www.npmjs.com/package/@solana/web3-compat) - Drop-in bridge for migrating `@solana/web3.js` v1 code to Kit primitives
+
+**Low-level SDK:**
+- [@solana/kit](https://solanakit.org) - Solana JavaScript SDK v6 (functional, tree-shakeable). Use for server-side scripts, bots, CLIs
+- [@solana/compat](https://www.npmjs.com/package/@solana/compat) - Bridge between Kit 6.x and legacy `@solana/web3.js` v1 types
+
+**Framework-specific:**
+- [@coral-xyz/anchor](https://www.npmjs.com/package/@coral-xyz/anchor) - Anchor TypeScript client (requires `@solana/web3.js` v1 as peer dependency)
 - [@solana/spl-token](https://www.npmjs.com/package/@solana/spl-token) - SPL Token JS library
 - [Umi Framework](https://github.com/metaplex-foundation/umi) - Modular framework by Metaplex
 
-> **Note:** `@solana/web3.js` v1 is in maintenance mode (last release July 2025). Use `@solana/kit` for all new client code. The only reason to install `@solana/web3.js` is as a peer dependency required by Anchor or Light Protocol SDKs.
+> **Note:** `@solana/web3.js` v1 is in maintenance mode. For new dApps, use framework-kit (`@solana/client` + `@solana/react-hooks`). For server-side/CLI code, use `@solana/kit` 6.x. The only reason to install `@solana/web3.js` is as a peer dependency required by Anchor or Light Protocol SDKs. See [client-development.md](client-development.md) for the full decision guide.
 
 ### Python
 - [solana-py](https://github.com/michaelhly/solana-py) - Solana Python SDK
@@ -170,7 +178,9 @@ Comprehensive collection of official documentation, development tools, learning 
 - Latest Anchor: 0.32.1
 - Recommended Solana CLI: 2.3.0+ (Agave)
 - Rust minimum: 1.89.0+ (required for Anchor 0.32.0+)
-- @solana/kit: 6.1.0
+- @solana/client (framework-kit): 1.7.0
+- @solana/react-hooks: 1.4.1
+- @solana/kit: 6.1.0 (standalone) / 5.x (used internally by framework-kit)
 - Solana program library: 2.0+
 
 **Updating tools:**

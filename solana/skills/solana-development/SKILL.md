@@ -136,6 +136,10 @@ Essential knowledge for all Solana developers, regardless of framework:
 - **[deployment.md](references/deployment.md)** - Deploy, upgrade, verify, and manage programs
 - **[production-deployment.md](references/production-deployment.md)** - Verified builds for production (Anchor 0.32.1 workflow)
 
+### Client-Side Development
+
+- **[client-development.md](references/client-development.md)** - dApp client: wallet connections, React hooks, SOL/SPL transfers, transaction management. Covers framework-kit (recommended for dApps) and @solana/kit 6.x (server-side/scripts)
+
 ### Implementation Details
 
 - **[serialization.md](references/serialization.md)** - Account data layout, Borsh, zero-copy patterns
