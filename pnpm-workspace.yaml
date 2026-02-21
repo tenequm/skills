@@ -14,3 +14,4 @@ packages:
   - 'erc-8004'
   - 'x402'
   - 'python-dev'
+  - 'web3-protocol-gtm'

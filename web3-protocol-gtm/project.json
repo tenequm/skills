@@ -1,0 +1,25 @@
+{
+  "name": "web3-protocol-gtm",
+  "$schema": "../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "web3-protocol-gtm",
+  "projectType": "library",
+  "targets": {
+    "validate": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "pnpm validate",
+        "cwd": "web3-protocol-gtm"
+      },
+      "cache": true,
+      "inputs": [
+        "{projectRoot}/skill/**/*.md",
+        "{projectRoot}/package.json"
+      ]
+    }
+  },
+  "release": {
+    "version": {
+      "generator": "@nx/js:release-version"
+    }
+  }
+}
