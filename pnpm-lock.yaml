@@ -46,6 +46,8 @@ importers:
 
   uv-ruff-python-tools: {}
 
+  web3-protocol-gtm: {}
+
   x402: {}
 
 packages:
