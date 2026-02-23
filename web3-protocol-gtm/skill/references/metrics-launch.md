@@ -1,5 +1,38 @@
 # Protocol Metrics and Launch Sequencing
 
+## Revenue Is the North Star
+
+The industry has decisively shifted from TVL to revenue as the primary success metric.
+
+**1kx 2025 Onchain Revenue Report (the definitive source):**
+```
+- On-chain economy: $20B in fees, $9.7B in H1 2025 alone (41% YoY growth)
+- 1,124 protocols achieved profitability in 2025
+- 389 protocols started generating fees for the first time in 2025
+- Nearly 400 protocols with $1M+ ARR
+- 71 protocols exceeded $100M in on-chain ARR
+- Value distributed to token holders hit ATH for 3 consecutive quarters ($1.9B in Q3)
+- Top apps cut token incentives from $2.8B (90% of fees) to <$0.1B - almost all
+  value now flows to holders rather than being subsidized
+```
+
+**Artemis "Crypto Revenue" standard (Sep 2025):**
+Proposed industry-standard definition for "revenue" as value accrual to token holders. Protocols operate as multi-sided marketplaces - metrics should reflect this. 10+ protocols and funds adopted the framework.
+
+**TVL is now considered misleading:** "TVL is the biggest lie in crypto." Classic recursive loop: deposit $100 ETH, borrow $80, swap to ETH, deposit again = $180+ TVL from $100 real capital. A massive chunk of DeFi TVL is just leverage masquerading as adoption.
+
+**What metrics matter now:**
+```
+1. Protocol revenue (fees accruing to token holders) - THE primary metric
+2. Active addresses / daily transactions (273M monthly active wallets in H1 2025)
+3. Fee-to-valuation ratio (P/F ratio) - DeFi median 17x vs Blockchain median 3,902x
+4. Revenue growth rate
+5. Value distributed to token holders (buybacks, burns, staking net of emissions)
+6. Developer activity (full-time crypto developers rose 5% YoY, Electric Capital)
+```
+
+---
+
 ## Metrics Deep Dive
 
 ### Instrumentation Guide
@@ -246,7 +279,7 @@ Prerequisites (ALL must be true):
   - [ ] Protocol has proven utility (real usage, not speculative)
   - [ ] Token serves a protocol function (governance, staking, fee payment)
   - [ ] Anti-sybil measures tested and deployed
-  - [ ] Legal review completed (jurisdiction-specific)
+  - [ ] Legal review completed (jurisdiction-specific, see regulatory section)
   - [ ] Community governance foundation established
   - [ ] Sustainable protocol revenue (or clear path)
   - [ ] Team tokens have reasonable vesting (12+ months cliff)
@@ -257,8 +290,75 @@ Token Launch Anti-Patterns:
   - Airdrop without anti-sybil (farmed by bots, creates sell pressure)
   - Token as only business model (unsustainable)
   - No utility beyond speculation (regulatory risk)
+  - Generic airdrop farming incentives (returns barely cover participant time cost)
 
 If your protocol works without a token, seriously consider not launching one.
+```
+
+### The Hyperliquid Airdrop Model (Gold Standard)
+
+Hyperliquid's HYPE token launch (Nov 2024) is the defining case study for how airdrops should work:
+
+```
+What they did:
+  - 31% of supply airdropped (vs. typical 5-15%)
+  - Zero VC backing, zero private investor allocations
+  - $1.7B market cap on day one, grew to $40B valuation by mid-2025
+  - $550M annualized revenue, $300B monthly trading volume
+  - 60%+ market share in decentralized derivatives
+  - Daily token buybacks creating deflationary pressure
+
+Why it worked:
+  - Genuine product-market fit FIRST, then airdrop (not the reverse)
+  - Generous allocation to actual users, not insiders
+  - Revenue-backed token (not speculative)
+  - No VC dump risk at unlock
+
+Key lesson:
+  Build in relative quiet, achieve genuine PMF, then distribute generously.
+  The reverse order (GTM before PMF) is increasingly failing.
+```
+
+### Airdrop Reality Check (2026)
+
+```
+What's dead:
+  - "Didn't Make Money, But At Least Got Tired" (Bitget 2025 review title)
+  - Number of participants rises, returns barely cover time cost
+  - Rules constantly adjusted, thresholds raised, random factors increased
+  - Generic airdrops with one-time snapshots attract mercenary capital
+
+What works:
+  - Milestone-based distribution tied to genuine protocol usage
+  - PMF before distribution (Hyperliquid model)
+  - Anti-sybil from day 1 (not bolted on after farming is discovered)
+  - "Fairer launchpads replacing opportunistic airdrops with milestone-based funding"
+```
+
+### Regulatory Environment for Tokens (2026)
+
+Compliance has become a competitive advantage. Key regulations:
+
+```
+United States:
+  - SEC enforcement actions against unregistered airdrop distributions
+  - IRS treats every airdropped token as taxable ordinary income
+  - Wash trading coordination during airdrops can trigger CFTC enforcement
+  - Clarity Act and Genius Act creating clearer but stricter frameworks
+  - US users increasingly excluded from major airdrops
+
+Europe:
+  - MiCA (Markets in Crypto-Assets) regulation in effect
+  - Clear licensing requirements for token issuers
+  - Consumer protection requirements
+
+General:
+  - Dragonfly published 58-page academic paper on airdrop effectiveness
+    and regulatory implications (2025)
+  - Legal review is no longer optional - it's prerequisite
+  - Jurisdiction selection matters: some jurisdictions are actively hostile,
+    others provide regulatory clarity
+  - "Compliance has become a competitive advantage" (ICODA, Oct 2025)
 ```
 
 ---
@@ -268,13 +368,14 @@ If your protocol works without a token, seriously consider not launching one.
 ### What Grant Reviewers Look For
 
 ```
-Solana Foundation:
+Solana Foundation ($100M+ distributed, 500+ projects):
   - Clear ecosystem benefit (not just "good for our team")
   - Working code (testnet at minimum)
   - Milestone-based plan with measurable outcomes
   - Team with relevant experience (GitHub profiles, past work)
   - Budget that is justified line-by-line
   - Applications now require Y-Combinator-level detail
+  - Types: Milestone-based, convertible grants, RFPs
 
 Superteam:
   - Faster process, smaller grants ($5-50K typical)
@@ -284,10 +385,37 @@ Superteam:
 
 Colosseum:
   - Hackathon performance is primary entry point
-  - Accelerator: $250K pre-seed for top hackathon teams
+  - Accelerator: $250K pre-seed for top hackathon teams (0.67% acceptance rate)
+  - Eternal program: $25K award + $250K pre-seed for accelerator admission
   - Investment themes: DePIN, AI agents, consumer, stablecoins, infrastructure
   - Prefer teams that can ship fast (weeks, not months)
+
+Optimism Retro Funding:
+  - Shifted from annual rounds to continuous rewards (Season 7-8)
+  - Algorithm-driven scoring: builders love steady payouts and data-backed evaluation
+  - Focus areas: Dev Tooling, Onchain Builders
+  - Monthly payouts vs. one-time grants
+
+Arbitrum:
+  - $10M Audit Program (12 months, smart contract audits)
+  - ArbiFuel: Gas fee sponsorship for early-stage teams
+  - Gaming Catalyst Program for gaming-specific grants
+  - Domain Allocators for specialized funding areas
+
+Alliance DAO:
+  - $500K funding upon admission, $450K investment required
+  - Median startup raises $3.5M after program
+  - MVP Tournament: Up to $500K + accelerator spot
+  - 1,700+ applications per cohort, ~20 accepted
+
+Gitcoin Grants:
+  - $60M+ distributed to date
+  - Quadratic funding rounds
+  - Strong for public goods and open-source tooling
 ```
+
+**Hackathon results as grant credential:**
+Hackathon wins are the best "working demo" you can bring to any grant application. Colosseum's pipeline explicitly evaluates hackathon iteration. Solana Foundation treats wins as strong social proof. Alliance MVP Tournaments are designed as direct grant feeders.
 
 ### Grant Application Template
 

@@ -94,13 +94,13 @@ Alternative types:
 5. Do nothing (live without the primitive)
 ```
 
-**Example (SATI):**
+**Example (on-chain identity protocol):**
 ```
-1. Direct: No production competitor on Solana for agent identity
-2. Cross-chain: ERC-8004 implementations on EVM (none production yet)
-3. Centralized: Custom API key systems, centralized agent registries
-4. DIY: Teams build custom reputation databases per platform
-5. Do nothing: Agents operate without verifiable identity or trust
+1. Direct: No production competitor on Solana for this primitive
+2. Cross-chain: Equivalent implementations on EVM (none production yet)
+3. Centralized: Custom API key systems, centralized registries
+4. DIY: Teams build custom databases per platform
+5. Do nothing: Users operate without verifiable identity or trust
 ```
 
 ### Step 2: Isolate Unique Attributes
@@ -157,16 +157,16 @@ Unlike [primary alternative],
 [Protocol] [unique advantage].
 ```
 
-**Example (SATI):**
+**Example (on-chain identity protocol):**
 ```
 For AI agent marketplace builders
 who need verifiable agent identity and reputation,
-SATI is the on-chain trust infrastructure
-that provides cryptographically enforced blind feedback on Solana.
+[Protocol] is the on-chain trust infrastructure
+that provides cryptographically enforced feedback on Solana.
 
 Unlike custom reputation databases,
-SATI stores attestations at $0.002 each with portable,
-cross-platform reputation via the ERC-8004 standard.
+[Protocol] stores attestations at sub-cent cost with portable,
+cross-platform reputation via an open standard.
 ```
 
 ---

@@ -186,6 +186,50 @@ Here's why we chose them over [alternatives]."
 
 ---
 
+## Chain Abstraction and Cross-Chain Composability
+
+Chain abstraction and intents have become the dominant technical narrative for interoperability. This creates new GTM opportunities for protocols that position as cross-chain building blocks.
+
+### Key Developments (2025-2026)
+
+```
+EIP-7702 (shipped May 2025, Pectra hard fork):
+  Every EOA can now "become" a smart account natively
+  Immediately benefited wallet providers (Coinbase, Phantom)
+  Enabled safe AI agent trading via session keys
+  Arbitrum adopted via ArbOS 4
+
+ERC-4337 (Account Abstraction):
+  40M+ smart accounts deployed across Ethereum and L2s
+  100M+ UserOperations processed (10x increase from 2023)
+  Enabled entire business categories: gasless transactions, social recovery
+
+Cross-chain intents:
+  UniswapX, CoW Protocol, StripChain allow users to express goals once
+  and have solvers execute across chains
+  Standards: ERC-7683 (cross-chain intents), ERC-7715, ERC-7679
+
+Messaging rails:
+  LayerZero v2 DVNs, Chainlink CCIP v1.5, Wormhole Gateway
+```
+
+### GTM Implications
+
+```
+If your protocol works cross-chain:
+  - Position as a "chain-abstracted" primitive (not chain-specific)
+  - Integration surface expands to every chain your messaging rail supports
+  - EIP-7702 opens agent-friendly use cases (session keys, smart accounts)
+
+If your protocol is chain-specific:
+  - Depth on one chain can beat breadth across many
+  - Composability within the chain's DeFi stack matters more
+  - Example: Meteora went from zero to #1 by fees on Solana by being
+    deeply composable with the Solana DeFi stack
+```
+
+---
+
 ## Standards Adoption Strategy
 
 ### How Standards Get Adopted - Historical Patterns
@@ -205,6 +249,13 @@ ERC-4337 (Account Abstraction):
   Adoption driver: Wallet teams needed it for UX improvements
   Pattern: Solved a real pain (gas abstraction, social recovery)
   Lesson: Standards that solve felt pain get adopted faster
+  2025 update: 40M+ smart accounts, 100M+ UserOperations
+
+EIP-7702 (Account Abstraction, native - May 2025):
+  Adoption driver: Every EOA needed smart account features without migration
+  Pattern: Core protocol change that benefited the entire ecosystem
+  Lesson: Standards that ship at the protocol level create immediate
+  competitive advantages for early adopters (Coinbase, Phantom wallets)
 
 Common pattern:
   Real problem -> Spec + reference impl -> 3-5 early adopters ->
@@ -324,6 +375,44 @@ Every "no" is a growth ceiling.
 ---
 
 ## Grant Partnerships
+
+### Cross-Ecosystem Grant Programs (2026)
+
+```
+Solana Foundation:
+  $100M+ distributed, 500+ projects, 6 continents
+  Types: Milestone-based public goods, convertible grants, RFPs
+  Pipeline: Hackathon performance is a strong signal
+
+Colosseum:
+  Accelerator: $250K pre-seed for hackathon graduates
+  0.67% acceptance rate from hackathon pool
+  50+ venture-backed startups produced
+
+Optimism Retro Funding:
+  Shifted to continuous, algorithm-driven rewards (Season 7-8)
+  Builders love steady payouts and data-backed scoring
+  Focus areas: Dev Tooling, Onchain Builders
+  Algorithms open-source but refined each season
+
+Arbitrum:
+  $10M Audit Program (12 months)
+  ArbiFuel: Gas fee sponsorship for early-stage teams
+  Gaming Catalyst Program
+  Domain Allocators for specialized funding
+
+Alliance DAO:
+  $500K funding upon admission
+  $3.5M median post-program raise
+  MVP Tournaments: Up to $500K + accelerator spot
+
+Gitcoin Grants:
+  $60M+ distributed to date
+  Quadratic funding rounds
+  Strong for public goods and open-source tooling
+```
+
+**Key trend:** Grant programs are moving toward milestone-based funding, data-driven evaluation (replacing purely human voting), and ecosystem-specific focus (RWA, AI, DePIN themes). Lump-sum grants are declining.
 
 ### Joint Grant Applications
 
