@@ -4,6 +4,6 @@
   "private": true,
   "description": "Go-to-market strategy for web3 infrastructure and protocol projects. Community growth, CT narrative, developer relations, ecosystem partnerships, and launch sequencing.",
   "scripts": {
-    "validate": "python3 ../.claude/skills/skill-creator/scripts/quick_validate.py ./skill"
+    "validate": "python3 ../.claude/skills/skill-creator/scripts/quick_validate.py ."
   }
 }

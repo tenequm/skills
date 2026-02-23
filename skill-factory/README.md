@@ -47,7 +47,7 @@ cp -r skill/ ~/.claude/skills/skill-factory/
 For documentation-based skills (automatic on first use):
 
 ```bash
-./skill/scripts/install-skill-seekers.sh
+./scripts/install-skill-seekers.sh
 ```
 
 ## How It Works

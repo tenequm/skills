@@ -325,7 +325,7 @@ cd ~/Skill_Seekers
 pip install -r requirements.txt
 
 # Or use installation script
-~/Projects/claude-skills/skill-factory/skill/scripts/install-skill-seekers.sh
+~/Projects/claude-skills/skill-factory/scripts/install-skill-seekers.sh
 ```
 
 **Quality score stuck below 8.0:**

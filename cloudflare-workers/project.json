@@ -12,7 +12,8 @@
       },
       "cache": true,
       "inputs": [
-        "{projectRoot}/skill/**/*.md",
+        "{projectRoot}/SKILL.md",
+        "{projectRoot}/references/**/*.md",
         "{projectRoot}/package.json"
       ]
     }

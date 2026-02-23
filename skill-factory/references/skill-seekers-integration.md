@@ -21,7 +21,7 @@ How skill-factory integrates with Skill_Seekers for automated skill creation.
 ### One-Command Install
 
 ```bash
-~/Projects/claude-skills/skill-factory/skill/scripts/install-skill-seekers.sh
+~/Projects/claude-skills/skill-factory/scripts/install-skill-seekers.sh
 ```
 
 ### Manual Install

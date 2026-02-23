@@ -29,7 +29,7 @@ When you modify a skill, simply commit your changes - Nx Release will handle ver
 
 ```bash
 # 1. Make your changes to a skill
-vim gh-cli/skill/SKILL.md
+vim gh-cli/SKILL.md
 
 # 2. Validate your changes
 cd gh-cli
@@ -168,14 +168,14 @@ claude-plugins/
 │   ├── package.json        # Plugin metadata with version
 │   ├── project.json        # Nx project configuration
 │   ├── CHANGELOG.md        # Auto-generated changelog
-│   └── skill/              # Skill content
-│       ├── SKILL.md
-│       └── references/
+│   ├── SKILL.md            # Main skill file
+│   └── references/         # Detailed reference docs
 ├── gh-cli/                  # GitHub CLI plugin
 │   ├── package.json
 │   ├── project.json
 │   ├── CHANGELOG.md
-│   └── skill/
+│   ├── SKILL.md
+│   └── references/
 └── scripts/                 # Build and release scripts
     └── sync-marketplace.sh  # Syncs versions to marketplace.json
 ```

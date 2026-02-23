@@ -4,6 +4,6 @@
   "private": true,
   "description": "GitHub CLI for remote repository analysis, file fetching, codebase comparison, and discovering trending code/repos. Use when analyzing repos without cloning, comparing codebases, or searching for popular GitHub projects.",
   "scripts": {
-    "validate": "python3 ../.claude/skills/skill-creator/scripts/quick_validate.py ./skill"
+    "validate": "python3 ../.claude/skills/skill-creator/scripts/quick_validate.py ."
   }
 }

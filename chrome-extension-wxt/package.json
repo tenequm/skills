@@ -4,6 +4,6 @@
   "private": true,
   "description": "Build Chrome extensions using WXT framework with TypeScript, React, Vue, or Svelte. Use when creating browser extensions, developing cross-browser add-ons, or working with Chrome Web Store projects.",
   "scripts": {
-    "validate": "python3 ../.claude/skills/skill-creator/scripts/quick_validate.py ./skill"
+    "validate": "python3 ../.claude/skills/skill-creator/scripts/quick_validate.py ."
   }
 }

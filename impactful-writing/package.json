@@ -4,6 +4,6 @@
   "private": true,
   "description": "Write clear, emotionally resonant, and well-structured content across any platform",
   "scripts": {
-    "validate": "python3 ../.claude/skills/skill-creator/scripts/quick_validate.py ./skill"
+    "validate": "python3 ../.claude/skills/skill-creator/scripts/quick_validate.py ."
   }
 }

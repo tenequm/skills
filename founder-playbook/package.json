@@ -4,6 +4,6 @@
   "private": true,
   "description": "Decision validation and thinking frameworks for startup founders - pressure-test your next steps with proven methodologies and crypto/web3 specific knowledge",
   "scripts": {
-    "validate": "python3 ../.claude/skills/skill-creator/scripts/quick_validate.py ./skill"
+    "validate": "python3 ../.claude/skills/skill-creator/scripts/quick_validate.py ."
   }
 }

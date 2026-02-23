@@ -4,6 +4,6 @@
   "private": true,
   "description": "Build and test Solidity smart contracts with Foundry toolkit (Forge, Cast, Anvil)",
   "scripts": {
-    "validate": "python3 ../.claude/skills/skill-creator/scripts/quick_validate.py ./skill"
+    "validate": "python3 ../.claude/skills/skill-creator/scripts/quick_validate.py ."
   }
 }

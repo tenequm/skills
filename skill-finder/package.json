@@ -4,6 +4,6 @@
   "private": true,
   "description": "Find and evaluate Claude skills for specific use cases using semantic search, Anthropic best practices assessment, and fitness scoring",
   "scripts": {
-    "validate": "python3 ../.claude/skills/skill-creator/scripts/quick_validate.py ./skill"
+    "validate": "python3 ../.claude/skills/skill-creator/scripts/quick_validate.py ."
   }
 }

@@ -15,13 +15,8 @@ Before creating any skill:
 ### 2. Initialize Plugin
 
 ```bash
-# Create plugin directory
-mkdir -p [plugin-name]/skill
-
-# Initialize skill structure
-python3 .claude/skills/skill-creator/scripts/init_skill.py \
-  [plugin-name] \
-  --path [plugin-name]/skill
+# Initialize skill structure (creates [plugin-name]/ with SKILL.md, references/, etc.)
+python3 .claude/skills/skill-creator/scripts/init_skill.py [plugin-name] --path .
 
 # Create package.json (start at 0.0.0)
 cat > [plugin-name]/package.json <<EOF
@@ -31,7 +26,7 @@ cat > [plugin-name]/package.json <<EOF
   "private": true,
   "description": "Your description",
   "scripts": {
-    "validate": "python3 ../../.claude/skills/skill-creator/scripts/quick_validate.py ./skill"
+    "validate": "python3 ../.claude/skills/skill-creator/scripts/quick_validate.py ."
   }
 }
 EOF
@@ -40,11 +35,27 @@ EOF
 cat > [plugin-name]/project.json <<EOF
 {
   "name": "[plugin-name]",
-  "root": "[plugin-name]",
+  "\$schema": "../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "[plugin-name]",
+  "projectType": "library",
   "targets": {
     "validate": {
-      "command": "python3 ../../.claude/skills/skill-creator/scripts/quick_validate.py ./skill",
-      "options": { "cwd": "[plugin-name]" }
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "pnpm validate",
+        "cwd": "[plugin-name]"
+      },
+      "cache": true,
+      "inputs": [
+        "{projectRoot}/SKILL.md",
+        "{projectRoot}/references/**/*.md",
+        "{projectRoot}/package.json"
+      ]
+    }
+  },
+  "release": {
+    "version": {
+      "generator": "@nx/js:release-version"
     }
   }
 }
@@ -90,8 +101,8 @@ For details, see `references/topic.md`
 ```
 
 **Progressive disclosure:**
-- SKILL.md: 200-500 lines (overview, quick start)
-- references/*.md: Detailed guides loaded on-demand
+- `[plugin]/SKILL.md`: 200-500 lines (overview, quick start)
+- `[plugin]/references/*.md`: Detailed guides loaded on-demand
 
 ### 4. Validate
 
@@ -129,7 +140,7 @@ python3 .claude/skills/skill-creator/scripts/init_skill.py \
   --description "Brief description"
 ```
 
-Creates: SKILL.md, references/, scripts/, assets/
+Creates: `[name]/SKILL.md`, `[name]/references/`, `[name]/scripts/`, `[name]/assets/`
 
 ### quick_validate.py
 Validates skill against Anthropic best practices.

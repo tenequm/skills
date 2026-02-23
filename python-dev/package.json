@@ -4,6 +4,6 @@
   "private": true,
   "description": "Skill: Opinionated Python development setup with uv, ty, ruff, pytest, and just",
   "scripts": {
-    "validate": "python3 ../.claude/skills/skill-creator/scripts/quick_validate.py ./skill"
+    "validate": "python3 ../.claude/skills/skill-creator/scripts/quick_validate.py ."
   }
 }

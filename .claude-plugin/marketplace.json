@@ -16,7 +16,7 @@
       "description": "Skill: Full GitHub CLI capabilities for repos & code",
       "version": "1.1.0",
       "skills": [
-        "./gh-cli/skill"
+        "./gh-cli"
       ]
     },
     {
@@ -25,7 +25,7 @@
       "description": "Skill: Build Chrome extensions with WXT framework",
       "version": "1.1.0",
       "skills": [
-        "./chrome-extension-wxt/skill"
+        "./chrome-extension-wxt"
       ]
     },
     {
@@ -34,7 +34,7 @@
       "description": "Skill: Rapid development with Cloudflare Workers - build and deploy serverless applications",
       "version": "3.0.0",
       "skills": [
-        "./cloudflare-workers/skill"
+        "./cloudflare-workers"
       ]
     },
     {
@@ -43,7 +43,7 @@
       "description": "Skill: Find and evaluate Claude skills using semantic search and quality assessment",
       "version": "1.1.0",
       "skills": [
-        "./skill-finder/skill"
+        "./skill-finder"
       ]
     },
     {
@@ -52,7 +52,7 @@
       "description": "Skill: Autonomous skill creation with automatic quality assurance - analyzes requests, selects optimal creation method, and delivers production-ready skills",
       "version": "0.2.0",
       "skills": [
-        "./skill-factory/skill"
+        "./skill-factory"
       ]
     },
     {
@@ -61,7 +61,7 @@
       "description": "Skill: Modern Python development with uv (10-100x faster package manager) and ruff (extremely fast linter/formatter) - Astral's fast tooling suite",
       "version": "0.1.0",
       "skills": [
-        "./uv-ruff-python-tools/skill"
+        "./uv-ruff-python-tools"
       ]
     },
     {
@@ -76,7 +76,7 @@
       "description": "Skill: Build beautiful UIs with Tailwind CSS and shadcn/ui - modern utility-first styling, component patterns, and Tailwind v4.1 features",
       "version": "0.3.1",
       "skills": [
-        "./styling-with-tailwind/skill"
+        "./styling-with-tailwind"
       ]
     },
     {
@@ -106,7 +106,7 @@
         "decision-making"
       ],
       "skills": [
-        "./founder-playbook/skill"
+        "./founder-playbook"
       ]
     },
     {
@@ -115,7 +115,7 @@
       "description": "Skill: Build and test Solidity smart contracts with Foundry toolkit (Forge, Cast, Anvil) - testing patterns, deployment scripts, and modern Solidity 0.8.30",
       "version": "0.1.0",
       "skills": [
-        "./foundry-solidity/skill"
+        "./foundry-solidity"
       ]
     },
     {
@@ -124,7 +124,7 @@
       "description": "Skill: Write clear, emotionally resonant, and well-structured content across any platform - research-backed principles for Twitter, articles, docs, emails, and more",
       "version": "0.1.0",
       "skills": [
-        "./impactful-writing/skill"
+        "./impactful-writing"
       ]
     },
     {
@@ -133,7 +133,7 @@
       "description": "Skill: Build with ERC-8004 Trustless Agents - on-chain agent identity, reputation, and discovery using the Agent0 SDK",
       "version": "0.1.0",
       "skills": [
-        "./erc-8004/skill"
+        "./erc-8004"
       ]
     },
     {
@@ -142,7 +142,7 @@
       "description": "Skill: Build internet-native payments with the x402 open protocol - HTTP 402 for APIs, AI agents, and web services across EVM and Solana",
       "version": "0.1.0",
       "skills": [
-        "./x402/skill"
+        "./x402"
       ]
     },
     {
@@ -151,7 +151,7 @@
       "description": "Skill: Opinionated Python development setup with uv, ty, ruff, pytest, and just",
       "version": "0.1.0",
       "skills": [
-        "./python-dev/skill"
+        "./python-dev"
       ]
     },
     {
@@ -160,7 +160,7 @@
       "description": "Skill: Go-to-market strategy for web3 infrastructure and protocol projects - community growth, CT narrative, developer relations, ecosystem partnerships, and launch sequencing",
       "version": "0.2.0",
       "skills": [
-        "./web3-protocol-gtm/skill"
+        "./web3-protocol-gtm"
       ]
     }
   ]
