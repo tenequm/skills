@@ -74,7 +74,7 @@
       "name": "frontend-dev",
       "source": "./frontend-dev",
       "description": "Frontend toolkit: React/TypeScript, Tailwind/shadcn, TanStack (Query, Router, Start), Vite, and Biome",
-      "version": "0.0.0"
+      "version": "0.1.0"
     },
     {
       "name": "founder-playbook",
