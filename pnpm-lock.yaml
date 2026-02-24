@@ -28,6 +28,8 @@ importers:
 
   foundry-solidity: {}
 
+  frontend-dev: {}
+
   gh-cli: {}
 
   impactful-writing: {}
@@ -39,10 +41,6 @@ importers:
   skill-finder: {}
 
   solana: {}
-
-  styling-with-tailwind: {}
-
-  tanstack: {}
 
   uv-ruff-python-tools: {}
 
