@@ -1,14 +1,14 @@
 {
-  "name": "tanstack",
+  "name": "frontend-dev",
   "$schema": "../node_modules/nx/schemas/project-schema.json",
-  "sourceRoot": "tanstack",
+  "sourceRoot": "frontend-dev",
   "projectType": "library",
   "targets": {
     "validate": {
       "executor": "nx:run-commands",
       "options": {
         "command": "pnpm validate",
-        "cwd": "tanstack"
+        "cwd": "frontend-dev"
       },
       "cache": true,
       "inputs": [

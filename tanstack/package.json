@@ -1,9 +1,0 @@
-{
-  "name": "tanstack",
-  "version": "0.0.0",
-  "private": true,
-  "description": "TanStack toolkit for building type-safe React applications with Query (server state), Router (file-based routing), and Start (full-stack framework)",
-  "scripts": {
-    "validate": "python3 ../.claude/skills/skill-creator/scripts/quick_validate.py ./skills/tanstack-query && python3 ../.claude/skills/skill-creator/scripts/quick_validate.py ./skills/tanstack-router && python3 ../.claude/skills/skill-creator/scripts/quick_validate.py ./skills/tanstack-start"
-  }
-}

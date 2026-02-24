@@ -71,18 +71,9 @@
       "version": "0.6.0"
     },
     {
-      "name": "styling-with-tailwind",
-      "source": "./",
-      "description": "Skill: Build beautiful UIs with Tailwind CSS and shadcn/ui - modern utility-first styling, component patterns, and Tailwind v4.1 features",
-      "version": "0.3.1",
-      "skills": [
-        "./styling-with-tailwind"
-      ]
-    },
-    {
-      "name": "tanstack",
-      "source": "./tanstack",
-      "description": "TanStack toolkit: Query (server state management), Router (type-safe file-based routing), and Start (full-stack React framework)",
+      "name": "frontend-dev",
+      "source": "./frontend-dev",
+      "description": "Frontend toolkit: React/TypeScript, Tailwind/shadcn, TanStack (Query, Router, Start), Vite, and Biome",
       "version": "0.0.0"
     },
     {

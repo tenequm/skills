@@ -1,7 +1,3 @@
----
-name: tanstack-query
-description: Master TanStack Query (React Query) v5 for server state management in React applications. Use when fetching data from APIs, managing server state, caching, handling mutations, streaming AI responses, or integrating with tRPC v11. Triggers on phrases like "react query", "tanstack query", "data fetching", "cache management", "server state", "streamed query", "streaming data", or file patterns like *query*.ts, *Query*.tsx, queryClient.ts.
----
 
 # TanStack Query (React Query) v5
 
@@ -386,7 +382,7 @@ For detailed information on advanced patterns, see the reference files:
 ### Infinite Queries
 
 For implementing infinite scroll and load-more patterns:
-- See `references/infinite-queries.md` for comprehensive guide
+- See `infinite-queries.md` for comprehensive guide
 - Covers `useInfiniteQuery` hook
 - Bidirectional pagination
 - `getNextPageParam` and `getPreviousPageParam`
@@ -395,7 +391,7 @@ For implementing infinite scroll and load-more patterns:
 ### Optimistic Updates
 
 For updating UI before server confirmation:
-- See `references/optimistic-updates.md` for detailed patterns
+- See `optimistic-updates.md` for detailed patterns
 - Optimistic mutations
 - Rollback on error
 - Context for cancellation
@@ -404,7 +400,7 @@ For updating UI before server confirmation:
 ### TypeScript Support
 
 For full type safety and inference:
-- See `references/typescript.md` for complete TypeScript guide
+- See `query-typescript.md` for complete TypeScript guide
 - Type inference from query functions
 - Generic type parameters
 - Typing query options
@@ -414,7 +410,7 @@ For full type safety and inference:
 ### Query Invalidation Patterns
 
 For advanced cache invalidation strategies:
-- See `references/query-invalidation.md`
+- See `query-invalidation.md`
 - Partial matching
 - Predicate functions
 - Refetch strategies
@@ -423,7 +419,7 @@ For advanced cache invalidation strategies:
 ### Performance Optimization
 
 For optimizing query performance:
-- See `references/performance.md`
+- See `query-performance.md`
 - Query deduplication
 - Structural sharing
 - Memory management

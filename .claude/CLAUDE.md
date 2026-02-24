@@ -30,13 +30,13 @@ Public repository of production-ready Claude Code skills. Owner: @opwizardx
 | erc-8004 | 0.1.0 | ERC-8004 Trustless Agents |
 | founder-playbook | 0.1.1 | Decision frameworks for founders |
 | foundry-solidity | 0.1.0 | Solidity with Foundry toolkit |
+| frontend-dev | 0.0.0 | React/TS, Tailwind/shadcn, TanStack, Vite, Biome |
 | gh-cli | 1.1.0 | GitHub CLI for remote repos |
 | impactful-writing | 0.1.0 | High-impact writing across platforms |
 | python-dev | 0.1.0 | Python with uv, ty, ruff, pytest |
 | skill-factory | 0.2.0 | Autonomous skill creation |
 | skill-finder | 1.1.0 | Find and evaluate skills |
 | solana | 0.6.0 | Solana dev, security auditing, ZK compression |
-| styling-with-tailwind | 0.3.1 | Tailwind CSS and shadcn/ui |
 | uv-ruff-python-tools | 0.1.0 | Python with uv and ruff |
 | web3-protocol-gtm | 0.2.0 | Web3 GTM strategy |
 | x402 | 0.1.0 | x402 payment protocol |

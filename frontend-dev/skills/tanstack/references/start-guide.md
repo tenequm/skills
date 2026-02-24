@@ -1,7 +1,3 @@
----
-name: tanstack-start
-description: Build full-stack React applications with TanStack Start. Use when creating SSR/SSG apps, server functions, API routes, middleware, or deploying to Cloudflare/Vercel/Node. Triggers on "tanstack start", "server functions", "createServerFn", "full-stack react", "SSR framework", or file patterns like vite.config.ts with tanstackStart, src/server.ts, *.server.ts.
----
 
 # TanStack Start
 
@@ -18,9 +14,9 @@ Full-stack React framework powered by TanStack Router and Vite. Adds SSR, stream
 - Deploying to Cloudflare Workers, Netlify, Vercel, Node.js, Bun, or Docker
 - Need SPA mode with optional server functions (no SSR required)
 
-**Use TanStack Router alone** (see tanstack-router skill) when you only need client-side routing without server features.
+**Use TanStack Router alone** (see `router-guide.md`) when you only need client-side routing without server features.
 
-> For routing concepts (file-based routing, search params, nested layouts, loaders, preloading), refer to the **tanstack-router** skill. This skill covers Start-specific full-stack features.
+> For routing concepts (file-based routing, search params, nested layouts, loaders, preloading), see `router-guide.md`. This guide covers Start-specific full-stack features.
 
 ## Quick Start Workflow
 
@@ -459,10 +455,10 @@ tanstackStart({ prerender: { enabled: true, crawlLinks: true } })
 
 For deeper coverage, see reference files:
 
-- `references/server-functions.md` - Streaming, FormData, progressive enhancement, request cancellation, custom function IDs
-- `references/middleware.md` - sendContext, custom fetch, global config, environment tree shaking
-- `references/ssr-modes.md` - Selective SSR inheritance, functional form, shellComponent, fallback rendering
-- `references/server-routes.md` - Dynamic params, wildcards, escaped matching, pathless layouts
+- `server-functions.md` - Streaming, FormData, progressive enhancement, request cancellation, custom function IDs
+- `middleware.md` - sendContext, custom fetch, global config, environment tree shaking
+- `ssr-modes.md` - Selective SSR inheritance, functional form, shellComponent, fallback rendering
+- `server-routes.md` - Dynamic params, wildcards, escaped matching, pathless layouts
 
 ## Resources
 
@@ -470,4 +466,4 @@ For deeper coverage, see reference files:
 - [GitHub](https://github.com/TanStack/router) (Start lives in the router repo)
 - [Examples](https://github.com/TanStack/router/tree/main/examples/react) - Basic, Auth, React Query, Cloudflare, Clerk, Supabase
 - [Start vs Next.js](https://tanstack.com/start/latest/docs/framework/react/comparison)
-- Cross-reference: **tanstack-router** skill for routing, **tanstack-query** skill for data fetching
+- Cross-reference: `router-guide.md` for routing, `query-guide.md` for data fetching

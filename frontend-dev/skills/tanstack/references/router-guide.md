@@ -1,7 +1,3 @@
----
-name: tanstack-router
-description: Build type-safe React applications with TanStack Router. Use when implementing file-based or code-based routing, type-safe navigation, search params validation, data loading, code splitting, or route-level error handling. Triggers on "tanstack router", "file-based routing", "type-safe routing", "search params", "route loader", or file patterns like routes/*.tsx, __root.tsx, routeTree.gen.ts.
----
 
 # TanStack Router v1
 
@@ -19,7 +15,7 @@ A fully type-safe router for React with first-class search param APIs, built-in 
 - Configuring preloading strategies (intent, viewport, render)
 - Integrating TanStack Query with route loaders
 - Adding navigation blocking for unsaved changes
-- Building SSR applications (for full SSR, see the tanstack-start skill)
+- Building SSR applications (for full SSR, see `start-guide.md`)
 
 ## Quick Start Workflow
 
@@ -396,11 +392,11 @@ Set `defaultPreloadStaleTime: 0` on the router when using external caching so lo
 ## Advanced Topics
 
 See reference files for deep dives:
-- `references/search-params.md` - Custom serialization, Standard Schema validation, arrays/objects, sharing across routes
-- `references/data-loading.md` - Deferred data loading with Await, external data loading, shouldReload, streaming SSR
-- `references/routing-patterns.md` - Virtual file routes, route masking, navigation blocking, authenticated routes, parallel routes
-- `references/code-splitting.md` - Automatic splitting options, loader splitting, directory encapsulation, code-based splitting
-- `references/ssr.md` - SSR setup, streaming, dehydration/hydration, data serialization, TanStack Start integration
+- `search-params.md` - Custom serialization, Standard Schema validation, arrays/objects, sharing across routes
+- `data-loading.md` - Deferred data loading with Await, external data loading, shouldReload, streaming SSR
+- `routing-patterns.md` - Virtual file routes, route masking, navigation blocking, authenticated routes, parallel routes
+- `code-splitting.md` - Automatic splitting options, loader splitting, directory encapsulation, code-based splitting
+- `router-ssr.md` - SSR setup, streaming, dehydration/hydration, data serialization, TanStack Start integration
 
 ## DevTools
 
