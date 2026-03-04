@@ -131,7 +131,7 @@
       "name": "x402",
       "source": "./",
       "description": "Skill: Build internet-native payments with the x402 open protocol - HTTP 402 for APIs, AI agents, and web services across EVM and Solana",
-      "version": "0.1.0",
+      "version": "0.2.0",
       "skills": [
         "./x402"
       ]
