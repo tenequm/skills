@@ -1,6 +1,6 @@
 {
   "name": "x402-skill",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "description": "Build internet-native payments with the x402 open protocol - HTTP 402 Payment Required for APIs, AI agents, and web services",
   "scripts": {
