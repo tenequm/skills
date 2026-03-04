@@ -146,6 +146,7 @@ Returned after successful settlement:
 | `payer` | string | No | Payer's wallet address |
 | `transaction` | string | Yes | Blockchain tx hash |
 | `network` | string | Yes | CAIP-2 network ID |
+| `amount` | string | No | Actual settled amount (used by `upto` scheme; may differ from requested) |
 
 ### VerifyResponse
 
@@ -207,10 +208,13 @@ Verifies payment without executing on-chain.
 **Request:**
 ```json
 {
+  "x402Version": 2,
   "paymentPayload": { /* PaymentPayload */ },
   "paymentRequirements": { /* PaymentRequirements */ }
 }
 ```
+
+The `x402Version` field is required in both `/verify` and `/settle` request bodies (added in v2 spec update, March 2026).
 
 **Success Response:**
 ```json
@@ -226,7 +230,7 @@ Verifies payment without executing on-chain.
 
 Executes payment by broadcasting to blockchain.
 
-**Request:** Same as `/verify`
+**Request:** Same structure as `/verify` (includes `x402Version`).
 
 **Success Response:**
 ```json
@@ -269,6 +273,9 @@ Format: `{namespace}:{reference}`
 | Solana Mainnet | `solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp` |
 | Solana Devnet | `solana:EtWTRABZaYq6iMfeYKouRu166VU2xqa1` |
 | Avalanche Mainnet | `eip155:43114` |
+| MegaETH Mainnet | `eip155:4326` |
+| Aptos Mainnet | `aptos:1` |
+| Aptos Testnet | `aptos:2` |
 | Avalanche Fuji | `eip155:43113` |
 
 ## Error Codes
@@ -279,7 +286,9 @@ Format: `{namespace}:{reference}`
 | `invalid_exact_evm_payload_signature` | Invalid EIP-712 signature |
 | `invalid_exact_evm_payload_authorization_valid_before` | Authorization expired |
 | `invalid_exact_evm_payload_authorization_valid_after` | Authorization not yet valid |
-| `invalid_exact_evm_payload_authorization_value` | Amount insufficient |
+| `invalid_exact_evm_payload_authorization_value_mismatch` | Amount does not exactly match required |
+| `invalid_exact_svm_payload_amount_mismatch` | Solana amount does not exactly match required |
+| `permit2_amount_mismatch` | Permit2 amount does not exactly match required |
 | `invalid_exact_evm_payload_recipient_mismatch` | Recipient mismatch |
 | `invalid_network` | Network not supported |
 | `invalid_payload` | Malformed payload |

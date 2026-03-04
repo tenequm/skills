@@ -306,6 +306,128 @@ client.
     Register("eip155:1", evm.NewExactEvmScheme(mainnetSigner))      // Override for mainnet
 ```
 
+## Advanced: OnProtectedRequest Hook
+
+Pre-payment interception hook. Called on every request to a protected route before payment processing. Use for API key bypass, rate limiting, CORS preflight, or custom access control.
+
+```go
+import x402http "github.com/coinbase/x402/go/http"
+
+// Grant free access based on custom logic (e.g., API key, CORS preflight)
+server.OnProtectedRequest(func(
+    ctx context.Context,
+    reqCtx x402http.HTTPRequestContext,
+    routeConfig x402http.RouteConfig,
+) (*x402http.ProtectedRequestHookResult, error) {
+    // Bypass payment for OPTIONS requests
+    if reqCtx.Method == "OPTIONS" {
+        return &x402http.ProtectedRequestHookResult{GrantAccess: true}, nil
+    }
+    // Bypass payment for valid API keys
+    if apiKey := reqCtx.Headers.Get("X-API-Key"); isValidKey(apiKey) {
+        return &x402http.ProtectedRequestHookResult{GrantAccess: true}, nil
+    }
+    return nil, nil // Continue to payment flow
+})
+
+// Deny access
+server.OnProtectedRequest(func(
+    ctx context.Context,
+    reqCtx x402http.HTTPRequestContext,
+    routeConfig x402http.RouteConfig,
+) (*x402http.ProtectedRequestHookResult, error) {
+    if isBlocked(reqCtx) {
+        return &x402http.ProtectedRequestHookResult{
+            Abort: true, Reason: "Access denied",
+        }, nil
+    }
+    return nil, nil
+})
+```
+
+Hook result semantics:
+- Return `nil` - no opinion, continue to next hook or payment flow
+- `GrantAccess: true` - bypass payment, grant free access
+- `Abort: true` - return 403 Forbidden with `Reason`
+- Multiple hooks execute in registration order; first non-nil result wins
+
+## Advanced: WithBazaar Facilitator Client
+
+Wraps `HTTPFacilitatorClient` to add bazaar discovery queries. Preserves all original capabilities (Verify, Settle, GetSupported).
+
+```go
+import (
+    x402http "github.com/coinbase/x402/go/http"
+    "github.com/coinbase/x402/go/extensions/bazaar"
+)
+
+// Create bazaar-enabled facilitator client
+facilitator := bazaar.WithBazaar(
+    x402http.NewHTTPFacilitatorClient(&x402http.FacilitatorConfig{URL: facilitatorURL}),
+)
+
+// List all discovered resources
+resources, err := facilitator.ListDiscoveryResources(ctx, nil)
+
+// List with filtering and pagination
+resources, err := facilitator.ListDiscoveryResources(ctx, &bazaar.ListDiscoveryResourcesParams{
+    Type:   "http",
+    Limit:  20,
+    Offset: 0,
+})
+
+for _, r := range resources.Items {
+    fmt.Printf("Resource: %s (Type: %s, Version: %d)\n", r.Resource, r.Type, r.X402Version)
+}
+fmt.Printf("Total: %d\n", resources.Pagination.Total)
+```
+
+## Advanced: Custom PaywallProvider
+
+Pluggable HTML generation for browser-facing 402 responses. Three priority levels:
+1. Per-route `CustomPaywallHTML` in RouteConfig (highest)
+2. Registered `PaywallProvider` (via `RegisterPaywallProvider`)
+3. Built-in EVM/SVM templates (default fallback)
+
+```go
+import x402http "github.com/coinbase/x402/go/http"
+
+// Option 1: Custom provider implementation
+type MyPaywall struct{}
+
+func (p *MyPaywall) GenerateHTML(
+    paymentRequired types.PaymentRequired,
+    config *x402http.PaywallConfig,
+) string {
+    return "<html>Custom paywall for " + config.AppName + "</html>"
+}
+
+server.RegisterPaywallProvider(&MyPaywall{})
+
+// Option 2: Compose network-specific handlers with PaywallBuilder
+provider := x402http.NewPaywallBuilder().
+    WithNetwork(&x402http.EVMPaywallHandler{}).
+    WithNetwork(&x402http.SVMPaywallHandler{}).
+    WithConfig(&x402http.PaywallConfig{
+        AppName: "My App",
+        AppLogo: "https://example.com/logo.png",
+        Testnet: false,
+    }).
+    Build()
+
+server.RegisterPaywallProvider(provider)
+
+// Option 3: Per-route custom HTML (overrides provider)
+routes := x402http.RoutesConfig{
+    "GET /api": {
+        Accepts:          paymentOptions,
+        CustomPaywallHTML: "<html>Custom for this route</html>",
+    },
+}
+```
+
+Built-in handlers: `EVMPaywallHandler` (matches `eip155:*`) and `SVMPaywallHandler` (matches `solana:*`). Use `x402http.DefaultPaywallProvider()` for both.
+
 ## Key Import Paths
 
 | Purpose | Import |
@@ -321,3 +443,4 @@ client.
 | SVM signers | `github.com/coinbase/x402/go/signers/svm` |
 | MCP support | `github.com/coinbase/x402/go/mcp` |
 | Bazaar extension | `github.com/coinbase/x402/go/extensions/bazaar` |
+| Bazaar facilitator client | `github.com/coinbase/x402/go/extensions/bazaar` (use `bazaar.WithBazaar()`) |

@@ -119,6 +119,7 @@ Format: `{namespace}:{reference}`
 
 - **EVM**: `eip155:<chainId>` (e.g., `eip155:8453` for Base)
 - **Solana**: `solana:<genesisHash>` (e.g., `solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp` for mainnet)
+- **Aptos**: `aptos:<chainId>` (e.g., `aptos:1` for mainnet)
 
 ### Token Support
 
@@ -128,6 +129,8 @@ Format: `{namespace}:{reference}`
 - Signature-based authorization (off-chain signing)
 
 **Solana**: Any SPL token or Token-2022 token. No EIP-712 configuration needed.
+
+**Aptos**: Any fungible asset via `0x1::primary_fungible_store::transfer`. TypeScript SDK only.
 
 **USDC** is the default token, supported across all networks. When you use price strings like `"$0.001"`, the system infers USDC.
 
@@ -255,8 +258,11 @@ facilitator.register("eip155:43114", new ExactEvmFacilitator({
 |---------|-----------|---------------|-------------------|
 | Base Mainnet | `eip155:8453` | Any EIP-3009 | Production facilitators |
 | Base Sepolia | `eip155:84532` | Any EIP-3009 | x402.org (testnet) |
+| MegaETH Mainnet | `eip155:4326` | USDM (`0xFAfDdbb3FC7688494971a79cc65DCa3EF82079E7`, 18 decimals) | Community |
 | Solana Mainnet | `solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp` | Any SPL/Token-2022 | Production facilitators |
 | Solana Devnet | `solana:EtWTRABZaYq6iMfeYKouRu166VU2xqa1` | Any SPL/Token-2022 | x402.org (testnet) |
+| Aptos Mainnet | `aptos:1` | Any Fungible Asset (USDC default) | Community |
+| Aptos Testnet | `aptos:2` | Any Fungible Asset (USDC default) | Community |
 | Any EVM | `eip155:<chainId>` | Any EIP-3009 | Self-hosted or community |
 
 ### Why EIP-3009?

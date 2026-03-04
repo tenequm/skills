@@ -67,7 +67,7 @@ const authorizationTypes = {
 
 1. **Signature validation** - verify EIP-712 signature recovers to `authorization.from`
 2. **Balance check** - confirm payer has sufficient token balance
-3. **Amount validation** - payment amount meets or exceeds required amount
+3. **Amount validation** - payment amount **exactly matches** required amount (strict equality)
 4. **Time window check** - authorization within valid time range
 5. **Parameter matching** - authorization params match payment requirements
 6. **Transaction simulation** - simulate `transferWithAuthorization` to ensure success
@@ -134,7 +134,7 @@ The `spender` is the `x402Permit2Proxy` contract (not the facilitator), which en
 1. Verify `payload.signature` is valid and recovers to `permit2Authorization.from`
 2. Verify client has enabled Permit2 approval (`ERC20.allowance(from, Permit2_Address) >= amount`)
 3. Verify client has sufficient token balance
-4. Verify `permit2Authorization.amount` covers the payment
+4. Verify `permit2Authorization.amount` exactly matches the required amount
 5. Verify `deadline` not expired and `witness.validAfter` is active
 6. Verify token and network match requirements
 7. Simulate `x402Permit2Proxy.settle`
