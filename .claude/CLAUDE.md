@@ -10,7 +10,7 @@ skills/<name>/
 └── references/       # On-demand detailed docs
 ```
 
-Discovery: `.claude-plugin/marketplace.json` and `skills/` directory.
+Discovery: `skills/` directory (each skill has `SKILL.md` with frontmatter).
 
 ## Adding a Skill
 
@@ -24,8 +24,7 @@ Discovery: `.claude-plugin/marketplace.json` and `skills/` directory.
    ---
    ```
 2. Add optional `references/` for detailed docs
-3. Add entry to `.claude-plugin/marketplace.json`
-4. Commit with conventional commits (`feat`, `fix`, `chore`, etc.)
+3. Commit with conventional commits (`feat`, `fix`, `chore`, etc.)
 
 ## Rules
 
@@ -33,7 +32,6 @@ Discovery: `.claude-plugin/marketplace.json` and `skills/` directory.
 - All code examples must work - no pseudocode
 - Keep SKILL.md under 500 lines, split to references/ when needed
 - Bump `metadata.version` in frontmatter when releasing changes
-- Update marketplace.json version to match
 - No unnecessary files (no README.md, package.json, project.json per skill)
 - Use conventional commits
 
