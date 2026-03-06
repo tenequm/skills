@@ -207,7 +207,15 @@ The `x402Permit2Proxy` is deployed to the same address across all EVM chains usi
 
 ## Default Asset Resolution
 
-When a server uses price string syntax (`"$0.001"`), x402 needs to know which stablecoin to use. Each supported chain has a default asset (USDC) configured internally. If `assetTransferMethod` is not specified, the system defaults to EIP-3009.
+When a server uses price string syntax (`"$0.001"`), x402 needs to know which stablecoin to use. Each supported chain has a default asset configured internally with these fields:
+
+- `address` - token contract address
+- `name`, `version` - for EIP-712 domain
+- `decimals` - token decimals
+- `assetTransferMethod` - `"eip3009"` (default) or `"permit2"`
+- `supportsEip2612` - `true` if the token implements EIP-2612 `permit()` (enables gasless Permit2 approval via the `eip2612GasSponsoring` extension)
+
+If `assetTransferMethod` is not specified, the system defaults to EIP-3009. Chains like MegaETH (`eip155:4326`) use Permit2 with `supportsEip2612: true` because their default stablecoin (USDM, 18 decimals) lacks EIP-3009 but supports EIP-2612.
 
 ### Using Custom Tokens with registerMoneyParser
 
@@ -287,7 +295,9 @@ If the client hasn't approved, they receive a `412 Precondition Failed` with err
 
 ## Common USDC Addresses
 
-| Network | USDC Address |
-|---------|-------------|
-| Base Sepolia | `0x036CbD53842c5426634e7929541eC2318f3dCF7e` |
-| Base Mainnet | `0x833589fCD6eDb6E08f4c7C32D4f71b54bda02913` |
+| Network | Token | Address | Decimals | Transfer Method |
+|---------|-------|---------|----------|-----------------|
+| Base Sepolia | USDC | `0x036CbD53842c5426634e7929541eC2318f3dCF7e` | 6 | EIP-3009 |
+| Base Mainnet | USDC | `0x833589fCD6eDb6E08f4c7C32D4f71b54bda02913` | 6 | EIP-3009 |
+| MegaETH Mainnet | USDM | `0xFAfDdbb3FC7688494971a79cc65DCa3EF82079E7` | 18 | Permit2 (supportsEip2612) |
+| Monad Mainnet | USDC | See SDK constants | 6 | EIP-3009 |

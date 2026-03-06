@@ -274,8 +274,11 @@ Format: `{namespace}:{reference}`
 | Solana Devnet | `solana:EtWTRABZaYq6iMfeYKouRu166VU2xqa1` |
 | Avalanche Mainnet | `eip155:43114` |
 | MegaETH Mainnet | `eip155:4326` |
+| Stellar Mainnet | `stellar:pubnet` |
+| Stellar Testnet | `stellar:testnet` |
 | Aptos Mainnet | `aptos:1` |
 | Aptos Testnet | `aptos:2` |
+| Monad Mainnet | `eip155:143` |
 | Avalanche Fuji | `eip155:43113` |
 
 ## Error Codes
@@ -294,6 +297,7 @@ Format: `{namespace}:{reference}`
 | `invalid_payload` | Malformed payload |
 | `invalid_scheme` | Scheme not supported |
 | `invalid_x402_version` | Version not supported |
+| `duplicate_settlement` | Same SVM transaction submitted to /settle multiple times |
 | `unexpected_verify_error` | Unexpected verify error |
 | `unexpected_settle_error` | Unexpected settle error |
 

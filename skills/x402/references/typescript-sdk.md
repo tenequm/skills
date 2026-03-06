@@ -7,6 +7,8 @@
 | `@x402/core` | Core types, `x402Client`, `x402ResourceServer`, `x402Facilitator` |
 | `@x402/evm` | EVM scheme (EIP-3009 + Permit2) |
 | `@x402/svm` | Solana scheme (SPL TransferChecked) |
+| `@x402/stellar` | Stellar scheme (SEP-41 Soroban token transfers) |
+| `@x402/aptos` | Aptos scheme (Fungible Asset transfers) |
 | `@x402/express` | Express.js middleware |
 | `@x402/hono` | Hono edge middleware |
 | `@x402/next` | Next.js middleware (`paymentProxy`, `withX402`) |

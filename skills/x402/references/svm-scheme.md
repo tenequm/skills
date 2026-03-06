@@ -107,6 +107,35 @@ The decompiled transaction MUST contain 3 to 5 instructions in this order:
 
 - `amount` in TransferChecked MUST equal `PaymentRequirements.amount` exactly
 
+## Duplicate Settlement Mitigation (RECOMMENDED)
+
+Solana's transaction deduplication ensures only one transfer executes on-chain, but the RPC returns "success" for each submission of the same transaction. A malicious client can exploit this by submitting the same payment to `/settle` multiple times before the first confirms, accessing multiple resources with a single payment.
+
+### In-Memory Settlement Cache
+
+All SDKs provide a `SettlementCache` that prevents this race condition:
+
+- **Cache key**: Base64-encoded transaction string
+- **TTL**: 120 seconds (covers Solana blockhash lifetime of ~60-90s plus margin)
+- **Behavior**: If key exists in cache, reject with `duplicate_settlement` error; otherwise insert and proceed
+- **Eviction**: Entries older than 120 seconds are automatically removed
+
+### SDK Implementation
+
+**TypeScript / Python**: Built-in `SettlementCache` enabled by default in SVM facilitator scheme helpers. No configuration needed.
+
+**Go**: Must pass a shared `SettlementCache` instance to both V1 and V2 SVM facilitator scheme registrations:
+
+```go
+import "github.com/coinbase/x402/go/mechanisms/svm"
+
+cache := svm.NewSettlementCache()
+// Pass cache to both V1 and V2 scheme registrations
+// to prevent cross-version duplicate settlements
+```
+
+**Direct merchants** (no facilitator): Must implement equivalent duplicate detection.
+
 ## Supported Solana Assets
 
 - Any SPL token

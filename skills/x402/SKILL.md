@@ -1,8 +1,8 @@
 ---
 name: x402
-description: "Build internet-native payments with the x402 open protocol. Use when developing paid APIs, paywalled content, AI agent payment flows, or any service using HTTP 402 Payment Required for on-chain micropayments. Covers TypeScript, Python, and Go SDKs across EVM (Base, MegaETH), Solana, and Aptos networks with HTTP, MCP, and A2A transports. Supports exact and upto (usage-based) payment schemes."
+description: "Build internet-native payments with the x402 open protocol. Use when developing paid APIs, paywalled content, AI agent payment flows, or any service using HTTP 402 Payment Required for on-chain micropayments. Covers TypeScript, Python, and Go SDKs across EVM (Base, MegaETH, Monad), Solana, Stellar, and Aptos networks with HTTP, MCP, and A2A transports. Supports exact and upto (usage-based) payment schemes."
 metadata:
-  version: "0.2.0"
+  version: "0.3.0"
 ---
 
 # x402 Protocol Development
@@ -16,7 +16,7 @@ x402 is an open standard (Apache-2.0, by Coinbase) that activates the HTTP `402 
 - Enabling **AI agents** to autonomously pay for resources
 - Integrating **MCP tools** that require payment
 - Building **agent-to-agent** (A2A) payment flows
-- Working with **EVM** (Base, Ethereum, MegaETH), **Solana**, or **Aptos** payment settlement
+- Working with **EVM** (Base, Ethereum, MegaETH, Monad), **Solana**, **Stellar**, or **Aptos** payment settlement
 - Implementing **usage-based billing** with the `upto` scheme (LLM tokens, bandwidth, compute)
 
 ## Core Architecture
@@ -193,11 +193,14 @@ registerExactSvmScheme(client, { signer: svmSigner });
 | MegaETH Mainnet | `eip155:4326` | Mainnet (USDM default, 18 decimals) |
 | Solana Mainnet | `solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp` | Mainnet |
 | Solana Devnet | `solana:EtWTRABZaYq6iMfeYKouRu166VU2xqa1` | Testnet |
+| Stellar Mainnet | `stellar:pubnet` | Mainnet (TypeScript SDK only) |
+| Stellar Testnet | `stellar:testnet` | Testnet (TypeScript SDK only) |
 | Aptos Mainnet | `aptos:1` | Mainnet (TypeScript SDK only) |
 | Aptos Testnet | `aptos:2` | Testnet (TypeScript SDK only) |
+| Monad Mainnet | `eip155:143` | Mainnet |
 | Avalanche | `eip155:43114` | Via community facilitators |
 
-Default facilitator (`https://x402.org/facilitator`) supports Base Sepolia and Solana Devnet.
+Default facilitator (`https://x402.org/facilitator`) supports Base Sepolia, Solana Devnet, and Stellar Testnet.
 
 ## SDK Packages
 
@@ -207,6 +210,7 @@ Default facilitator (`https://x402.org/facilitator`) supports Base Sepolia and S
 | `@x402/core` | Core types, client, server, facilitator |
 | `@x402/evm` | EVM scheme (EIP-3009 + Permit2) |
 | `@x402/svm` | Solana scheme (SPL TransferChecked) |
+| `@x402/stellar` | Stellar scheme (SEP-41 Soroban token transfers) |
 | `@x402/aptos` | Aptos scheme (Fungible Asset transfers) |
 | `@x402/express` | Express middleware |
 | `@x402/hono` | Hono edge middleware |
@@ -236,7 +240,7 @@ go get github.com/coinbase/x402/go
 - **Client/Server/Facilitator**: The three roles in every payment. Client signs, server enforces, facilitator settles on-chain. See `references/core-concepts.md`
 - **Wallet**: Both payment mechanism and identity for buyers/sellers. See `references/core-concepts.md`
 - **Networks & Tokens**: CAIP-2 identifiers, EIP-3009 tokens on EVM, SPL on Solana, custom token config. See `references/core-concepts.md`
-- **Scheme**: Payment method. `exact` = transfer exact amount (production-ready); `upto` = authorize max, settle actual usage (spec finalized, not yet supported by facilitators). See `references/evm-scheme.md`, `references/svm-scheme.md`, `references/upto-scheme.md`, `references/aptos-scheme.md`
+- **Scheme**: Payment method. `exact` = transfer exact amount (production-ready); `upto` = authorize max, settle actual usage (spec finalized, not yet supported by facilitators). See `references/evm-scheme.md`, `references/svm-scheme.md`, `references/stellar-scheme.md`, `references/upto-scheme.md`, `references/aptos-scheme.md`
 - **Transport**: How payment data is transmitted (HTTP headers, MCP `_meta`, A2A metadata). See `references/transports.md`
 - **Extensions**: Optional features (bazaar discovery, payment-identifier idempotency, sign-in-with-x auth, gas sponsoring). See `references/extensions.md`
 - **Hooks**: Lifecycle callbacks on client/server/facilitator (TS, Python, Go). See `references/lifecycle-hooks.md`
@@ -254,7 +258,8 @@ go get github.com/coinbase/x402/go
 | `references/python-sdk.md` | Python SDK patterns for server, client, MCP (server + client), facilitator |
 | `references/go-sdk.md` | Go SDK patterns for server, client, MCP, facilitator, signers, custom money parser |
 | `references/evm-scheme.md` | EVM exact scheme: EIP-3009, Permit2, default asset resolution, registerMoneyParser, custom tokens |
-| `references/svm-scheme.md` | Solana exact scheme: SPL TransferChecked, verification rules |
+| `references/svm-scheme.md` | Solana exact scheme: SPL TransferChecked, verification rules, duplicate settlement mitigation |
+| `references/stellar-scheme.md` | Stellar exact scheme: SEP-41 Soroban token transfers, ledger-based expiration, fee sponsorship, TypeScript SDK only |
 | `references/upto-scheme.md` | Upto (usage-based) scheme: authorize max amount, settle actual usage. EVM via Permit2 only |
 | `references/aptos-scheme.md` | Aptos exact scheme: fungible asset transfers, fee payer sponsorship, TypeScript SDK only |
 | `references/transports.md` | HTTP, MCP, A2A transport implementations |
