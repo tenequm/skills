@@ -21,14 +21,9 @@ Thumbs.db
 
 # Logs
 *.log
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
 
 # Node modules (if skills include scripts)
 node_modules/
-package-lock.json
-yarn.lock
 
 # Python
 __pycache__/
@@ -45,7 +40,3 @@ ENV/
 .scratch/
 .notes/
 .claude/settings.local.json
-
-# Nx
-.nx/cache
-.nx/workspace-data

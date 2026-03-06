@@ -1,9 +1,0 @@
-{
-  "name": "solana",
-  "version": "0.6.0",
-  "private": true,
-  "description": "Comprehensive Solana development toolkit with skills for building programs (Anchor/native Rust) and security auditing, plus proactive security review agent",
-  "scripts": {
-    "validate": "python3 ../.claude/skills/skill-creator/scripts/quick_validate.py ./skills/solana-development && python3 ../.claude/skills/skill-creator/scripts/quick_validate.py ./skills/solana-security && python3 ../.claude/skills/skill-creator/scripts/quick_validate.py ./skills/solana-compression"
-  }
-}

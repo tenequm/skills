@@ -1,9 +1,0 @@
-{
-  "name": "uv-ruff-python-tools-skill",
-  "version": "0.1.0",
-  "private": true,
-  "description": "Skill: Modern Python development with uv (package manager) and ruff (linter/formatter) - Astral's fast tooling suite",
-  "scripts": {
-    "validate": "python3 ../.claude/skills/skill-creator/scripts/quick_validate.py ."
-  }
-}

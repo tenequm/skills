@@ -1,9 +1,0 @@
-{
-  "name": "python-dev-skill",
-  "version": "0.1.0",
-  "private": true,
-  "description": "Skill: Opinionated Python development setup with uv, ty, ruff, pytest, and just",
-  "scripts": {
-    "validate": "python3 ../.claude/skills/skill-creator/scripts/quick_validate.py ."
-  }
-}

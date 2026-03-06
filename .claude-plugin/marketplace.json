@@ -1,167 +1,168 @@
 {
   "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
-  "name": "tenequm-plugins",
+  "name": "tenequm-skills",
   "owner": {
     "name": "Misha Kolesnik",
     "email": "misha@kolesnik.io"
   },
   "metadata": {
-    "description": "Claude Code plugins with mostly skills for founders, developers, and web3 builders",
-    "version": "1.0.0"
+    "description": "Claude Code skills for founders, developers, and web3 builders",
+    "version": "2.0.0"
   },
   "plugins": [
     {
-      "name": "gh-cli",
+      "name": "biome",
       "source": "./",
-      "description": "Skill: Full GitHub CLI capabilities for repos & code",
-      "version": "1.1.0",
-      "skills": [
-        "./gh-cli"
-      ]
+      "description": "Skill: Lint and format frontend code with Biome 2.4",
+      "version": "0.1.0",
+      "skills": ["./skills/biome"]
     },
     {
       "name": "chrome-extension-wxt",
       "source": "./",
       "description": "Skill: Build Chrome extensions with WXT framework",
       "version": "1.1.0",
-      "skills": [
-        "./chrome-extension-wxt"
-      ]
+      "skills": ["./skills/chrome-extension-wxt"]
     },
     {
       "name": "cloudflare-workers",
       "source": "./",
-      "description": "Skill: Rapid development with Cloudflare Workers - build and deploy serverless applications",
+      "description": "Skill: Build and deploy serverless apps with Cloudflare Workers",
       "version": "3.0.0",
-      "skills": [
-        "./cloudflare-workers"
-      ]
-    },
-    {
-      "name": "skill-finder",
-      "source": "./",
-      "description": "Skill: Find and evaluate Claude skills using semantic search and quality assessment",
-      "version": "1.1.0",
-      "skills": [
-        "./skill-finder"
-      ]
-    },
-    {
-      "name": "skill-factory",
-      "source": "./",
-      "description": "Skill: Autonomous skill creation with automatic quality assurance - analyzes requests, selects optimal creation method, and delivers production-ready skills",
-      "version": "0.2.0",
-      "skills": [
-        "./skill-factory"
-      ]
-    },
-    {
-      "name": "uv-ruff-python-tools",
-      "source": "./",
-      "description": "Skill: Modern Python development with uv (10-100x faster package manager) and ruff (extremely fast linter/formatter) - Astral's fast tooling suite",
-      "version": "0.1.0",
-      "skills": [
-        "./uv-ruff-python-tools"
-      ]
-    },
-    {
-      "name": "solana",
-      "source": "./solana",
-      "description": "Comprehensive Solana development toolkit: build programs with Anchor/native Rust and audit for security vulnerabilities",
-      "version": "0.6.0"
-    },
-    {
-      "name": "frontend-dev",
-      "source": "./frontend-dev",
-      "description": "Frontend toolkit: React/TypeScript, Tailwind/shadcn, TanStack (Query, Router, Start), Vite, and Biome",
-      "version": "0.1.0"
-    },
-    {
-      "name": "founder-playbook",
-      "source": "./",
-      "description": "Skill: Decision validation and thinking frameworks for startup founders - pressure-test decisions with proven methodologies and crypto/web3 knowledge",
-      "version": "0.1.1",
-      "author": {
-        "name": "Misha Kolesnik",
-        "email": "misha@kolesnik.io"
-      },
-      "homepage": "https://github.com/tenequm/claude-plugins",
-      "repository": "https://github.com/tenequm/claude-plugins",
-      "license": "MIT",
-      "keywords": [
-        "founder",
-        "startup",
-        "coaching",
-        "web3",
-        "solana",
-        "decision-making"
-      ],
-      "skills": [
-        "./founder-playbook"
-      ]
-    },
-    {
-      "name": "foundry-solidity",
-      "source": "./",
-      "description": "Skill: Build and test Solidity smart contracts with Foundry toolkit (Forge, Cast, Anvil) - testing patterns, deployment scripts, and modern Solidity 0.8.30",
-      "version": "0.1.0",
-      "skills": [
-        "./foundry-solidity"
-      ]
-    },
-    {
-      "name": "impactful-writing",
-      "source": "./",
-      "description": "Skill: Write clear, emotionally resonant, and well-structured content across any platform - research-backed principles for Twitter, articles, docs, emails, and more",
-      "version": "0.1.0",
-      "skills": [
-        "./impactful-writing"
-      ]
+      "skills": ["./skills/cloudflare-workers"]
     },
     {
       "name": "erc-8004",
       "source": "./",
-      "description": "Skill: Build with ERC-8004 Trustless Agents - on-chain agent identity, reputation, and discovery using the Agent0 SDK",
+      "description": "Skill: Build with ERC-8004 Trustless Agents - on-chain agent identity and reputation",
       "version": "0.1.0",
-      "skills": [
-        "./erc-8004"
-      ]
+      "skills": ["./skills/erc-8004"]
     },
     {
-      "name": "x402",
+      "name": "founder-playbook",
       "source": "./",
-      "description": "Skill: Build internet-native payments with the x402 open protocol - HTTP 402 for APIs, AI agents, and web services across EVM and Solana",
-      "version": "0.2.0",
-      "skills": [
-        "./x402"
-      ]
+      "description": "Skill: Decision validation and thinking frameworks for startup founders",
+      "version": "0.1.1",
+      "skills": ["./skills/founder-playbook"]
+    },
+    {
+      "name": "foundry-solidity",
+      "source": "./",
+      "description": "Skill: Build and test Solidity smart contracts with Foundry toolkit",
+      "version": "0.1.0",
+      "skills": ["./skills/foundry-solidity"]
+    },
+    {
+      "name": "gh-cli",
+      "source": "./",
+      "description": "Skill: GitHub CLI for remote repo analysis and code search",
+      "version": "1.1.0",
+      "skills": ["./skills/gh-cli"]
+    },
+    {
+      "name": "impactful-writing",
+      "source": "./",
+      "description": "Skill: Write clear, emotionally resonant content across any platform",
+      "version": "0.1.0",
+      "skills": ["./skills/impactful-writing"]
     },
     {
       "name": "python-dev",
       "source": "./",
-      "description": "Skill: Opinionated Python development setup with uv, ty, ruff, pytest, and just",
+      "description": "Skill: Python development with uv, ty, ruff, pytest, and just",
       "version": "0.1.0",
-      "skills": [
-        "./python-dev"
-      ]
+      "skills": ["./skills/python-dev"]
     },
     {
-      "name": "web3-protocol-gtm",
+      "name": "react-typescript",
       "source": "./",
-      "description": "Skill: Go-to-market strategy for web3 infrastructure and protocol projects - community growth, CT narrative, developer relations, ecosystem partnerships, and launch sequencing",
+      "description": "Skill: Build React 19 apps with TypeScript",
+      "version": "0.1.0",
+      "skills": ["./skills/react-typescript"]
+    },
+    {
+      "name": "shadcn-tailwind",
+      "source": "./",
+      "description": "Skill: Build UIs with Tailwind CSS v4 and shadcn/ui",
+      "version": "0.1.0",
+      "skills": ["./skills/shadcn-tailwind"]
+    },
+    {
+      "name": "skill-factory",
+      "source": "./",
+      "description": "Skill: Autonomous skill creation with quality assurance",
       "version": "0.2.0",
-      "skills": [
-        "./web3-protocol-gtm"
-      ]
+      "skills": ["./skills/skill-factory"]
+    },
+    {
+      "name": "skill-finder",
+      "source": "./",
+      "description": "Skill: Find and evaluate Claude skills using semantic search",
+      "version": "1.1.0",
+      "skills": ["./skills/skill-finder"]
+    },
+    {
+      "name": "solana-compression",
+      "source": "./",
+      "description": "Skill: Build with ZK Compression on Solana using Light Protocol",
+      "version": "0.6.0",
+      "skills": ["./skills/solana-compression"]
+    },
+    {
+      "name": "solana-development",
+      "source": "./",
+      "description": "Skill: Build Solana programs with Anchor framework or native Rust",
+      "version": "0.6.0",
+      "skills": ["./skills/solana-development"]
+    },
+    {
+      "name": "solana-security",
+      "source": "./",
+      "description": "Skill: Audit Solana programs for security vulnerabilities",
+      "version": "0.6.0",
+      "skills": ["./skills/solana-security"]
     },
     {
       "name": "swift-macos",
       "source": "./",
-      "description": "Comprehensive macOS app development toolkit: Swift 6.2, SwiftUI, SwiftData, Swift Concurrency, Foundation Models, testing, and distribution",
+      "description": "Skill: macOS app development with Swift 6.2, SwiftUI, SwiftData, ScreenCaptureKit",
       "version": "0.2.0",
-      "skills": [
-        "./swift-macos"
-      ]
+      "skills": ["./skills/swift-macos"]
+    },
+    {
+      "name": "tanstack",
+      "source": "./",
+      "description": "Skill: TanStack Query, Router, and Start for React apps",
+      "version": "0.1.0",
+      "skills": ["./skills/tanstack"]
+    },
+    {
+      "name": "uv-ruff-python-tools",
+      "source": "./",
+      "description": "Skill: Modern Python development with uv and ruff",
+      "version": "0.1.0",
+      "skills": ["./skills/uv-ruff-python-tools"]
+    },
+    {
+      "name": "vite",
+      "source": "./",
+      "description": "Skill: Configure and optimize Vite 7 for React projects",
+      "version": "0.1.0",
+      "skills": ["./skills/vite"]
+    },
+    {
+      "name": "web3-protocol-gtm",
+      "source": "./",
+      "description": "Skill: Go-to-market strategy for web3 protocols and products",
+      "version": "0.2.0",
+      "skills": ["./skills/web3-protocol-gtm"]
+    },
+    {
+      "name": "x402",
+      "source": "./",
+      "description": "Skill: Internet-native payments with x402 open protocol",
+      "version": "0.2.0",
+      "skills": ["./skills/x402"]
     }
   ]
 }

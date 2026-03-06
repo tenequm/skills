@@ -1,21 +1,11 @@
 repos:
-  # Validate skill structure with Nx (uses cache)
-  - repo: local
-    hooks:
-      - id: validate-skills
-        name: Validate skill structure
-        entry: nx affected -t validate
-        language: system
-        pass_filenames: false
-        files: '(SKILL\.md|references/.*\.md)$'
-
   # Check for secrets
   - repo: https://github.com/Yelp/detect-secrets
     rev: v1.5.0
     hooks:
       - id: detect-secrets
         args: ['--baseline', '.secrets.baseline']
-        exclude: (package-lock\.json|pnpm-lock\.yaml|solana/skills/.*/references/.*\.md)
+        exclude: (pnpm-lock\.yaml|skills/.*/references/.*\.md)
 
   # Standard checks
   - repo: https://github.com/pre-commit/pre-commit-hooks

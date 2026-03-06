@@ -1,9 +1,0 @@
-{
-  "name": "frontend-dev",
-  "version": "0.1.0",
-  "private": true,
-  "description": "Frontend development toolkit: React/TypeScript, Tailwind/shadcn, TanStack (Query, Router, Start), Vite, and Biome",
-  "scripts": {
-    "validate": "python3 ../.claude/skills/skill-creator/scripts/quick_validate.py ./skills/react-typescript && python3 ../.claude/skills/skill-creator/scripts/quick_validate.py ./skills/shadcn-tailwind && python3 ../.claude/skills/skill-creator/scripts/quick_validate.py ./skills/tanstack && python3 ../.claude/skills/skill-creator/scripts/quick_validate.py ./skills/vite && python3 ../.claude/skills/skill-creator/scripts/quick_validate.py ./skills/biome"
-  }
-}

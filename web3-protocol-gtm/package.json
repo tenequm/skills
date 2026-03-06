@@ -1,9 +1,0 @@
-{
-  "name": "web3-protocol-gtm-skill",
-  "version": "0.2.0",
-  "private": true,
-  "description": "Go-to-market strategy for web3 infrastructure and protocol projects. Community growth, CT narrative, developer relations, ecosystem partnerships, and launch sequencing.",
-  "scripts": {
-    "validate": "python3 ../.claude/skills/skill-creator/scripts/quick_validate.py ."
-  }
-}

@@ -1,9 +1,0 @@
-{
-  "name": "erc-8004-skill",
-  "version": "0.1.0",
-  "private": true,
-  "description": "Build with ERC-8004 Trustless Agents - on-chain agent identity, reputation, and discovery using the Agent0 SDK",
-  "scripts": {
-    "validate": "python3 ../.claude/skills/skill-creator/scripts/quick_validate.py ."
-  }
-}

@@ -1,9 +1,0 @@
-{
-  "name": "skill-factory-skill",
-  "version": "0.2.0",
-  "private": true,
-  "description": "Autonomous skill creation agent that analyzes requests, automatically selects the best creation method, ensures quality compliance, and delivers production-ready skills without user decision-making",
-  "scripts": {
-    "validate": "python3 ../.claude/skills/skill-creator/scripts/quick_validate.py ."
-  }
-}
