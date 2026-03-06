@@ -1,0 +1,25 @@
+{
+  "name": "swift-macos",
+  "$schema": "../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "swift-macos",
+  "projectType": "library",
+  "targets": {
+    "validate": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "pnpm validate",
+        "cwd": "swift-macos"
+      },
+      "cache": true,
+      "inputs": [
+        "{projectRoot}/**/*.md",
+        "{projectRoot}/package.json"
+      ]
+    }
+  },
+  "release": {
+    "version": {
+      "generator": "@nx/js:release-version"
+    }
+  }
+}

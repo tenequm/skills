@@ -153,6 +153,15 @@
       "skills": [
         "./web3-protocol-gtm"
       ]
+    },
+    {
+      "name": "swift-macos",
+      "source": "./",
+      "description": "Comprehensive macOS app development toolkit: Swift 6.2, SwiftUI, SwiftData, Swift Concurrency, Foundation Models, testing, and distribution",
+      "version": "0.0.0",
+      "skills": [
+        "./swift-macos"
+      ]
     }
   ]
 }
