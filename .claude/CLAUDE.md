@@ -31,7 +31,7 @@ Discovery: `skills/` directory (each skill has `SKILL.md` with frontmatter).
 - Use progressive disclosure (SKILL.md + references/)
 - All code examples must work - no pseudocode
 - Keep SKILL.md under 500 lines, split to references/ when needed
-- Bump `metadata.version` in frontmatter when releasing changes
+- **ALWAYS** bump `metadata.version` in frontmatter when any file in a skill is modified (SKILL.md or references/). Use semver: patch for fixes, minor for new content, major for breaking changes
 - No unnecessary files (no README.md, package.json, project.json per skill)
 - Use conventional commits
 

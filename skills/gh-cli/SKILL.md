@@ -2,7 +2,7 @@
 name: gh-cli
 description: GitHub CLI for remote repository analysis, file fetching, codebase comparison, and discovering trending code/repos. Use when analyzing repos without cloning, comparing codebases, or searching for popular GitHub projects.
 metadata:
-  version: "1.1.0"
+  version: "1.1.1"
 ---
 
 # GitHub CLI - Remote Analysis & Discovery
@@ -22,7 +22,7 @@ Remote repository operations, codebase comparison, and code discovery without cl
 ### Fetch a file remotely
 
 ```bash
-gh api repos/OWNER/REPO/contents/path/file.ts | jq -r '.content' | base64 -d
+gh api repos/OWNER/REPO/contents/path/file.ts --template '{{.content | base64decode}}'
 ```
 
 ### Get directory listing
@@ -52,8 +52,8 @@ Systematic workflow for comparing repositories to identify similarities and diff
 ### Step 1: Fetch directory structures
 
 ```bash
-gh api repos/OWNER-A/REPO-A/contents/PATH > repo1.json
-gh api repos/OWNER-B/REPO-B/contents/PATH > repo2.json
+gh api repos/OWNER-A/REPO-A/contents/PATH
+gh api repos/OWNER-B/REPO-B/contents/PATH
 ```
 
 If comparing a monorepo package, specify the path (e.g., `packages/explorerkit-idls`).
@@ -61,27 +61,26 @@ If comparing a monorepo package, specify the path (e.g., `packages/explorerkit-i
 ### Step 2: Compare file lists
 
 ```bash
-jq -r '.[].name' repo1.json > repo1-files.txt
-jq -r '.[].name' repo2.json > repo2-files.txt
-diff repo1-files.txt repo2-files.txt
+gh api repos/OWNER-A/REPO-A/contents/PATH -q '.[].name'
+gh api repos/OWNER-B/REPO-B/contents/PATH -q '.[].name'
 ```
 
-Shows files unique to each repo and common files.
+Compare the output of each command to identify files unique to each repo and common files.
 
 ### Step 3: Fetch key files for comparison
 
 Compare package dependencies:
 
 ```bash
-gh api repos/OWNER-A/REPO-A/contents/package.json | jq -r '.content' | base64 -d > repo1-pkg.json
-gh api repos/OWNER-B/REPO-B/contents/package.json | jq -r '.content' | base64 -d > repo2-pkg.json
+gh api repos/OWNER-A/REPO-A/contents/package.json --template '{{.content | base64decode}}'
+gh api repos/OWNER-B/REPO-B/contents/package.json --template '{{.content | base64decode}}'
 ```
 
 Compare main entry points:
 
 ```bash
-gh api repos/OWNER-A/REPO-A/contents/src/index.ts | jq -r '.content' | base64 -d > repo1-index.ts
-gh api repos/OWNER-B/REPO-B/contents/src/index.ts | jq -r '.content' | base64 -d > repo2-index.ts
+gh api repos/OWNER-A/REPO-A/contents/src/index.ts --template '{{.content | base64decode}}'
+gh api repos/OWNER-B/REPO-B/contents/src/index.ts --template '{{.content | base64decode}}'
 ```
 
 ### Step 4: Analyze differences

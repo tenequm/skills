@@ -17,8 +17,8 @@ uvx ty check
 # Global install
 uv tool install ty@latest
 
-# Standalone installer
-curl -LsSf https://astral.sh/ty/install.sh | sh
+# Homebrew
+brew install ty
 ```
 
 ## Basic Usage

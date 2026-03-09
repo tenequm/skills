@@ -7,11 +7,11 @@ Complete guide to uv - the Python package manager, version manager, and project 
 ## Installation
 
 ```bash
-# macOS/Linux
-curl -LsSf https://astral.sh/uv/install.sh | sh
-
-# Homebrew
+# macOS/Linux (Homebrew)
 brew install uv
+
+# Or via pip
+pip install uv
 
 # Verify
 uv version

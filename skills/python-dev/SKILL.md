@@ -2,7 +2,7 @@
 name: python-dev
 description: Opinionated Python development setup with uv + ty + ruff + pytest + just. Use when creating new Python projects, setting up pyproject.toml, configuring linting, type checking, testing, or build tooling. Triggers on "python project", "uv init", "pyproject.toml", "ruff config", "ty check", "pytest setup", "justfile", "python linting", "python formatting", "type checking python".
 metadata:
-  version: "0.1.0"
+  version: "0.1.1"
 ---
 
 # Python Development Setup
@@ -245,7 +245,7 @@ uv run python -m my_project  # Run the project
 
 ```bash
 # 1. Install uv if not present
-curl -LsSf https://astral.sh/uv/install.sh | sh
+brew install uv
 
 # 2. Convert requirements.txt to pyproject.toml deps
 uv add -r requirements.txt
