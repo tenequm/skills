@@ -74,6 +74,18 @@ openclaw models auth setup-token             # Anthropic setup-token paste
 openclaw models auth paste-token [--expires-in <duration>]  # token paste with optional expiration
 ```
 
+## Daemon
+
+```bash
+openclaw daemon install [--port N] [--runtime node|bun] [--force]
+openclaw daemon start
+openclaw daemon stop
+openclaw daemon restart
+openclaw daemon status [--json]
+```
+
+Install/manage the gateway as a system service (launchd on macOS, systemd on Linux). Restart checks for gateway token drift (service token vs config token) before proceeding. Disabled in Nix mode.
+
 ## Onboarding
 
 ```bash
@@ -82,6 +94,8 @@ openclaw onboard --non-interactive --accept-risk  # automated
 openclaw onboard --mode local --flow quick
 openclaw onboard --reset --reset-scope full
 ```
+
+Note: `onboard` avoids persisting talk fallback API key on fresh setup.
 
 ## Messages
 
@@ -110,13 +124,50 @@ openclaw secrets resolve                     # resolve secret references
 
 Secret resolution modes: `"strict"`, `"summary"`, `"operational_readonly"`.
 Falls back to local resolution when gateway unavailable.
+Target registry groups: `memory`, `qrRemote`, `channels`, `models`, `agentRuntime`, `status` (`src/cli/command-secret-targets.ts`).
+
+## ACP
+
+```bash
+openclaw acp [--url <url>] [--token <token>] [--token-file <path>]
+openclaw acp [--password <password>] [--password-file <path>]
+openclaw acp [--session <key>] [--session-label <label>]
+openclaw acp [--require-existing] [--reset-session]
+openclaw acp [--no-prefix-cwd] [--provenance off|meta|meta+receipt]
+openclaw acp [-v|--verbose]
+openclaw acp serve                           # serve ACP gateway
+```
+
+Runs an ACP bridge backed by the Gateway. Supports `--token-file`/`--password-file` for secret-safe credential passing (prefer over `--token`/`--password`).
+
+## Cron
+
+```bash
+openclaw cron status                         # cron job status
+openclaw cron list                           # list cron jobs
+openclaw cron add                            # add a cron job
+openclaw cron edit                           # edit a cron job
+```
+
+Run `openclaw doctor --fix` to normalize legacy cron job storage.
 
 ## Diagnostics
 
 ```bash
 openclaw doctor                              # diagnose issues
+openclaw doctor --fix                        # auto-repair (cron, daemon, sandbox, etc.)
 openclaw login                               # re-authenticate web provider
 ```
+
+Doctor non-interactive cron repair is now properly gated (requires `--fix` flag in non-interactive mode).
+
+## Exec Environment
+
+Child commands spawned via `exec` receive `OPENCLAW_CLI=1` in their environment (`src/infra/openclaw-exec-env.ts`). Shell-like runtimes also receive `OPENCLAW_SHELL` markers:
+- `exec` - commands run through the exec tool
+- `acp` - ACP runtime backend process spawns (acpx)
+- `acp-client` - `openclaw acp client` bridge process
+- `tui-local` - local TUI `!` shell commands
 
 ## Dev Commands
 

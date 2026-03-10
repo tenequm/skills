@@ -3,10 +3,10 @@
 ## Discovery Sources
 
 Plugins are discovered from (in order):
-1. **Bundled plugins** - built into OpenClaw core
-2. **Config load paths** - `plugins.load.paths[]` array
-3. **Global extensions dir** - `~/.openclaw/extensions/`
-4. **Workspace extensions** - per-agent workspace dirs
+1. **Config load paths** - `plugins.load.paths[]` array
+2. **Workspace extensions** - per-agent workspace dirs
+3. **Bundled plugins** - built into OpenClaw core
+4. **Global extensions dir** - `~/.openclaw/extensions/`
 
 Key files: `src/plugins/discovery.ts`, `src/plugins/loader.ts`
 
@@ -56,11 +56,12 @@ const plugin: OpenClawPluginDefinition = {
   configSchema: myZodSchema,
   register(api: OpenClawPluginApi) {
     api.registerChannel({ plugin: channelImpl });
-    api.registerTools([tool1, tool2]);
+    api.registerTool(toolDef);                 // singular, supports factory pattern
     api.registerCommand(commandDef);           // custom slash commands (bypass LLM)
     api.on("before_agent_start", handler);     // typed hook with priority
-    api.registerCronJobs([cronSpec]);
-    api.registerGatewayHandler("my-route", handler);
+    api.registerHttpRoute(routeDef);           // HTTP endpoint
+    api.registerGatewayMethod("method", handler); // gateway protocol method
+    api.registerContextEngine("id", factory);  // exclusive slot for context engine
   }
 };
 export default plugin;
@@ -71,13 +72,18 @@ export default plugin;
 ```typescript
 type OpenClawPluginApi = {
   runtime: PluginRuntime;
+  pluginConfig: Record<string, unknown>;       // resolved plugin config
   registerChannel(opts: { plugin: ChannelPlugin }): void;
-  registerTools(tools: AnyAgentTool[]): void;
+  registerTool(tool: AnyAgentTool | ToolFactory): void;  // singular, supports factory
   registerCommand(command: OpenClawPluginCommandDefinition): void;
   on<K extends PluginHookName>(hookName: K, handler: PluginHookHandlerMap[K], opts?: { priority?: number }): void;
-  registerCronJobs(jobs: CronJobSpec[]): void;
-  registerGatewayHandler(id: string, handler: GatewayRequestHandler): void;
-  // provider auth, services, CLI commands...
+  registerHttpRoute(route: HttpRouteDefinition): void;    // replaces old registerHttpHandler
+  registerGatewayMethod(method: string, handler: GatewayMethodHandler): void;
+  registerProvider(provider: ProviderDefinition): void;   // auth-only, no model catalog
+  registerService(service: ServiceDefinition): void;
+  registerCli(cli: CliDefinition): void;
+  registerContextEngine(id: string, factory: ContextEngineFactory): void;  // exclusive slot
+  resolvePath(...segments: string[]): string;
 };
 ```
 
@@ -113,7 +119,11 @@ Plugin commands are processed before built-in commands and before agent invocati
 - `prependSystemContext` - static, cacheable content prepended to system prompt
 - `appendSystemContext` - static, cacheable content appended to system prompt
 
+Sync-only hooks: `before_message_write` and `tool_result_persist` reject async handlers at registration time.
+
 Hook policy: `plugins.entries[pluginId].hooks.allowPromptInjection` (boolean) controls prompt mutation access. When `false`, `before_prompt_build` is blocked entirely and `before_agent_start` is constrained to non-prompt fields.
+
+Global hook runner uses `Symbol.for("openclaw.plugins.hook-runner-global-state")` for process-global singleton pattern - ensures duplicated dist chunks share one instance (#40184).
 
 ## Plugin Runtime
 
@@ -125,11 +135,17 @@ type PluginRuntime = {
   tools: PluginRuntimeTools;
   events: PluginRuntimeEvents;
   system: PluginRuntimeSystem;
+  modelAuth: {                                 // NEW (#41090): safe model auth access
+    getApiKeyForModel(modelId: string): Promise<string | undefined>;
+    resolveApiKeyForProvider(providerId: string): Promise<string | undefined>;
+  };
   // media, whatsapp, config access...
 };
 ```
 
 Runtime is lazy-loaded via Proxy to avoid heavy dependencies in test/validation scenarios.
+
+`modelAuth` safety wrappers strip `agentDir`/`store`/`profileId`/`preferredProfile` to prevent credential steering by plugins.
 
 ## Plugin Config Type
 
@@ -226,7 +242,7 @@ openclaw plugins doctor                   # diagnostics
 
 100+ scoped exports. Plugins import from `openclaw/plugin-sdk` or `openclaw/<subpath>`. Runtime resolves via jiti alias.
 
-Key exports: types, config access, channel interfaces, tool builders, hook types, media pipeline, crypto/signing utilities.
+Key exports: types, config access, channel interfaces, tool builders, hook types, media pipeline, crypto/signing utilities, `requireApiKey`/`ResolvedProviderAuth` for model auth, `ContextEngineFactory` for context engine registration.
 
 Channel-specific SDK subpaths:
 - `openclaw/discord` - thread binding management (`autoBindSpawnedDiscordSubagent`, `listThreadBindingsBySessionKey`, `unbindThreadBindingsBySessionKey`)
@@ -246,4 +262,6 @@ extensions/my-plugin/
 
 Keep plugin deps in the extension `package.json`, not root. Use `devDependencies` or `peerDependencies` for `openclaw` (resolved at runtime via jiti alias).
 
-Removed `api.registerHttpHandler()` - plugins using it get a clear migration error pointing to new API (#36794).
+Removed `api.registerHttpHandler()` - plugins using it get a clear migration error pointing to `api.registerHttpRoute()` (#36794).
+
+Context engine registry uses same Symbol-based singleton pattern as hook runner: `Symbol.for("openclaw.contextEngineRegistryState")` - ensures single instance across duplicated chunks.

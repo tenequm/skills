@@ -23,6 +23,8 @@
 | Voice Call | `extensions/voice-call/` | via plugin config | Twilio/SIP voice |
 | Feishu/Lark | `extensions/feishu/` | via plugin config | Feishu bot API |
 | BlueBubbles | `extensions/bluebubbles/` | via plugin config | iMessage via BlueBubbles server |
+| Mattermost | `extensions/mattermost/` | via plugin config | Mattermost WebSocket + slash HTTP |
+| ACPX | `extensions/acpx/` | via plugin config | ACP runtime backend (acpx CLI) |
 
 ## Channel Plugin Registration
 
@@ -90,6 +92,10 @@ Key files: `src/telegram/thread-bindings.ts`, Discord thread binding via plugin 
 - **Streaming modes**: `"off"`, `"partial"`, `"block"`, `"progress"`
 - **Direct DMs**: `direct` config keyed by chat ID for per-user settings
 - **Topics**: support `agentId` for topic-specific agent routing
+- **Network fallback**: resolver-scoped dispatchers with IPv4 fallback retry on `ETIMEDOUT`/`ENETUNREACH`/`UND_ERR_CONNECT_TIMEOUT` (`src/telegram/fetch.ts`)
+- **Duplicate prevention**: deduplicates messages when preview edit times out before delivery confirmation
+- **Exec approvals**: per-account `execApprovals` config with `approvers` list, `target` (`"dm"`, `"channel"`, `"both"`), and inline approval buttons for OpenCode/Codex flows (`src/telegram/exec-approvals.ts`)
+- **Direct delivery hooks**: bridges direct delivery to internal `message:sent` hooks (`src/telegram/bot/delivery.replies.ts`)
 
 ## Discord Channel Config
 
@@ -113,6 +119,7 @@ Key files: `src/telegram/thread-bindings.ts`, Discord thread binding via plugin 
 - **Event queue**: configurable `listenerTimeout`, `maxQueueSize`, `maxConcurrency`
 - **Streaming modes**: `"off"`, `"partial"`, `"block"`, `"progress"`
 - **Reaction notification**: `"off"`, `"own"`, `"all"`, `"allowlist"`
+- **maxLinesPerMessage**: effective value applied in live replies; resolved per-account with root/account config merge (`src/discord/accounts.ts`)
 
 ## Discord Architecture
 
@@ -141,7 +148,7 @@ Key files:
 - `src/discord/account-inspect.ts`
 - `src/telegram/account-inspect.ts`
 - `src/slack/account-inspect.ts`
-- `src/channels/account-snapshot-fields.ts` - shared utilities for credential status projection
+- `src/channels/account-snapshot-fields.ts` - shared utilities for credential status projection (supports `tokenStatus`, `botTokenStatus`, `appTokenStatus`, `signingSecretStatus`, `userTokenStatus`)
 
 ## Channel Status
 
@@ -187,11 +194,36 @@ extensions/my-channel/
 Key paths:
 - `src/routing/` - message routing between channels
 - `src/channels/` - shared channel infrastructure (dock, summary, snapshot fields)
+- `src/channels/dock.ts` - channel docking with group policy resolution per channel
+- `src/channels/native-command-session-targets.ts` - native command session target resolution
+- `src/channels/plugins/helpers.ts` - plugin helpers (default account resolution, pairing hints, DM security policy builder)
+- `src/channels/plugins/group-mentions.test.ts` - group mention handling
+- `src/channels/plugins/group-policy-warnings.ts` - group policy warning collectors (open policy, allowlist provider, missing route allowlist)
+- `src/channels/plugins/onboarding/` - channel-specific onboarding helpers
 - `src/auto-reply/` - auto-reply logic, skill commands
 
 Messages flow: Channel -> Routing -> Agent -> Response -> Channel
 
 WebChat replies now stay on WebChat instead of being rerouted by persisted delivery routing (#37135).
+
+## Extension-Specific Fixes
+
+**MS Teams** (`extensions/msteams/`):
+- Uses General channel conversation ID as team key for Bot Framework compatibility; Bot Framework sends `channelData.team.id` as the conversation ID, not the Graph API group GUID (`src/resolve-allowlist.ts`)
+
+**Mattermost** (`extensions/mattermost/`):
+- Reads `replyTo` param as fallback when `replyToId` is blank in plugin `handleAction` send paths (`src/channel.ts`)
+- Fixes DM media upload for unprefixed 26-char user IDs (`src/mattermost/send.ts`)
+
+**Feishu/Lark** (`extensions/feishu/`):
+- Passes `mediaLocalRoots` in `sendText` local-image auto-convert shim so local path images resolve correctly (`src/outbound.ts`)
+
+**ACPX** (`extensions/acpx/`):
+- ACP runtime backend plugin: registers via `api.registerService()`, not `registerChannel()`
+- Config: `command`, `expectedVersion`, `cwd`, `permissionMode` (`approve-all`/`approve-reads`/`deny-all`), `nonInteractivePermissions` (`deny`/`fail`), `strictWindowsCmdWrapper`, `timeoutSeconds`, `queueOwnerTtlSeconds`, `mcpServers`
+- MCP server injection: named MCP server definitions injected into ACPX session bootstrap via proxy agent command
+- Pinned version: `0.1.15`, auto-installs plugin-local if bundled binary missing/mismatched
+- Spawned processes receive `OPENCLAW_SHELL=acp` env marker
 
 ## Allowlists & Pairing
 
