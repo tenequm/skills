@@ -40,3 +40,7 @@ ENV/
 .scratch/
 .notes/
 .claude/settings.local.json
+
+# Eval run outputs (raw analysis files from skill-creator runs)
+# Grading, timing, and benchmark results are committed for historical tracking
+**/_evals/**/outputs/

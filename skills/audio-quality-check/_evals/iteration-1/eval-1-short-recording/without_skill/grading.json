@@ -1,0 +1,31 @@
+{
+  "eval_id": 1,
+  "configuration": "without_skill",
+  "expectations": [
+    {
+      "text": "Analysis completed without errors on the short recording",
+      "passed": true,
+      "evidence": "Analysis completed successfully using ffmpeg/sox"
+    },
+    {
+      "text": "Reported track structure (tracks, sample rates, duration)",
+      "passed": true,
+      "evidence": "Detailed track info: AAC-LC 48kHz stereo for both tracks, 17.4s duration"
+    },
+    {
+      "text": "Reported loudness levels for available tracks",
+      "passed": true,
+      "evidence": "System -31.8 LUFS, mic -54.6 LUFS with EBU R128 measurements"
+    },
+    {
+      "text": "Gave a clear verdict on whether the audio is clean",
+      "passed": true,
+      "evidence": "Clear 'NOT CLEAN - several significant issues' verdict"
+    },
+    {
+      "text": "Response was appropriately concise for a quick check request",
+      "passed": false,
+      "evidence": "165 lines of very detailed analysis for a 'quick check' on a 17-second recording. Includes codec efficiency analysis, channel analysis, silence detection timestamps, dynamic range analysis - far more than a quick check warrants."
+    }
+  ]
+}

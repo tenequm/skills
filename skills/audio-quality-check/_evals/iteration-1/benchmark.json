@@ -1,0 +1,172 @@
+{
+  "metadata": {
+    "skill_name": "audio-quality-check",
+    "skill_path": "/Users/tenequm/Projects/skills/skills/audio-quality-check",
+    "executor_model": "claude-opus-4-6",
+    "analyzer_model": "claude-opus-4-6",
+    "timestamp": "2026-03-12T16:00:00Z",
+    "evals_run": [0, 1, 2],
+    "runs_per_configuration": 1
+  },
+  "runs": [
+    {
+      "eval_id": 0,
+      "eval_name": "long-call-echo",
+      "configuration": "with_skill",
+      "run_number": 1,
+      "result": {
+        "pass_rate": 1.0,
+        "passed": 7,
+        "failed": 0,
+        "total": 7,
+        "time_seconds": 245.7,
+        "tokens": 37627
+      },
+      "expectations": [
+        {"text": "Ran the bundled analyze_recording.py script on the recording", "passed": true, "evidence": "Script output saved to script_output.txt, analysis references script findings throughout"},
+        {"text": "Identified echo/duplication in the system audio track via autocorrelation", "passed": true, "evidence": "Clearly stated 'autocorrelation peaks at consistent lags in the 20-53ms range' with r=0.4752 at 53ms"},
+        {"text": "Reported the approximate echo lag (30-53ms range)", "passed": true, "evidence": "Reported exact values: 53.0ms (r=0.4752), 20.9ms (r=0.3412), 31.2ms (r=0.3028). Median ~31ms"},
+        {"text": "Noted that cross-track correlation is near zero (not mic bleed)", "passed": true, "evidence": "Stated cross-correlation near zero at all time points (max 0.0164), voice-band coherence 0.0000"},
+        {"text": "Flagged that AEC-processed tracks are over-amplified", "passed": true, "evidence": "Stated: 'aec_mic: -8.5 LUFS (was -18.6, now WAY too loud)' and 'LOUDNESS BLOWN OUT'"},
+        {"text": "Reported PESQ and/or STOI scores", "passed": true, "evidence": "Reported both: STOI 0.540-0.582 (poor), PESQ WB degrades from 4.10 to 2.49"},
+        {"text": "Provided actionable explanation of echo cause", "passed": true, "evidence": "Identified virtual audio processor as likely cause, recommended investigating Krisp/Loopback"}
+      ],
+      "notes": []
+    },
+    {
+      "eval_id": 0,
+      "eval_name": "long-call-echo",
+      "configuration": "without_skill",
+      "run_number": 1,
+      "result": {
+        "pass_rate": 0.2857,
+        "passed": 2,
+        "failed": 5,
+        "total": 7,
+        "time_seconds": 366.3,
+        "tokens": 71237
+      },
+      "expectations": [
+        {"text": "Ran the bundled analyze_recording.py script on the recording", "passed": false, "evidence": "No access to the skill script. Used ad-hoc ffmpeg/sox/python analysis instead."},
+        {"text": "Identified echo/duplication in the system audio track via autocorrelation", "passed": false, "evidence": "MISDIAGNOSED: Attributed echo to 'speaker-to-mic bleed'. Did not perform autocorrelation on system track."},
+        {"text": "Reported the approximate echo lag (30-53ms range)", "passed": false, "evidence": "Mentioned 44ms track offset but did not measure echo via autocorrelation."},
+        {"text": "Noted that cross-track correlation is near zero (not mic bleed)", "passed": false, "evidence": "Reached opposite conclusion: 'only 1.6-2.7 dB quieter - severe bleed'. Used RMS instead of cross-correlation."},
+        {"text": "Flagged that AEC-processed tracks are over-amplified", "passed": true, "evidence": "Noted mic went from -18.6 to -6.6 LUFS and AEC 'amplified the mic track by ~12 dB'. Flagged +14.1 dBTP clipping."},
+        {"text": "Reported PESQ and/or STOI scores", "passed": false, "evidence": "Did not run PESQ or STOI. No speech quality or intelligibility metrics."},
+        {"text": "Provided actionable explanation of echo cause", "passed": true, "evidence": "Provided workaround but misidentified root cause as speaker-to-mic bleed."}
+      ],
+      "notes": []
+    },
+    {
+      "eval_id": 1,
+      "eval_name": "short-recording",
+      "configuration": "with_skill",
+      "run_number": 1,
+      "result": {
+        "pass_rate": 1.0,
+        "passed": 5,
+        "failed": 0,
+        "total": 5,
+        "time_seconds": 115.5,
+        "tokens": 20710
+      },
+      "expectations": [
+        {"text": "Analysis completed without errors on the short recording", "passed": true, "evidence": "Script ran successfully, all sections populated with data"},
+        {"text": "Reported track structure (tracks, sample rates, duration)", "passed": true, "evidence": "Reported Track 0: AAC 48kHz stereo 7kbps, Track 1: AAC 48kHz stereo 93kbps, ~17 seconds"},
+        {"text": "Reported loudness levels for available tracks", "passed": true, "evidence": "System -35.0 LUFS, mic -57.2 LUFS, AEC system -31.8 LUFS, AEC mic -15.0 LUFS"},
+        {"text": "Gave a clear verdict on whether the audio is clean", "passed": true, "evidence": "Clear 'NOT clean' verdict at the top with structured findings"},
+        {"text": "Response was appropriately concise for a quick check request", "passed": true, "evidence": "44 lines, organized into 6 numbered sections with a summary. Reasonable for complexity."}
+      ],
+      "notes": []
+    },
+    {
+      "eval_id": 1,
+      "eval_name": "short-recording",
+      "configuration": "without_skill",
+      "run_number": 1,
+      "result": {
+        "pass_rate": 0.8,
+        "passed": 4,
+        "failed": 1,
+        "total": 5,
+        "time_seconds": 142.4,
+        "tokens": 31094
+      },
+      "expectations": [
+        {"text": "Analysis completed without errors on the short recording", "passed": true, "evidence": "Analysis completed successfully using ffmpeg/sox"},
+        {"text": "Reported track structure (tracks, sample rates, duration)", "passed": true, "evidence": "Detailed track info: AAC-LC 48kHz stereo for both tracks, 17.4s duration"},
+        {"text": "Reported loudness levels for available tracks", "passed": true, "evidence": "System -31.8 LUFS, mic -54.6 LUFS with EBU R128 measurements"},
+        {"text": "Gave a clear verdict on whether the audio is clean", "passed": true, "evidence": "Clear 'NOT CLEAN - several significant issues' verdict"},
+        {"text": "Response was appropriately concise for a quick check request", "passed": false, "evidence": "165 lines of very detailed analysis for a 'quick check' on a 17-second recording."}
+      ],
+      "notes": []
+    },
+    {
+      "eval_id": 2,
+      "eval_name": "no-aec-manual",
+      "configuration": "with_skill",
+      "run_number": 1,
+      "result": {
+        "pass_rate": 1.0,
+        "passed": 5,
+        "failed": 0,
+        "total": 5,
+        "time_seconds": 153.4,
+        "tokens": 23368
+      },
+      "expectations": [
+        {"text": "Handled the absence of audio-processed.m4a gracefully", "passed": true, "evidence": "Correctly noted 'No processed (AEC) version exists' and 'No AEC needed' since system track is silent"},
+        {"text": "Correctly skipped PESQ/STOI comparison", "passed": true, "evidence": "No PESQ/STOI sections in the output - correctly omitted since no reference/degraded pair exists"},
+        {"text": "Still ran the applicable analyses (echo, loudness, spectral, SNR)", "passed": true, "evidence": "Ran all applicable: loudness, echo detection, cross-track, spectral, SNR (42dB)"},
+        {"text": "Reported track structure of the raw audio file", "passed": true, "evidence": "Track 0: AAC 48kHz stereo 51kbps, Track 1: AAC 48kHz stereo 105kbps, 21s and 19.3s"},
+        {"text": "Provided a meaningful quality summary", "passed": true, "evidence": "Clear 'GOOD' verdict with summary table. However, MISSED clipping issue that baseline caught (+12.9 dBFS true peak). Script lacks clipping detection."}
+      ],
+      "notes": ["with_skill missed clipping (+12.9 dBFS true peak) that baseline caught - script lacks clipping/true-peak detection"]
+    },
+    {
+      "eval_id": 2,
+      "eval_name": "no-aec-manual",
+      "configuration": "without_skill",
+      "run_number": 1,
+      "result": {
+        "pass_rate": 1.0,
+        "passed": 5,
+        "failed": 0,
+        "total": 5,
+        "time_seconds": 224.7,
+        "tokens": 35992
+      },
+      "expectations": [
+        {"text": "Handled the absence of audio-processed.m4a gracefully", "passed": true, "evidence": "Noted 'No AEC processing' in the title and recommendations"},
+        {"text": "Correctly skipped PESQ/STOI comparison", "passed": true, "evidence": "Did not attempt PESQ/STOI - no comparison pair available"},
+        {"text": "Still ran the applicable analyses (echo, loudness, spectral, SNR)", "passed": true, "evidence": "Ran loudness (-46.9 LUFS system, -8.7 LUFS mic), clipping (+12.9 dBTP), channel analysis, silence detection, frequency distribution, dynamic range, SNR"},
+        {"text": "Reported track structure of the raw audio file", "passed": true, "evidence": "Very detailed: AAC-LC 48kHz stereo, bitrates, durations, priming frames, sample counts"},
+        {"text": "Provided a meaningful quality summary", "passed": true, "evidence": "Clear 'POOR' rating due to severe mic clipping (+12.9 dBFS true peak). This finding the with-skill version MISSED."}
+      ],
+      "notes": []
+    }
+  ],
+  "run_summary": {
+    "with_skill": {
+      "pass_rate": {"mean": 1.0, "stddev": 0.0, "min": 1.0, "max": 1.0},
+      "time_seconds": {"mean": 171.5, "stddev": 67.0, "min": 115.5, "max": 245.7},
+      "tokens": {"mean": 27235, "stddev": 9098, "min": 20710, "max": 37627}
+    },
+    "without_skill": {
+      "pass_rate": {"mean": 0.695, "stddev": 0.369, "min": 0.286, "max": 1.0},
+      "time_seconds": {"mean": 244.5, "stddev": 113.3, "min": 142.4, "max": 366.3},
+      "tokens": {"mean": 46108, "stddev": 21899, "min": 31094, "max": 71237}
+    },
+    "delta": {
+      "pass_rate": "+0.31",
+      "time_seconds": "-73.0",
+      "tokens": "-18873"
+    }
+  },
+  "notes": [
+    "Eval 0 (echo detection) shows the biggest skill advantage: 7/7 vs 2/7. Without the script, the baseline misdiagnosed the root cause.",
+    "Eval 2 reveals a gap: the skill's script lacks clipping/true-peak detection, causing it to miss severe clipping that the baseline's ad-hoc analysis caught.",
+    "The skill is consistently faster and uses fewer tokens (~41% fewer tokens on average), likely because the bundled script handles the heavy analysis.",
+    "Eval 1 (conciseness) is a clear skill win: 44 lines vs 165 lines for the same 17-second recording."
+  ]
+}
