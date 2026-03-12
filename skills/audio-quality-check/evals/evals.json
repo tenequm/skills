@@ -1,0 +1,23 @@
+{
+  "skill_name": "audio-quality-check",
+  "evals": [
+    {
+      "id": 0,
+      "prompt": "I just had a 13 minute Google Meet call and the recording sounds weird - speakers voices sound slightly doubled/echoed. Can you check the quality of this recording and figure out what's going on?\n\nThe recording is at: /Users/tenequm/Library/Application Support/Blackbox/Recordings/2026-03-12-140342-A8DF",
+      "expected_output": "Should run the analysis script, identify the ~53ms echo in the system track via autocorrelation, note that cross-track correlation is near zero (meaning it's NOT mic bleed), flag AEC loudness issues, report STOI as poor, and explain the likely cause (virtual audio processor duplication)",
+      "files": []
+    },
+    {
+      "id": 1,
+      "prompt": "quick check on this short recording - is the audio clean?\n/Users/tenequm/Library/Application Support/Blackbox/Recordings/2026-03-11-015259-D7C6",
+      "expected_output": "Should run the analysis, handle the short recording gracefully (~17s), report track info, loudness, echo analysis, and quality metrics without crashing on short segments",
+      "files": []
+    },
+    {
+      "id": 2,
+      "prompt": "analyze the audio quality of this manual recording, it doesn't have the processed version - just the raw audio.m4a\n/Users/tenequm/Library/Application Support/Blackbox/Recordings/2026-03-10-191332-7974",
+      "expected_output": "Should handle single-file recording without AEC gracefully, skip PESQ/STOI comparison (no reference vs degraded pair), still run echo detection, loudness, spectral, and SNR analysis",
+      "files": []
+    }
+  ]
+}
