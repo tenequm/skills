@@ -10,6 +10,10 @@
 - Macros
 - Resources
 - Conditional Compilation
+- Manual .app Bundle Assembly
+- Mixed ObjC Targets
+- Swift Testing with CLT (No Xcode)
+- Multiple Executable Targets
 
 ## Package.swift Basics
 
@@ -244,4 +248,145 @@ import FoundationModels
 #if targetEnvironment(simulator)
 // Simulator-specific code
 #endif
+```
+
+## Manual .app Bundle Assembly
+
+SPM (`swift build`) produces a bare executable, not a `.app` bundle. macOS requires a proper `.app` for Info.plist keys (LSUIElement, NSMicrophoneUsageDescription), TCC permissions, and framework loading. Assemble manually via Makefile:
+
+```makefile
+APP_BUNDLE = build/MyApp.app
+BINARY = .build/arm64-apple-macosx/release/MyApp
+
+bundle: build
+	@mkdir -p "$(APP_BUNDLE)/Contents/MacOS"
+	@mkdir -p "$(APP_BUNDLE)/Contents/Frameworks"
+	@mkdir -p "$(APP_BUNDLE)/Contents/Resources"
+	# Copy binary
+	@cp "$(BINARY)" "$(APP_BUNDLE)/Contents/MacOS/MyApp"
+	# CRITICAL: Add rpath for frameworks (SPM default doesn't include it)
+	@install_name_tool -add_rpath @executable_path/../Frameworks \
+	    "$(APP_BUNDLE)/Contents/MacOS/MyApp"
+	# Copy Info.plist and icon
+	@cp Info.plist "$(APP_BUNDLE)/Contents/"
+	@cp Assets/AppIcon.icns "$(APP_BUNDLE)/Contents/Resources/"
+	# Copy dynamic frameworks (e.g., Sparkle)
+	@cp -R .build/artifacts/sparkle/Sparkle/Sparkle.framework \
+	    "$(APP_BUNDLE)/Contents/Frameworks/"
+	# CRITICAL: Copy SPM resource bundles (CoreML models, assets, etc.)
+	@for bundle in .build/arm64-apple-macosx/release/*.bundle; do \
+	    [ -d "$$bundle" ] && cp -R "$$bundle" "$(APP_BUNDLE)/Contents/Resources/"; \
+	done
+	# Sign from inside out: nested bundles first, then main app
+	@codesign --force --options runtime --sign "$(SIGN_ID)" --timestamp \
+	    "$(APP_BUNDLE)/Contents/Frameworks/Sparkle.framework"
+	@codesign --force --options runtime --sign "$(SIGN_ID)" --timestamp \
+	    --identifier com.example.MyApp --entitlements entitlements.plist "$(APP_BUNDLE)"
+```
+
+Key gotchas:
+- **`install_name_tool -add_rpath`** is required or dynamic frameworks crash with `dyld: Library not loaded: @rpath/...`
+- **SPM resource bundles** (`.bundle` directories from packages with `resources:`) are NOT automatically included. Missing them causes silent crashes on non-dev machines where `Bundle.module` resolves to nil.
+- **Sign from inside out**: nested `.xpc` and `.app` bundles within frameworks must be signed before the framework, which must be signed before the top-level app.
+- **Stale artifacts** can have read-only permissions from previous builds. Use `chmod -R u+w` or clean before copying.
+
+### make run race condition
+
+`open` won't relaunch an already-running LSUIElement app. Kill and wait before rebuilding:
+
+```makefile
+run: build
+	@killall MyApp 2>/dev/null; while killall -0 MyApp 2>/dev/null; do sleep 0.1; done
+	@$(MAKE) bundle
+	@open "$(APP_BUNDLE)"
+```
+
+Rebuilding while the old process is running causes `SIGKILL (Code Signature Invalid)` - macOS detects memory-mapped code pages don't match the new binary's signature.
+
+## Mixed ObjC Targets
+
+SPM doesn't allow mixing Swift and ObjC in a single target. Create a separate target:
+
+```swift
+targets: [
+    .executableTarget(
+        name: "MyApp",
+        dependencies: ["ObjCExceptionCatcher"],
+        exclude: ["ObjCExceptionCatcher"], // Exclude from main target's path scan
+        swiftSettings: [.swiftLanguageMode(.v6), .defaultIsolation(MainActor.self)]
+    ),
+    .target(
+        name: "ObjCExceptionCatcher",
+        path: "Sources/ObjCExceptionCatcher",
+        publicHeadersPath: "include",
+        linkerSettings: [.linkedFramework("AVFAudio")]
+    ),
+]
+```
+
+Directory layout:
+```
+Sources/
+  MyApp/
+    main.swift
+  ObjCExceptionCatcher/
+    include/ObjCExceptionCatcher.h
+    ObjCExceptionCatcher.m
+```
+
+## Swift Testing with CLT (No Xcode)
+
+On machines using CommandLineTools (not Xcode), `import Testing` fails. The framework exists but SPM doesn't search the CLT path. Add three `unsafeFlags`:
+
+```swift
+.testTarget(
+    name: "MyAppTests",
+    dependencies: ["MyApp"],
+    swiftSettings: [
+        .swiftLanguageMode(.v6),
+        // Compiler: find Testing module
+        .unsafeFlags(["-F",
+            "/Library/Developer/CommandLineTools/Library/Developer/Frameworks"]),
+    ],
+    linkerSettings: [
+        // Linker: resolve Testing framework
+        .unsafeFlags(["-F",
+            "/Library/Developer/CommandLineTools/Library/Developer/Frameworks"]),
+        // Runtime: load Testing framework
+        .unsafeFlags(["-Xlinker", "-rpath", "-Xlinker",
+            "/Library/Developer/CommandLineTools/Library/Developer/Frameworks"]),
+    ]
+)
+```
+
+## Multiple Executable Targets
+
+When adding helper binaries (e.g., watchdog, CLI tool) to the same package:
+
+```swift
+targets: [
+    .executableTarget(
+        name: "MyApp",
+        exclude: ["Watchdog", "ObjCExceptionCatcher"], // Exclude sibling directories
+        swiftSettings: [.swiftLanguageMode(.v6), .defaultIsolation(MainActor.self)]
+    ),
+    .executableTarget(
+        name: "MyWatchdog",
+        path: "Sources/Watchdog",
+        swiftSettings: [
+            .swiftLanguageMode(.v6),
+            .treatAllWarnings(as: .error),
+            // Helper doesn't need defaultIsolation - it's a simple process monitor
+        ]
+    ),
+]
+```
+
+The Makefile copies helper binaries into `Contents/MacOS/` and signs them before the main app:
+
+```makefile
+@cp .build/arm64-apple-macosx/release/MyWatchdog "$(APP_BUNDLE)/Contents/MacOS/"
+@codesign --force --sign "$(SIGN_ID)" "$(APP_BUNDLE)/Contents/MacOS/MyWatchdog"
+# Then sign main app last
+@codesign --force --sign "$(SIGN_ID)" --entitlements entitlements.plist "$(APP_BUNDLE)"
 ```

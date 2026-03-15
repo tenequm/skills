@@ -6,6 +6,7 @@
 - Hosting SwiftUI in AppKit
 - Common Bridges
 - NSWindow Access
+- NSPanel / Floating HUD
 
 ## NSViewRepresentable
 
@@ -225,4 +226,75 @@ ContentView()
         window.isOpaque = false
         window.backgroundColor = .clear
     })
+```
+
+## NSPanel / Floating HUD
+
+For toast notifications, recording indicators, or floating widgets that must appear above all apps (including full-screen):
+
+```swift
+class HUDPanel: NSPanel {
+    init(content: some View) {
+        super.init(
+            contentRect: .zero,
+            styleMask: [.nonactivatingPanel, .fullSizeContentView],
+            backing: .buffered,
+            defer: true
+        )
+        level = .floating
+        isOpaque = false
+        backgroundColor = .clear
+        hidesOnDeactivate = false // CRITICAL for menu bar apps
+        isReleasedWhenClosed = false // Prevent dangling reference
+        collectionBehavior = [
+            .canJoinAllSpaces,        // Visible on all Spaces/desktops
+            .fullScreenAuxiliary,     // Visible over full-screen apps
+            .transient,               // Don't appear in Mission Control
+        ]
+
+        let hostingView = NSHostingView(rootView: content)
+        hostingView.frame.size = hostingView.fittingSize
+        contentView = hostingView
+        setContentSize(hostingView.fittingSize)
+    }
+
+    func show(on screen: NSScreen? = NSScreen.main) {
+        guard let screen else { return }
+        let size = contentView?.fittingSize ?? .zero
+        // Use visibleFrame (not frame) to avoid menu bar overlap
+        let origin = NSPoint(
+            x: screen.visibleFrame.maxX - size.width - 16,
+            y: screen.visibleFrame.maxY - size.height - 16
+        )
+        setFrameOrigin(origin)
+        orderFrontRegardless()
+
+        // Auto-dismiss after delay
+        DispatchQueue.main.asyncAfter(deadline: .now() + 3) { [weak self] in
+            self?.close()
+        }
+    }
+}
+```
+
+Key gotchas:
+- **`hidesOnDeactivate = false`**: Required for menu bar apps - the HUD must stay visible when the app isn't frontmost.
+- **Use `screen.visibleFrame`** not `screen.frame` - `frame` includes the menu bar area.
+- **`.fixedSize()`** on the SwiftUI content - without it, `fittingSize` compresses the content and text truncates.
+- **`isReleasedWhenClosed = false`**: Prevents a dangling reference crash if you hold a strong reference to the panel.
+
+### HUD actions bridging to SwiftUI
+
+NSPanel can't access `@Environment(\.openWindow)`. Use NotificationCenter to bridge:
+
+```swift
+// In HUD - post notification on click:
+static let showMainWindowNotification = Notification.Name("ShowMainWindow")
+NSNotificationCenter.default.post(name: Self.showMainWindowNotification, object: nil)
+
+// In SwiftUI MenuBarExtra content - receive and act:
+.onReceive(NotificationCenter.default.publisher(for: HUDPanel.showMainWindowNotification)) { _ in
+    openWindow(id: "main")
+    NSApp.activate(ignoringOtherApps: true)
+}
 ```

@@ -5,7 +5,9 @@
 - Implicit Sendable
 - Making Types Sendable
 - @unchecked Sendable
+- @unchecked Sendable + Serial Queue Pattern
 - @Sendable Closures
+- @preconcurrency import
 - Swift 6 Language Mode
 - Common Patterns
 
@@ -105,6 +107,53 @@ final class ThreadSafeCache<Key: Hashable & Sendable, Value: Sendable>: @uncheck
 - Types using `os_unfair_lock` or `NSLock` internally
 - Bridging legacy code during migration
 
+## @unchecked Sendable + Serial Queue Pattern
+
+For classes that manage their own thread safety via a serial dispatch queue (common in audio/video recording), use `@unchecked Sendable` with `nonisolated(unsafe)` properties:
+
+```swift
+class AudioRecorder: NSObject, @unchecked Sendable, SCStreamOutput {
+    private let audioQueue = DispatchQueue(label: "com.app.audio")
+
+    // State accessed from background callbacks - nonisolated(unsafe) + serial queue
+    nonisolated(unsafe) private var writer: AVAssetWriter?
+    nonisolated(unsafe) private var systemInput: AVAssetWriterInput?
+    nonisolated(unsafe) private var micInput: AVAssetWriterInput?
+    nonisolated(unsafe) private var sessionStarted = false
+    nonisolated(unsafe) private var stopped = false
+
+    // SCStreamOutput callback - runs on audioQueue (background)
+    nonisolated func stream(_ stream: SCStream,
+                            didOutputSampleBuffer sampleBuffer: CMSampleBuffer,
+                            of type: SCStreamOutputType) {
+        // All nonisolated(unsafe) state accessed exclusively on audioQueue
+        guard !stopped, let input = systemInput, input.isReadyForMoreMediaData else { return }
+        input.append(sampleBuffer)
+    }
+
+    // Callbacks passed at init, not set after - avoids data races
+    nonisolated let onError: (@Sendable (Error) -> Void)?
+
+    init(onError: (@Sendable (Error) -> Void)? = nil) {
+        self.onError = onError
+    }
+}
+```
+
+With `defaultIsolation(MainActor.self)`, pair `@ObservationIgnored` with `nonisolated(unsafe)` for internal bookkeeping properties in `@Observable` classes:
+
+```swift
+@Observable
+class ResourceManager: @unchecked Sendable {
+    // UI-visible state (MainActor-isolated, observed by SwiftUI)
+    var isRecording = false
+
+    // Internal state (not for UI, accessed on background queue)
+    @ObservationIgnored nonisolated(unsafe) private var writer: AVAssetWriter?
+    @ObservationIgnored nonisolated(unsafe) private var listenerIDs: Set<AudioObjectID> = []
+}
+```
+
 ## @Sendable Closures
 
 Functions passed across concurrency boundaries must be `@Sendable`:
@@ -127,6 +176,19 @@ performInBackground {
     count += 1 // Compiler error: mutation of captured var in @Sendable closure
 }
 ```
+
+## @preconcurrency import
+
+Apple framework types like `AVAudioPCMBuffer`, `AVAssetWriter`, `CMSampleBuffer`, and `AVAudioFormat` lack `Sendable` conformance. Use `@preconcurrency import` to suppress warnings while Apple updates their frameworks:
+
+```swift
+@preconcurrency import AVFoundation  // Covers AVAudioPCMBuffer, AVAssetWriter, etc.
+@preconcurrency import CoreMedia     // Covers CMSampleBuffer, CMTime, etc.
+```
+
+This treats the imported types as implicitly `Sendable` (matching pre-concurrency behavior). When Apple adds proper annotations, remove `@preconcurrency` to get full checking.
+
+`KeyPath` is also not `Sendable` in Swift 6. This breaks `Table` sort with `KeyPathComparator`. Workaround: pre-sort data in the source and avoid `KeyPathComparator` entirely.
 
 ## Swift 6 Language Mode
 

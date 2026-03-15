@@ -6,6 +6,7 @@
 - App Store Distribution
 - Developer ID Distribution
 - Notarization
+- Notarization Gotchas
 - Sandboxing
 - Hardened Runtime
 - Universal Binaries
@@ -203,6 +204,51 @@ xcrun notarytool submit MyApp.dmg \
   --issuer ISSUER_UUID \
   --wait
 ```
+
+## Notarization Gotchas
+
+### Nested framework bundles must be deep-signed
+
+Frameworks like Sparkle contain nested bundles (`Updater.app`, `Installer.xpc`, `Downloader.xpc`). Notarization rejects if these aren't individually signed with Developer ID + secure timestamp. Sign from inside out:
+
+```bash
+# Sign all nested bundles inside Sparkle
+find "MyApp.app/Contents/Frameworks/Sparkle.framework" \
+    -type d \( -name "*.app" -o -name "*.xpc" \) | while read f; do
+    codesign --force --options runtime --sign "$SIGN_ID" --timestamp "$f"
+done
+# Then the framework itself
+codesign --force --options runtime --sign "$SIGN_ID" --timestamp \
+    "MyApp.app/Contents/Frameworks/Sparkle.framework"
+# Then the main app
+codesign --force --options runtime --sign "$SIGN_ID" --timestamp \
+    --entitlements entitlements.plist "MyApp.app"
+
+# Verify before submitting
+codesign --verify --deep --strict MyApp.app
+```
+
+### Missing intermediate certificate
+
+After importing a Developer ID Application certificate, `security find-identity -v -p codesigning` may show no valid identity. Apple's G2 intermediate certificate must be downloaded and installed separately into the keychain.
+
+### First-time Developer ID accounts may stall
+
+First notarization submissions from a new Developer ID can sit "In Progress" for 72+ hours. If signing were wrong, Apple rejects within minutes as `Invalid`. "In Progress" for days means the submission passed validation and is in Apple's review queue. File a Technical Support Incident (TSI) if this happens.
+
+### Gatekeeper bypass for non-notarized builds
+
+Developer ID-signed but non-notarized apps show Gatekeeper warnings. Users can bypass: right-click the app > Open > click "Open" in the dialog (one-time). Or: System Settings > Privacy & Security > "Open Anyway".
+
+### Sparkle EdDSA signing
+
+Sparkle uses its own EdDSA key pair (separate from Apple code signing) to verify update integrity. Sign DMGs with Sparkle's `sign_update` tool:
+
+```bash
+.build/artifacts/sparkle/Sparkle/bin/sign_update MyApp-1.0.0.dmg
+```
+
+The appcast.xml contains the EdDSA signature and is generated per-release.
 
 ## Sandboxing
 

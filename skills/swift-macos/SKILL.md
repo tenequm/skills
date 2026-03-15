@@ -2,7 +2,7 @@
 name: swift-macos
 description: Comprehensive macOS app development with Swift 6.2, SwiftUI, SwiftData, Swift Concurrency, Foundation Models, Swift Testing, ScreenCaptureKit, and app distribution. Use when building native Mac apps, implementing windows/scenes/navigation/menus/toolbars, persisting data with SwiftData (@Model, @Query, #Predicate, ModelContainer), writing concurrent code (async/await, actors, @concurrent, default MainActor isolation, Sendable), using on-device AI (Foundation Models), testing with Swift Testing, capturing screen/audio with ScreenCaptureKit, recording audio with AVFoundation, building menu bar apps, monitoring processes, registering login items, bridging AppKit, or distributing via App Store/Developer ID/notarization. Triggers on macOS app, Mac app, SwiftUI macOS, Swift macOS, SwiftData, @Model, @Query, Swift concurrency, async await, actor isolation, @MainActor, @concurrent, Sendable, Foundation Models, Swift Testing, notarize, MenuBarExtra, NSViewRepresentable, ScreenCaptureKit, SCStream, SCShareableContent, screen capture, screen recording, audio capture, AVAssetWriter, AVAudioFile, SMAppService, login item, LSUIElement, NSWorkspace, process monitoring.
 metadata:
-  version: "0.2.0"
+  version: "0.3.0"
 ---
 
 # macOS App Development - Swift 6.2
@@ -457,21 +457,21 @@ See `references/architecture.md` for all patterns with examples.
 | File | When to read |
 |------|-------------|
 | **SwiftUI & macOS** | |
-| `references/app-lifecycle.md` | Window management, scenes, DocumentGroup, MenuBarExtra |
+| `references/app-lifecycle.md` | Window management, scenes, DocumentGroup, MenuBarExtra gotchas, async termination, LSUIElement issues |
 | `references/swiftui-macos.md` | Sidebar, Inspector, Table, forms, popovers, sheets, search |
-| `references/appkit-interop.md` | NSViewRepresentable, hosting controllers, AppKit bridging |
-| `references/screen-capture-audio.md` | ScreenCaptureKit, SCStream, audio capture, AVAssetWriter, permissions |
-| `references/system-integration.md` | Keyboard shortcuts, drag & drop, file access, App Intents, process monitoring, login items, LSUIElement |
+| `references/appkit-interop.md` | NSViewRepresentable, hosting controllers, AppKit bridging, NSPanel/floating HUD |
+| `references/screen-capture-audio.md` | ScreenCaptureKit, SCStream gotchas, AVAudioEngine dual pipeline, AVAssetWriter crash safety, TCC gotchas |
+| `references/system-integration.md` | Keyboard shortcuts, drag & drop, file access, App Intents, process monitoring, CoreAudio per-process APIs, login items, LSUIElement, idle sleep prevention |
 | `references/foundation-models.md` | On-device AI: guided generation, tool calling, streaming |
 | `references/architecture.md` | MVVM, TCA, dependency injection, project structure |
 | `references/testing.md` | Swift Testing, exit tests, attachments, UI testing, XCTest migration |
-| `references/distribution.md` | App Store, Developer ID, notarization, sandboxing, universal binaries |
-| `references/spm-build.md` | Package.swift, Swift Build, plugins, macros |
+| `references/distribution.md` | App Store, Developer ID, notarization gotchas, nested bundle signing, sandboxing, universal binaries |
+| `references/spm-build.md` | Package.swift, Swift Build, plugins, macros, manual .app bundle assembly, mixed ObjC targets, CLT testing |
 | **Concurrency** | |
-| `references/approachable-concurrency.md` | Default MainActor isolation, @concurrent, nonisolated async |
+| `references/approachable-concurrency.md` | Default MainActor isolation, @concurrent, nonisolated async, runtime pitfalls |
 | `references/actors-isolation.md` | Actor model, global actors, custom executors, reentrancy |
 | `references/structured-concurrency.md` | Task, TaskGroup, async let, cancellation, priority, named tasks |
-| `references/sendable-safety.md` | Sendable protocol, data race safety, @unchecked escape hatches |
+| `references/sendable-safety.md` | Sendable protocol, data race safety, @unchecked Sendable + serial queue, @preconcurrency import |
 | `references/async-patterns.md` | AsyncSequence, AsyncStream, Observations, continuations, Clock |
 | `references/migration-guide.md` | GCD to async/await, Combine to AsyncSequence, Swift 6 migration |
 | **SwiftData** | |

@@ -7,6 +7,7 @@
 - Nonisolated Async Changes
 - Enabling in Xcode
 - Migration Strategy
+- Runtime Pitfalls with Default Isolation
 
 ## Vision & Philosophy
 
@@ -178,5 +179,131 @@ defaultIsolation(nil) // This file opts out of default isolation
 
 actor NetworkClient {
     // Explicitly managed isolation
+}
+```
+
+## Runtime Pitfalls with Default Isolation
+
+These issues compile cleanly but crash at runtime. The compiler does not always catch them.
+
+### Closure isolation inheritance (most dangerous)
+
+Closures defined inside MainActor-isolated methods inherit MainActor isolation. When passed to APIs that call them on background threads, Swift 6 runtime checks the executor and crashes with `dispatch_assert_queue_fail` / SIGTRAP.
+
+Affected APIs include `AVAudioEngine.installTap`, `NotificationCenter.addObserver` with `queue: nil`, `DispatchSource.setEventHandler`, and `NSSetUncaughtExceptionHandler`.
+
+```swift
+// CRASHES at runtime - closure inherits MainActor isolation but runs on audio thread:
+func startCapture() {
+    engine.inputNode.installTap(onBus: 0, bufferSize: 1024, format: fmt) { buffer, time in
+        self.process(buffer) // dispatch_assert_queue_fail
+    }
+}
+
+// FIX - extract to @Sendable typed variable to break isolation inheritance:
+func startCapture() {
+    let handler: @Sendable (AVAudioPCMBuffer, AVAudioTime) -> Void = { [weak self] buffer, time in
+        self?.process(buffer) // nonisolated, safe on any thread
+    }
+    engine.inputNode.installTap(onBus: 0, bufferSize: 1024, format: fmt, block: handler)
+}
+```
+
+Same fix needed for NotificationCenter observers:
+```swift
+// CRASHES - observer closure inherits MainActor, but CoreAudio fires on I/O thread:
+NotificationCenter.default.addObserver(
+    forName: .AVAudioEngineConfigurationChange, object: engine, queue: nil
+) { [weak self] _ in self?.handleConfigChange() }
+
+// FIX - either use queue: .main or extract to @Sendable:
+NotificationCenter.default.addObserver(
+    forName: .AVAudioEngineConfigurationChange, object: engine, queue: .main
+) { [weak self] _ in self?.handleConfigChange() }
+```
+
+### deinit is always nonisolated
+
+`deinit` cannot access MainActor-isolated properties or call MainActor-isolated methods. Properties needed for cleanup must be `nonisolated(unsafe)`:
+
+```swift
+@Observable
+class ResourceManager: @unchecked Sendable {
+    // Pair @ObservationIgnored with nonisolated(unsafe) for internal state
+    @ObservationIgnored nonisolated(unsafe) private var listenerID: AudioObjectID?
+
+    deinit {
+        // Can access nonisolated(unsafe) properties directly
+        if let id = listenerID {
+            AudioObjectRemovePropertyListener(id, &address, callback, nil)
+        }
+    }
+}
+```
+
+### Types and enums need explicit nonisolated for cross-isolation use
+
+With default isolation, all types are MainActor. Value types and enums used in background callbacks or `Task.detached` need explicit opt-out:
+
+```swift
+// Without this, using LevelSource in a nonisolated SCStreamOutput callback errors:
+nonisolated enum LevelSource: Sendable {
+    case mic, system, both
+}
+
+// Codable structs used across isolation boundaries:
+nonisolated struct TranscriptSegment: Codable, Sendable {
+    let timestamp: Double
+    let text: String
+}
+```
+
+### Non-Sendable Apple framework types
+
+Several Apple types lack Sendable conformance. Use `@preconcurrency import` to suppress warnings:
+
+```swift
+@preconcurrency import AVFoundation // Suppresses AVAudioPCMBuffer, AVAssetWriter Sendable warnings
+
+// KeyPath is not Sendable - Table sort with KeyPathComparator breaks:
+// Instead of: @State var sortOrder = [KeyPathComparator(\Item.date)]
+// Pre-sort data in the source and avoid KeyPathComparator entirely.
+
+// AVAssetWriter can't cross TaskGroup boundary (sending parameter).
+// Use a simple Task instead of TaskGroup for timeout patterns.
+```
+
+### Methods called from nonisolated contexts
+
+Functions called from background callbacks must be explicitly `nonisolated`:
+
+```swift
+class AudioProcessor: @unchecked Sendable {
+    // Called from audioQueue (background) - must be explicit nonisolated
+    nonisolated private func handleConfigChange(engine: AVAudioEngine) {
+        // Only access nonisolated(unsafe) state or dispatch to queue
+    }
+
+    // Log utilities must also be nonisolated to work from any thread
+    nonisolated static func log(_ message: String) { ... }
+}
+```
+
+### Callbacks set after init create data races
+
+Mutable closure properties set after initialization are read from background callbacks:
+
+```swift
+// BAD - data race between MainActor set and background read:
+class Recorder {
+    var onError: ((Error) -> Void)?
+}
+
+// GOOD - immutable, passed at init:
+class Recorder {
+    nonisolated let onError: (@Sendable (Error) -> Void)?
+    init(onError: (@Sendable (Error) -> Void)? = nil) {
+        self.onError = onError
+    }
 }
 ```

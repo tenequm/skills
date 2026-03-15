@@ -8,8 +8,10 @@
 - App Intents
 - Notifications
 - Process Observation
+- CoreAudio Per-Process APIs
 - Login Items (SMAppService)
 - LSUIElement & Background Apps
+- Idle Sleep Prevention
 
 ## Keyboard Shortcuts
 
@@ -381,6 +383,81 @@ class ProcessMonitor {
 }
 ```
 
+## CoreAudio Per-Process APIs
+
+macOS 14.2+ provides per-process audio state APIs for detecting which apps are using audio I/O. Useful for call detection, audio monitoring, or building audio routing tools.
+
+```swift
+import CoreAudio
+
+/// Find all processes with active audio input AND output (e.g., call apps)
+func findActiveCallingProcesses() -> [(pid: pid_t, bundleID: String)] {
+    var addr = AudioObjectPropertyAddress(
+        mSelector: kAudioHardwarePropertyProcessObjectList,
+        mScope: kAudioObjectPropertyScopeGlobal,
+        mElement: kAudioObjectPropertyElementMain
+    )
+
+    var size: UInt32 = 0
+    guard AudioObjectGetPropertyDataSize(
+        AudioObjectID(kAudioObjectSystemObject), &addr, 0, nil, &size
+    ) == noErr else { return [] }
+
+    let count = Int(size) / MemoryLayout<AudioObjectID>.size
+    var objectIDs = [AudioObjectID](repeating: 0, count: count)
+    guard AudioObjectGetPropertyData(
+        AudioObjectID(kAudioObjectSystemObject), &addr, 0, nil, &size, &objectIDs
+    ) == noErr else { return [] }
+
+    let myPID = ProcessInfo.processInfo.processIdentifier
+    var results: [(pid_t, String)] = []
+
+    for objID in objectIDs {
+        // Get PID
+        var pidAddr = AudioObjectPropertyAddress(
+            mSelector: kAudioProcessPropertyPID,
+            mScope: kAudioObjectPropertyScopeGlobal,
+            mElement: kAudioObjectPropertyElementMain
+        )
+        var pid: pid_t = 0
+        var pidSize = UInt32(MemoryLayout<pid_t>.size)
+        guard AudioObjectGetPropertyData(objID, &pidAddr, 0, nil, &pidSize, &pid) == noErr,
+              pid != myPID else { continue }
+
+        // Check IsRunningInput AND IsRunningOutput (dual check filters dictation/Siri)
+        var inputAddr = AudioObjectPropertyAddress(
+            mSelector: kAudioProcessPropertyIsRunningInput,
+            mScope: kAudioObjectPropertyScopeGlobal,
+            mElement: kAudioObjectPropertyElementMain
+        )
+        var isInput: UInt32 = 0
+        var boolSize = UInt32(MemoryLayout<UInt32>.size)
+        guard AudioObjectGetPropertyData(objID, &inputAddr, 0, nil, &boolSize, &isInput) == noErr,
+              isInput != 0 else { continue }
+
+        var outputAddr = inputAddr
+        outputAddr.mSelector = kAudioProcessPropertyIsRunningOutput
+        var isOutput: UInt32 = 0
+        guard AudioObjectGetPropertyData(objID, &outputAddr, 0, nil, &boolSize, &isOutput) == noErr,
+              isOutput != 0 else { continue }
+
+        // Get bundle ID
+        if let bundleID = getBundleID(for: objID) {
+            results.append((pid, bundleID))
+        }
+    }
+    return results
+}
+```
+
+Key gotchas:
+- **Filter out own PID** and ScreenCaptureKit helper PIDs (`com.apple.screencapturekit*`, `com.apple.replayd`).
+- **Input+Output dual check** filters out dictation, Siri, voice memos (input only). Real call apps (Zoom, Meet, Teams) have both active.
+- **`AudioBufferList` is a variable-length C struct**. `UnsafeMutablePointer<AudioBufferList>.allocate(capacity: 1)` only reserves space for one buffer. Multi-channel devices cause heap overflow. Allocate exact `bufSize` bytes from `GetPropertyDataSize`.
+- **Chrome reports helper subprocess bundle IDs** (e.g., `com.google.Chrome.helper.renderer`). Strip `.helper*` suffix to resolve to the parent app.
+- **Polling (3s interval) is simpler than listeners**. CoreAudio property listeners require `Unmanaged.passUnretained(self)` pointer dance, complex deinit cleanup, and are unreliable with some browser audio pipelines. For call detection, 0-3s delay is negligible.
+- **`CoreAudio.RemovePropertyListenerBlock`** has a known Swift bug where block-copied closures get different addresses, causing removal to fail. Use the C function pointer variant instead.
+
 ## Login Items (SMAppService)
 
 macOS 13+ API for registering login items, agents, and daemons.
@@ -539,3 +616,21 @@ With `LSUIElement = true`: no Dock icon, no Cmd+Tab entry, no Force Quit listing
 ### Caveat
 
 `NSWorkspace.didLaunchApplicationNotification` does NOT fire for LSUIElement or background apps. Use KVO on `runningApplications` to detect them (see Process Observation section).
+
+## Idle Sleep Prevention
+
+Prevent macOS from sleeping during long operations (recording, encoding, uploads):
+
+```swift
+// Start activity (prevents idle sleep)
+let activity = ProcessInfo.processInfo.beginActivity(
+    .userInitiated, reason: "Recording audio"
+)
+
+// ... long-running operation ...
+
+// End activity (allow sleep again)
+ProcessInfo.processInfo.endActivity(activity)
+```
+
+Use `.userInitiated` for operations the user started. The system will not idle-sleep while the activity is active, but the user can still manually put the machine to sleep.

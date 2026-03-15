@@ -5,15 +5,20 @@
 - SCContentFilter - Filtering
 - SCStream & SCStreamConfiguration
 - SCStreamOutput - Receiving Samples
+- SCStream Production Gotchas
 - SCRecordingOutput (macOS 15+)
 - SCContentSharingPicker (macOS 14+)
 - SCScreenshotManager (macOS 14+)
 - Audio-Only Capture Pattern
+- AVAudioEngine for Mic (Dual Pipeline)
 - AVAssetWriter for Audio
+- AVAssetWriter Crash Safety
 - AVAudioFile for Audio
 - CMSampleBuffer to AVAudioPCMBuffer
+- AVAudioPCMBuffer to CMSampleBuffer (for AVAssetWriter)
 - Audio Format Settings
 - Permissions
+- TCC Operational Gotchas
 - Complete Examples
 
 ## SCShareableContent - Content Discovery
@@ -224,6 +229,71 @@ private func handleAudio(_ sampleBuffer: CMSampleBuffer) {
 }
 ```
 
+## SCStream Production Gotchas
+
+### SCStream is NOT reusable after error
+
+After `didStopWithError`, the XPC connection to `replayd` is invalidated. Calling `startCapture()` again throws `attemptToStartStreamState`. You must destroy the stream and create a new one:
+
+```swift
+func stream(_ stream: SCStream, didStopWithError error: Error) {
+    // DO NOT try stream.startCapture() - it will throw
+    self.stream = nil // Release the dead stream
+    Task { try await restartWithNewStream() } // Create fresh SCStream
+}
+```
+
+### SCRecordingOutput stops on updateConfiguration()
+
+`SCRecordingOutput` stops recording when `SCStreamConfiguration` is updated on a running stream. This is documented in the Apple header. If your app needs mid-stream config changes (device following, resolution changes), use manual `SCStreamOutput` + `AVAssetWriter` instead.
+
+### VPIO and SCStream are fundamentally incompatible
+
+`AVAudioEngine.setVoiceProcessingEnabled(true)` creates a hidden VPIO aggregate device that hooks into the system audio output path for its AEC reference signal. This silences SCStream's system audio capture. Do not use VPIO and SCStream together. Use post-processing AEC or an independent mic pipeline instead.
+
+### SCStream .microphone output type is unreliable for dual-track
+
+The `.microphone` SCStreamOutputType (macOS 15+) can produce duration mismatches and data corruption when written as a second AVAssetWriterInput alongside system audio. Use an independent AVAudioEngine pipeline for mic capture instead (see "AVAudioEngine for Mic" section).
+
+### Multiple SCStreams can run simultaneously
+
+Two `SCStream` instances (e.g., one display-wide, one per-app) can run from the same process. Each is an independent XPC connection to the ScreenCaptureKit daemon. Both start without error and deliver audio buffers concurrently.
+
+### Virtual audio processors cause duplication in display-wide capture
+
+Virtual audio devices (Krisp, SoundSource) process audio with latency (~50ms). Display-wide capture picks up both the original app output and the virtual device's delayed copy, causing audible echo. Fix: use per-app `SCContentFilter(display:including:[specificApp])` to exclude virtual audio processors.
+
+### Chrome/Electron helper bundle ID resolution
+
+CoreAudio and ScreenCaptureKit report Chrome's renderer subprocess as the audio client (`com.google.Chrome.helper.renderer`). Strip `.helper*` suffix to resolve to the parent app for `SCContentFilter` lookup:
+
+```swift
+func resolveParentBundleID(_ bundleID: String) -> String {
+    if let range = bundleID.range(of: ".helper", options: .literal) {
+        return String(bundleID[..<range.lowerBound])
+    }
+    return bundleID
+}
+// "com.google.Chrome.helper.renderer" -> "com.google.Chrome"
+```
+
+### Never mutate SCStream's CMSampleBuffer in-place
+
+SCStream sample buffers are framework-managed and potentially shared. Writing into them via `CMBlockBufferGetDataPointer` is undefined behavior. Use dual-track recording (separate AVAssetWriterInputs) instead of mixing into existing buffers.
+
+### SCStream error codes and recovery
+
+| Code | Meaning | Recovery |
+|------|---------|---------|
+| -3801 | Permission denied (TCC) | Stop, set `permissionNeeded = true`, prompt user |
+| -3802 | Display disconnected (undocking) | Auto-restart with new stream |
+| -3817 | User stopped via system UI | Respect user intent, save and stop |
+| -3818 | System audio failed | Restart without audio |
+| -3820 | Mic capture failed | Restart without mic |
+| -3821 | System stopped (sleep/wake) | Wait 1s, restart with new file |
+
+Rate-limit restarts (e.g., max 3 in 30s) to prevent infinite loops.
+
 ## SCRecordingOutput (macOS 15+)
 
 Simplified file recording without manual AVAssetWriter buffer handling.
@@ -356,6 +426,106 @@ try stream.addStreamOutput(self, type: .audio, sampleHandlerQueue: audioQueue)
 
 **App-specific audio**: use `SCContentFilter(display:including:exceptingWindows:)` with specific apps to capture only their audio output.
 
+## AVAudioEngine for Mic (Dual Pipeline)
+
+For dual-track recording (system audio + mic), use SCStream for system audio and AVAudioEngine for mic independently. This avoids SCStream `.microphone` output reliability issues and VPIO incompatibility.
+
+```swift
+class DualTrackRecorder {
+    private var engine = AVAudioEngine()
+    private let audioQueue = DispatchQueue(label: "AudioCapture")
+
+    func startMicCapture() throws {
+        let inputNode = engine.inputNode
+        let format = inputNode.inputFormat(forBus: 0)
+
+        // CRITICAL: Extract closure to @Sendable to avoid MainActor isolation inheritance
+        let tapHandler: @Sendable (AVAudioPCMBuffer, AVAudioTime) -> Void = { [weak self] buffer, time in
+            self?.audioQueue.async { self?.handleMicBuffer(buffer, time: time) }
+        }
+        inputNode.installTap(onBus: 0, bufferSize: 1024, format: format, block: tapHandler)
+
+        engine.prepare()
+        try engine.start()
+    }
+}
+```
+
+### AVAudioEngine device following
+
+When audio hardware changes (headphone plug/unplug, Bluetooth connect), handle `AVAudioEngineConfigurationChange`:
+
+```swift
+// Use queue: .main to avoid isolation inheritance crash
+NotificationCenter.default.addObserver(
+    forName: .AVAudioEngineConfigurationChange, object: engine, queue: .main
+) { [weak self] _ in
+    self?.handleConfigChange()
+}
+
+func handleConfigChange() {
+    // Use the NEW device's native format, not the stored old one
+    let newFormat = engine.inputNode.inputFormat(forBus: 0)
+    guard newFormat.sampleRate > 0, newFormat.channelCount > 0 else { return }
+    engine.inputNode.removeTap(onBus: 0)
+    // Reinstall tap with new format... (see ObjC wrapper section below)
+}
+```
+
+Debounce config changes (200-500ms) - virtual devices like Krisp fire rapid sequences.
+
+### installTap throws ObjC NSException, not Swift Error
+
+`AVAudioEngine.installTap(onBus:)` throws an ObjC `NSException` when the format is incompatible. Swift `do/catch` does NOT catch NSExceptions. A generic `ObjCTryBlock` wrapper also fails because the Swift compiler eliminates the ObjC trampoline for `NS_NOESCAPE` blocks in release builds.
+
+Fix: purpose-built ObjC wrapper methods where the entire throw-to-catch chain is pure ObjC:
+
+```objc
+// ObjCExceptionCatcher.h
+#import <AVFAudio/AVFAudio.h>
+BOOL ObjCInstallTap(AVAudioNode *node, uint32_t bus, uint32_t bufferSize,
+                    AVAudioFormat * _Nullable format,
+                    void (^block)(AVAudioPCMBuffer *, AVAudioTime *),
+                    NSError **outError);
+BOOL ObjCStartEngine(AVAudioEngine *engine, NSError **outError);
+```
+
+```objc
+// ObjCExceptionCatcher.m
+BOOL ObjCInstallTap(AVAudioNode *node, uint32_t bus, uint32_t bufferSize,
+                    AVAudioFormat *format,
+                    void (^block)(AVAudioPCMBuffer *, AVAudioTime *),
+                    NSError **outError) {
+    @try {
+        [node installTapOnBus:bus bufferSize:bufferSize format:format block:block];
+        return YES;
+    } @catch (NSException *e) {
+        if (outError)
+            *outError = [NSError errorWithDomain:@"ObjCException" code:-1
+                userInfo:@{NSLocalizedDescriptionKey: e.reason ?: e.name}];
+        return NO;
+    }
+}
+```
+
+In SPM, create a separate target for the ObjC code:
+```swift
+.target(
+    name: "ObjCExceptionCatcher",
+    path: "Sources/ObjCExceptionCatcher",
+    publicHeadersPath: "include",
+    linkerSettings: [.linkedFramework("AVFAudio")]
+)
+```
+
+### VPIO aggregate device reports bogus channel counts
+
+`setVoiceProcessingEnabled(true)` reports combined input+output channels (e.g., 9 = mic + speaker). Pass `nil` as format to `installTap` to let VPIO negotiate internally:
+
+```swift
+inputNode.installTap(onBus: 0, bufferSize: 1024, format: nil, block: handler)
+```
+
 ## AVAssetWriter for Audio
 
 **Preferred for ScreenCaptureKit** - accepts CMSampleBuffer directly (no conversion), supports compressed output.
@@ -394,6 +564,81 @@ await writer.finishWriting()
 File types: `.m4a` (AAC/ALAC), `.mov` (PCM/AAC/ALAC), `.mp4` (AAC), `.wav` (PCM), `.caf` (any).
 
 Pass `nil` for `outputSettings` to write without re-encoding (pass-through).
+
+## AVAssetWriter Crash Safety
+
+### movieFragmentInterval for crash recovery
+
+Writes fragment headers periodically, making partial files recoverable after crashes or force-kills. Works with `.m4a` container (empirically verified - not just `.mov`):
+
+```swift
+writer.movieFragmentInterval = CMTime(seconds: 10, preferredTimescale: 600)
+```
+
+A force-killed recording produces a valid file with audio up to the last fragment boundary (~10s max data loss).
+
+### expectsMediaDataInRealTime is critical
+
+Always set `expectsMediaDataInRealTime = true` on inputs, even for post-processing pipelines. Without it, the writer applies internal backpressure that can deadlock synchronous polling loops:
+
+```swift
+audioInput.expectsMediaDataInRealTime = true // Prevents backpressure deadlock
+```
+
+### Guard writer status in polling loops
+
+After `input.append()` fails, the writer enters `.failed` state and `isReadyForMoreMediaData` returns `false` forever. Without a status guard, polling loops hang infinitely:
+
+```swift
+// BAD - hangs forever if writer fails:
+while !input.isReadyForMoreMediaData { usleep(10_000) }
+
+// GOOD - break on writer failure:
+while !input.isReadyForMoreMediaData {
+    guard writer.status == .writing else { break }
+    usleep(10_000)
+}
+```
+
+### Session start timing for multi-track recording
+
+With dual-track (system audio + mic), start the session on the first system audio sample. Gate mic buffer appending on a `sessionStarted` flag. Mic samples arriving before session start must be dropped:
+
+```swift
+func handleSystemAudio(_ sampleBuffer: CMSampleBuffer) {
+    if !sessionStarted {
+        writer.startSession(atSourceTime: sampleBuffer.presentationTimeStamp)
+        sessionStarted = true
+    }
+    systemInput.append(sampleBuffer)
+}
+
+func handleMic(_ sampleBuffer: CMSampleBuffer) {
+    guard sessionStarted else { return } // Drop pre-session mic samples
+    micInput.append(sampleBuffer)
+}
+```
+
+### Channel count mismatch causes silent audio
+
+Output settings must match actual input format. AVAudioEngine delivers mono (1ch) mic audio. Configuring the writer input for stereo (2ch) causes silent output with 100% append success rate:
+
+```swift
+// System audio: 2ch stereo
+let systemSettings: [String: Any] = [
+    AVFormatIDKey: kAudioFormatMPEG4AAC,
+    AVNumberOfChannelsKey: 2, AVEncoderBitRateKey: 128_000, ...
+]
+// Mic audio: 1ch mono (matches AVAudioEngine input)
+let micSettings: [String: Any] = [
+    AVFormatIDKey: kAudioFormatMPEG4AAC,
+    AVNumberOfChannelsKey: 1, AVEncoderBitRateKey: 64_000, ...
+]
+```
+
+### CMBlockBuffer memory trap
+
+Never use `CMBlockBufferCreateWithMemoryBlock` with `flags: 0` and `memoryBlock: nil` - this defers memory allocation and `CMBlockBufferReplaceDataBytes` writes to uninitialized memory. Use `kCMBlockBufferAssureMemoryNowFlag` or the `CMSampleBufferSetDataBufferFromAudioBufferList` pattern (see next section).
 
 ## AVAudioFile for Audio
 
@@ -459,6 +704,49 @@ try sampleBuffer.copyPCMData(
     fromRange: 0..<CMSampleBufferGetNumSamples(sampleBuffer),
     into: pcmBuffer.mutableAudioBufferList
 )
+```
+
+## AVAudioPCMBuffer to CMSampleBuffer (for AVAssetWriter)
+
+When writing AVAudioEngine tap output to AVAssetWriter, convert `AVAudioPCMBuffer` to `CMSampleBuffer`. Let CoreMedia manage block buffer memory:
+
+```swift
+func makeSampleBuffer(from pcmBuffer: AVAudioPCMBuffer, time: AVAudioTime) -> CMSampleBuffer? {
+    let format = pcmBuffer.format
+    let frameCount = pcmBuffer.frameLength
+
+    guard let formatDesc = format.formatDescription else { return nil }
+
+    var sampleBuffer: CMSampleBuffer?
+    var timing = CMSampleTimingInfo(
+        duration: CMTime(value: 1, timescale: Int32(format.sampleRate)),
+        presentationTimeStamp: CMTime(
+            seconds: AVAudioTime.seconds(forHostTime: time.hostTime),
+            preferredTimescale: 600
+        ),
+        decodeTimeStamp: .invalid
+    )
+
+    // Create empty sample buffer
+    guard CMSampleBufferCreate(
+        allocator: kCFAllocatorDefault, dataBuffer: nil, dataReady: false,
+        makeDataReadyCallback: nil, refcon: nil,
+        formatDescription: formatDesc,
+        sampleCount: CMItemCount(frameCount),
+        sampleTimingEntryCount: 1, sampleTimingArray: &timing,
+        sampleSizeEntryCount: 0, sampleSizeArray: nil,
+        sampleBufferOut: &sampleBuffer
+    ) == noErr, let sb = sampleBuffer else { return nil }
+
+    // Attach audio data (CoreMedia manages block buffer memory)
+    guard CMSampleBufferSetDataBufferFromAudioBufferList(
+        sb, blockBufferAllocator: kCFAllocatorDefault,
+        blockBufferMemoryAllocator: kCFAllocatorDefault,
+        flags: 0, bufferList: pcmBuffer.audioBufferList
+    ) == noErr else { return nil }
+
+    return sb
+}
 ```
 
 ## Audio Format Settings
@@ -589,6 +877,55 @@ NSWorkspace.shared.open(URL(string:
 tccutil reset ScreenCapture com.yourcompany.yourapp
 tccutil reset Microphone com.yourcompany.yourapp
 ```
+
+## TCC Operational Gotchas
+
+### Ad-hoc signing resets TCC on every rebuild
+
+Ad-hoc signing (`codesign --sign -`) generates a different CDHash each build. TCC identifies ad-hoc apps by CDHash, so permissions reset on every rebuild. Fix: use a self-signed development certificate - TCC then uses the designated requirement (cert + bundle ID), and permissions persist across rebuilds.
+
+```bash
+# Create self-signed dev cert (one-time)
+openssl req -x509 -newkey rsa:2048 -keyout key.pem -out cert.pem -days 365 -nodes \
+    -subj "/CN=My Development"
+security import cert.pem -k ~/Library/Keychains/login.keychain-db
+security import key.pem -k ~/Library/Keychains/login.keychain-db
+```
+
+### Terminal attribution
+
+Running a compiled binary from the terminal attributes Screen Recording permission to the terminal app (e.g., WezTerm, Terminal.app), not the actual app. Always test via `.app` bundle (`open MyApp.app`), not direct binary execution.
+
+### Bare binaries cannot get Screen Recording
+
+Standalone binaries without a `.app` bundle and `CFBundleIdentifier` in Info.plist cannot reliably get Screen Recording permission on modern macOS. TCC expects a proper bundle. Wrap test binaries in a minimal `.app` with Info.plist.
+
+### Two separate TCC entries for microphone
+
+`SCStreamConfiguration.captureMicrophone = true` and `AVCaptureDevice.requestAccess(for: .audio)` create separate TCC entries under different services (`kTCCServiceScreenCapture` vs `kTCCServiceMicrophone`). Both must be granted. System Settings Microphone pane shows both.
+
+### CGRequestScreenCaptureAccess timing
+
+Do NOT call `CGRequestScreenCaptureAccess()` in `App.init()` - macOS attributes the permission to the parent process (terminal). Call it in `applicationDidFinishLaunching` when the app bundle is fully registered.
+
+### Permission status vs action
+
+For `.notDetermined`: trigger `AVCaptureDevice.requestAccess()` (shows system dialog). For `.denied`: redirect to System Settings (user must toggle manually). Don't open Settings for `.notDetermined` - the system dialog is a better UX.
+
+### Refresh permission state when app reactivates
+
+Permission state checked in `onAppear` becomes stale after user switches to Settings and back:
+
+```swift
+.onAppear { refreshPermissions() }
+.onReceive(NotificationCenter.default.publisher(
+    for: NSApplication.didBecomeActiveNotification
+)) { _ in refreshPermissions() }
+```
+
+### Screen Recording permission requires restart
+
+After granting Screen Recording in System Settings, macOS shows "Quit & Reopen". This is unavoidable system behavior. Design onboarding so Screen Recording is the last permission step, framing the restart as "setup complete."
 
 ## Complete Examples
 
