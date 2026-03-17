@@ -19,11 +19,11 @@ The `exact` scheme on Solana uses `TransferChecked` for SPL tokens. The client c
   "scheme": "exact",
   "network": "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp",
   "amount": "1000",
-  "asset": "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",  // pragma: allowlist secret
-  "payTo": "2wKupLR9q6wXYppw8Gr2NvWxKBUqm4PPJKkQfoxHDBg4",  // pragma: allowlist secret
+  "asset": "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+  "payTo": "2wKupLR9q6wXYppw8Gr2NvWxKBUqm4PPJKkQfoxHDBg4",
   "maxTimeoutSeconds": 60,
   "extra": {
-    "feePayer": "EwWqGE4ZFKLofuestmU4LDdK7XM1N4ALgdZccwYugwGd"  // pragma: allowlist secret
+    "feePayer": "EwWqGE4ZFKLofuestmU4LDdK7XM1N4ALgdZccwYugwGd"
   }
 }
 ```
@@ -36,18 +36,7 @@ The `exact` scheme on Solana uses `TransferChecked` for SPL tokens. The client c
 ```json
 {
   "x402Version": 2,
-  "resource": { "url": "...", "description": "...", "mimeType": "..." },
-  "accepted": {
-    "scheme": "exact",
-    "network": "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp",
-    "amount": "1000",
-    "asset": "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",  // pragma: allowlist secret
-    "payTo": "2wKupLR9q6wXYppw8Gr2NvWxKBUqm4PPJKkQfoxHDBg4",  // pragma: allowlist secret
-    "maxTimeoutSeconds": 60,
-    "extra": {
-      "feePayer": "EwWqGE4ZFKLofuestmU4LDdK7XM1N4ALgdZccwYugwGd"  // pragma: allowlist secret
-    }
-  },
+  "accepted": { "scheme": "exact", "network": "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp", "..." },
   "payload": {
     "transaction": "AAAAAAAAAAAAA...AAAAAAAAAAAAA="
   }
@@ -56,31 +45,22 @@ The `exact` scheme on Solana uses `TransferChecked` for SPL tokens. The client c
 
 The `transaction` field contains the base64-encoded, serialized, partially-signed versioned Solana transaction.
 
-## SettlementResponse
-
-```json
-{
-  "success": true,
-  "transaction": "base58 encoded transaction signature",
-  "network": "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp",
-  "payer": "base58 encoded public address of the transaction fee payer"
-}
-```
-
 ## Facilitator Verification Rules (MUST)
 
 ### 1. Instruction Layout
 
-The decompiled transaction MUST contain 3 to 5 instructions in this order:
+The decompiled transaction MUST contain 3 to 6 instructions in this order:
 
-1. `ComputeBudget::SetComputeUnitLimit`
-2. `ComputeBudget::SetComputeUnitPrice`
+1. `ComputeBudget::SetComputeUnitLimit` (discriminator `2`)
+2. `ComputeBudget::SetComputeUnitPrice` (discriminator `3`)
 3. `SPL Token` or `Token-2022` `TransferChecked`
-4. (Optional) Lighthouse program instruction (Phantom wallet protection)
-5. (Optional) Lighthouse program instruction (Solflare wallet protection)
+4. (Optional) Lighthouse or Memo program instruction
+5. (Optional) Lighthouse or Memo program instruction
+6. (Optional) Memo program instruction
 
-- If a 4th or 5th instruction exists, its program MUST be Lighthouse (`L2TExMFKdjpN9kozasaurPirfHy9P8sbXoAN1qA3S95`)
+- Allowed optional programs: Lighthouse (`L2TExMFKdjpN9kozasaurPirfHy9P8sbXoAN1qA3S95`) and Memo (`MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr`)
 - Phantom injects 1 Lighthouse instruction; Solflare injects 2
+- Memo instructions enable transaction uniqueness
 
 ### 2. Fee Payer Safety
 
@@ -90,26 +70,25 @@ The decompiled transaction MUST contain 3 to 5 instructions in this order:
 
 ### 3. Compute Budget Validity
 
-- Instructions (1) and (2) MUST use `ComputeBudget` program with correct discriminators (2 = SetLimit, 3 = SetPrice)
-- Compute unit price MUST be bounded (reference: <= 5 lamports per CU)
+- Compute unit price MUST be bounded (<= 5,000,000 microlamports = 5 lamports per CU)
+- Default compute unit limit: 20,000
 
 ### 4. Transfer Destination
 
-- TransferChecked program MUST be either `spl-token` or `token-2022`
+- TransferChecked program MUST be either `spl-token` (`TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA`) or `token-2022` (`TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb`)
 - Destination MUST equal the Associated Token Account PDA for `(owner=payTo, mint=asset)` under the selected token program
 
-### 5. Account Existence
-
-- Source ATA MUST exist
-- Destination ATA MUST exist (unless Create ATA instruction is present)
-
-### 6. Amount Exactness
+### 5. Amount Exactness
 
 - `amount` in TransferChecked MUST equal `PaymentRequirements.amount` exactly
 
+### 6. Simulation
+
+- Facilitator signs the transaction with the fee payer's signer, then simulates to verify it would succeed
+
 ## Duplicate Settlement Mitigation (RECOMMENDED)
 
-Solana's transaction deduplication ensures only one transfer executes on-chain, but the RPC returns "success" for each submission of the same transaction. A malicious client can exploit this by submitting the same payment to `/settle` multiple times before the first confirms, accessing multiple resources with a single payment.
+Solana's transaction deduplication ensures only one transfer executes on-chain, but the RPC returns "success" for each submission of the same transaction. A malicious client can exploit this by submitting the same payment to `/settle` multiple times before the first confirms.
 
 ### In-Memory Settlement Cache
 
@@ -119,37 +98,60 @@ All SDKs provide a `SettlementCache` that prevents this race condition:
 - **TTL**: 120 seconds (covers Solana blockhash lifetime of ~60-90s plus margin)
 - **Behavior**: If key exists in cache, reject with `duplicate_settlement` error; otherwise insert and proceed
 - **Eviction**: Entries older than 120 seconds are automatically removed
+- **Thread safety**: Go uses `sync.Mutex`; Python uses `threading.Lock`; TypeScript relies on single-threaded event loop
 
 ### SDK Implementation
 
-**TypeScript / Python**: Built-in `SettlementCache` enabled by default in SVM facilitator scheme helpers. No configuration needed.
+**TypeScript**: Built-in `SettlementCache` class. Enabled by default.
 
-**Go**: Must pass a shared `SettlementCache` instance to both V1 and V2 SVM facilitator scheme registrations:
+```typescript
+import { SettlementCache } from "@x402/svm";
+const cache = new SettlementCache();
+new ExactSvmScheme(signer, cache); // optional - one is created if omitted
+```
+
+**Go**: Thread-safe `SettlementCache` with `sync.Mutex`. Must pass a shared instance to both V1 and V2 scheme registrations:
 
 ```go
 import "github.com/coinbase/x402/go/mechanisms/svm"
-
 cache := svm.NewSettlementCache()
-// Pass cache to both V1 and V2 scheme registrations
-// to prevent cross-version duplicate settlements
 ```
 
-**Direct merchants** (no facilitator): Must implement equivalent duplicate detection.
+**Python**: Thread-safe `SettlementCache` using `threading.Lock`. Same API as Go.
+
+```python
+from x402.mechanisms.svm.settlement_cache import SettlementCache
+cache = SettlementCache()
+```
+
+## Multi-Signer Load Balancing
+
+The SVM facilitator supports multiple fee payer addresses. `getExtra()` randomly selects from available signers to distribute load. `getSigners()` returns all available addresses.
 
 ## Supported Solana Assets
 
-- Any SPL token
+- Any SPL token (Token Program)
 - Token-2022 program tokens
 
 ## Common Token Mints
 
-| Token | Mint Address |
-|-------|-------------|
-| USDC (Mainnet) | `EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v` |
+| Token | Network | Mint Address |
+|-------|---------|-------------|
+| USDC | Mainnet | `EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v` |
+| USDC | Devnet/Testnet | `4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU` |
 
 ## Network Identifiers
 
-| Network | CAIP-2 ID |
-|---------|-----------|
-| Solana Mainnet | `solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp` |
-| Solana Devnet | `solana:EtWTRABZaYq6iMfeYKouRu166VU2xqa1` |
+| Network | CAIP-2 ID | V1 Name |
+|---------|-----------|---------|
+| Solana Mainnet | `solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp` | `solana` |
+| Solana Devnet | `solana:EtWTRABZaYq6iMfeYKouRu166VU2xqa1` | `solana-devnet` |
+| Solana Testnet | `solana:4uhcVJyU9pJkvQyS88uRDiswHXSCkY3z` | `solana-testnet` |
+
+## SDK Support
+
+| SDK | Status |
+|-----|--------|
+| TypeScript (`@x402/svm`) | Full (client, server, facilitator) |
+| Go | Full (facilitator) |
+| Python | Full (facilitator) |

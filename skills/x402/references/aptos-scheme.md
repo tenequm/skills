@@ -14,10 +14,10 @@ Install: `npm install @x402/aptos`
 
 ## Network Identifiers
 
-| Network | CAIP-2 ID |
-|---------|-----------|
-| Aptos Mainnet | `aptos:1` |
-| Aptos Testnet | `aptos:2` |
+| Network | CAIP-2 ID | Chain ID |
+|---------|-----------|----------|
+| Aptos Mainnet | `aptos:1` | 1 |
+| Aptos Testnet | `aptos:2` | 2 |
 
 ## Supported Tokens
 
@@ -34,7 +34,7 @@ Address format: 64 hex characters with `0x` prefix (regex: `/^0x[a-fA-F0-9]{64}$
 
 1. Client requests protected resource
 2. Server returns `402` with PaymentRequirements (includes `extra.feePayer` if gas sponsored)
-3. Client builds fee payer transaction using `0x1::primary_fungible_store::transfer`
+3. Client builds fee payer transaction using `0x1::primary_fungible_store::transfer` (or `0x1::fungible_asset::transfer`)
 4. Client signs transaction (signature covers payload only, NOT fee payer address)
 5. Client serializes via BCS encoding, Base64 encodes, sends in `PAYMENT-SIGNATURE` header
 6. Server forwards to facilitator for verification
@@ -61,24 +61,16 @@ Address format: 64 hex characters with `0x` prefix (regex: `/^0x[a-fA-F0-9]{64}$
 
 - `extra.feePayer`: If present, facilitator pays gas. If absent, client pays own gas.
 
-## Payload Structure
-
-```typescript
-type ExactAptosPayload = {
-  transaction: string;  // Base64-encoded JSON with transaction and senderAuthenticator byte arrays
-};
-```
-
 ## Verification Rules
 
-Facilitator verification (17 steps):
+Facilitator verification:
 1. Verify x402Version is 2
 2. Verify scheme is "exact"
 3. Verify network matches (CAIP-2)
 4. For sponsored tx: verify fee payer is managed by facilitator
 5. Deserialize BCS-encoded transaction and verify signature
 6. Verify chain ID matches expected network
-7. Verify sender's public key matches derived address (Ed25519)
+7. Verify sender's public key matches derived address
 8. For sponsored tx: verify max gas <= 500,000 units (prevent gas drain)
 9. For sponsored tx: verify fee payer address matches
 10. Verify sender != fee payer
@@ -130,26 +122,21 @@ import { toFacilitatorAptosSigner } from "@x402/aptos";
 
 const facilitator = new x402Facilitator();
 facilitator.register("aptos:2", new ExactAptosScheme(
-  toFacilitatorAptosSigner(aptosAccount)
+  toFacilitatorAptosSigner(aptosAccount),
+  true  // sponsorTransactions (default)
 ));
 ```
 
-### Multi-Network (EVM + Solana + Aptos)
+## Multi-Signer Load Balancing
 
-```typescript
-const server = new x402ResourceServer(facilitator)
-  .register("eip155:84532", new ExactEvmScheme())
-  .register("solana:EtWTRABZaYq6iMfeYKouRu166VU2xqa1", new ExactSvmScheme())
-  .register("aptos:2", new ExactAptosScheme());
+The Aptos facilitator supports multiple fee payer addresses. `getExtra()` randomly selects from available signers. `getSigners()` returns all addresses.
 
-// Route config
-"GET /api/data": {
-  accepts: [
-    { scheme: "exact", price: "$0.001", network: "eip155:84532", payTo: evmAddress },
-    { scheme: "exact", price: "$0.001", network: "aptos:2", payTo: aptosAddress },
-  ],
-}
-```
+## Non-Sponsored Transactions
+
+If `extra.feePayer` is absent, the client pays their own gas:
+1. Client constructs a regular transaction including gas payment
+2. Client fully signs the transaction
+3. Facilitator submits the fully-signed transaction directly via `submitTransaction()`
 
 ## Key Import Paths
 
@@ -159,8 +146,4 @@ const server = new x402ResourceServer(facilitator)
 | Server scheme | `@x402/aptos/exact/server` |
 | Facilitator scheme | `@x402/aptos/exact/facilitator` |
 | Signer utilities | `@x402/aptos` |
-
-## Testing Resources
-
-- Testnet APT faucet: https://aptos.dev/network/faucet
-- Test USDC faucet: https://faucet.circle.com/
+| Constants | `@x402/aptos` (APTOS_MAINNET_CAIP2, APTOS_TESTNET_CAIP2, USDC_MAINNET_FA, USDC_TESTNET_FA, MAX_GAS_AMOUNT, APTOS_ADDRESS_REGEX) |

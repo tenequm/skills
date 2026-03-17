@@ -4,7 +4,7 @@ x402 supports three transports: HTTP, MCP, and A2A. All use the same core types 
 
 ## HTTP Transport
 
-The original and primary transport. Uses HTTP status codes and headers.
+The original and primary transport. Uses HTTP status codes and headers. Response bodies are a server implementation concern - all x402 protocol information is communicated through headers.
 
 ### Headers
 
@@ -28,10 +28,8 @@ HTTP/1.1 402 Payment Required
 Content-Type: application/json
 PAYMENT-REQUIRED: eyJ4NDAyVmVyc2lvbiI6MiwiZXJyb3IiOi...
 
-{"error": "Payment required"}
+{}
 ```
-
-The `PAYMENT-REQUIRED` header is base64-encoded JSON containing the full `PaymentRequired` object.
 
 **Step 3: Client retries with payment**
 ```http
@@ -48,6 +46,17 @@ PAYMENT-RESPONSE: eyJzdWNjZXNzIjp0cnVlLCJ0cmFuc2FjdGl...
 
 {"weather": "sunny", "temperature": 70}
 ```
+
+**Step 5 (failure): Server responds with payment failure**
+```http
+HTTP/1.1 402 Payment Required
+Content-Type: application/json
+PAYMENT-RESPONSE: eyJzdWNjZXNzIjpmYWxzZSwiZXJyb3JSZWFzb24iOi...
+
+{}
+```
+
+On failure, the `PAYMENT-RESPONSE` header still contains the settlement result (with `success: false` and `errorReason`).
 
 ### HTTP Error Mapping
 
@@ -88,36 +97,15 @@ For AI agents and MCP clients paying for tools.
     "structuredContent": {
       "x402Version": 2,
       "error": "Payment required",
-      "resource": {
-        "url": "mcp://tool/financial_analysis",
-        "description": "Financial analysis tool",
-        "mimeType": "application/json"
-      },
-      "accepts": [
-        {
-          "scheme": "exact",
-          "network": "eip155:84532",
-          "amount": "10000",
-          "asset": "0x036CbD53842c5426634e7929541eC2318f3dCF7e",
-          "payTo": "0x209693Bc6afc0C5328bA36FaF03C514EF312287C",
-          "maxTimeoutSeconds": 60,
-          "extra": { "name": "USDC", "version": "2" }
-        }
-      ]
+      "resource": { "url": "mcp://tool/financial_analysis" },
+      "accepts": [{ "scheme": "exact", "network": "eip155:84532", "..." : "..." }]
     },
-    "content": [
-      {
-        "type": "text",
-        "text": "{\"x402Version\":2,...}"
-      }
-    ]
+    "content": [{ "type": "text", "text": "{\"x402Version\":2,...}" }]
   }
 }
 ```
 
-Server provides `PaymentRequired` in both:
-- `structuredContent` - direct object (preferred)
-- `content[0].text` - JSON string fallback
+Server provides `PaymentRequired` in both `structuredContent` (preferred) and `content[0].text` (JSON string fallback).
 
 **Step 3: Client retries with payment in `_meta`**
 ```json
@@ -131,7 +119,6 @@ Server provides `PaymentRequired` in both:
     "_meta": {
       "x402/payment": {
         "x402Version": 2,
-        "resource": { "url": "mcp://tool/financial_analysis", "..." : "..." },
         "accepted": { "scheme": "exact", "..." : "..." },
         "payload": { "signature": "0x...", "authorization": { "..." : "..." } }
       }
@@ -146,9 +133,7 @@ Server provides `PaymentRequired` in both:
   "jsonrpc": "2.0",
   "id": 1,
   "result": {
-    "content": [
-      { "type": "text", "text": "Analysis result..." }
-    ],
+    "content": [{ "type": "text", "text": "Analysis result..." }],
     "_meta": {
       "x402/payment-response": {
         "success": true,
@@ -182,8 +167,6 @@ Server returns `state: "input-required"` with payment metadata:
 
 ```json
 {
-  "jsonrpc": "2.0",
-  "id": "req-001",
   "result": {
     "kind": "task",
     "id": "task-123",
@@ -210,9 +193,6 @@ Server returns `state: "input-required"` with payment metadata:
 
 ```json
 {
-  "jsonrpc": "2.0",
-  "method": "message/send",
-  "id": "req-003",
   "params": {
     "message": {
       "taskId": "task-123",
@@ -245,14 +225,12 @@ Server returns `state: "input-required"` with payment metadata:
         "parts": [{ "kind": "text", "text": "Payment successful." }],
         "metadata": {
           "x402.payment.status": "payment-completed",
-          "x402.payment.receipts": [
-            {
-              "success": true,
-              "transaction": "0x1234...",
-              "network": "eip155:8453",
-              "payer": "0x857b..."
-            }
-          ]
+          "x402.payment.receipts": [{
+            "success": true,
+            "transaction": "0x1234...",
+            "network": "eip155:8453",
+            "payer": "0x857b..."
+          }]
         }
       }
     }
@@ -278,13 +256,11 @@ Agents declare x402 support in their AgentCard:
 ```json
 {
   "capabilities": {
-    "extensions": [
-      {
-        "uri": "https://github.com/google-a2a/a2a-x402/v0.1",
-        "description": "x402 on-chain payment support",
-        "required": true
-      }
-    ]
+    "extensions": [{
+      "uri": "https://github.com/google-a2a/a2a-x402/v0.1",
+      "description": "x402 on-chain payment support",
+      "required": true
+    }]
   }
 }
 ```

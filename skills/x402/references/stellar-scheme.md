@@ -6,7 +6,7 @@ The `exact` scheme on Stellar uses Soroban smart contracts with the SEP-41 token
 
 ## Protocol Flow
 
-1. Server responds with `PaymentRequired` containing `extra.feePayer` (facilitator's public key)
+1. Server responds with `PaymentRequired` containing `extra.areFeesSponsored` (always true)
 2. Client builds a Soroban `invokeHostFunction` operation calling `transfer(from, to, amount)` on the token contract
 3. Client simulates the transaction to identify auth entry requirements
 4. Client signs auth entries with ledger-based expiration (NOT the full transaction)
@@ -34,6 +34,7 @@ Default facilitator (`https://x402.org/facilitator`) supports Stellar Testnet.
 
 - **Testnet**: Default RPC at `https://soroban-testnet.stellar.org` (HTTP allowed)
 - **Mainnet**: No default RPC - must supply custom URL (HTTPS enforced). See [Stellar RPC Providers](https://developers.stellar.org/docs/data/apis/rpc/providers#publicly-accessible-apis)
+- **Horizon URLs**: Testnet `https://horizon-testnet.stellar.org`, Mainnet `https://horizon.stellar.org`
 
 ## Key Differences from EVM/SVM
 
@@ -48,7 +49,8 @@ Default facilitator (`https://x402.org/facilitator`) supports Stellar Testnet.
 
 - Base fee: 10,000 stroops (0.001 XLM) minimum
 - Default max facilitator fee: 50,000 stroops
-- Ledger-based expiration: `currentLedger + ceil(maxTimeoutSeconds / ~5s)`
+- Ledger-based expiration: `currentLedger + ceil(maxTimeoutSeconds / estimatedLedgerCloseTime)`
+- Signature expiration ledger tolerance: 2 ledgers (for RPC skew)
 
 ## PaymentRequirements
 
@@ -61,32 +63,10 @@ Default facilitator (`https://x402.org/facilitator`) supports Stellar Testnet.
   "payTo": "GA3D5...STELLAR_ADDRESS",
   "maxTimeoutSeconds": 60,
   "extra": {
-    "feePayer": "GC2F5...FACILITATOR_KEY"
+    "areFeesSponsored": true
   }
 }
 ```
-
-## PaymentPayload
-
-```json
-{
-  "x402Version": 2,
-  "accepted": {
-    "scheme": "exact",
-    "network": "stellar:testnet",
-    "amount": "1000000",
-    "asset": "CBIELTK6YBZJU5UP2WWQEUCYKLPU6AUNZ2BQ4WWFEIE3USCIHMXQDAMA",
-    "payTo": "GA3D5...STELLAR_ADDRESS",
-    "maxTimeoutSeconds": 60,
-    "extra": { "feePayer": "GC2F5...FACILITATOR_KEY" }
-  },
-  "payload": {
-    "transaction": "AAAAAAAAAA...base64_XDR...AAAAAAA="
-  }
-}
-```
-
-The `transaction` field contains the base64-encoded XDR Soroban transaction with signed auth entries.
 
 ## TypeScript Usage
 
@@ -108,8 +88,8 @@ client.register("stellar:*", new ExactStellarScheme(signer));
 import { ExactStellarScheme } from "@x402/stellar/exact/server";
 import { x402ResourceServer } from "@x402/core/server";
 
-const server = new x402ResourceServer(facilitator);
-server.register("stellar:testnet", new ExactStellarScheme());
+const server = new x402ResourceServer(facilitator)
+  .register("stellar:testnet", new ExactStellarScheme());
 ```
 
 ### Facilitator
@@ -122,14 +102,8 @@ const signers = [createEd25519Signer(privateKey, "stellar:testnet")];
 const scheme = new ExactStellarScheme(signers, {
   rpcConfig: { url: "https://soroban-testnet.stellar.org" },
   maxTransactionFeeStroops: 50_000,
-});
-```
-
-### Custom RPC
-
-```typescript
-const scheme = new ExactStellarScheme(signer, {
-  url: "https://custom-rpc-provider.example.com",
+  selectSigner: (addrs) => addrs[0], // Optional: custom signer selection
+  feeBumpSigner: createEd25519Signer(feeBumpKey, "stellar:testnet"), // Optional
 });
 ```
 
@@ -151,21 +125,34 @@ serverScheme.registerMoneyParser(async (amount, network) => {
 
 ## Facilitator Verification Rules (MUST)
 
-1. Transaction has exactly 1 `invokeHostFunction` operation
-2. Contract address matches `requirements.asset`
-3. Function is `transfer` with 3 arguments (from, to, amount)
-4. `to` equals `requirements.payTo`
-5. Amount equals `requirements.amount` (as i128)
-6. Facilitator is NOT the payer, operation source, or in auth entries
-7. Auth entry signatures valid and not expired
-8. Re-simulation succeeds with expected balance changes only
-9. Client fee within acceptable bounds
+1. Verify x402Version is 2
+2. Verify scheme is "exact" and network is valid Stellar network
+3. Transaction has exactly 1 `invokeHostFunction` operation
+4. Facilitator addresses MUST NOT appear as transaction source, operation source, or in auth entries
+5. Contract address matches `requirements.asset`
+6. Function is `transfer` with 3 arguments (from, to, amount)
+7. `to` equals `requirements.payTo`
+8. Amount equals `requirements.amount` (as i128)
+9. Re-simulation succeeds
+10. Client fee within acceptable bounds (>= minResourceFee, <= maxTransactionFeeStroops)
+11. Validate simulation events: exactly 1 transfer event matching expected sender/recipient/amount/asset
+12. Auth entries: only `sorobanCredentialsAddress` type, no facilitator addresses, signature expiration within tolerance, no sub-invocations
+
+## Settlement Flow
+
+1. Re-verify payment
+2. Parse transaction envelope, extract Soroban data
+3. Select signer (round-robin by default, configurable)
+4. Rebuild transaction with facilitator as source, facilitator-chosen fee
+5. Sign inner transaction
+6. Optionally wrap in FeeBumpTransaction (if `feeBumpSigner` configured)
+7. Submit to network, poll for confirmation
 
 ## Address Types
 
-- **G-address**: Standard Stellar accounts
-- **C-address**: Soroban contract addresses (used for token assets)
-- **M-address**: Muxed accounts (multiplexed sub-accounts)
+- **G-address**: Standard Stellar accounts (56 chars)
+- **C-address**: Soroban contract addresses (56 chars, used for token assets)
+- **M-address**: Muxed accounts (69 chars, multiplexed sub-accounts)
 
 ## Utility Functions
 
@@ -177,5 +164,6 @@ import {
   getRpcUrl,                          // Get RPC URL with custom override
   getNetworkPassphrase,               // Get network passphrase
   convertToTokenAmount,               // Decimal to smallest units
+  getEstimatedLedgerCloseTimeSeconds, // For expiration calculations
 } from "@x402/stellar";
 ```

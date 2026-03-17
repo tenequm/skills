@@ -1,8 +1,8 @@
 ---
 name: x402
-description: "Build internet-native payments with the x402 open protocol. Use when developing paid APIs, paywalled content, AI agent payment flows, or any service using HTTP 402 Payment Required for on-chain micropayments. Covers TypeScript, Python, and Go SDKs across EVM (Base, MegaETH, Monad), Solana, Stellar, and Aptos networks with HTTP, MCP, and A2A transports. Supports exact and upto (usage-based) payment schemes."
+description: "Build internet-native payments with the x402 open protocol. Use when developing paid APIs, paywalled content, AI agent payment flows, or any service using HTTP 402 Payment Required for on-chain micropayments. Covers TypeScript, Python, and Go SDKs across EVM (Base, MegaETH, Monad, Polygon), Solana, Stellar, and Aptos networks with HTTP, MCP, and A2A transports. Supports exact and upto (usage-based) payment schemes."
 metadata:
-  version: "0.3.0"
+  version: "0.4.0"
 ---
 
 # x402 Protocol Development
@@ -16,7 +16,7 @@ x402 is an open standard (Apache-2.0, by Coinbase) that activates the HTTP `402 
 - Enabling **AI agents** to autonomously pay for resources
 - Integrating **MCP tools** that require payment
 - Building **agent-to-agent** (A2A) payment flows
-- Working with **EVM** (Base, Ethereum, MegaETH, Monad), **Solana**, **Stellar**, or **Aptos** payment settlement
+- Working with **EVM** (Base, Ethereum, MegaETH, Monad, Polygon), **Solana**, **Stellar**, or **Aptos** payment settlement
 - Implementing **usage-based billing** with the `upto` scheme (LLM tokens, bandwidth, compute)
 
 ## Core Architecture
@@ -198,6 +198,8 @@ registerExactSvmScheme(client, { signer: svmSigner });
 | Aptos Mainnet | `aptos:1` | Mainnet (TypeScript SDK only) |
 | Aptos Testnet | `aptos:2` | Testnet (TypeScript SDK only) |
 | Monad Mainnet | `eip155:143` | Mainnet |
+| Polygon Mainnet | `eip155:137` | Mainnet |
+| Polygon Amoy | `eip155:80002` | Testnet |
 | Avalanche | `eip155:43114` | Via community facilitators |
 
 Default facilitator (`https://x402.org/facilitator`) supports Base Sepolia, Solana Devnet, and Stellar Testnet.
@@ -219,7 +221,8 @@ Default facilitator (`https://x402.org/facilitator`) supports Base Sepolia, Sola
 | `@x402/fetch` | Fetch wrapper |
 | `@x402/paywall` | Browser paywall UI |
 | `@x402/mcp` | MCP client + server |
-| `@x402/extensions` | Bazaar, payment-identifier, sign-in-with-x |
+| `@x402/extensions` | Bazaar, offer-receipt, payment-identifier, sign-in-with-x, gas sponsoring |
+| `@x402/upto` | Upto (usage-based) scheme |
 
 ### Python (pip)
 ```bash
@@ -228,6 +231,9 @@ pip install "x402[requests]"   # Sync HTTP client
 pip install "x402[fastapi]"    # FastAPI server
 pip install "x402[flask]"      # Flask server
 pip install "x402[svm]"        # Solana support
+pip install "x402[mcp]"        # MCP integration
+pip install "x402[extensions]" # Extensions (bazaar, etc.)
+pip install "x402[all]"        # Everything
 ```
 
 ### Go
@@ -242,7 +248,7 @@ go get github.com/coinbase/x402/go
 - **Networks & Tokens**: CAIP-2 identifiers, EIP-3009 tokens on EVM, SPL on Solana, custom token config. See `references/core-concepts.md`
 - **Scheme**: Payment method. `exact` = transfer exact amount (production-ready); `upto` = authorize max, settle actual usage (spec finalized, not yet supported by facilitators). See `references/evm-scheme.md`, `references/svm-scheme.md`, `references/stellar-scheme.md`, `references/upto-scheme.md`, `references/aptos-scheme.md`
 - **Transport**: How payment data is transmitted (HTTP headers, MCP `_meta`, A2A metadata). See `references/transports.md`
-- **Extensions**: Optional features (bazaar discovery, payment-identifier idempotency, sign-in-with-x auth, gas sponsoring). See `references/extensions.md`
+- **Extensions**: Optional features (bazaar discovery, offer-receipt attestations, payment-identifier idempotency, sign-in-with-x auth, gas sponsoring). See `references/extensions.md`
 - **Hooks**: Lifecycle callbacks on client/server/facilitator (TS, Python, Go). See `references/lifecycle-hooks.md`
 - **Protocol types**: `PaymentRequired`, `PaymentPayload`, `SettlementResponse`. See `references/protocol-spec.md`
 - **Custom tokens**: Use `registerMoneyParser` for non-USDC tokens, Permit2 for non-EIP-3009 tokens. See `references/evm-scheme.md`

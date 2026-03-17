@@ -20,6 +20,13 @@ Using 402 keeps the protocol natively web-compatible and easy to integrate into 
 
 Both headers must be valid Base64-encoded JSON strings for cross-implementation compatibility.
 
+### V1 to V2 Header Migration
+
+| V1 Header | V2 Header |
+|-----------|-----------|
+| `X-PAYMENT` | `PAYMENT-SIGNATURE` |
+| `X-PAYMENT-RESPONSE` | `PAYMENT-RESPONSE` |
+
 ## Client / Server Roles
 
 ### Client (Buyer)
@@ -53,6 +60,12 @@ The resource provider enforcing payment for access. Can be:
 
 Servers do not need to manage client identities or maintain session state. Verification and settlement are handled per request.
 
+#### Duplicate Settlement on Solana
+
+If your server settles payments directly on Solana (without a facilitator), a race condition exists: the same signed payment can be submitted multiple times before on-chain confirmation. Solana's RPC returns "success" for each submission.
+
+Mitigation: maintain a short-lived in-memory cache of transaction payloads being settled. Reject duplicates with `"duplicate_settlement"` error. Evict entries after 120 seconds. If using a facilitator, the SVM libraries include built-in `SettlementCache` protection.
+
 ## Facilitator
 
 An optional but recommended service that simplifies payment verification and settlement.
@@ -82,11 +95,11 @@ Multiple production facilitators are available. The ecosystem is permissionless 
 
 | Facilitator | Networks | Use Case |
 |-------------|----------|----------|
-| x402.org (default) | Base Sepolia, Solana Devnet | Testing/development, no setup needed |
-| [Production facilitators](https://www.x402.org/ecosystem?category=facilitators) | Base, Solana, Polygon, Avalanche, etc. | Production use |
+| x402.org (default) | Base Sepolia, Solana Devnet, Stellar Testnet | Testing/development, no setup needed |
+| [Production facilitators](https://www.x402.org/ecosystem?filter=facilitators) | Base, Solana, Polygon, Avalanche, etc. | Production use |
 | Self-hosted | Any EVM chain | Full control |
 
-**Key insight**: Facilitators support NETWORKS, not specific tokens. Any EIP-3009 token works on EVM networks, and any SPL/Token-2022 token works on Solana, as long as the facilitator supports that network.
+**Key insight**: Facilitators support NETWORKS, not specific tokens. Any EIP-3009 token works on EVM networks, any SPL/Token-2022 token works on Solana, any SEP-41 token works on Stellar, and any fungible asset works on Aptos, as long as the facilitator supports that network.
 
 ## Wallet
 
@@ -94,7 +107,7 @@ In x402, a wallet is both a payment mechanism and a form of unique identity.
 
 ### For Buyers
 - Store USDC/crypto
-- Sign payment payloads (EIP-712 for EVM, Ed25519 for Solana)
+- Sign payment payloads (EIP-712 for EVM, Ed25519 for Solana/Aptos, BCS signing for Aptos)
 - Authorize on-chain payments programmatically
 - Wallets enable AI agents to transact without account creation
 
@@ -106,8 +119,7 @@ In x402, a wallet is both a payment mechanism and a form of unique identity.
 - **CDP Wallet API** (https://docs.cdp.coinbase.com/wallet-api-v2/docs/welcome): Recommended for programmatic payments and secure key management
 - **viem** / **ethers** HD wallets: For EVM
 - **@solana/kit**: For Solana
-
-Agents need wallets too. Programmatic wallets let agents sign EIP-712 payloads without exposing seed phrases.
+- **Aptos TypeScript SDK**: For Aptos
 
 ## Networks and Token Support
 
@@ -120,17 +132,17 @@ Format: `{namespace}:{reference}`
 - **EVM**: `eip155:<chainId>` (e.g., `eip155:8453` for Base)
 - **Solana**: `solana:<genesisHash>` (e.g., `solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp` for mainnet)
 - **Aptos**: `aptos:<chainId>` (e.g., `aptos:1` for mainnet)
+- **Stellar**: `stellar:<network>` (e.g., `stellar:pubnet` for mainnet)
 
 ### Token Support
 
-**EVM**: Any ERC-20 token implementing EIP-3009 (`transferWithAuthorization`). This enables:
-- Gasless transfers (facilitator sponsors gas)
-- One-step payments (no separate approval transactions)
-- Signature-based authorization (off-chain signing)
+**EVM**: Any ERC-20 token implementing EIP-3009 (`transferWithAuthorization`). For the `exact` scheme with Permit2 fallback: Any ERC-20 token via `permitWitnessTransferFrom` (requires one-time Permit2 approval).
 
-**Solana**: Any SPL token or Token-2022 token. No EIP-712 configuration needed.
+**Solana**: Any SPL token or Token-2022 token.
 
-**Aptos**: Any fungible asset via `0x1::primary_fungible_store::transfer`. TypeScript SDK only.
+**Aptos**: Any fungible asset via `0x1::primary_fungible_store::transfer`. Supports sponsored (gasless) transactions. TypeScript SDK only.
+
+**Stellar**: Any Soroban token implementing SEP-41. Uses `transfer(from, to, amount)`. TypeScript SDK only. Ledger-based expiration (~12 ledgers, ~60 seconds).
 
 **USDC** is the default token, supported across all networks. When you use price strings like `"$0.001"`, the system infers USDC.
 
@@ -177,19 +189,6 @@ To use a token other than USDC, you need:
 2. **EIP-712 Name**: Token's name for EIP-712 signatures (read `name()` on the contract)
 3. **EIP-712 Version**: Token's version for EIP-712 signatures (read `version()` on the contract)
 
-**Finding values on Basescan:**
-- Name: Read `name()` function - e.g., https://basescan.org/token/0x833589fcd6edb6e08f4c7c32d4f71b54bda02913#readProxyContract#F16
-- Version: Read `version()` function - e.g., https://basescan.org/token/0x833589fcd6edb6e08f4c7c32d4f71b54bda02913#readProxyContract#F24
-
-```typescript
-{
-  extra: {
-    name: "USD Coin",   // From name() function
-    version: "2"        // From version() function
-  }
-}
-```
-
 ### Adding New Networks (Dynamic Registration)
 
 v2 uses dynamic network registration - support any EVM network without modifying source code.
@@ -197,16 +196,15 @@ v2 uses dynamic network registration - support any EVM network without modifying
 **TypeScript:**
 ```typescript
 import { x402ResourceServer, HTTPFacilitatorClient } from "@x402/core/server";
-import { registerExactEvmScheme } from "@x402/evm/exact/server";
+import { ExactEvmScheme } from "@x402/evm/exact/server";
 
 const facilitator = new HTTPFacilitatorClient({
-  url: "https://your-facilitator.com"  // Must support target network
+  url: "https://your-facilitator.com"
 });
 
 const server = new x402ResourceServer(facilitator);
-registerExactEvmScheme(server);  // Registers wildcard support for all EVM chains
+server.register("eip155:*", new ExactEvmScheme());
 
-// Use any CAIP-2 identifier in routes:
 "GET /api/data": {
   accepts: [{
     scheme: "exact",
@@ -220,36 +218,27 @@ registerExactEvmScheme(server);  // Registers wildcard support for all EVM chain
 **Go:**
 ```go
 schemes := []ginmw.SchemeConfig{
-    {Network: x402.Network("eip155:43114"), Server: evm.NewExactEvmScheme()},  // Avalanche
+    {Network: x402.Network("eip155:43114"), Server: evm.NewExactEvmScheme()},
 }
 ```
 
 **Python:**
 ```python
 server = x402ResourceServer(facilitator)
-server.register("eip155:43114", ExactEvmServerScheme())  # Avalanche mainnet
+server.register("eip155:43114", ExactEvmServerScheme())
 ```
 
 ### Running Your Own Facilitator
 
-If you need support for a custom network or want full control:
-
-**Prerequisites:**
-1. RPC endpoint for your target network
-2. Wallet with native tokens for gas sponsorship
-3. The x402 facilitator code
-
 **TypeScript:**
 ```typescript
 import { x402Facilitator } from "@x402/core";
-import { ExactEvmFacilitator } from "@x402/evm/exact/facilitator";
+import { ExactEvmScheme } from "@x402/evm/exact/facilitator";
 
 const facilitator = new x402Facilitator();
-facilitator.register("eip155:43114", new ExactEvmFacilitator({
+facilitator.register("eip155:43114", new ExactEvmScheme({
   privateKey: process.env.FACILITATOR_KEY
 }));
-
-// Expose /verify, /settle, /supported endpoints via Express/Hono/etc.
 ```
 
 ### Quick Reference
@@ -258,11 +247,14 @@ facilitator.register("eip155:43114", new ExactEvmFacilitator({
 |---------|-----------|---------------|-------------------|
 | Base Mainnet | `eip155:8453` | Any EIP-3009 | Production facilitators |
 | Base Sepolia | `eip155:84532` | Any EIP-3009 | x402.org (testnet) |
-| MegaETH Mainnet | `eip155:4326` | USDM (`0xFAfDdbb3FC7688494971a79cc65DCa3EF82079E7`, 18 decimals) | Community |
+| MegaETH Mainnet | `eip155:4326` | USDM (18 decimals) | Community |
+| Monad Mainnet | `eip155:143` | USDC | Community |
 | Solana Mainnet | `solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp` | Any SPL/Token-2022 | Production facilitators |
 | Solana Devnet | `solana:EtWTRABZaYq6iMfeYKouRu166VU2xqa1` | Any SPL/Token-2022 | x402.org (testnet) |
-| Aptos Mainnet | `aptos:1` | Any Fungible Asset (USDC default) | Community |
-| Aptos Testnet | `aptos:2` | Any Fungible Asset (USDC default) | Community |
+| Aptos Mainnet | `aptos:1` | Any Fungible Asset | Community |
+| Aptos Testnet | `aptos:2` | Any Fungible Asset | Community |
+| Stellar Mainnet | `stellar:pubnet` | Any SEP-41 Soroban token | Community |
+| Stellar Testnet | `stellar:testnet` | Any SEP-41 Soroban token | x402.org (testnet) |
 | Any EVM | `eip155:<chainId>` | Any EIP-3009 | Self-hosted or community |
 
 ### Why EIP-3009?
@@ -272,20 +264,34 @@ facilitator.register("eip155:43114", new ExactEvmFacilitator({
 3. **Universal facilitator support**: Any EIP-3009 token works with any EVM facilitator
 4. **Security**: Transfers authorized by cryptographic signatures with time bounds and nonces
 
+## SDK Support Matrix
+
+| Component | TypeScript | Go | Python |
+|-----------|:---:|:---:|:---:|
+| Core (Server/Client/Facilitator) | Yes | Yes | Yes |
+| EVM (exact/eip3009) | Yes | Yes | Yes |
+| SVM (exact/spl) | Yes | Yes | Yes |
+| Stellar (exact/soroban) | Yes | No | No |
+| Aptos (exact/fungible) | Yes | No | No |
+
+### HTTP Framework Integrations
+
+| Role | TypeScript | Go | Python |
+|------|------------|-----|--------|
+| Server | Express, Hono, Next.js | Gin | FastAPI, Flask |
+| Client | Fetch, Axios | net/http | httpx, requests |
+
 ## Going to Production (Mainnet)
 
 ### 1. Switch Facilitator URL
 
-Testnet uses `https://x402.org/facilitator`. For mainnet, use a production facilitator:
-
 ```typescript
-// Production facilitator (e.g., Coinbase)
 const facilitator = new HTTPFacilitatorClient({
   url: "https://api.cdp.coinbase.com/platform/v2/x402"
 });
 ```
 
-See the [x402 Ecosystem](https://www.x402.org/ecosystem?category=facilitators) for available production facilitators.
+See the [x402 Ecosystem](https://www.x402.org/ecosystem?filter=facilitators) for available production facilitators.
 
 ### 2. Update Network Identifiers
 

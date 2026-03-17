@@ -16,92 +16,24 @@ Standard extension structure:
 
 ## Bazaar (Resource Discovery)
 
-Enables resource discovery and cataloging. Servers declare endpoint specs so facilitators can catalog them in a discovery service.
+Enables resource discovery and cataloging. Servers declare endpoint specs so facilitators can catalog them in a discovery service. Supports two transport types: **HTTP** and **MCP**.
 
-### Server Advertises (in PaymentRequired)
+### Transport Types
 
-```json
-{
-  "extensions": {
-    "bazaar": {
-      "info": {
-        "input": {
-          "type": "http",
-          "method": "GET",
-          "queryParams": { "city": "San Francisco" }
-        },
-        "output": {
-          "type": "json",
-          "example": { "city": "San Francisco", "weather": "foggy", "temperature": 60 }
-        }
-      },
-      "schema": {
-        "$schema": "https://json-schema.org/draft/2020-12/schema",
-        "type": "object",
-        "properties": {
-          "input": {
-            "type": "object",
-            "properties": {
-              "type": { "type": "string", "const": "http" },
-              "method": { "type": "string", "enum": ["GET", "HEAD", "DELETE"] },
-              "queryParams": { "type": "object" }
-            },
-            "required": ["type", "method"]
-          },
-          "output": {
-            "type": "object",
-            "properties": {
-              "type": { "type": "string" },
-              "example": { "type": "object" }
-            },
-            "required": ["type"]
-          }
-        },
-        "required": ["input"]
-      }
-    }
-  }
-}
-```
+**HTTP** (`input.type: "http"`) - standard REST endpoints. Method is auto-inferred from route key (e.g., `"GET /weather"`) and injected by `bazaarResourceServerExtension`.
 
-### POST Endpoint Example
+**MCP** (`input.type: "mcp"`) - Model Context Protocol tools. Identified by `toolName` field. Transport defaults to `"streamable-http"` per MCP spec, optionally `"sse"`.
 
-```json
-{
-  "extensions": {
-    "bazaar": {
-      "info": {
-        "input": {
-          "type": "http",
-          "method": "POST",
-          "bodyType": "json",
-          "body": { "query": "example" }
-        },
-        "output": { "type": "json", "example": { "results": [] } }
-      },
-      "schema": { "..." : "..." }
-    }
-  }
-}
-```
+### MCP Input Fields
 
-### Input Types
-
-**Query methods (GET, HEAD, DELETE):**
 | Field | Required | Description |
 |-------|----------|-------------|
-| `type` | Yes | Always `"http"` |
-| `method` | Yes | `"GET"`, `"HEAD"`, or `"DELETE"` |
-| `queryParams` | No | Example query parameters |
-| `headers` | No | Custom header examples |
-
-**Body methods (POST, PUT, PATCH):**
-| Field | Required | Description |
-|-------|----------|-------------|
-| `type` | Yes | Always `"http"` |
-| `method` | Yes | `"POST"`, `"PUT"`, or `"PATCH"` |
-| `bodyType` | Yes | `"json"`, `"form-data"`, or `"text"` |
-| `body` | Yes | Request body example |
+| `type` | Yes | Always `"mcp"` |
+| `toolName` | Yes | MCP tool name |
+| `description` | No | Human-readable tool description |
+| `transport` | No | `"streamable-http"` (default) or `"sse"` |
+| `inputSchema` | Yes | JSON Schema for tool arguments |
+| `example` | No | Example tool arguments |
 
 ### SDK Usage
 
@@ -109,10 +41,22 @@ Enables resource discovery and cataloging. Servers declare endpoint specs so fac
 ```typescript
 import { declareDiscoveryExtension } from "@x402/extensions/bazaar";
 
-// In route config
+// HTTP endpoint - method auto-inferred from route key
 extensions: {
   ...declareDiscoveryExtension({
-    output: { example: { weather: "sunny", temperature: 72 } }
+    input: { city: "San Francisco" },
+    inputSchema: { properties: { city: { type: "string" } }, required: ["city"] },
+    output: { example: { weather: "sunny", temperature: 72 } },
+  }),
+}
+
+// MCP tool - toolName discriminates from HTTP
+extensions: {
+  ...declareDiscoveryExtension({
+    toolName: "financial_analysis",
+    description: "Analyze financial data",
+    inputSchema: { type: "object", properties: { ticker: { type: "string" } }, required: ["ticker"] },
+    output: { example: { pe_ratio: 28.5 } },
   }),
 }
 ```
@@ -129,20 +73,101 @@ Extensions: bazaar.DeclareDiscoveryExtension(bazaar.DiscoveryInfo{
 })
 ```
 
-### Facilitator Behavior
+**Python:**
+```python
+from x402.extensions.bazaar import declare_discovery_extension, OutputConfig
 
-Facilitators receiving a `PaymentPayload` with bazaar extension:
-1. Validate `info` against provided `schema`
-2. Extract discovery information (URL, method, input/output)
-3. Catalog in their discovery service (implementation-specific)
+extensions = declare_discovery_extension(
+    input={"city": "San Francisco"},
+    input_schema={"properties": {"city": {"type": "string"}}, "required": ["city"]},
+    output=OutputConfig(example={"weather": "sunny"}),
+)
+```
+
+### Server Extension (Method Enrichment)
+
+`bazaarResourceServerExtension` auto-injects the HTTP method from request context into `info.input.method`.
+
+```typescript
+import { bazaarResourceServerExtension } from "@x402/extensions/bazaar";
+const resourceServer = new x402ResourceServer(facilitatorClient)
+  .registerExtension(bazaarResourceServerExtension);
+```
+
+Go: `bazaar.BazaarResourceServerExtension` | Python: `bazaar_resource_server_extension`
+
+### WithBazaar Facilitator Client
+
+```typescript
+import { withBazaar } from "@x402/extensions/bazaar";
+const client = withBazaar(new HTTPFacilitatorClient({ url }));
+const resources = await client.extensions.discovery.listResources({ type: "http", limit: 10 });
+```
+
+Go: `bazaar.WithBazaar(facilitatorClient)` then `facilitator.ListDiscoveryResources(ctx, params)`
 
 ### Discovery API
 
 ```
-GET /discovery/resources?type=http&limit=10
+GET /discovery/resources?type=http&limit=10&offset=0
 ```
 
-Returns cataloged x402 resources with their payment requirements.
+---
+
+## Offer-Receipt (Signed Attestations)
+
+Enables cryptographically signed offers and receipts for audit trails, verified reviews, and dispute resolution. TypeScript only.
+
+### Signature Formats
+
+| Format | Use Case |
+|--------|----------|
+| `jws` | Cross-chain, supports did:key/did:jwk/did:web |
+| `eip712` | EVM-native, ECDSA recovery |
+
+### Server Setup
+
+```typescript
+import {
+  createOfferReceiptExtension,
+  createJWSOfferReceiptIssuer,
+  declareOfferReceiptExtension,
+} from "@x402/extensions/offer-receipt";
+
+const issuer = createJWSOfferReceiptIssuer(
+  "did:web:api.example.com#key-1",
+  { kid: "did:web:api.example.com#key-1", algorithm: "ES256", format: "jws", sign: mySignFn },
+);
+
+const resourceServer = new x402ResourceServer(facilitatorClient)
+  .registerExtension(createOfferReceiptExtension(issuer));
+
+extensions: {
+  ...declareOfferReceiptExtension({ includeTxHash: false, offerValiditySeconds: 300 }),
+}
+```
+
+### Client Usage
+
+```typescript
+import {
+  extractOffersFromPaymentRequired,
+  decodeSignedOffers,
+  findAcceptsObjectFromSignedOffer,
+  extractReceiptFromResponse,
+  verifyReceiptMatchesOffer,
+} from "@x402/extensions/offer-receipt";
+
+const offers = extractOffersFromPaymentRequired(paymentRequired);
+const decoded = decodeSignedOffers(offers);
+const requirements = findAcceptsObjectFromSignedOffer(decoded[0], paymentRequired.accepts);
+const receipt = extractReceiptFromResponse(response);
+const valid = verifyReceiptMatchesOffer(receipt, decoded[0], [myWalletAddress]);
+```
+
+### DID Key Resolution
+
+`extractPublicKeyFromKid(kid)` supports `did:key` (Ed25519, secp256k1, P-256), `did:jwk`, and `did:web` (fetches `/.well-known/did.json`).
 
 ---
 
@@ -150,48 +175,37 @@ Returns cataloged x402 resources with their payment requirements.
 
 Enables clients to provide an `id` for request deduplication and safe retries.
 
-### Server Advertises
+### SDK Usage
 
-```json
-{
-  "extensions": {
-    "payment-identifier": {
-      "info": { "required": false },
-      "schema": {
-        "$schema": "https://json-schema.org/draft/2020-12/schema",
-        "type": "object",
-        "properties": {
-          "required": { "type": "boolean" },
-          "id": { "type": "string", "minLength": 16, "maxLength": 128 }
-        },
-        "required": ["required"]
-      }
-    }
-  }
-}
+**TypeScript (server):**
+```typescript
+import { declarePaymentIdentifierExtension, paymentIdentifierResourceServerExtension } from "@x402/extensions/payment-identifier";
+
+extensions: { [PAYMENT_IDENTIFIER]: declarePaymentIdentifierExtension(false) }
+resourceServer.registerExtension(paymentIdentifierResourceServerExtension);
 ```
 
-### Client Sends
+**TypeScript (client):**
+```typescript
+import { appendPaymentIdentifierToExtensions } from "@x402/extensions/payment-identifier";
+appendPaymentIdentifierToExtensions(extensions); // Adds ID only if server declared extension
+```
 
-```json
-{
-  "extensions": {
-    "payment-identifier": {
-      "schema": { "..." : "..." },
-      "info": {
-        "required": false,
-        "id": "pay_7d5d747be160e280504c099d984bcfe0"
-      }
-    }
-  }
-}
+**Go (client):**
+```go
+import "github.com/coinbase/x402/go/extensions/paymentidentifier"
+err := paymentidentifier.AppendPaymentIdentifierToExtensions(extensions, "")
+```
+
+**Go (facilitator):**
+```go
+id, err := paymentidentifier.ExtractPaymentIdentifier(payload, true) // validate=true
 ```
 
 ### ID Format
 
 - **Length**: 16-128 characters
-- **Characters**: alphanumeric, hyphens, underscores
-- **Recommendation**: UUID v4 with prefix (e.g., `pay_`)
+- **Characters**: alphanumeric, hyphens, underscores (`^[a-zA-Z0-9_-]+$`)
 
 ### Idempotency Behavior
 
@@ -202,66 +216,11 @@ Enables clients to provide an `id` for request deduplication and safe retries.
 | Same `id`, different payload | 409 Conflict |
 | `required: true`, no `id` | 400 Bad Request |
 
-### Responsibilities
-
-- **Server**: Request deduplication, response caching
-- **Facilitator**: Verify/settle idempotency
-- **Client**: Generate unique `id`, reuse on retries
-
 ---
 
 ## Sign-In With X (Wallet Authentication)
 
-CAIP-122 wallet-based authentication. Clients prove wallet ownership by signing a challenge, allowing servers to skip payment for addresses that previously paid.
-
-This is a **Server-Client** extension. The facilitator is not involved.
-
-### Server Advertises
-
-```json
-{
-  "extensions": {
-    "sign-in-with-x": {
-      "info": {
-        "domain": "api.example.com",
-        "uri": "https://api.example.com/premium-data",
-        "version": "1",
-        "nonce": "a1b2c3d4e5f67890a1b2c3d4e5f67890",  // pragma: allowlist secret
-        "issuedAt": "2024-01-15T10:30:00.000Z",
-        "expirationTime": "2024-01-15T10:35:00.000Z",
-        "statement": "Sign in to access premium data",
-        "resources": ["https://api.example.com/premium-data"]
-      },
-      "supportedChains": [
-        { "chainId": "eip155:8453", "type": "eip191" },
-        { "chainId": "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp", "type": "ed25519" }
-      ],
-      "schema": { "..." : "..." }
-    }
-  }
-}
-```
-
-### Client Sends (SIGN-IN-WITH-X Header)
-
-Base64-encoded JSON in `SIGN-IN-WITH-X` HTTP header:
-
-```json
-{
-  "domain": "api.example.com",
-  "address": "0x857b06519E91e3A54538791bDbb0E22373e36b66",
-  "uri": "https://api.example.com/premium-data",
-  "version": "1",
-  "chainId": "eip155:8453",
-  "type": "eip191",
-  "nonce": "a1b2c3d4e5f67890a1b2c3d4e5f67890",  // pragma: allowlist secret
-  "issuedAt": "2024-01-15T10:30:00.000Z",
-  "expirationTime": "2024-01-15T10:35:00.000Z",
-  "statement": "Sign in to access premium data",
-  "resources": ["https://api.example.com/premium-data"],
-  "signature": "0x2d6a7588..."
-}
-```
+CAIP-122 wallet-based authentication. Clients prove wallet ownership by signing a challenge, allowing servers to skip payment for addresses that previously paid. TypeScript only.
 
 ### Supported Chains
 
@@ -270,154 +229,44 @@ Base64-encoded JSON in `SIGN-IN-WITH-X` HTTP header:
 | EVM (`eip155:*`) | `eip191` | EIP-4361 (SIWE) |
 | Solana (`solana:*`) | `ed25519` | Sign-In With Solana (SIWS) |
 
-### EVM Message Format (SIWE)
+### Server
 
-```
-api.example.com wants you to sign in with your Ethereum account:
-0x857b06519E91e3A54538791bDbb0E22373e36b66
+```typescript
+import { declareSIWxExtension, siwxResourceServerExtension } from "@x402/extensions/sign-in-with-x";
 
-Sign in to access premium data
-
-URI: https://api.example.com/premium-data
-Version: 1
-Chain ID: 8453
-Nonce: a1b2c3d4e5f67890a1b2c3d4e5f67890
-Issued At: 2024-01-15T10:30:00.000Z
-Expiration Time: 2024-01-15T10:35:00.000Z
+extensions: { ...declareSIWxExtension({ domain: "example.com", statement: "Sign in" }) }
+server.registerExtension(siwxResourceServerExtension);
 ```
 
-### Server Verification Steps
-
-1. Parse and base64-decode the `SIGN-IN-WITH-X` header
-2. Validate: `domain` matches request host, `uri` matches origin, `issuedAt` is recent, `expirationTime` is future, `nonce` is unique
-3. Verify signature by chain type (`eip155:*` -> ECDSA, `solana:*` -> Ed25519)
-4. Check if recovered `address` has previously paid for the resource
-
-### Security
-
-- **Domain binding** prevents cross-service signature reuse
-- **Unique nonces** prevent replay attacks
-- **Time bounds** constrain validity windows
-- EVM supports smart wallets via EIP-1271/EIP-6492
-
-### SDK Support
-
-| Extension | TypeScript | Go | Python |
-|-----------|------------|-----|--------|
-| bazaar | Yes | Yes | Yes |
-| sign-in-with-x | Yes | No | No |
-| payment-identifier | Yes | No | No |
+Client sends `SIGN-IN-WITH-X` HTTP header (Base64-encoded JSON with signature).
 
 ---
 
 ## Gas Sponsoring Extensions (EVM)
 
-Two extensions enable gasless Permit2 approval flows for the `exact` EVM scheme. Both are Facilitator-advertised: the facilitator agrees to sponsor gas for the client's approval transaction.
+Two extensions enable gasless Permit2 approval flows.
 
 ### eip2612GasSponsoring
 
-For tokens implementing **EIP-2612** (e.g., USDC). The client signs an off-chain EIP-2612 permit, and the facilitator submits it on-chain via `x402Permit2Proxy.settleWithPermit`.
+For tokens implementing **EIP-2612**. Client signs off-chain permit; facilitator calls `settleWithPermit()`.
 
-**Facilitator advertises in PaymentRequired:**
-```json
-{
-  "extensions": {
-    "eip2612GasSponsoring": {
-      "info": {
-        "description": "The facilitator accepts EIP-2612 gasless Permit to Permit2 canonical contract.",
-        "version": "1"
-      },
-      "schema": {
-        "type": "object",
-        "properties": {
-          "from": { "type": "string", "description": "Sender address" },
-          "asset": { "type": "string", "description": "ERC-20 token contract" },
-          "spender": { "type": "string", "description": "Canonical Permit2 address" },
-          "amount": { "type": "string", "description": "Approval amount (typically MaxUint)" },
-          "nonce": { "type": "string", "description": "Current nonce of sender" },
-          "deadline": { "type": "string", "description": "Signature expiry timestamp" },
-          "signature": { "type": "string", "description": "65-byte EIP-2612 signature (r,s,v)" },
-          "version": { "type": "string", "description": "Schema version" }
-        },
-        "required": ["from", "asset", "spender", "amount", "nonce", "deadline", "signature", "version"]
-      }
-    }
-  }
-}
+```typescript
+import { declareEip2612GasSponsoringExtension } from "@x402/extensions";
+extensions: { ...declareEip2612GasSponsoringExtension() }
 ```
 
-**Client sends in PaymentPayload:**
-```json
-{
-  "extensions": {
-    "eip2612GasSponsoring": {
-      "info": {
-        "from": "0x857b...36b66",
-        "asset": "0x036C...CF7e",
-        "spender": "0xCanonicalPermit2",
-        "amount": "115792089237316195423570985008687907853269984665640564039457584007913129639935",
-        "nonce": "0",
-        "deadline": "1740672154",
-        "signature": "0x2d6a7588...",
-        "version": "1"
-      }
-    }
-  }
-}
-```
-
-**Facilitator verification:**
-1. Verify `asset` implements `IERC20Permit`
-2. Verify `signature` was signed for `spender` and recovers to `from`
-3. Verify `spender` matches Canonical Permit2
-4. Simulate `x402Permit2Proxy.settleWithPermit`
-
-**Settlement:** Calls `x402Permit2Proxy.settleWithPermit` (atomic permit + settle).
+Go: `eip2612gassponsor.DeclareEip2612GasSponsoringExtension()`
 
 ### erc20ApprovalGasSponsoring
 
-For tokens **without** EIP-2612 support. The client signs a raw EVM transaction calling `token.approve(Permit2, amount)`, and the facilitator broadcasts it with gas funding.
+For tokens **without** EIP-2612. Client signs a raw `approve()` transaction; facilitator broadcasts atomically before settling.
 
-**Key difference from eip2612:** The client signs a full EVM transaction (not just a permit signature), and the facilitator must fund gas if the client lacks native tokens.
-
-**Client sends in PaymentPayload:**
-```json
-{
-  "extensions": {
-    "erc20ApprovalGasSponsoring": {
-      "info": {
-        "from": "0x857b...36b66",
-        "asset": "0x036C...CF7e",
-        "spender": "0xCanonicalPermit2",
-        "amount": "115792089237316195423570985008687907853269984665640564039457584007913129639935",
-        "signedTransaction": "0x505cbf0d...",
-        "version": "1"
-      }
-    }
-  }
-}
+```typescript
+import { declareErc20ApprovalGasSponsoringExtension } from "@x402/extensions";
+extensions: { ...declareErc20ApprovalGasSponsoringExtension() }
 ```
 
-**Client requirements:**
-- `maxFee` and `maxPriorityFee` must align with current network gas prices
-- `nonce` must match the client's current on-chain nonce
-
-**Facilitator verification:**
-1. RLP-decode the signed transaction
-2. Verify signer matches `from`
-3. Verify `to` equals the `asset` contract
-4. Verify calldata matches `approve(spender, amount)`
-5. Verify `spender` matches Canonical Permit2
-6. Verify nonce matches client's on-chain nonce
-7. Verify gas fees match current network prices
-8. Check if client has enough native gas; calculate deficit if not
-
-**Settlement (atomic batch):**
-1. **Gas funding** - send native tokens to client if needed
-2. **Approval relay** - broadcast client's signed `approve()` transaction
-3. **Settlement** - call `x402Permit2Proxy.settle()`
-
-All three steps execute as an atomic batch to prevent front-running between the funding and settlement steps.
+Go: `erc20approvalgassponsor.DeclareExtension()`
 
 ### Gas Sponsoring Comparison
 
@@ -427,4 +276,16 @@ All three steps execute as an atomic batch to prevent front-running between the 
 | Client signs | Off-chain EIP-2612 permit | Full EVM transaction |
 | Gas funding needed | No (off-chain signature) | Yes (if client lacks gas) |
 | Settlement method | `settleWithPermit` | Atomic batch (fund + approve + settle) |
-| Front-run protection | Inherent (off-chain) | Atomic batch required |
+
+---
+
+## SDK Support Matrix
+
+| Extension | TypeScript | Go | Python |
+|-----------|------------|-----|--------|
+| bazaar | Yes | Yes | Yes |
+| offer-receipt | Yes | No | No |
+| sign-in-with-x | Yes | No | No |
+| payment-identifier | Yes | Yes | No |
+| eip2612GasSponsoring | Yes | Yes | No |
+| erc20ApprovalGasSponsoring | Yes | Yes | No |
