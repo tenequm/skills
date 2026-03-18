@@ -1,0 +1,23 @@
+{
+  "skill_name": "command-skill-creator",
+  "evals": [
+    {
+      "id": 0,
+      "prompt": "I need a slash command for deploying our services. We have a pnpm monorepo with packages under packages/. Build is `pnpm build`, we push Docker images with `docker push ghcr.io/myorg/$SERVICE`, and deploy with `kubectl rollout restart deployment/$SERVICE`. The command should take a service name as an argument. I want it to build, push, deploy, and then verify the rollout succeeded. If the rollout fails it should show me the pod logs so I can diagnose.",
+      "expected_output": "A complete SKILL.md with: disable-model-invocation: true, argument-hint for service name, phased workflow (build -> push -> deploy -> verify), approval gate before deploy, error handling for rollout failure with pod log inspection, guard clause for missing argument, no hardcoded paths",
+      "files": []
+    },
+    {
+      "id": 1,
+      "prompt": "I need a command that syncs our TypeScript API types from this backend repo to our frontend repo at ~/pj/frontend/. Whenever we change types in src/types/, the frontend needs matching updates. The frontend uses a different package manager (npm) and has its own conventions I'm not sure about. The command shouldn't take any arguments - it should just figure out what changed and sync it.",
+      "expected_output": "A complete SKILL.md with: cross-repo pattern, reads frontend CLAUDE.md for conventions, uses grep/glob to discover where types are referenced in the frontend (not hardcoded paths), approval gate before modifying the other repo, handles the case where no types have changed, follows the frontend's commit/deploy conventions",
+      "files": []
+    },
+    {
+      "id": 2,
+      "prompt": "Make me a quick command that runs tests on only the files I've changed in my current branch compared to main. We use vitest. Nothing fancy, just want to type /test-changed and have it figure out what to test.",
+      "expected_output": "A simple, short SKILL.md (under 50 lines ideally) using the Simple Task pattern. Should NOT be over-engineered - no approval gates, no complex phases, no opus model. Just: get changed files, filter for testable ones, run vitest on them, report results. Should still have disable-model-invocation and basic error handling.",
+      "files": []
+    }
+  ]
+}
