@@ -2,7 +2,7 @@
 name: biome
 description: Lint and format frontend code with Biome 2.4. Covers type-aware linting, GritQL custom rules, domains, import organizer, and migration from ESLint/Prettier. Use when configuring linting rules, formatting code, writing custom lint rules, or setting up CI checks. Triggers on biome, biome config, biome lint, biome format, biome check, biome ci, gritql, migrate from eslint, migrate from prettier, import sorting, code formatting, lint rules, type-aware linting, noFloatingPromises.
 metadata:
-  version: "0.1.0"
+  version: "0.2.0"
 ---
 
 # Biome
@@ -10,6 +10,24 @@ metadata:
 Fast, unified linting, formatting, and import organization for JavaScript, TypeScript, JSX, CSS, and GraphQL. Biome 2.4 provides type-aware linting without the TypeScript compiler, GritQL plugins for custom rules, and domain-based rule grouping. Single binary, zero config by default, 97% Prettier compatibility.
 
 ## Critical Rules
+
+### `files.ignore` DOES NOT EXIST - use `files.includes` with negation
+
+Biome 2.x only supports `files.includes` (with an `s`). There is NO `files.ignore`, NO `files.include` (without `s`), NO `files.exclude`. Using any of these will throw `Found an unknown key` errors.
+
+The only valid keys under `files` are: `includes`, `maxSize`, `ignoreUnknown`, `experimentalScannerIgnores`.
+
+To exclude files (generated code, vendored files, etc.), use negation patterns in `files.includes`:
+
+```json
+{
+  "files": {
+    "includes": ["**", "!**/routeTree.gen.ts", "!**/generated/**"]
+  }
+}
+```
+
+Do NOT use `overrides` with `linter/formatter/assists: { enabled: false }` to skip generated files - that approach is fragile (easy to miss a subsystem like assists/import organizer) and unnecessarily complex. Just exclude via `files.includes`.
 
 ### Always use `biome check`, not separate lint + format
 
@@ -91,12 +109,10 @@ pnpm biome ci --reporter=default --reporter=github .  # GitHub Actions annotatio
     "useIgnoreFile": true
   },
   "files": {
-    "include": [
+    "includes": [
       "src/**/*.ts", "src/**/*.tsx",
-      "tests/**/*.ts", "**/*.config.ts", "**/*.json"
-    ],
-    "ignore": [
-      "*.d.ts", "**/generated", "**/components/ui"
+      "tests/**/*.ts", "**/*.config.ts", "**/*.json",
+      "!**/generated", "!**/components/ui"
     ]
   },
   "formatter": {
@@ -175,6 +191,54 @@ The import organizer (Biome Assist) merges duplicates, sorts by distance, and su
       }
     }
   }
+}
+```
+
+### Per-subsystem includes
+
+Each subsystem (`linter`, `formatter`, `assist`) has its own `includes` for fine-grained scoping. Applied after `files.includes` - can only narrow, not widen.
+
+```json
+{
+  "files": {
+    "includes": ["**", "!**/dist"]
+  },
+  "linter": {
+    "includes": ["**", "!**/components/ui"]
+  },
+  "formatter": {
+    "includes": ["**", "!**/components/ui"]
+  }
+}
+```
+
+This lints and formats everything except `dist/` and `components/ui`, while assists (import organizer) still run on `components/ui`.
+
+### Overrides
+
+Overrides apply different settings to specific file patterns. Use for per-file rule tweaks (e.g., relaxing rules for vendored/shadcn components). The field is `includes` (with `s`).
+
+```json
+{
+  "overrides": [
+    {
+      "includes": ["**/components/ui/**"],
+      "linter": {
+        "rules": {
+          "suspicious": { "noDocumentCookie": "off" },
+          "style": { "useComponentExportOnlyModules": "off" }
+        }
+      }
+    },
+    {
+      "includes": ["**/*.test.ts"],
+      "linter": {
+        "rules": {
+          "suspicious": { "noConsole": "off" }
+        }
+      }
+    }
+  ]
 }
 ```
 
@@ -433,6 +497,22 @@ biome explain noFloatingPromises             # Explain a rule
 8. **Use `--staged` in pre-commit hooks**: `biome check --staged --write --no-errors-on-unmatched .`
 9. **Profile slow rules** with `biome lint --profile-rules` (v2.4)
 10. **Use GritQL plugins** for project-specific patterns instead of disabling rules globally
+
+## Gotchas
+
+These are real mistakes that have caused broken configs, dirty working trees, and wasted debugging time. Read before writing any Biome config.
+
+1. **`files.ignore`, `files.include`, `files.exclude` do not exist.** Only `files.includes` (with `s`). Biome will throw `Found an unknown key` for anything else. See the first critical rule above.
+
+2. **`organizeImports` is NOT a top-level config key.** In Biome 2.x it moved under `assist.actions.source.organizeImports`. Using it at the top level is a config error.
+
+3. **`overrides` that disable `linter` + `formatter` still run `assist`.** If you use overrides to skip a generated file, the import organizer (an assist action) will still rewrite it. This silently dirties your working tree. Use `files.includes` negation to fully exclude a file instead.
+
+4. **`overrides` field is `includes` (with `s`), not `include`.** Same naming as `files.includes`.
+
+5. **`biome check --write` runs formatter + linter + assists in one pass.** Any of these three can modify files. If a generated file keeps getting dirtied after `check --write`, check which subsystem is touching it - it's often the import organizer (assist), not the formatter or linter.
+
+6. **`--fix` does not exist.** The flag is `--write`. `--fix` will silently do nothing or error.
 
 ## Resources
 
