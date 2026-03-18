@@ -1,0 +1,72 @@
+{
+  "skill_name": "polish",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "Set up the fixture repo by running `bash evals/fixtures/cleanliness/setup.sh`, then cd into the created directory and run /polish",
+      "expected_output": "Report should find debug leftovers (console.log), AI slop (obvious comments, unnecessary JSDoc), and dead code (unused function, commented-out block). Should NOT flag the logger.info call. Should stop and wait for approval before fixing.",
+      "files": ["evals/fixtures/cleanliness/setup.sh"],
+      "expectations": [
+        "Report flags console.log on the debug line as a debug leftover",
+        "Report does NOT flag logger.info as a debug leftover",
+        "Report flags the '// increment counter' comment as AI slop",
+        "Report flags JSDoc on the internal helper as AI slop",
+        "Report flags the unused processLegacy function as dead code",
+        "Report flags the commented-out code block as dead code",
+        "Report explicitly stops and waits for user approval before making fixes",
+        "All three review agents (Cleanliness, Design, Efficiency) are launched in parallel"
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "Set up the fixture repo by running `bash evals/fixtures/design-reuse/setup.sh`, then cd into the created directory and run /polish",
+      "expected_output": "Report should find a reuse opportunity (hand-rolled slugify duplicating existing utility), over-engineering (single-use wrapper), and stringly-typed code (raw string where enum exists). Should search the codebase for existing utilities.",
+      "files": ["evals/fixtures/design-reuse/setup.sh"],
+      "expectations": [
+        "Report identifies that the hand-rolled slugify logic duplicates the existing slugify utility in utils/string.ts",
+        "Report flags the single-use fetchWithRetry wrapper as over-engineering",
+        "Report flags raw status strings where the Status enum already exists as stringly-typed code",
+        "Agent 2 (Design) searches beyond the changed files to find existing utilities",
+        "Report explicitly stops and waits for user approval before making fixes"
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "Set up the fixture repo by running `bash evals/fixtures/efficiency/setup.sh`, then cd into the created directory and run /polish",
+      "expected_output": "Report should find sequential awaits that could be parallel, an N+1 query pattern, and a TOCTOU anti-pattern. Should NOT flag the one-time setup function.",
+      "files": ["evals/fixtures/efficiency/setup.sh"],
+      "expectations": [
+        "Report flags the sequential awaits on independent API calls and suggests Promise.all or similar",
+        "Report flags the N+1 pattern (querying details inside a loop)",
+        "Report flags the TOCTOU pattern (checking file existence before reading)",
+        "Report does NOT flag the one-time initConfig setup function for efficiency",
+        "Report explicitly stops and waits for user approval before making fixes"
+      ]
+    },
+    {
+      "id": 4,
+      "prompt": "Set up the fixture repo by running `bash evals/fixtures/mixed/setup.sh`, then cd into the created directory and run /polish",
+      "expected_output": "Report should find issues across all three categories: cleanliness (console.log, TODO), design (duplicated fetch wrapper), and efficiency (sequential awaits). Report should be deduplicated and grouped by category.",
+      "files": ["evals/fixtures/mixed/setup.sh"],
+      "expectations": [
+        "Report contains findings in at least two of the three categories (Cleanliness, Design, Efficiency)",
+        "Report findings are deduplicated - no issue appears twice even if multiple agents flagged it",
+        "Report includes file paths and line numbers for each finding",
+        "Report explicitly stops and waits for user approval before making fixes",
+        "Automated checks (lint/typecheck) run before the review agents"
+      ]
+    },
+    {
+      "id": 5,
+      "prompt": "Set up the fixture repo by running `bash evals/fixtures/clean/setup.sh`, then cd into the created directory and run /polish",
+      "expected_output": "Report should say 'Clean - no issues found' and stop. Should not suggest improvements to pre-existing code or nitpick style choices.",
+      "files": ["evals/fixtures/clean/setup.sh"],
+      "expectations": [
+        "Report states clean or no issues found",
+        "Report does NOT flag any issues in the changed code",
+        "Report does NOT suggest improvements to pre-existing unchanged code",
+        "Automated checks (lint/typecheck) pass before review"
+      ]
+    }
+  ]
+}
