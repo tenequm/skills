@@ -17,13 +17,14 @@
 | Extension | Path | Config Key | Notes |
 |-----------|------|------------|-------|
 | MS Teams | `extensions/msteams/` | via plugin config | Microsoft Graph API |
-| Matrix | `extensions/matrix/` | via plugin config | matrix-js-sdk |
+| Matrix | `extensions/matrix/` | via plugin config | matrix-js-sdk, thread binding commands |
 | Zalo | `extensions/zalo/` | via plugin config | Zalo Official Account API |
 | Zalo User | `extensions/zalouser/` | via plugin config | Zalo personal account |
 | Voice Call | `extensions/voice-call/` | via plugin config | Twilio/SIP voice |
 | Feishu/Lark | `extensions/feishu/` | via plugin config | Feishu bot API |
 | BlueBubbles | `extensions/bluebubbles/` | via plugin config | iMessage via BlueBubbles server |
 | Mattermost | `extensions/mattermost/` | via plugin config | Mattermost WebSocket + slash HTTP |
+| WhatsApp | `extensions/whatsapp/` | via plugin config | WhatsApp via Baileys, npm-publishable |
 | ACPX | `extensions/acpx/` | via plugin config | ACP runtime backend (acpx CLI) |
 
 ## Channel Plugin Registration
@@ -42,9 +43,9 @@ api.registerChannel({
 });
 ```
 
-## Thread Bindings (Telegram & Discord)
+## Thread Bindings (Telegram, Discord & Matrix)
 
-Both Telegram and Discord now support thread-bound sessions via `threadBindings` config:
+Telegram, Discord, and Matrix support thread-bound sessions via `threadBindings` config:
 
 ```json
 {
@@ -63,6 +64,12 @@ Both Telegram and Discord now support thread-bound sessions via `threadBindings`
 - Auto-sweep mechanism cleans expired bindings
 - `spawnSubagentSessions`: auto-create + bind threads for `sessions_spawn({ thread: true })`
 - `spawnAcpSessions`: auto-create + bind threads for `/acp spawn`
+
+Thread binding spawn policy defaults (`src/channels/thread-bindings-policy.ts`):
+- Discord and Matrix default spawn flags to `false`
+- Other channels default to `true`
+
+Matrix thread binding commands: `/acp spawn`, `/session spawn`, `/focus`, `/unfocus` - wired through `bindings.compileConfiguredBinding`/`matchInboundConversation`.
 
 Key files: `src/telegram/thread-bindings.ts`, Discord thread binding via plugin SDK
 
@@ -95,7 +102,7 @@ Key files: `src/telegram/thread-bindings.ts`, Discord thread binding via plugin 
 - **Network fallback**: resolver-scoped dispatchers with IPv4 fallback retry on `ETIMEDOUT`/`ENETUNREACH`/`UND_ERR_CONNECT_TIMEOUT` (`src/telegram/fetch.ts`)
 - **Duplicate prevention**: deduplicates messages when preview edit times out before delivery confirmation
 - **Exec approvals**: per-account `execApprovals` config with `approvers` list, `target` (`"dm"`, `"channel"`, `"both"`), and inline approval buttons for OpenCode/Codex flows (`src/telegram/exec-approvals.ts`)
-- **Direct delivery hooks**: bridges direct delivery to internal `message:sent` hooks (`src/telegram/bot/delivery.replies.ts`)
+- **Direct delivery hooks**: bridges direct delivery to internal `message:sent` hooks (`src/telegram/bot/delivery.replies.ts`); media loader now injected via plugin-sdk path
 
 ## Discord Channel Config
 
@@ -120,18 +127,30 @@ Key files: `src/telegram/thread-bindings.ts`, Discord thread binding via plugin 
 - **Streaming modes**: `"off"`, `"partial"`, `"block"`, `"progress"`
 - **Reaction notification**: `"off"`, `"own"`, `"all"`, `"allowlist"`
 - **maxLinesPerMessage**: effective value applied in live replies; resolved per-account with root/account config merge (`src/discord/accounts.ts`)
+- **Account helper cycle broken**: account resolution and inspect now import from `extensions/discord/src/runtime-api.ts` cleanly
+- **Strict DM allowlist auth**: enforced for DM component interactions (PR #49997)
 
 ## Discord Architecture
 
-New inbound event processing system:
+Inbound event processing system:
 - `src/discord/monitor/inbound-worker.ts` - keyed async queue per session
 - `src/discord/monitor/inbound-job.ts` - job serialization and execution
 - `src/discord/monitor/timeouts.ts` - timeout normalization and abort signal management
 - `src/discord/monitor/message-handler.ts` - debounce + worker integration
 
+## Matrix Extension
+
+New capabilities added:
+
+- **Thread binding commands**: `/acp spawn`, `/session spawn`, `/focus`, `/unfocus` wired through binding compilation
+- **Persistent sync state**: `FileBackedMatrixSyncStore` with debounced writes and `cleanShutdown` tracking
+- **Startup migration**: legacy Matrix state migration wired into `openclaw doctor` and gateway startup; doctor migration previews restored
+- **Poll vote alias**: `messageId` accepted as alias for `pollId` parameter in poll votes
+- **Onboarding**: runtime-safe status checks (PR #49995)
+
 ## Account Inspection & Credential Status
 
-New pattern for safe credential projection without exposing tokens:
+Pattern for safe credential projection without exposing tokens:
 
 ```typescript
 type CredentialStatus = "available" | "configured_unavailable" | "missing";
@@ -161,6 +180,19 @@ openclaw channels status --json     # JSON output
 
 Falls back to config-only status when gateway unreachable. Reports "secret unavailable in this command path" for unresolvable SecretRef-backed tokens.
 
+## Outbound Target & Action Resolution
+
+Target display and action fallbacks moved to channel plugins:
+- `messaging.formatTargetDisplay` - plugin callbacks for target display
+- `messaging.inferTargetChatType` - plugin delegates for target kind inference
+- `threading.resolveAutoThreadId` - auto-thread ID resolution moved to plugins
+- Channel-specific message action fallbacks removed from core outbound
+
+## Block Streaming
+
+- Newline chunk mode no longer flushes per paragraph; `flushOnEnqueue` is opt-in only
+- Envelope timestamp formatting honors timezone via `formatEnvelopeTimestamp`
+
 ## Adding a New Channel
 
 When adding a new channel (built-in or extension):
@@ -172,6 +204,8 @@ When adding a new channel (built-in or extension):
 6. Update `.github/labeler.yml` + create matching label
 7. Update all UI surfaces (macOS app, web UI, mobile if applicable)
 8. Add status + configuration forms
+
+Note: `openclaw channels remove` now installs optional plugins before removal.
 
 ## Extension Directory Pattern
 
@@ -214,9 +248,12 @@ WebChat replies now stay on WebChat instead of being rerouted by persisted deliv
 **Mattermost** (`extensions/mattermost/`):
 - Reads `replyTo` param as fallback when `replyToId` is blank in plugin `handleAction` send paths (`src/channel.ts`)
 - Fixes DM media upload for unprefixed 26-char user IDs (`src/mattermost/send.ts`)
+- Sanitized `actionId` to alphanumeric-only with empty-id and collision guards (PR #49920)
 
 **Feishu/Lark** (`extensions/feishu/`):
 - Passes `mediaLocalRoots` in `sendText` local-image auto-convert shim so local path images resolve correctly (`src/outbound.ts`)
+- `@_all` no longer treated as bot-specific mention (PR #50440)
+- Bot-menu event keys mapped to slash commands (PR #49986)
 
 **ACPX** (`extensions/acpx/`):
 - ACP runtime backend plugin: registers via `api.registerService()`, not `registerChannel()`
@@ -225,9 +262,14 @@ WebChat replies now stay on WebChat instead of being rerouted by persisted deliv
 - Pinned version: `0.1.15`, auto-installs plugin-local if bundled binary missing/mismatched
 - Spawned processes receive `OPENCLAW_SHELL=acp` env marker
 
+**WhatsApp** (`extensions/whatsapp/`):
+- Now npm-publishable (`private: true` removed from package.json)
+- Uses Baileys library for WhatsApp Web connection
+
 ## Allowlists & Pairing
 
 - Each channel supports allowlists for authorized users
 - Pairing: some channels support device/user pairing flows
+- Pairing setup codes now include shared auth (bootstrap token) via `src/pairing/setup-code.ts`
 - Command gating: channels can restrict which commands are available
 - Onboarding: channel-specific onboarding prompts

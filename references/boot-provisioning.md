@@ -44,11 +44,14 @@ On gateway startup:
 2. If exists and non-empty, runs agent with boot instructions as prompt
 3. Agent executes BOOT.md tasks (send messages, configure, run setup)
 4. Session state restored after boot completes (snapshots + restores main session mapping)
-5. Returns: `"skipped" | "ran" | "failed"`
+5. Returns discriminated union:
+   - `{ status: "skipped", reason: "missing" | "empty" }`
+   - `{ status: "ran" }`
+   - `{ status: "failed", reason: string }`
 
 - Boot runs in a dedicated session (`boot-<timestamp>-<uuid>`)
 - Agent runs with `senderIsOwner: true`, `deliver: false`
-- BOOT.md prompt instructs agent to use message tool with `target` field (not `to`)
+- BOOT.md prompt instructs agent to use message tool with `action=send` and `channel` + `target` fields
 - Silent reply token used to suppress unnecessary output
 
 Use BOOT.md for one-shot initialization tasks that need agent intelligence (not just config).
@@ -108,7 +111,7 @@ openclaw onboard [OPTIONS]
 
 ## Exec Approval Manager
 
-Key file: `src/gateway/exec-approval-manager.ts` (NEW)
+Key file: `src/gateway/exec-approval-manager.ts`
 
 In-memory manager for exec command approvals (used by Telegram exec approvals for OpenCode/Codex).
 
@@ -119,8 +122,9 @@ class ExecApprovalManager {
   resolve(recordId, decision, resolvedBy?): boolean;
   expire(recordId, resolvedBy?): boolean;
   consumeAllowOnce(recordId): boolean;    // atomic one-time approval consumption
-  awaitDecision(recordId): Promise<...>;  // wait on already-registered approval
+  awaitDecision(recordId): Promise<...>;  // DEPRECATED: use register() instead
   lookupPendingId(input): ExecApprovalIdLookupResult;  // exact, prefix, or ambiguous match
+  getSnapshot(recordId): ExecApprovalSnapshot | undefined;  // read-only snapshot of current state
 }
 ```
 
@@ -144,20 +148,43 @@ Periodically checks channel health and auto-restarts unhealthy channels.
 - `stuck` - busy but no run activity within 25min
 - `busy` - actively processing (healthy short-circuit)
 - `startup-connect-grace` - within connect grace window after start
+- `unmanaged` - disabled/unconfigured accounts (NEW)
 
-### Timing Defaults
+### Restart Reasons
+
+`ChannelRestartReason` type:
+- `gave-up` - reconnectAttempts >= 10
+- `stopped` - channel stopped unexpectedly
+- `stale-socket` - no events within threshold
+- `stuck` - busy but no progress
+- `disconnected` - running but not connected
+
+### Timing Defaults (via `ChannelHealthTimingPolicy`)
 
 - Check interval: 5 minutes (`channelHealthCheckMinutes` config)
 - Monitor startup grace: 60s
 - Channel connect grace: 120s (`DEFAULT_CHANNEL_CONNECT_GRACE_MS`)
-- Stale event threshold: 30 minutes (`DEFAULT_CHANNEL_STALE_EVENT_THRESHOLD_MS`)
+- Stale event threshold: 30 minutes (`channelStaleEventThresholdMinutes` config)
 - Cooldown: 2 cycles between restarts per channel
-- Max restarts: 10/hour per channel
+- Max restarts: 10/hour per channel (`channelMaxRestartsPerHour` config)
+
+### Health Check Skips
+
+- `isHealthMonitorEnabled` - checks if monitoring is enabled
+- `isManuallyStopped` - skips monitoring for manually stopped channels
+
+### Busy Lifecycle Guard
+
+`busyStateInitializedForLifecycle` prevents stale busy fields from previous channel lifecycle causing false healthy short-circuit.
 
 ### Stale Socket Exclusions
 
-- Telegram (long-polling) and webhook-mode channels are excluded from stale-socket checks
+- Telegram (long-polling) and webhook-mode channels excluded from stale-socket checks
 - Lifecycle-aware: ignores stale `lastEventAt` from previous lifecycle when channel restarted
+
+### Restart Flow
+
+stop -> `resetRestartAttempts` -> start -> record timestamp
 
 ## Node Pending Work
 
@@ -185,6 +212,10 @@ Key file: `src/gateway/auth.ts`
 - `password` - shared password (config or `OPENCLAW_GATEWAY_PASSWORD` env)
 - `trusted-proxy` - identity from reverse proxy headers (`trustedProxy.userHeader`)
 
+### Auth Methods (result)
+
+Auth resolution returns a method value: `none`, `token`, `password`, `trusted-proxy`, `device-token`, `bootstrap-token`.
+
 ### Auth Resolution
 
 - Mode auto-detected: override > config > password presence > token presence > default (token)
@@ -193,16 +224,25 @@ Key file: `src/gateway/auth.ts`
 - Missing credentials (no token/password provided) do not burn rate-limit slots
 - Lockout expired entries reset attempt counters correctly (prevents infinite escalation)
 - `GatewaySecretRefUnavailableError` thrown when SecretRef is used but secrets provider not initialized
+- `allowRealIpFallback`: trusts X-Real-IP only when explicitly enabled (default: false)
+
+### Trusted Proxy Auth
+
+- `requiredHeaders`: headers that must be present from the proxy
+- `allowUsers`: optional allowlist of user identities
 
 ### Credential Resolution
 
-Key file: `src/gateway/credentials.ts`
+Key files: `src/gateway/credentials.ts`, `src/gateway/credential-planner.ts`
 
 - Local mode: `gateway.auth.token` with `gateway.remote.token` as fallback
 - Remote mode: `gateway.remote.*` with env and local config fallback chain
 - Precedence: gateway service context uses `config-first`, others use `env-first`
-- Unresolved `${VAR}` placeholders in credential values are rejected
+- Unresolved `${VAR}` placeholders in credential values are rejected (`trimCredentialToUndefined`)
 - `CLAWDBOT_*` legacy env vars supported as fallback
+- `GatewayCredentialPlan` type for structured credential resolution
+- `resolveGatewayProbeCredentialsFromConfig` - probe-specific, remote-only fallback
+- `resolveGatewayDriftCheckCredentialsFromConfig` - drift check, local mode, config-first, empty env
 
 ## AgentBox Provisioning Flow
 
@@ -270,3 +310,4 @@ openclaw channels status --probe
 9. **Exec child commands** marked with `OPENCLAW_CLI` env var
 10. **Memory flush** protects bootstrap files during flush operations
 11. **One-shot mode** tears down cached memory managers to prevent exit hangs
+12. **Default reasoning config** now defaults to off (PR #50405) - agents expecting reasoning must enable it explicitly

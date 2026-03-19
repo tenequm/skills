@@ -29,7 +29,7 @@
 type OpenClawConfig = {
   meta?: {
     lastTouchedVersion?: string;
-    lastTouchedAt?: string;       // ISO timestamp
+    lastTouchedAt?: string | number;  // ISO timestamp or Unix epoch (coerced to ISO)
   };
   auth?: AuthConfig;
   acp?: AcpConfig;
@@ -53,6 +53,7 @@ type OpenClawConfig = {
     checkOnStart?: boolean;
     auto?: { enabled?: boolean; stableDelayHours?: number; stableJitterHours?: number; betaCheckIntervalHours?: number };
   };
+  browser?: BrowserConfig;
   ui?: {
     seamColor?: string;           // accent color (hex)
     assistant?: { name?: string; avatar?: string };
@@ -84,18 +85,35 @@ type OpenClawConfig = {
   talk?: TalkConfig;              // NOTE: top-level, not nested under gateway
   gateway?: GatewayConfig;
   memory?: MemoryConfig;
-  browser?: BrowserConfig;
+  mcp?: McpConfig;                // MCP server definitions (NEW)
 };
 ```
 
-Key types: `src/config/types.openclaw.ts`, `src/config/types.plugins.ts`
+Key types: `src/config/types.openclaw.ts`, `src/config/types.plugins.ts`, `src/config/types.mcp.ts`
 
 ### Notable structural changes since last refresh
 
-- `talk` config is a **top-level** key (not nested under `gateway`)
-- `env` is now a structured object with `shellEnv`, `vars`, and sugar for direct string keys; blocked dangerous host env vars are filtered out
-- `meta` fields renamed: `lastTouchedVersion` / `lastTouchedAt`
-- Added top-level keys: `wizard`, `update`, `ui`, `nodeHost`, `bindings`, `broadcast`, `audio`, `media`, `commands`, `discovery`, `canvasHost`, `web`
+- `mcp` added as top-level key for MCP server definitions
+- `browser` key ordering moved (now before `ui`)
+- `meta.lastTouchedAt` now accepts numeric Unix timestamps (coerced to ISO via Zod transform)
+
+### MCP Config (new)
+
+```typescript
+type McpConfig = {
+  servers?: Record<string, McpServerConfig>;
+};
+
+type McpServerConfig = {
+  command?: string;
+  args?: string[];
+  env?: Record<string, string | number | boolean>;
+  cwd?: string;
+  workingDirectory?: string;
+  url?: string;
+  [key: string]: unknown;          // extensible for future fields
+};
+```
 
 ## Gateway Config
 
@@ -108,9 +126,10 @@ type GatewayConfig = {
   controlUi?: GatewayControlUiConfig;
   auth?: GatewayAuthConfig;       // mode: "none" | "token" | "password" | "trusted-proxy"
   tailscale?: GatewayTailscaleConfig;
-  remote?: GatewayRemoteConfig;
+  remote?: GatewayRemoteConfig;   // remote.enabled field added (default: true when absent)
   reload?: GatewayReloadConfig;   // mode: "off" | "restart" | "hot" | "hybrid"
   tls?: GatewayTlsConfig;
+  push?: GatewayPushConfig;       // APNs relay config (baseUrl, timeoutMs) (NEW)
   http?: {
     endpoints?: {
       chatCompletions?: GatewayHttpChatCompletionsConfig;
@@ -123,6 +142,8 @@ type GatewayConfig = {
   allowRealIpFallback?: boolean;  // default: false
   tools?: GatewayToolsConfig;
   channelHealthCheckMinutes?: number;  // default: 5, 0 to disable
+  channelStaleEventThresholdMinutes?: number;  // default: 30, must be >= healthCheck interval (NEW)
+  channelMaxRestartsPerHour?: number;  // default: 10, rolling window cap (NEW)
 };
 ```
 
@@ -200,6 +221,31 @@ type DiscordAccountConfig = {
   };
 };
 ```
+
+## Session Config
+
+```typescript
+type SessionConfig = {
+  scope?: "per-sender" | "global";
+  dmScope?: "main" | "per-peer" | "per-channel-peer" | "per-account-channel-peer";
+  identityLinks?: Record<string, string[]>;
+  mainKey?: string;               // always normalized to "main" (custom values ignored with warning)
+  threadBindings?: SessionThreadBindingsConfig;  // shared defaults for thread routing
+  reset?: SessionResetConfig;
+  resetByType?: SessionResetByTypeConfig;
+  resetByChannel?: Record<string, SessionResetConfig>;
+  sendPolicy?: SessionSendPolicyConfig;
+  maintenance?: SessionMaintenanceConfig;  // pruning, capping, file rotation
+  parentForkMaxTokens?: number;            // max parent transcript tokens for thread/session forking (0 = disable guard) (NEW)
+  agentToAgent?: {
+    maxPingPongTurns?: number;             // cap on requester/target agent turns (0-5, default: 5) (NEW)
+  };
+  // ...
+};
+```
+
+- `normalizeExplicitSessionKey`: provider-aware key normalization (Discord guild+channel normalization)
+- `session.mainKey` is forcefully set to `"main"` regardless of config value
 
 ## Env Variable Handling
 
@@ -294,32 +340,11 @@ Compose config from multiple files:
 
 Included file is merged, then local keys override.
 
-## Session Config
-
-```typescript
-type SessionConfig = {
-  scope?: "per-sender" | "global";
-  dmScope?: "main" | "per-peer" | "per-channel-peer" | "per-account-channel-peer";
-  identityLinks?: Record<string, string[]>;
-  mainKey?: string;               // always normalized to "main" (custom values ignored with warning)
-  threadBindings?: SessionThreadBindingsConfig;  // shared defaults for thread routing
-  reset?: SessionResetConfig;
-  resetByType?: SessionResetByTypeConfig;
-  resetByChannel?: Record<string, SessionResetConfig>;
-  sendPolicy?: SessionSendPolicyConfig;
-  maintenance?: SessionMaintenanceConfig;  // pruning, capping, file rotation
-  // ...
-};
-```
-
-- `normalizeExplicitSessionKey`: provider-aware key normalization (Discord guild+channel normalization)
-- `session.mainKey` is forcefully set to `"main"` regardless of config value
-
 ## Defaults Applied at Runtime
 
 Key file: `src/config/defaults.ts`
 
-- **Model aliases**: `opus` -> `anthropic/claude-opus-4-6`, `sonnet` -> `anthropic/claude-sonnet-4-6`, `gpt` -> `openai/gpt-5.4`, `gemini` -> `google/gemini-3.1-pro-preview`, etc.
+- **Model aliases**: `opus` -> `anthropic/claude-opus-4-6`, `sonnet` -> `anthropic/claude-sonnet-4-6`, `gpt` -> `openai/gpt-5.4`, `gpt-mini` -> `openai/gpt-5-mini`, `gemini` -> `google/gemini-3.1-pro-preview`, `gemini-flash` -> `google/gemini-3-flash-preview`, `gemini-flash-lite` -> `google/gemini-3.1-flash-lite-preview`
 - **Agent defaults**: `maxConcurrent` (from `DEFAULT_AGENT_MAX_CONCURRENT`), `subagents.maxConcurrent` (from `DEFAULT_SUBAGENT_MAX_CONCURRENT`)
 - **Context pruning**: auto-enabled with `mode: "cache-ttl"` when Anthropic auth is configured; heartbeat interval set to `1h` (OAuth) or `30m` (API key)
 - **Anthropic cache retention**: `cacheRetention: "short"` auto-applied for Anthropic/Bedrock models when using API key auth
@@ -338,6 +363,9 @@ Zod schemas in `src/config/zod-schema*.ts`:
 - `zod-schema.session.ts` - session/message rules
 - `zod-schema.plugins.ts` - plugin config
 - `zod-schema.hooks.ts` - hook definitions
+- `zod-schema.installs.ts` - plugin install records (NEW)
+- `zod-schema.sensitive.ts` - sensitive field schemas (NEW)
+- `zod-schema.agent-runtime.ts` - agent runtime schemas (NEW)
 - `zod-schema.ts` - main entry, composes all schemas
 
 Malformed config breaks gateway startup. Schema cache key is hashed to prevent RangeError with many channels (#36603).
@@ -345,13 +373,14 @@ Malformed config breaks gateway startup. Schema cache key is hashed to prevent R
 ## Config CLI
 
 ```bash
-openclaw config show                    # print current config
-openclaw config set <key> <value>       # set a config value
-openclaw config get <key>               # get a config value
-openclaw config edit                    # open in editor
-openclaw config path                    # print config file path
-openclaw config reset                   # reset to defaults
+openclaw config get <key>                  # get a config value
+openclaw config set <key> <value>          # set a config value (also supports SecretRef builder)
+openclaw config unset <key>                # remove a config key
+openclaw config file                       # print config file path
+openclaw config validate                   # validate current config
 ```
+
+`config set` supports three modes: direct value, SecretRef builder (`--ref-provider`/`--ref-source`/`--ref-id`), and batch (`--batch-json`/`--batch-file`).
 
 ## AgentBox Config Pattern
 
