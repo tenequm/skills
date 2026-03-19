@@ -140,7 +140,7 @@ Never hardcode absolute paths. Use:
 
 `` !`command` `` executes before Claude sees the skill content:
 ```markdown
-Current branch: !`git rev-parse --abbrev-ref HEAD`
+Current branch: !\u200B`git rev-parse --abbrev-ref HEAD`
 ```
 
 Use sparingly - each adds latency. Best for lightweight context (git state, env values).
