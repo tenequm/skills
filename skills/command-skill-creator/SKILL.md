@@ -136,15 +136,6 @@ Never hardcode absolute paths. Use:
 - `${CLAUDE_SKILL_DIR}` - skill's own directory (for bundled scripts)
 - Relative paths from repo root
 
-## Dynamic Context Injection
-
-`` !`command` `` executes before Claude sees the skill content:
-```markdown
-Current branch: !\u200B`git rev-parse --abbrev-ref HEAD`
-```
-
-Use sparingly - each adds latency. Best for lightweight context (git state, env values).
-
 ## Design Patterns
 
 See [references/design-patterns.md](references/design-patterns.md) for detailed patterns with full examples. Quick reference:
