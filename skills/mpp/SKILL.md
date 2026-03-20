@@ -2,7 +2,7 @@
 name: mpp
 description: "Build with MPP (Machine Payments Protocol) - the open protocol for machine-to-machine payments over HTTP 402. Use when developing paid APIs, payment-gated content, AI agent payment flows, MCP tool payments, pay-per-token streaming, or any service using HTTP 402 Payment Required. Covers the mppx TypeScript SDK with Hono/Express/Next.js/Elysia middleware, pympp Python SDK, and mpp Rust SDK. Supports Tempo stablecoins, Stripe cards, Lightning Bitcoin, and custom payment methods. Includes charge (one-time) and session (streaming pay-as-you-go) intents. Make sure to use this skill whenever the user mentions mpp, mppx, machine payments, HTTP 402 payments, Tempo payments, payment channels, pay-per-token, paid API endpoints, or payment-gated services."
 metadata:
-  version: "0.2.0"
+  version: "0.3.0"
 ---
 
 # MPP - Machine Payments Protocol
@@ -375,32 +375,51 @@ const iterateSseData = Session.Sse.iterateData
 
 **Session voucher POSTs have no body.** Mid-stream voucher POSTs carry only `Authorization: Payment` - no JSON body. If your middleware decides charge vs session based on `body.stream`, vouchers will hit the charge path and fail with "credential amount does not match this route's requirements." Check the **credential's intent** instead.
 
-**Clone the request before reading the body.** `request.json()` consumes the Request body. If you parse the body first and then pass the original request to `mppx.session()` or `mppx.charge()`, the mppx handler gets an empty body and returns 402. Clone before reading:
+**Clone the request before reading the body.** `request.json()` consumes the Request body. If you parse the body first and then pass the original request to `mppx.session()` or `mppx.charge()`, the mppx handler gets an empty body and returns 402. Clone before reading.
+
+**Voucher amount must match the original session's tick cost.** This is the most insidious bug: `mppx.session()` internally recomputes a challenge from the options you pass and compares `amount` against the credential's embedded challenge. If your pricing function derives tick cost from the request body (e.g. model name), voucher POSTs (empty body) will compute a different amount than the session-opening request did. mppx compares them field-by-field and rejects with 402 on mismatch. **Extract amount from the credential's challenge request instead of recomputing it:**
+
 ```typescript
 import { Credential } from 'mppx'
 
+// 1. Detect session credentials and save the original challenge params
 let isSessionCredential = false
+let credentialChallengeRequest: Record<string, unknown> | undefined
 try {
   const credential = Credential.fromRequest(c.req.raw)
   isSessionCredential = credential.challenge.intent === 'session'
+  if (isSessionCredential) {
+    // The credential carries the original challenge that was issued when
+    // the session opened - including the correct amount in base units.
+    credentialChallengeRequest = credential.challenge.request as Record<string, unknown>
+  }
 } catch {
   // No credential - continue to normal flow
 }
 
-// Clone BEFORE reading body - mppx handlers need to read it too
+// 2. Clone BEFORE reading body - mppx handlers need to read it too
 const raw = c.req.raw.clone()
 const body = await c.req.json().catch(() => ({}))
 
+// 3. For voucher POSTs, use the credential's amount (not body-derived)
 if (isSessionCredential && !wantStream) {
-  // Session voucher - route to mppx.session() directly.
-  // The session handler recognizes the voucher, updates channel balance,
-  // and returns 200 without needing the route handler.
-  const result = await mppx.session({ amount: tickCost, unitType: 'token' })(raw)
+  // credential.challenge.request.amount is in base units (e.g. "3" for 0.000003 USDC).
+  // Convert back to human-readable for mppx.session() options.
+  const tickCost = credentialChallengeRequest?.amount
+    ? (Number(credentialChallengeRequest.amount) / 1_000_000).toFixed(6)
+    : computeTickCostFromBody(body) // fallback - shouldn't normally happen
+  const unitType =
+    typeof credentialChallengeRequest?.unitType === 'string'
+      ? credentialChallengeRequest.unitType
+      : 'token'
+  const result = await mppx.session({ amount: tickCost, unitType })(raw)
   if (result.status === 402) return result.challenge
   return result.withReceipt(new Response(null, { status: 200 }))
 }
 // All other mppx calls must also use `raw`, not `c.req.raw`
 ```
+
+**Why this happens:** When mppx verifies a credential, it calls `createMethodFn` with the options you pass to `mppx.session()`. This generates a fresh challenge and compares its `amount` field against the credential's embedded challenge. The credential carries the challenge from the session-opening request (e.g. amount="3" for kimi-k2.5 at $0.000003/tick). If voucher POSTs recompute from empty body and get a different amount (e.g. "1000" from a price floor), the comparison fails and mppx returns 402. The amounts are in Tempo base units (6 decimals), so "3" = 0.000003 USDC.
 
 ### Pricing & Streaming
 
