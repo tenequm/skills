@@ -2,7 +2,7 @@
 name: mpp
 description: "Build with MPP (Machine Payments Protocol) - the open protocol for machine-to-machine payments over HTTP 402. Use when developing paid APIs, payment-gated content, AI agent payment flows, MCP tool payments, pay-per-token streaming, or any service using HTTP 402 Payment Required. Covers the mppx TypeScript SDK with Hono/Express/Next.js/Elysia middleware, pympp Python SDK, and mpp Rust SDK. Supports Tempo stablecoins, Stripe cards, Lightning Bitcoin, and custom payment methods. Includes charge (one-time) and session (streaming pay-as-you-go) intents. Make sure to use this skill whenever the user mentions mpp, mppx, machine payments, HTTP 402 payments, Tempo payments, payment channels, pay-per-token, paid API endpoints, or payment-gated services."
 metadata:
-  version: "0.3.0"
+  version: "0.4.0"
 ---
 
 # MPP - Machine Payments Protocol
@@ -365,11 +365,77 @@ const iterateSseData = Session.Sse.iterateData
 
 ### Stores
 
-**BigInt serialization**: mppx stores channel state with BigInt values (from the `ox` library). `JSON.stringify` throws `"Do not know how to serialize a BigInt"`. Use `Store.memory()` (handles it via ox's `Json.parse/stringify`) or `Store.upstash()`. Plain Redis/ioredis with `JSON.stringify`-based adapters will corrupt state.
+**Never use `Store.memory()` in production.** It loses all channel state on server restart/redeploy. When state is lost, the server can't close channels or settle funds - client deposits stay locked in escrow indefinitely. Use a persistent store (Redis/Valkey, Upstash, Cloudflare KV).
+
+**Standard Redis/ioredis/Valkey requires a custom adapter.** `Store.upstash()` only works with the Upstash REST SDK (which auto-serializes BigInt). For standard Redis clients, channel state contains BigInt fields (`deposit`, `highestVoucherAmount`, `spent`, `settledOnChain`) that need ox-compatible serialization. Use `Store.from()` with the `#__bigint` convention:
+```typescript
+import { Store } from 'mppx/server'
+import type Redis from 'ioredis'
+
+const BIGINT_SUFFIX = '#__bigint'
+
+function createRedisStore(redis: Redis): Store.Store {
+  return Store.from({
+    async get(key) {
+      const raw = await redis.get(key)
+      if (raw == null) return null as never
+      return JSON.parse(raw, (_, v) =>
+        typeof v === 'string' && v.endsWith(BIGINT_SUFFIX)
+          ? BigInt(v.slice(0, -BIGINT_SUFFIX.length))
+          : v,
+      ) as never
+    },
+    async put(key, value) {
+      await redis.set(
+        key,
+        JSON.stringify(value, (_, v) =>
+          typeof v === 'bigint' ? `${v}${BIGINT_SUFFIX}` : v,
+        ),
+      )
+    },
+    async delete(key) {
+      await redis.del(key)
+    },
+  })
+}
+
+// Usage:
+tempo.session({ ..., store: createRedisStore(redis), sse: { poll: true } })
+```
+There's an [open issue](https://github.com/wevm/mppx/issues/208) to add a built-in `Store.redis()`.
 
 **No built-in TTL**: Custom store implementations must add explicit TTL/expiry on entries, otherwise channel state grows unboundedly. mppx's built-in stores handle this automatically.
 
 **Polling mode**: If your store doesn't implement the optional `waitForUpdate()` method (e.g. custom Redis/ioredis adapters), pass `sse: { poll: true }` to `tempo.session()`. Otherwise SSE streams will hang waiting for event-driven wakeups that never come.
+
+### Channel Recovery After Restarts
+
+**Pass `channelId` to `mppx.session()` for channel recovery.** The `SessionMethodDetails` type has an optional `channelId` field. When included in the 402 challenge, the client SDK's `tryRecoverChannel()` reads on-chain state and resumes the existing channel instead of opening a new one (which locks more funds in escrow). The server doesn't auto-populate this - it's the application's job:
+
+```typescript
+import { Credential } from 'mppx'
+
+// Extract channelId from the credential's payload before calling mppx.session()
+let channelId: string | undefined
+try {
+  const credential = Credential.fromRequest(request)
+  if (credential.challenge.intent === 'session') {
+    const payload = credential.payload as { channelId?: string }
+    channelId = payload.channelId
+  }
+} catch {
+  // No credential
+}
+
+// Pass channelId so the 402 challenge includes it for client-side recovery
+const result = await mppx.session({
+  amount: tickCost,
+  unitType: 'token',
+  ...(channelId && { channelId }),
+})(request)
+```
+
+**Why this matters:** After a server restart, even with a persistent store, the first voucher from a returning client may fail verification (e.g., store was briefly unavailable). Without `channelId` in the re-issued 402 challenge, the client opens a new channel - locking more USDC in escrow while the old deposit sits unclaimed. With `channelId`, the client recovers the existing on-chain channel and continues using it.
 
 ### Credential-Based Routing (Not Body-Based)
 
