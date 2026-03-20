@@ -140,7 +140,55 @@ The `TempoStreamChannel` on-chain escrow manages deposits, settlements, and refu
 
 - **deposit**: Lock tokens into a channel.
 - **settle**: Batch-settle vouchers, updating the channel's consumed amount.
-- **close**: Final settlement plus refund of unspent tokens to the client.
+- **close**: Final settlement plus refund of unspent tokens to the client. **Payee-only** - only the server (payee) can call this.
+- **requestClose**: Payer-initiated close request. Starts a grace period during which the server can still settle outstanding vouchers.
+- **withdraw**: Payer reclaims deposit after the grace period expires. Emits `ChannelExpired`.
+- **CLOSE_GRACE_PERIOD**: View function returning the grace period duration (900 seconds / 15 minutes on mainnet).
+
+### Payer-Initiated Recovery
+
+If the server is unresponsive or fails to close a channel, the payer can recover locked funds using a two-step process:
+
+1. **`requestClose(channelId)`** - signals intent to close. The server gets a grace period (15 min on mainnet) to settle any outstanding vouchers it holds.
+2. **Wait for grace period** - `CLOSE_GRACE_PERIOD()` returns the duration. The `CloseRequested` event includes `closeGraceEnd` timestamp.
+3. **`withdraw(channelId)`** - after the grace period, the payer reclaims the full unsettled deposit.
+
+```typescript
+import { createClient, encodeFunctionData, http, parseAbi, type Hex } from 'viem'
+import { prepareTransactionRequest, readContract, sendRawTransaction, signTransaction } from 'viem/actions'
+import { tempo } from 'viem/chains'
+
+const ESCROW = '0x33b901018174DDabE4841042ab76ba85D4e24f25' as Hex
+const USDC = '0x20C000000000000000000000b9537d11c60E8b50' as Hex
+
+const abi = parseAbi([
+  'function requestClose(bytes32 channelId)',
+  'function withdraw(bytes32 channelId)',
+  'function CLOSE_GRACE_PERIOD() view returns (uint64)',
+  'function channels(bytes32) view returns (bool finalized, uint64 closeRequestedAt, address payer, address payee, address token, address authorizedSigner, uint128 deposit, uint128 settled)',
+])
+
+const client = createClient({ account, chain: tempo, transport: http('https://rpc.tempo.xyz') })
+
+// Step 1: Request close
+const data = encodeFunctionData({ abi, functionName: 'requestClose', args: [channelId] })
+const prepared = await prepareTransactionRequest(client, {
+  account, calls: [{ to: ESCROW, data }], feeToken: USDC,
+} as never)
+const serialized = await signTransaction(client, { ...prepared, account } as never) as Hex
+await sendRawTransaction(client, { serializedTransaction: serialized })
+
+// Step 2: Wait for grace period (15 min on mainnet), then withdraw
+const withdrawData = encodeFunctionData({ abi, functionName: 'withdraw', args: [channelId] })
+// ... same prepare + sign + send pattern
+```
+
+Key details:
+- `close()` is **payee-only**. Calling it as the payer reverts with `NotPayee()`.
+- During the grace period, the server can still call `close()` with the highest voucher to claim earned funds.
+- If the server does nothing, `withdraw()` returns the entire unsettled deposit to the payer.
+- Tempo transactions use the `calls` pattern and `feeToken` for gas payment in USDC. Use `signTransaction(client, ...)` (not `account.signTransaction`) to get Tempo's custom serializer.
+- To find open channels, query `ChannelOpened` events filtered by payer address, then check each channel's state via `channels(channelId)`. Paginate event queries in chunks of 100k blocks (Tempo RPC limit).
 
 ## Performance Characteristics
 
