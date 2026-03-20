@@ -322,11 +322,41 @@ Always import `Mppx` and `tempo` from the appropriate subpath for your context (
 - **Payment methods**: Tempo (stablecoins), Stripe (cards), Lightning (Bitcoin), Card (network tokens), or custom. See method-specific references
 - **Intents**: `charge` (one-time) and `session` (streaming). See `references/sessions.md` for session details
 - **Transports**: HTTP (headers) and MCP (JSON-RPC). See `references/transports.md`
+- **Tempo gas model**: Tempo has **no native gas token** (no ETH equivalent). All transaction fees are paid in stablecoins (USDC, pathUSD) via the `feeToken` transaction field. Accounts must either set `feeToken` per-transaction or call `setUserToken` on the FeeManager precompile to set a default. Without this, transactions fail with `gas_limit: 0`. See `references/tempo-method.md`
 - **Fee sponsorship**: Server pays gas fees on behalf of clients (Tempo). See `references/tempo-method.md`
 - **Push/pull modes**: Client broadcasts tx (push) or server broadcasts (pull). See `references/tempo-method.md`
 - **Custom methods**: Implement any payment rail with `Method.from()`. See `references/custom-methods.md`
 
 ## Production Gotchas
+
+### Tempo Gas (CRITICAL)
+
+**Tempo has no native gas token.** Unlike Ethereum (ETH for gas) or Solana (SOL for fees), Tempo charges transaction fees in stablecoins. Every transaction must specify which stablecoin pays for gas. There are two ways:
+
+1. **Per-transaction `feeToken`** - set in the transaction itself:
+```typescript
+const prepared = await prepareTransactionRequest(client, {
+  account,
+  calls: [{ to, data }],
+  feeToken: '0x20C000000000000000000000b9537d11c60E8b50', // USDC mainnet
+} as never)
+```
+
+2. **Account-level default via `setUserToken`** - one-time setup, applies to all future transactions:
+```typescript
+import { setUserToken } from 'viem/tempo'
+await client.fee.setUserTokenSync({
+  token: '0x20C000000000000000000000b9537d11c60E8b50', // USDC mainnet
+})
+```
+
+**Without either, transactions fail silently with `gas_limit: 0`.** The mppx SDK handles this internally for payment transactions, but any direct on-chain calls (settle, close, custom contract interactions) must set `feeToken` explicitly or ensure `setUserToken` was called for the account.
+
+**Fee token addresses:**
+| Network | Token | Address |
+|---------|-------|---------|
+| Mainnet | USDC | `0x20C000000000000000000000b9537d11c60E8b50` |
+| Testnet | pathUSD | `0x20c0000000000000000000000000000000000000` |
 
 ### Setup
 

@@ -4,11 +4,44 @@
 
 Tempo is a blockchain purpose-built for payments. Key properties:
 
+- **No native gas token**: fees are paid in stablecoins (USDC, pathUSD), not ETH/SOL
 - **TIP-20 stablecoins**: pathUSD, USDC
 - **~500ms deterministic finality**
 - **Sub-cent fees** with fee sponsorship support
 - **2D nonces**: parallel transaction ordering (no stuck-tx bottlenecks)
 - **Payment lane**: dedicated lane for channel operations (sessions)
+
+## Gas and Fee Tokens
+
+Tempo has **no native gas token**. Transaction fees are denominated in USD and paid in any TIP-20 stablecoin. Every transaction must know which token to use for fees. Three levels of precedence (highest first):
+
+1. **Transaction-level `feeToken`** - explicit per-transaction:
+```typescript
+const prepared = await prepareTransactionRequest(client, {
+  account,
+  calls: [{ to, data }],
+  feeToken: '0x20C000000000000000000000b9537d11c60E8b50', // USDC
+} as never)
+const serialized = await signTransaction(client, { ...prepared, account } as never)
+await sendRawTransaction(client, { serializedTransaction: serialized })
+```
+
+2. **Account-level default via `setUserToken`** - one-time call to the FeeManager precompile:
+```typescript
+import { setUserToken } from 'viem/tempo'
+await client.fee.setUserTokenSync({
+  token: '0x20C000000000000000000000b9537d11c60E8b50',
+})
+```
+After this, all transactions from the account use USDC for gas unless overridden at the transaction level.
+
+3. **Validator default** - if neither is set, the validator's preferred token is used (unreliable - don't depend on this).
+
+**If no fee token can be determined, the transaction fails with `gas_limit: 0`.**
+
+The mppx SDK sets `feeToken` automatically for payment transactions. Direct on-chain calls (manual settle, close, custom contracts) must set it explicitly via `feeToken` in `prepareTransactionRequest` or ensure `setUserToken` was called.
+
+Note: Tempo transactions use a custom serialization format (type 0x76). Always use `signTransaction(client, ...)` from viem/actions (which uses the chain's serializer), NOT `account.signTransaction()` (which uses the default legacy serializer).
 
 ## Tempo Charge
 
