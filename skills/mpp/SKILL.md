@@ -373,7 +373,9 @@ const iterateSseData = Session.Sse.iterateData
 
 ### Credential-Based Routing (Not Body-Based)
 
-**Session voucher POSTs have no body.** Mid-stream voucher POSTs carry only `Authorization: Payment` - no JSON body. If your middleware decides charge vs session based on `body.stream`, vouchers will hit the charge path and fail with "credential amount does not match this route's requirements." Check the **credential's intent** instead:
+**Session voucher POSTs have no body.** Mid-stream voucher POSTs carry only `Authorization: Payment` - no JSON body. If your middleware decides charge vs session based on `body.stream`, vouchers will hit the charge path and fail with "credential amount does not match this route's requirements." Check the **credential's intent** instead.
+
+**Clone the request before reading the body.** `request.json()` consumes the Request body. If you parse the body first and then pass the original request to `mppx.session()` or `mppx.charge()`, the mppx handler gets an empty body and returns 402. Clone before reading:
 ```typescript
 import { Credential } from 'mppx'
 
@@ -385,14 +387,19 @@ try {
   // No credential - continue to normal flow
 }
 
+// Clone BEFORE reading body - mppx handlers need to read it too
+const raw = c.req.raw.clone()
+const body = await c.req.json().catch(() => ({}))
+
 if (isSessionCredential && !wantStream) {
   // Session voucher - route to mppx.session() directly.
   // The session handler recognizes the voucher, updates channel balance,
   // and returns 200 without needing the route handler.
-  const result = await mppx.session({ amount: tickCost, unitType: 'token' })(request)
+  const result = await mppx.session({ amount: tickCost, unitType: 'token' })(raw)
   if (result.status === 402) return result.challenge
   return result.withReceipt(new Response(null, { status: 200 }))
 }
+// All other mppx calls must also use `raw`, not `c.req.raw`
 ```
 
 ### Pricing & Streaming
