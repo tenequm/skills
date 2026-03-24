@@ -117,6 +117,19 @@ Used in agentbox for pay-per-use inference:
 
 x402 providers work with the `openclaw-x402` plugin that intercepts 402 responses and auto-signs Solana USDC payments.
 
+## Model Studio (DashScope/Qwen) Provider
+
+The `modelstudio` extension provides Qwen models via Alibaba Cloud Model Studio with four auth methods:
+
+| Method | Endpoint | Type |
+|--------|----------|------|
+| `standard-api-key-cn` | `dashscope.aliyuncs.com/compatible-mode/v1` | Pay-as-you-go (China) |
+| `standard-api-key` | `dashscope-intl.aliyuncs.com/compatible-mode/v1` | Pay-as-you-go (Global/Intl) |
+| `api-key-cn` | `coding.dashscope.aliyuncs.com/v1` | Coding Plan subscription (China) |
+| `api-key` | `coding-intl.dashscope.aliyuncs.com/v1` | Coding Plan subscription (Global/Intl) |
+
+Group label: "Qwen (Alibaba Cloud Model Studio)". Default model: `modelstudio/qwen3.5-plus`. All four base URLs are registered as native Model Studio URLs (streaming usage compat applied). Env var: `MODELSTUDIO_API_KEY`. Coding Plan models include `qwen3.5-plus`, `glm-5`, `kimi-k2.5`, `MiniMax-M2.5`.
+
 ## Provider Registration via Plugin
 
 ```typescript
@@ -183,6 +196,27 @@ Transient HTTP status codes that trigger model fallback:
 `499`, `500`, `502`, `503`, `504`, `521`, `522`, `523`, `524`, `529`
 
 HTTP 499 (Client Closed Request) is classified as `timeout` for fallback purposes (or `overloaded` if the response body contains an `overloaded_error` payload). This handles proxies/load balancers that return 499 when upstream is slow.
+
+### Fallback Classifier Priority Order
+
+`classifyFailoverReason()` evaluates in this order (first match wins):
+
+1. `overloaded` - explicit overload signals
+2. `timeout` - transient HTTP status codes (5xx), 529 -> `overloaded`
+3. `billing` - billing/payment errors
+4. `auth_permanent` - permanent auth failures
+5. `auth` - transient auth errors
+6. `timeout` - JSON `api_error` with transient signal (see below)
+7. `format` - Cloud Code Assist format errors
+8. `timeout` - generic timeout patterns
+
+### Generalized `api_error` Detection
+
+JSON `api_error` payloads (`"type":"api_error"`) are only classified as transient (`timeout`) when the message matches a transient signal pattern. This handles non-standard providers (e.g. MiniMax returning `"unknown error, 520 (1000)"`).
+
+Transient signals: `internal server error`, `overload`, `temporarily unavailable`, `service unavailable`, `unknown error`, `server error`, `bad gateway`, `gateway timeout`, `upstream error`, `backend error`, `try again later`, `temporarily.*unable`.
+
+Billing/auth errors inside `api_error` payloads are excluded from transient classification - they fall through to their specific classifiers.
 
 ## Auth Profile Cooldowns
 

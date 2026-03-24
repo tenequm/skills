@@ -16,7 +16,7 @@ Key files: `src/gateway/server-startup.ts`, `src/gateway/boot.ts`
 8. **Fire `gateway:startup` event** - delayed 250ms, plugins can hook into this (requires `hooks.internal.enabled`)
 9. **Start plugin services** - `startPluginServices()` for registry lifecycle
 10. **ACP identity reconcile** - if `acp.enabled`, reconcile pending session identities on startup
-11. **Start memory backend** - `startGatewayMemoryBackend()` for qmd memory initialization
+11. **Start memory backend** - `startGatewayMemoryBackend()` for qmd memory initialization (LanceDB runtime bootstrapped on demand at first use)
 12. **Schedule restart sentinel** - wake check for updates (delayed 750ms)
 
 ### Plugin Loading During Boot
@@ -55,6 +55,42 @@ On gateway startup:
 - Silent reply token used to suppress unnecessary output
 
 Use BOOT.md for one-shot initialization tasks that need agent intelligence (not just config).
+
+## LanceDB Runtime Bootstrap
+
+Key file: `extensions/memory-lancedb/lancedb-runtime.ts`
+
+The `memory-lancedb` plugin bootstraps `@lancedb/lancedb` on demand via `createLanceDbRuntimeLoader()`:
+
+1. **Try bundled import** - direct `import("@lancedb/lancedb")` (works in dev / monorepo)
+2. **Try cached runtime** - check `<stateDir>/plugin-runtimes/memory-lancedb/lancedb/` for previously installed runtime matching manifest
+3. **Auto-install** - if both fail, run `npm install` into the runtime dir with the pinned version from the plugin's `package.json`
+
+Key behaviors:
+- Load promise is singleton-cached; reset on failure so retries are possible
+- Manifest comparison gates cache validity (version bump triggers reinstall)
+- `OPENCLAW_NIX_MODE=1` disables auto-install (fail-fast for Nix environments)
+- Exposed via `loadLanceDbModule()` for use in the plugin index
+
+## Skill Secrets Runtime Resolution
+
+Key file: `src/agents/skills/runtime-config.ts`
+
+Skill env overrides (`applySkillEnvOverrides`, `applySkillSnapshotEnvOverrides`) now prefer the runtime config snapshot over the static config:
+
+```typescript
+function resolveSkillRuntimeConfig(config?: OpenClawConfig): OpenClawConfig | undefined {
+  return getRuntimeConfigSnapshot() ?? config;
+}
+```
+
+This ensures SecretRef-resolved secrets (only available after secrets provider initializes at runtime) are used for skill env injection, rather than raw config values from disk.
+
+## OpenAI Codex Proxy Bootstrap
+
+Key file: `extensions/openai/openai-codex-provider.runtime.ts`
+
+The Codex OAuth refresh wrapper now bootstraps the global undici proxy dispatcher before calling the upstream `getOAuthApiKey`. Without this, OAuth token refreshes behind an HTTP proxy would fail because the proxy dispatcher was only set up during initial agent run startup, not during deferred token refresh.
 
 ## Onboarding Flows
 
@@ -311,3 +347,6 @@ openclaw channels status --probe
 10. **Memory flush** protects bootstrap files during flush operations
 11. **One-shot mode** tears down cached memory managers to prevent exit hangs
 12. **Default reasoning config** now defaults to off (PR #50405) - agents expecting reasoning must enable it explicitly
+13. **LanceDB runtime auto-installs** on packaged/global installs where bundled import fails - requires `npm` on PATH; disable with `OPENCLAW_NIX_MODE=1`
+14. **Skill SecretRef secrets** only available after secrets provider initializes - skill env overrides now prefer `getRuntimeConfigSnapshot()` over static config so resolved secrets propagate
+15. **Codex OAuth behind proxy** - proxy dispatcher must be bootstrapped before OAuth refresh; now handled automatically by the `getOAuthApiKey` wrapper

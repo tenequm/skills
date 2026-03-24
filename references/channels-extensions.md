@@ -129,6 +129,7 @@ Key files: `src/telegram/thread-bindings.ts`, Discord thread binding via plugin 
 - **maxLinesPerMessage**: effective value applied in live replies; resolved per-account with root/account config merge (`src/discord/accounts.ts`)
 - **Account helper cycle broken**: account resolution and inspect now import from `extensions/discord/src/runtime-api.ts` cleanly
 - **Strict DM allowlist auth**: enforced for DM component interactions (PR #49997)
+- **Native command auth replies**: privileged native slash commands (e.g. `/config show`, `/plugins list`) now return explicit "You are not authorized" reply on auth failure instead of falling through to Discord's generic empty-interaction fallback; gated on `CommandSource === "native"` in `rejectUnauthorizedCommand()`/`rejectNonOwnerCommand()` gates (PR #53072)
 
 ## Discord Architecture
 
@@ -147,6 +148,15 @@ New capabilities added:
 - **Startup migration**: legacy Matrix state migration wired into `openclaw doctor` and gateway startup; doctor migration previews restored
 - **Poll vote alias**: `messageId` accepted as alias for `pollId` parameter in poll votes
 - **Onboarding**: runtime-safe status checks (PR #49995)
+
+## Slack Channel
+
+- **Delivery-mirror guard**: embedded Pi session subscriber now filters `provider: "openclaw"` + `model: "delivery-mirror"` synthetic transcript entries via `isDeliveryMirrorAssistantMessage()`, preventing duplicate re-delivery to Slack ~3.6s after original
+- **Chunk limit raised**: `SLACK_TEXT_LIMIT` raised from 4000 to 8000 (`extensions/slack/src/limits.ts`); passed as `fallbackLimit` to `resolveTextChunkLimit()`; config override via `textChunkLimit` still works
+
+## Diagnostics
+
+- **Cache-trace credential redaction**: credentials are now redacted from cache-trace diagnostic output to prevent accidental token exposure in diagnostic dumps
 
 ## Account Inspection & Credential Status
 
@@ -254,6 +264,7 @@ WebChat replies now stay on WebChat instead of being rerouted by persisted deliv
 - Passes `mediaLocalRoots` in `sendText` local-image auto-convert shim so local path images resolve correctly (`src/outbound.ts`)
 - `@_all` no longer treated as bot-specific mention (PR #50440)
 - Bot-menu event keys mapped to slash commands (PR #49986)
+- Config schema uses `name` (not `botName`) for account display name (PR #52753)
 
 **ACPX** (`extensions/acpx/`):
 - ACP runtime backend plugin: registers via `api.registerService()`, not `registerChannel()`
@@ -265,6 +276,7 @@ WebChat replies now stay on WebChat instead of being rerouted by persisted deliv
 **WhatsApp** (`extensions/whatsapp/`):
 - Now npm-publishable (`private: true` removed from package.json)
 - Uses Baileys library for WhatsApp Web connection
+- Test harness stabilized: session exports preserved in login coverage and shared workers, media test module exports preserved, CI extension checks stabilized
 
 ## Allowlists & Pairing
 

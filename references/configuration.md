@@ -96,6 +96,14 @@ Key types: `src/config/types.openclaw.ts`, `src/config/types.plugins.ts`, `src/c
 - `mcp` added as top-level key for MCP server definitions
 - `browser` key ordering moved (now before `ui`)
 - `meta.lastTouchedAt` now accepts numeric Unix timestamps (coerced to ISO via Zod transform)
+- Session reset defaults changed: mode `"idle"` + idleMinutes `0` = sessions never auto-reset (was daily at 4am)
+- Per-agent defaults: `thinkingDefault`, `reasoningDefault`, `fastModeDefault` on `AgentConfig` (PR #51974)
+- Telegram `apiRoot` for custom Bot API endpoints (PR #48842)
+- Compaction: `truncateAfterCompaction` (PR #41021) and `timeoutSeconds` (PR #46889)
+- Install records: `clawhub` source with `clawhubUrl`, `clawhubPackage`, `clawhubFamily`, `clawhubChannel`
+- Auth profile store: locked writers reload from disk to prevent stale reverts (PR #53211)
+- Mistral: per-model safe max-token caps via `resolveNormalizedProviderModelMaxTokens`
+- Gateway reload: `deferralTimeoutMs` for graceful restart grace period
 
 ### MCP Config (new)
 

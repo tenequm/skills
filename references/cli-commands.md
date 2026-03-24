@@ -36,13 +36,13 @@ openclaw config validate                   # validate current config
 ## Plugins
 
 ```bash
-openclaw plugins install <spec>              # npm, path, or archive
+openclaw plugins install <spec>              # npm, clawhub, path, or archive
 openclaw plugins install --link <path>       # symlink local
 openclaw plugins disable <id>
 openclaw plugins enable <id>
 openclaw plugins list [--json] [--verbose]
 openclaw plugins info <id> [--json]
-openclaw plugins uninstall <id> [--keep-files] [--force]
+openclaw plugins uninstall <id|clawhub-spec> [--keep-files] [--force]
 openclaw plugins update [--all] [--dry-run]
 openclaw plugins doctor
 ```
@@ -210,7 +210,7 @@ Run `openclaw doctor --fix` to normalize legacy cron job storage.
 
 ```bash
 openclaw doctor                              # diagnose issues
-openclaw doctor --fix                        # auto-repair (cron, daemon, sandbox, etc.)
+openclaw doctor --fix                        # auto-repair (cron, daemon, sandbox, stale plugins, etc.)
 openclaw doctor --repair                     # alias for --fix
 openclaw doctor --force                      # force repair without confirmation
 openclaw doctor --deep                       # deep diagnostics
@@ -221,7 +221,7 @@ openclaw reset                               # reset config/sessions
 openclaw uninstall                           # uninstall openclaw
 ```
 
-Doctor non-interactive cron repair is now properly gated (requires `--fix` flag in non-interactive mode).
+Doctor `--fix` repairs include: cron normalization, daemon/sandbox checks, stale `plugins.allow` and `plugins.entries` pruning (removes refs to plugins no longer installed). Non-interactive cron repair is properly gated (requires `--fix` flag in non-interactive mode). Uninstall accepts plugin IDs, names, installed specs, resolved specs, marketplace plugin names, and `clawhub:<package>` specs (versionless match supported).
 
 ## Exec Environment
 
@@ -229,6 +229,8 @@ Child commands spawned via `exec` receive `OPENCLAW_CLI=1` in their environment 
 - `exec` - commands run through the exec tool
 - `acp-client` - `openclaw acp client` bridge process
 - `tui-local` - local TUI `!` shell commands
+
+Shell-wrapper positional-argv allowlist matching (`src/infra/exec-approvals-allowlist.ts`) only permits direct carrier invocations: rejects single-quoted `$0`/`$n` tokens and newline-separated exec to prevent payload smuggling, while still accepting `exec -- carrier` forms.
 
 ## Sub-CLIs (additional)
 

@@ -205,16 +205,26 @@ type PluginEntryConfig = {
   config?: Record<string, unknown>;
 };
 
-type PluginInstallRecord = {
-  source: "npm" | "path" | "archive" | "marketplace";
+type PluginInstallRecord = InstallRecordBase & {
+  source: "npm" | "path" | "archive" | "marketplace" | "clawhub";
   spec?: string;
   sourcePath?: string;
   installPath?: string;
   version?: string;
   installedAt?: string;
+  resolvedName?: string;
+  resolvedVersion?: string;
+  resolvedSpec?: string;
+  integrity?: string;
+  shasum?: string;
+  resolvedAt?: string;
   marketplaceName?: string;                     // marketplace install metadata
   marketplaceSource?: string;
   marketplacePlugin?: string;
+  clawhubUrl?: string;                          // clawhub install metadata
+  clawhubPackage?: string;
+  clawhubFamily?: string;
+  clawhubChannel?: string;
 };
 ```
 
@@ -233,6 +243,22 @@ Options: `mode: "validate"` validates without executing plugins.
 Untracked plugins (no provenance) generate diagnostics warnings.
 
 Key file: `src/plugins/loader.ts`
+
+### Uninstall Resolution
+
+`resolvePluginUninstallId()` (`src/cli/plugins-cli.ts`) uses a multi-step fallback chain:
+1. Match by plugin `id`/`name` in registry
+2. Match by `spec`/`resolvedSpec`/`resolvedName`/`marketplacePlugin` in install records
+3. Parse as ClawHub spec (`clawhub:<name>`) and match `clawhubPackage` (versionless)
+4. Fall back to raw id
+
+### Doctor: Stale Plugin Config Pruning
+
+Key file: `src/commands/doctor/shared/stale-plugin-config.ts` (PR #53187)
+
+`scanStalePluginConfig()` finds orphaned `plugins.allow` and `plugins.entries` refs pointing to plugins no longer installed. `maybeRepairStalePluginConfig()` auto-removes them via `openclaw doctor --fix`. Auto-repair is blocked when manifest discovery has errors (`isStalePluginAutoRepairBlocked()`).
+
+`normalizePluginId()` (`src/plugins/config-state.ts`) is now exported for use by the doctor scanner.
 
 ## Process-Global Singleton Pattern
 
