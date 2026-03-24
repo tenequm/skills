@@ -94,10 +94,21 @@ const result = await mppx.session({
 
 ### Composing Methods
 
+Present multiple payment methods in a single 402 response. Accepts handler function refs (0.4.0+), method objects, or `"name/intent"` string keys:
+
 ```ts
+// Handler function refs (preferred, 0.4.0+)
+const result = await mppx.compose(
+  mppx.tempo.charge({ amount: '0.01' }),
+  mppx.stripe.charge({ amount: '0.01' }),
+)(request)
+if (result.status === 402) return result.challenge
+return result.withReceipt(Response.json({ data: '...' }))
+
+// Tuple syntax also works
 const handler = mppx.compose(
-  ['charge', { amount: '0.01' }],
-  ['session', { amount: '1.00', unitType: 'credits' }],
+  ['tempo/charge', { amount: '0.01' }],
+  ['stripe/charge', { amount: '0.01' }],
 )
 ```
 
@@ -432,36 +443,32 @@ try {
 
 ## Store Interface
 
-For session channel state persistence.
+For session channel state persistence. All built-in adapters handle BigInt serialization via `ox`'s `Json` module.
 
 ```ts
 import { Store } from 'mppx/server'
 
-// In-memory (development)
+// In-memory (development only)
 const store = Store.memory()
+
+// Redis / ioredis / Valkey (added in 0.4.9)
+const store = Store.redis(redisClient) // client needs: get, set, del
 
 // Cloudflare KV
 const store = Store.cloudflare(env.MY_KV_NAMESPACE)
 
-// Upstash Redis
-const store = Store.upstash({
-  url: process.env.UPSTASH_URL,
-  token: process.env.UPSTASH_TOKEN,
+// Upstash Redis / Vercel KV
+const store = Store.upstash(upstashClient)
+
+// Custom adapter
+const store = Store.from({
+  get: async (key) => { /* ... */ },
+  put: async (key, value) => { /* ... */ },
+  delete: async (key) => { /* ... */ },
 })
 
-// Custom store
-const store = {
-  get: async (key: string) => { /* ... */ },
-  set: async (key: string, value: any, ttl?: number) => { /* ... */ },
-  delete: async (key: string) => { /* ... */ },
-}
-
-// Pass to session config
-const mppx = Mppx.create({
-  methods: [tempo()],
-  secretKey: process.env.MPP_SECRET_KEY,
-  store,
-})
+// Pass to session method config
+tempo.session({ currency, recipient, store, sse: { poll: true } })
 ```
 
 ## Zod Validators

@@ -2,7 +2,7 @@
 name: mpp
 description: "Build with MPP (Machine Payments Protocol) - the open protocol for machine-to-machine payments over HTTP 402. Use when developing paid APIs, payment-gated content, AI agent payment flows, MCP tool payments, pay-per-token streaming, or any service using HTTP 402 Payment Required. Covers the mppx TypeScript SDK with Hono/Express/Next.js/Elysia middleware, pympp Python SDK, and mpp Rust SDK. Supports Tempo stablecoins, Stripe cards, Lightning Bitcoin, and custom payment methods. Includes charge (one-time) and session (streaming pay-as-you-go) intents. Make sure to use this skill whenever the user mentions mpp, mppx, machine payments, HTTP 402 payments, Tempo payments, payment channels, pay-per-token, paid API endpoints, or payment-gated services."
 metadata:
-  version: "0.4.0"
+  version: "0.5.0"
 ---
 
 # MPP - Machine Payments Protocol
@@ -239,7 +239,19 @@ const mppx = Mppx.create({
     spark.charge({ mnemonic: process.env.MNEMONIC! }),
   ],
 })
-// 402 response advertises all methods; client picks one
+```
+
+Use `compose()` to present multiple methods in a single 402 response with per-route pricing:
+
+```typescript
+app.get('/api/resource', async (req) => {
+  const result = await mppx.compose(
+    mppx.tempo.charge({ amount: '0.01' }),
+    mppx.stripe.charge({ amount: '0.01' }),
+  )(req)
+  if (result.status === 402) return result.challenge
+  return result.withReceipt(Response.json({ data: '...' }))
+})
 ```
 
 ## Payments Proxy
@@ -252,6 +264,8 @@ import { Mppx, tempo } from 'mppx/server'
 
 const mppx = Mppx.create({ methods: [tempo()] })
 const proxy = Proxy.create({
+  title: 'My API Gateway',
+  description: 'Paid access to AI APIs',
   services: [
     openai({
       apiKey: 'sk-...', // pragma: allowlist secret
@@ -262,6 +276,7 @@ const proxy = Proxy.create({
     }),
   ],
 })
+// Discovery: GET /discover, GET /discover/<id>, GET /discover.md, GET /llms.txt
 ```
 
 ## MCP Transport
@@ -286,7 +301,7 @@ const result = await mcp.callTool({ name: 'premium_tool', arguments: {} })
 
 See `references/transports.md` for the full MCP encoding (challenge in error.data.challenges, credential in _meta).
 
-## Testing
+## Testing & CLI
 
 ```bash
 # Create an account (stored in keychain, auto-funded on testnet)
@@ -297,6 +312,13 @@ npx mppx http://localhost:3000/resource
 
 # Inspect challenge without paying
 npx mppx --inspect http://localhost:3000/resource
+```
+
+**CLI config file**: Extend the CLI with custom payment methods via `mppx.config.(js|mjs|ts)`:
+```typescript
+// mppx.config.ts
+import { defineConfig } from 'mppx/cli'
+export default defineConfig({ plugins: [myCustomMethod()] })
 ```
 
 ## SDK Packages
@@ -378,7 +400,7 @@ Mppx.create({
 })
 ```
 
-**Hono multiple headers**: `c.header(name, value)` replaces by default. When emitting multiple `WWW-Authenticate` values (e.g. charge + session intents), the second call silently overwrites the first. Use `{ append: true }`:
+**Hono multiple headers**: `c.header(name, value)` replaces by default. When emitting multiple `WWW-Authenticate` values (e.g. charge + session intents), the second call silently overwrites the first. Prefer using `mppx.compose()` which handles multi-header emission correctly. If composing manually, use `{ append: true }`:
 ```typescript
 c.header('WWW-Authenticate', chargeWwwAuth)
 c.header('WWW-Authenticate', sessionWwwAuth, { append: true })
@@ -395,48 +417,20 @@ const iterateSseData = Session.Sse.iterateData
 
 ### Stores
 
-**Never use `Store.memory()` in production.** It loses all channel state on server restart/redeploy. When state is lost, the server can't close channels or settle funds - client deposits stay locked in escrow indefinitely. Use a persistent store (Redis/Valkey, Upstash, Cloudflare KV).
+**Never use `Store.memory()` in production.** It loses all channel state on server restart/redeploy. When state is lost, the server can't close channels or settle funds - client deposits stay locked in escrow indefinitely. Use a persistent store.
 
-**Standard Redis/ioredis/Valkey requires a custom adapter.** `Store.upstash()` only works with the Upstash REST SDK (which auto-serializes BigInt). For standard Redis clients, channel state contains BigInt fields (`deposit`, `highestVoucherAmount`, `spent`, `settledOnChain`) that need ox-compatible serialization. Use `Store.from()` with the `#__bigint` convention:
+Built-in store adapters (all handle BigInt serialization via `ox`'s `Json` module):
 ```typescript
 import { Store } from 'mppx/server'
-import type Redis from 'ioredis'
 
-const BIGINT_SUFFIX = '#__bigint'
-
-function createRedisStore(redis: Redis): Store.Store {
-  return Store.from({
-    async get(key) {
-      const raw = await redis.get(key)
-      if (raw == null) return null as never
-      return JSON.parse(raw, (_, v) =>
-        typeof v === 'string' && v.endsWith(BIGINT_SUFFIX)
-          ? BigInt(v.slice(0, -BIGINT_SUFFIX.length))
-          : v,
-      ) as never
-    },
-    async put(key, value) {
-      await redis.set(
-        key,
-        JSON.stringify(value, (_, v) =>
-          typeof v === 'bigint' ? `${v}${BIGINT_SUFFIX}` : v,
-        ),
-      )
-    },
-    async delete(key) {
-      await redis.del(key)
-    },
-  })
-}
-
-// Usage:
-tempo.session({ ..., store: createRedisStore(redis), sse: { poll: true } })
+Store.memory()              // development only
+Store.redis(redisClient)    // ioredis, node-redis, Valkey (added in 0.4.9)
+Store.upstash(upstashClient) // Upstash Redis / Vercel KV
+Store.cloudflare(kvNamespace) // Cloudflare KV
+Store.from({ get, put, delete }) // custom adapter
 ```
-There's an [open issue](https://github.com/wevm/mppx/issues/208) to add a built-in `Store.redis()`.
 
-**No built-in TTL**: Custom store implementations must add explicit TTL/expiry on entries, otherwise channel state grows unboundedly. mppx's built-in stores handle this automatically.
-
-**Polling mode**: If your store doesn't implement the optional `waitForUpdate()` method (e.g. custom Redis/ioredis adapters), pass `sse: { poll: true }` to `tempo.session()`. Otherwise SSE streams will hang waiting for event-driven wakeups that never come.
+**Polling mode**: If your store doesn't implement the optional `waitForUpdate()` method (e.g. custom adapters via `Store.from()`), pass `sse: { poll: true }` to `tempo.session()`. Otherwise SSE streams will hang waiting for event-driven wakeups that never come.
 
 ### Channel Recovery After Restarts
 
@@ -467,55 +461,11 @@ const result = await mppx.session({
 
 **Why this matters:** After a server restart, even with a persistent store, the first voucher from a returning client may fail verification (e.g., store was briefly unavailable). Without `channelId` in the re-issued 402 challenge, the client opens a new channel - locking more USDC in escrow while the old deposit sits unclaimed. With `channelId`, the client recovers the existing on-chain channel and continues using it.
 
-### Credential-Based Routing (Not Body-Based)
+### Request Handling
 
-**Session voucher POSTs have no body.** Mid-stream voucher POSTs carry only `Authorization: Payment` - no JSON body. If your middleware decides charge vs session based on `body.stream`, vouchers will hit the charge path and fail with "credential amount does not match this route's requirements." Check the **credential's intent** instead.
+**Session voucher POSTs have no body.** Mid-stream voucher POSTs carry only `Authorization: Payment` - no JSON body. If your middleware decides charge vs session based on `body.stream`, vouchers will hit the charge path. Check the **credential's intent** instead. As of mppx 0.4.9, the SDK skips route amount/currency/recipient validation for topUp and voucher credentials (the on-chain voucher signature is the real validation), so body-derived pricing mismatches no longer cause spurious 402 rejections.
 
 **Clone the request before reading the body.** `request.json()` consumes the Request body. If you parse the body first and then pass the original request to `mppx.session()` or `mppx.charge()`, the mppx handler gets an empty body and returns 402. Clone before reading.
-
-**Voucher amount must match the original session's tick cost.** This is the most insidious bug: `mppx.session()` internally recomputes a challenge from the options you pass and compares `amount` against the credential's embedded challenge. If your pricing function derives tick cost from the request body (e.g. model name), voucher POSTs (empty body) will compute a different amount than the session-opening request did. mppx compares them field-by-field and rejects with 402 on mismatch. **Extract amount from the credential's challenge request instead of recomputing it:**
-
-```typescript
-import { Credential } from 'mppx'
-
-// 1. Detect session credentials and save the original challenge params
-let isSessionCredential = false
-let credentialChallengeRequest: Record<string, unknown> | undefined
-try {
-  const credential = Credential.fromRequest(c.req.raw)
-  isSessionCredential = credential.challenge.intent === 'session'
-  if (isSessionCredential) {
-    // The credential carries the original challenge that was issued when
-    // the session opened - including the correct amount in base units.
-    credentialChallengeRequest = credential.challenge.request as Record<string, unknown>
-  }
-} catch {
-  // No credential - continue to normal flow
-}
-
-// 2. Clone BEFORE reading body - mppx handlers need to read it too
-const raw = c.req.raw.clone()
-const body = await c.req.json().catch(() => ({}))
-
-// 3. For voucher POSTs, use the credential's amount (not body-derived)
-if (isSessionCredential && !wantStream) {
-  // credential.challenge.request.amount is in base units (e.g. "3" for 0.000003 USDC).
-  // Convert back to human-readable for mppx.session() options.
-  const tickCost = credentialChallengeRequest?.amount
-    ? (Number(credentialChallengeRequest.amount) / 1_000_000).toFixed(6)
-    : computeTickCostFromBody(body) // fallback - shouldn't normally happen
-  const unitType =
-    typeof credentialChallengeRequest?.unitType === 'string'
-      ? credentialChallengeRequest.unitType
-      : 'token'
-  const result = await mppx.session({ amount: tickCost, unitType })(raw)
-  if (result.status === 402) return result.challenge
-  return result.withReceipt(new Response(null, { status: 200 }))
-}
-// All other mppx calls must also use `raw`, not `c.req.raw`
-```
-
-**Why this happens:** When mppx verifies a credential, it calls `createMethodFn` with the options you pass to `mppx.session()`. This generates a fresh challenge and compares its `amount` field against the credential's embedded challenge. The credential carries the challenge from the session-opening request (e.g. amount="3" for kimi-k2.5 at $0.000003/tick). If voucher POSTs recompute from empty body and get a different amount (e.g. "1000" from a price floor), the comparison fails and mppx returns 402. The amounts are in Tempo base units (6 decimals), so "3" = 0.000003 USDC.
 
 ### Pricing & Streaming
 
