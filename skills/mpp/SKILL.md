@@ -2,7 +2,7 @@
 name: mpp
 description: "Build with MPP (Machine Payments Protocol) - the open protocol for machine-to-machine payments over HTTP 402. Use when developing paid APIs, payment-gated content, AI agent payment flows, MCP tool payments, pay-per-token streaming, or any service using HTTP 402 Payment Required. Covers the mppx TypeScript SDK with Hono/Express/Next.js/Elysia middleware, pympp Python SDK, and mpp Rust SDK. Supports Tempo stablecoins, Stripe cards, Lightning Bitcoin, and custom payment methods. Includes charge (one-time) and session (streaming pay-as-you-go) intents. Make sure to use this skill whenever the user mentions mpp, mppx, machine payments, HTTP 402 payments, Tempo payments, payment channels, pay-per-token, paid API endpoints, or payment-gated services."
 metadata:
-  version: "0.5.0"
+  version: "0.5.1"
 ---
 
 # MPP - Machine Payments Protocol
@@ -387,6 +387,15 @@ await client.fee.setUserTokenSync({
 **Recipient wallet initialization**: TIP-20 token accounts on Tempo must be initialized before they can receive tokens (similar to Solana ATAs). Send a tiny amount (e.g. 0.01 USDC) to the recipient address first: `tempo wallet transfer 0.01 0x20C000000000000000000000b9537d11c60E8b50 <recipient>`.
 
 ### Server
+
+**Set `realm` explicitly for mppscan attribution.** The `realm` value is hashed into Tempo's attribution memo (bytes 5-14 of the 32-byte `transferWithMemo` data) and is how mppscan correlates on-chain transactions to registered servers. `Mppx.create()` auto-detects `realm` from env vars (`MPP_REALM`, `FLY_APP_NAME`, `HEROKU_APP_NAME`, `HOST`, `HOSTNAME`, `RAILWAY_PUBLIC_DOMAIN`, `RENDER_EXTERNAL_HOSTNAME`, `VERCEL_URL`, `WEBSITE_HOSTNAME`). On PaaS platforms (Vercel, Railway, Heroku) these are stable app names and work fine. **In Kubernetes, `HOSTNAME` is the pod name** (e.g. `web-69d986c8d8-6dtdx`) which rotates on every deploy - causing a new server fingerprint each time, so mppscan can't track your transactions. Fix by setting `MPP_REALM` env var to your stable public domain or passing `realm` directly:
+```typescript
+Mppx.create({
+  methods: [tempo({ ... })],
+  realm: 'web.surf.cascade.fyi', // or process.env.MPP_REALM
+  secretKey,
+})
+```
 
 **`tempo()` vs explicit registration**: `tempo({ ... })` registers both `charge` and `session` intents with shared config. When you need different config per intent (e.g. session needs `store` and `sse: { poll: true }` but charge doesn't), register them explicitly:
 ```typescript
