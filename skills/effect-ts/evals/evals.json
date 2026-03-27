@@ -1,0 +1,52 @@
+{
+  "skill_name": "effect-ts",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "Write an Effect service that wraps a flaky HTTP API. It should retry on network errors with exponential backoff (max 3 retries), fail fast on auth errors, and expose a typed interface via Context.Tag. Include the layer and a usage example.",
+      "expected_output": "A complete Effect service with typed errors (NetworkError, AuthError), a Context.Tag-based interface, a Layer with retry logic using Schedule.exponential + Schedule.recurs, conditional retry (only on NetworkError), and a runnable usage example.",
+      "files": [],
+      "expectations": [
+        "Imports from 'effect' package (not invented packages)",
+        "Defines at least 2 distinct typed error classes (e.g., NetworkError and AuthError)",
+        "Uses Context.Tag (v3) or ServiceMap.Service (v4) for the service interface",
+        "Uses Schedule.exponential for exponential backoff",
+        "Limits retries to 3 (Schedule.recurs(3) or equivalent)",
+        "Only retries network errors, not auth errors (conditional retry logic)",
+        "Includes a Layer definition (Layer.succeed, Layer.effect, or similar)",
+        "Includes a runnable usage example (Effect.runPromise or NodeRuntime.runMain)",
+        "Does not use non-existent Effect APIs (e.g., Effect.retryN, Effect.cachedWithTTL)"
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "I need to consume an SSE endpoint that streams JSON events and process each event through a validation schema. Show me how to do this with Effect Stream, including proper resource cleanup if the connection drops.",
+      "expected_output": "An Effect Stream that connects to an SSE endpoint via HttpClient, parses SSE data lines, validates each event with Schema.decodeUnknown, handles errors, and uses Scope/acquireRelease for cleanup on disconnect.",
+      "files": [],
+      "expectations": [
+        "Uses Effect Stream module for SSE consumption",
+        "Validates events with Schema (Schema.decodeUnknown or Schema.decodeUnknownEffect)",
+        "Uses acquireRelease, addFinalizer, unwrapScoped, or AbortController for resource cleanup",
+        "Defines typed error classes for connection and parse failures",
+        "Parses SSE format (data: lines, event separation on blank lines)",
+        "Does not use non-existent APIs (e.g., Stream.fromSSE, Stream.fromEventSource, Stream.acquireRelease)",
+        "Handles errors with catchTag or similar typed error handling"
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "Migrate this v3 Effect code to v4:\n```typescript\nimport { Context, Data, Effect, Layer } from 'effect'\nclass AppError extends Data.TaggedError('AppError')<{ message: string }> {}\nclass Config extends Context.Tag('Config')<Config, { readonly apiKey: string }>() {}\nconst ConfigLive = Layer.succeed(Config, { apiKey: 'secret' })\nconst program = Effect.gen(function*() {\n  const config = yield* Config\n  return yield* Effect.tryPromise({ try: () => fetch(config.apiKey), catch: () => new AppError({ message: 'failed' }) })\n}).pipe(Effect.catchAll((e) => Effect.log(e.message)))\nEffect.runPromise(program.pipe(Effect.provide(ConfigLive)))\n```",
+      "expected_output": "Migrated code using ServiceMap.Service instead of Context.Tag, Schema.TaggedErrorClass instead of Data.TaggedError, Effect.catch instead of Effect.catchAll, and correct v4 import patterns. Should note all changes made.",
+      "files": [],
+      "expectations": [
+        "Replaces Context.Tag with ServiceMap.Service (the v4 API)",
+        "Replaces Data.TaggedError with Schema.TaggedErrorClass (the v4 API)",
+        "Replaces Effect.catchAll with Effect.catch (the v4 rename)",
+        "Imports ServiceMap from 'effect'",
+        "Includes a changelog or migration notes explaining what changed",
+        "No v3-only APIs remain in code (Context.Tag, Data.TaggedError, Effect.catchAll)",
+        "Code is logically complete and would compile with effect v4"
+      ]
+    }
+  ]
+}
