@@ -1,8 +1,8 @@
 ---
 name: web3-protocol-gtm
-description: Go-to-market strategy for web3 builders - protocols, products, services, and solo founders. Use when planning growth for a crypto protocol, product, or service, building developer community, crafting CT narrative, planning ecosystem partnerships, preparing grant applications, measuring protocol traction, sequencing testnet to mainnet launch, launching tokens, pricing crypto-native products, optimizing landing page conversion, selling to AI agents, or growing as a solo founder in web3. Covers community-led growth, Crypto Twitter strategy, developer relations, hackathon playbooks, ecosystem composability, standards adoption, protocol metrics, solo founder GTM, token launch tactics, CT growth for small accounts, dual-rail payments, micropayment pricing, embedded wallet UX, and agent-as-customer models. Triggers on web3 GTM, protocol marketing, crypto growth, developer relations, community building, CT narrative, ecosystem partnerships, standards adoption, protocol launch, grant application, hackathon strategy, solo founder, token launch, pump.fun, building in public, CT growth, reply strategy, crypto SaaS, product launch, micropayment pricing, landing page conversion, x402 pricing, agent customers.
+description: Go-to-market strategy for web3 builders - protocols, products, services, and solo founders. Use when planning growth for a crypto protocol, building developer community, crafting CT narrative, planning ecosystem partnerships, preparing grant applications, launching tokens, pricing crypto-native products, or growing as a solo founder in web3. Covers community-led growth, CT strategy, developer relations, hackathon playbooks, standards adoption, token launch tactics, micropayment pricing, and agent-as-customer models.
 metadata:
-  version: "0.2.0"
+  version: "0.2.1"
 ---
 
 # Web3 Protocol GTM
