@@ -52,7 +52,7 @@ docs/                  - Documentation (Mintlify)
 ## Config File Locations
 
 - Main config: `~/.openclaw/config.json` (or `.json5`)
-- Extensions: `~/.openclaw/extensions/`
+- Plugins: `~/.openclaw/plugins/`
 - Skills: `~/.openclaw/skills/` (managed) + workspace skills
 - Agents: `~/.openclaw/agents/<agent-id>/`
 - Sessions: `~/.openclaw/agents/<agent-id>/sessions/`

@@ -6,7 +6,7 @@ Plugins are discovered from (in order):
 1. **Config load paths** - `plugins.load.paths[]` array
 2. **Workspace extensions** - per-agent workspace dirs
 3. **Bundled plugins** - built into OpenClaw core
-4. **Global extensions dir** - `~/.openclaw/extensions/`
+4. **Global plugins dir** - `~/.openclaw/plugins/`
 
 Key files: `src/plugins/discovery.ts`, `src/plugins/loader.ts`
 
@@ -323,7 +323,7 @@ openclaw plugins doctor                   # diagnostics
 3. Inspect `package.json` + `openclaw.plugin.json`
 4. Validate `openclaw.extensions` array
 5. Security scan for dangerous patterns
-6. Install to `~/.openclaw/extensions/<plugin-id>/`
+6. Install to `~/.openclaw/plugins/<plugin-id>/`
 7. Run `npm install --omit=dev` in plugin dir
 8. Update config: install record + allowlist + enable
 9. Gateway restart required
