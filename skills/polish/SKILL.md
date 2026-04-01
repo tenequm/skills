@@ -2,7 +2,7 @@
 name: polish
 description: Pre-release code review - runs lint/type checks, then launches 3 parallel review agents (cleanliness, design, efficiency) to analyze the diff, synthesizes a unified report, and fixes with approval. Use before committing, pushing, or releasing changes. Triggers on "review code", "check before commit", "cleanup before release", "review changes", "is this ready to ship", "polish before release", "simplify".
 metadata:
-  version: "2.1.0"
+  version: "2.2.0"
 disable-model-invocation: true
 ---
 
@@ -82,9 +82,22 @@ Looks for runtime performance and resource issues.
 - **Overly broad operations**: reading entire files when only a portion is needed, loading all items when filtering for one
 - **Unchecked system boundaries**: fetch/HTTP calls without response status checks (`r.ok`), unhandled promise rejections on external calls, missing error handling at I/O boundaries
 
-## Phase 4: Report
+## Phase 4: Validate Findings
 
-Synthesize findings from all three agents into a single deduplicated report. If multiple agents flagged the same code, merge into one finding. Group by category:
+Before presenting anything, verify every finding from the agents against actual code. Drop any finding that fails validation.
+
+For each finding:
+- **Read the exact file and lines cited** - confirm the code exists and matches the description. Drop findings where the line number is wrong or the code doesn't match what was claimed
+- **Dead code / unused imports** - grep the entire codebase for references. If the symbol is referenced anywhere (imports, calls, type usage), drop the finding
+- **Reuse suggestions** - confirm the suggested utility/function actually exists at the claimed path. If it doesn't exist, drop the finding
+- **Debug leftovers** - confirm the flagged line is actually a debug artifact, not structured logging (`logger.*`, `c.var.logger.*`)
+- **Efficiency / design claims** - read the surrounding context to confirm the pattern matches. Drop speculative findings that don't hold up with full context
+
+Only findings that survive validation proceed to the report.
+
+## Phase 5: Report
+
+Synthesize validated findings into a single deduplicated report. If multiple agents flagged the same code, merge into one finding. Group by category:
 
 ```
 ## Review Findings
@@ -108,9 +121,9 @@ Synthesize findings from all three agents into a single deduplicated report. If 
 
 If zero issues found, report "Clean - no issues found" and stop.
 
-The report MUST end with the line "**Awaiting approval before proceeding with fixes.**" (or "Clean - no issues found"). Do not proceed to Phase 5 until the user explicitly approves.
+The report MUST end with the line "**Awaiting approval before proceeding with fixes.**" (or "Clean - no issues found"). Do not proceed to Phase 6 until the user explicitly approves.
 
-## Phase 5: Fix and Verify
+## Phase 6: Fix and Verify
 
 After user approves:
 1. Fix all reported issues with minimal targeted edits
