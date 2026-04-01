@@ -145,6 +145,17 @@ api.registerProviderAuth({
 
 Note: `registerProvider()` is auth-only. It does NOT populate the model catalog. Model metadata (names, context windows, costs) must be defined in config `models.providers`. Plugin-based missing-auth errors now include descriptive error messages.
 
+### New Provider Plugin Hooks
+
+| Hook | Purpose |
+|------|---------|
+| `normalizeModelId` | Provider-owned model-id alias cleanup before resolution |
+| `normalizeConfig` | Transform provider config before validation |
+| `normalizeTransport` | Adjust request transport options per-provider |
+| `resolveConfigApiKey` | Custom API key resolution from config/env |
+| `createStreamFn` | Factory for provider-specific streaming implementation |
+| `createEmbeddingProvider` | Memory embeddings via provider plugin (for memory plugins) |
+
 ## Plugin Model Auth API
 
 Context-engine plugins can resolve model credentials via `runtime.modelAuth`:

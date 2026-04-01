@@ -361,3 +361,129 @@ extensions/my-plugin/
 Keep plugin deps in the extension `package.json`, not root. Use `devDependencies` or `peerDependencies` for `openclaw` (resolved at runtime via jiti alias).
 
 Removed `api.registerHttpHandler()` - plugins using it get a clear migration error pointing to `api.registerHttpRoute()` (#36794).
+
+## New Provider Plugin Types
+
+Provider plugins gained several new hook contexts for decoupling provider-specific logic from core:
+
+```typescript
+// Provider-owned model-id normalization (plugin-side alias cleanup)
+type ProviderNormalizeModelIdContext = { provider: string; modelId: string };
+
+// Provider-owned config normalization for models.providers.<id> entries
+type ProviderNormalizeConfigContext = { provider: string; providerConfig: ModelProviderConfig };
+
+// Provider-owned transport normalization (API/baseUrl-based, not provider-id-based)
+type ProviderNormalizeTransportContext = { provider: string; api?: string | null; baseUrl?: string };
+
+// Provider-owned env/config auth marker resolution
+type ProviderResolveConfigApiKeyContext = { provider: string; env: NodeJS.ProcessEnv };
+
+// Provider-owned transport creation (custom StreamFn replacing pi-ai default)
+type ProviderCreateStreamFnContext = { config?; agentDir?; workspaceDir?; provider; modelId; model };
+
+// Provider-owned embedding transport creation (memory embeddings via provider plugin)
+type ProviderCreateEmbeddingProviderContext = {
+  config; agentDir?; workspaceDir?; provider; model;
+  remote?: { baseUrl?; apiKey?; headers? };
+  providerApiKey?; outputDimensionality?; taskType?;
+};
+```
+
+`ProviderWrapStreamFnContext` now includes optional `model?: ProviderRuntimeModel`.
+
+`ProviderAuthContext` now includes optional `env?: NodeJS.ProcessEnv`.
+
+## Plugin Tool Context Additions
+
+`OpenClawPluginToolContext` gained new fields:
+- `runtimeConfig?: OpenClawConfig` - active runtime-resolved config snapshot
+- `browser?: { sandboxBridgeUrl?; allowHostControl? }` - browser sandbox bridge info
+- `deliveryContext?: DeliveryContext` - trusted ambient delivery route for active session
+
+## Speech Provider Plugin Additions
+
+`SpeechProviderPlugin` gained new hooks:
+- `autoSelectOrder?: number` - priority for auto-selection
+- `resolveConfig?` - provider-owned config resolution
+- `parseDirectiveToken?` - provider-owned directive token parsing
+- `resolveTalkConfig?` / `resolveTalkOverrides?` - talk config resolution
+
+## Web Search Provider Additions
+
+`WebSearchProviderPlugin` gained `runSetup?` hook for interactive provider setup.
+
+## Memory Plugin State (`src/plugins/memory-state.ts` - NEW)
+
+Centralized module for memory plugin exclusive slots:
+
+```typescript
+type MemoryPromptSectionBuilder = (params: { availableTools: Set<string>; citationsMode? }) => string[];
+type MemoryFlushPlanResolver = (params: { cfg?; nowMs? }) => MemoryFlushPlan | null;
+type MemoryPluginRuntime = {
+  getMemorySearchManager(params: { cfg; agentId; purpose? }): Promise<{ manager; error? }>;
+  resolveMemoryBackendConfig(params: { cfg; agentId }): MemoryRuntimeBackendConfig;
+  closeAllMemorySearchManagers?(): Promise<void>;
+};
+```
+
+Three exclusive slots: prompt section builder, flush plan resolver, and runtime adapter.
+
+## Memory Embedding Providers (`src/plugins/memory-embedding-providers.ts` - NEW)
+
+Multiple adapters can coexist (unlike other exclusive slots):
+
+```typescript
+type MemoryEmbeddingProviderAdapter = {
+  id: string;
+  model: string;
+  maxInputTokens?: number;
+  embedQuery: (text: string) => Promise<number[]>;
+  embedBatch: (texts: string[]) => Promise<number[][]>;
+};
+```
+
+## Plugin Kind Slots (`src/plugins/slots.ts` - NEW)
+
+Multi-kind plugin support. `kind` field can now be a single `PluginKind` or an array:
+
+```typescript
+type PluginKind = "memory" | "context-engine";
+function hasKind(kind: PluginKind | PluginKind[] | undefined, target: PluginKind): boolean;
+function normalizeKinds(kind?: PluginKind | PluginKind[]): PluginKind[];
+```
+
+## CLI Backend Plugin Type (NEW)
+
+```typescript
+type CliBackendPlugin = {
+  id: string;                          // provider id (e.g. "claude-cli/opus")
+  config: CliBackendConfig;            // default backend config
+  bundleMcp?: boolean;                 // inject bundle MCP config file
+  normalizeConfig?: (config: CliBackendConfig) => CliBackendConfig;
+};
+```
+
+## CLI Command Descriptors (NEW)
+
+```typescript
+type OpenClawPluginCliCommandDescriptor = {
+  name: string;
+  description: string;
+  hasSubcommands: boolean;
+};
+```
+
+Used for lazy root CLI registration - when descriptors cover every top-level command, the plugin registrar stays lazy-loaded.
+
+## Plugin Install Security
+
+- `before_install` hook removed (commit `fcb802e`)
+- Dangerous skill installs now fail closed by default (commit `0d7f1e2`)
+- New override: `--dangerously-force-unsafe-install` bypasses built-in blocking
+- Marketplace and Ollama network requests are guarded (commit `8deb952`)
+- Plugin install blocked when source scan fails (commit `7a953a5`)
+
+## ExecApprovalManager Generics
+
+`ExecApprovalManager` is now generic: `ExecApprovalManager<TPayload = ExecApprovalRequestPayload>`. All methods (`create`, `register`, `getSnapshot`) use the generic `TPayload` type.
