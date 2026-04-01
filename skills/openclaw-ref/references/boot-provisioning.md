@@ -7,17 +7,19 @@ Key files: `src/gateway/server-startup.ts`, `src/gateway/boot.ts`
 ### Boot Order
 
 1. **Load config** - `loadConfig()` reads + validates config
-2. **Load plugins** - `loadOpenClawPlugins()` discovers and registers all plugins
-3. **Clean stale locks** - remove stale session lock files (stale threshold: 30min)
-4. **Start browser control** - if browser automation enabled
-5. **Start Gmail watcher** - if `hooks.gmail.account` configured; validates `hooks.gmail.model` against catalog
-6. **Load internal hooks** - clear previous hooks, load from config + directory discovery
-7. **Start channels** - Telegram, Discord, Slack, etc. (skippable via `OPENCLAW_SKIP_CHANNELS=1`)
-8. **Fire `gateway:startup` event** - delayed 250ms, plugins can hook into this (requires `hooks.internal.enabled`)
-9. **Start plugin services** - `startPluginServices()` for registry lifecycle
-10. **ACP identity reconcile** - if `acp.enabled`, reconcile pending session identities on startup
-11. **Start memory backend** - `startGatewayMemoryBackend()` for qmd memory initialization (LanceDB runtime bootstrapped on demand at first use)
-12. **Schedule restart sentinel** - wake check for updates (delayed 750ms)
+2. **Seed control UI origins** - `maybeSeedControlUiAllowedOriginsAtStartup()` persists `gateway.controlUi.allowedOrigins` for non-loopback installs upgraded to v2026.2.26+ without required origins
+3. **Record startup write hash** - if config was mutated (generated token or seeded origins), re-read snapshot and capture `startupInternalWriteHash` so the config reloader ignores this self-inflicted write
+4. **Load plugins** - `loadOpenClawPlugins()` discovers and registers all plugins
+5. **Clean stale locks** - remove stale session lock files (stale threshold: 30min)
+6. **Start browser control** - if browser automation enabled
+7. **Start Gmail watcher** - if `hooks.gmail.account` configured; validates `hooks.gmail.model` against catalog
+8. **Load internal hooks** - clear previous hooks, load from config + directory discovery
+9. **Start channels** - Telegram, Discord, Slack, etc. (skippable via `OPENCLAW_SKIP_CHANNELS=1`)
+10. **Fire `gateway:startup` event** - delayed 250ms, plugins can hook into this (requires `hooks.internal.enabled`)
+11. **Start plugin services** - `startPluginServices()` for registry lifecycle
+12. **ACP identity reconcile** - if `acp.enabled`, reconcile pending session identities on startup
+13. **Start memory backend** - `startGatewayMemoryBackend()` for qmd memory initialization (LanceDB runtime bootstrapped on demand at first use)
+14. **Schedule restart sentinel** - wake check for updates (delayed 750ms)
 
 ### Plugin Loading During Boot
 
@@ -55,6 +57,167 @@ On gateway startup:
 - Silent reply token used to suppress unnecessary output
 
 Use BOOT.md for one-shot initialization tasks that need agent intelligence (not just config).
+
+## Config Reload Startup Loop Prevention
+
+Key files: `src/gateway/config-reload.ts`, `src/gateway/server.impl.ts`
+
+At startup, the gateway may mutate its own config file (seeding control UI origins, generating auth tokens). The config file watcher (chokidar) would see this write and trigger a reload loop.
+
+Prevention mechanism:
+1. After startup writes, the gateway re-reads the config snapshot and captures `startupInternalWriteHash`
+2. `startGatewayConfigReloader()` receives `initialInternalWriteHash` and stores it as `lastAppliedWriteHash`
+3. On watcher trigger, if the snapshot hash matches `lastAppliedWriteHash`, the reload is silently skipped
+4. After the first non-self write, `lastAppliedWriteHash` is cleared (set to `null`) so future external changes reload normally
+
+In-process config writes use `subscribeToWrites` listener to bypass the file watcher entirely: the listener receives the runtime config and persisted hash directly, sets `pendingInProcessConfig`, and schedules an immediate reload with `scheduleAfter(0)`.
+
+## HTTP Request Pipeline
+
+Key file: `src/gateway/server-http.ts`
+
+HTTP requests are processed through `runGatewayHttpRequestStages()`, a stage-based pipeline with per-stage try/catch error isolation.
+
+```typescript
+type GatewayHttpRequestStage = {
+  name: string;
+  run: () => Promise<boolean> | boolean;
+};
+
+async function runGatewayHttpRequestStages(
+  stages: readonly GatewayHttpRequestStage[],
+): Promise<boolean>;
+```
+
+Each stage returns `true` if it handled the request (short-circuits remaining stages) or `false` to pass through. If a stage throws, the error is logged and the stage is skipped - subsequent stages (control-ui, gateway probes, etc.) remain reachable. This prevents a single broken plugin facade or missing optional dependency (e.g. `@slack/bolt`) from producing cascade 500s across unrelated routes.
+
+## Node Command Policy
+
+Key file: `src/gateway/node-command-policy.ts`
+
+Determines which commands a connected node is allowed to execute. Decoupled from pairing state - the allowlist is resolved purely from config and platform metadata.
+
+### Platform Defaults
+
+Commands are grouped by platform (`ios`, `android`, `macos`, `linux`, `windows`, `unknown`). Platform is resolved from `node.platform` via prefix matching, then `node.deviceFamily` via token matching.
+
+| Platform | Defaults |
+|----------|----------|
+| `ios` | canvas, camera, location, device, contacts, calendar, reminders, photos, motion, `system.notify` |
+| `android` | canvas, camera, location, notifications (incl. actions), `system.notify`, device (incl. permissions/health), contacts, calendar, callLog, reminders, photos, motion |
+| `macos` | canvas, camera, location, device, contacts, calendar, reminders, photos, motion, `system.run`/`system.which`/`system.notify`/`browser.proxy` |
+| `linux`/`windows` | `system.run`, `system.which`, `system.notify`, `browser.proxy` |
+| `unknown` | canvas, camera, location, `system.notify` |
+
+### Dangerous Commands (opt-in)
+
+`DEFAULT_DANGEROUS_NODE_COMMANDS`: `camera.snap`, `camera.clip`, `screen.record`, `contacts.add`, `calendar.add`, `reminders.add`, `sms.send`, `sms.search`. Not in any platform default - must be explicitly added via `gateway.nodes.allowCommands`.
+
+### Allowlist Resolution
+
+```typescript
+resolveNodeCommandAllowlist(cfg, node): Set<string>
+// = PLATFORM_DEFAULTS[platform] + cfg.gateway.nodes.allowCommands - cfg.gateway.nodes.denyCommands
+```
+
+### Command Validation
+
+`isNodeCommandAllowed()` checks: command non-empty, in allowlist, and declared by node (node must advertise supported commands at connect time). If the node declared no commands, all invocations are rejected.
+
+## Node Pairing Reconciliation
+
+Key file: `src/gateway/node-connect-reconcile.ts`
+
+`reconcileNodePairingOnConnect()` runs when a node connects via WebSocket:
+
+1. Resolves `nodeId` from device ID or client ID
+2. Resolves command allowlist via `resolveNodeCommandAllowlist()` using platform/deviceFamily from connect params
+3. Filters declared commands against allowlist via `normalizeDeclaredNodeCommands()`
+4. If node is not already paired, calls `requestPairing()` to create a pending pairing request
+5. Returns `{ nodeId, effectiveCommands, pendingPairing? }`
+
+## Node Catalog
+
+Key file: `src/gateway/node-catalog.ts`
+
+`createKnownNodeCatalog()` merges three sources into a unified node view:
+
+- **Device pairing** - `PairedDevice` entries filtered to `role: "node"`
+- **Node pairing** - `NodePairingPairedNode` approved entries with caps/commands/permissions
+- **Live connections** - `NodeSession` currently connected nodes
+
+Node IDs from all three sources are unioned. For each node, `buildEffectiveKnownNode()` resolves fields using live > nodePairing > devicePairing precedence. The `effective` field on each entry is a `NodeListNode` with merged `caps`, `commands` (sorted, deduplicated), version info, connection state, and pairing state.
+
+`listKnownNodes()` sorts: connected first, then alphabetical by displayName/nodeId.
+
+## Cron Busy-Wait Drift Fix
+
+Key file: `src/cron/service/timer.ts`
+
+Recurring main-session wake-now jobs (cron/every schedule, `sessionTarget: "main"`, `wakeMode: "now"`) previously blocked the cron lane in a busy-wait loop when the main session had requests in flight. This caused the cron job's measured duration to reflect queue wait time instead of actual bookkeeping.
+
+Fix: when `heartbeatResult.status === "skipped"` with `reason: "requests-in-flight"` and the job is recurring (`schedule.kind !== "at"`), the cron lane now calls `requestHeartbeatNow()` (fire-and-forget nudge) and returns immediately with `{ status: "ok" }`. One-shot `at` jobs still busy-wait up to `wakeNowHeartbeatBusyMaxWaitMs` (default 2min) with 250ms retry delay before falling back to the nudge.
+
+## Cron Legacy Delivery Migration (Doctor)
+
+Key files: `src/commands/doctor-cron.ts`, `src/commands/doctor-cron-legacy-delivery.ts`, `src/commands/doctor-cron-store-migration.ts`
+
+`maybeRepairLegacyCronStore()` detects and normalizes legacy cron job storage:
+
+**Store migration** (`normalizeStoredCronJobs`):
+- `jobId` -> `id`
+- Bare string schedule -> `{ kind: "cron", expr }`
+- `schedule.cron` -> `schedule.expr`
+- Legacy payload kind normalization (`agentturn` -> `agentTurn`, `systemevent` -> `systemEvent`)
+- Top-level payload/delivery fields inlined into nested `payload`/`delivery` objects
+- Missing `state`, `enabled`, `wakeMode`, `name`, `sessionTarget` fields populated with defaults
+- `delivery.mode: "deliver"` -> `"announce"`
+- Legacy `payload.provider` -> `delivery.channel`
+
+**Legacy delivery migration** (`normalizeLegacyDeliveryInput`):
+- Extracts `deliver`, `bestEffortDeliver`, `channel`, `provider`, `to`, `threadId` from payload
+- Builds or merges into structured `delivery` object with `mode: "announce"` or `"none"`
+- Strips legacy fields from payload after migration
+
+**Notify fallback** (`migrateLegacyNotifyFallback`):
+- Jobs with `notify: true` and existing webhook delivery: just removes `notify` flag
+- Jobs with `notify: true` but no delivery: migrates to `delivery.mode: "webhook"` using `cron.webhook` config
+- Warns if `cron.webhook` is unset and migration cannot proceed automatically
+
+## Bundled Plugin Runtime Deps Doctor Check
+
+Key file: `src/commands/doctor-bundled-plugin-runtime-deps.ts`
+
+`maybeRepairBundledPluginRuntimeDeps()` scans bundled plugins for missing native dependencies.
+
+**Scan** (`scanBundledPluginRuntimeDeps`):
+- Skips source checkout roots (`.git` + `src` + `extensions` present)
+- Reads `package.json` from each plugin in `dist/extensions/`
+- Collects `dependencies` + `optionalDependencies` across all plugins
+- Detects missing deps (sentinel: `node_modules/<name>/package.json` absent) and version conflicts across plugins
+
+**Repair**:
+- Runs `npm install --omit=dev --no-save --package-lock=false --ignore-scripts --legacy-peer-deps` with pinned versions
+- Strips npm global config env vars (`npm_config_global`, `npm_config_location`, `npm_config_prefix`) to prevent nested global install
+
+**Conflict reporting**: if multiple plugins pin different versions of the same dep, warns with per-plugin version breakdown.
+
+## Chat-Native Task Board
+
+Key file: `src/commands/tasks.ts`
+
+CLI subcommands for managing background tasks:
+
+| Subcommand | Purpose |
+|------------|---------|
+| `tasks list` | List tasks with optional `--runtime` / `--status` filters. Shows task ID, kind, status, delivery, run, child session, summary. |
+| `tasks show <id>` | Detailed view of a single task (lookup by ID or token prefix). All fields including timestamps, labels, errors, progress. |
+| `tasks notify <id> <policy>` | Update a task's notify policy (`TaskNotifyPolicy`). |
+| `tasks cancel <id>` | Cancel a running task. Calls `cancelTaskById()` which coordinates with the task runtime. |
+| `tasks audit` | List audit findings with `--severity` / `--code` / `--limit` filters. Shows severity, code, task ID, status, age, detail. |
+| `tasks maintenance` | Reconcile, stamp cleanup, prune. Dry-run by default; `--apply` to write changes. Reports audit health before/after. |
+
+All subcommands support `--json` for machine-readable output. Task lookup uses `reconcileTaskLookupToken()` for prefix matching on shortened IDs.
 
 ## LanceDB Runtime Bootstrap
 
@@ -168,6 +331,7 @@ class ExecApprovalManager {
 - Resolved entries kept for 15s grace period for late `awaitDecision` calls
 - Supports caller metadata: `requestedByConnId`, `requestedByDeviceId`, `requestedByClientId`
 - `lookupPendingId` supports prefix matching for shortened approval IDs
+- After approval completion, the agent session is resumed via `sendExecApprovalFollowup()` which dispatches a `callGatewayTool("agent", ...)` with the original session key and a structured prompt containing the exec result. Denied commands get a distinct prompt instructing the agent not to retry.
 
 ## Channel Health Monitor
 
@@ -350,3 +514,8 @@ openclaw channels status --probe
 13. **LanceDB runtime auto-installs** on packaged/global installs where bundled import fails - requires `npm` on PATH; disable with `OPENCLAW_NIX_MODE=1`
 14. **Skill SecretRef secrets** only available after secrets provider initializes - skill env overrides now prefer `getRuntimeConfigSnapshot()` over static config so resolved secrets propagate
 15. **Codex OAuth behind proxy** - proxy dispatcher must be bootstrapped before OAuth refresh; now handled automatically by the `getOAuthApiKey` wrapper
+16. **Startup config reload loop** - gateway records `startupInternalWriteHash` after self-mutations (token generation, origin seeding); config reloader skips watcher triggers matching this hash
+17. **HTTP stage cascade 500s** - `runGatewayHttpRequestStages()` isolates each stage in try/catch; a broken plugin facade or missing optional dep no longer takes down unrelated HTTP routes
+18. **Node command policy is config-only** - allowlist resolution is decoupled from pairing state; determined by platform defaults + `gateway.nodes.allowCommands` - `gateway.nodes.denyCommands`
+19. **Cron recurring wake-now drift** - recurring main-session cron jobs no longer busy-wait when the main lane is busy; they fire a `requestHeartbeatNow` nudge and release the cron lane immediately
+20. **Bundled plugin runtime deps** - packaged installs may be missing native deps from bundled plugins; `openclaw doctor --fix` runs `npm install` with pinned versions into the package root

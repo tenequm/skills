@@ -57,6 +57,7 @@ Supported `api` values for model definitions:
 | `google-generative-ai` | Google Generative AI API |
 | `github-copilot` | GitHub Copilot API |
 | `bedrock-converse-stream` | AWS Bedrock Converse Stream |
+| `azure-openai-responses` | Azure OpenAI Responses API |
 | `ollama` | Ollama local inference |
 
 ## Model Aliases
@@ -130,6 +131,31 @@ The `modelstudio` extension provides Qwen models via Alibaba Cloud Model Studio 
 
 Group label: "Qwen (Alibaba Cloud Model Studio)". Default model: `modelstudio/qwen3.5-plus`. All four base URLs are registered as native Model Studio URLs (streaming usage compat applied). Env var: `MODELSTUDIO_API_KEY`. Coding Plan models include `qwen3.5-plus`, `glm-5`, `kimi-k2.5`, `MiniMax-M2.5`.
 
+## Anthropic Plugin Architecture
+
+The Anthropic provider is implemented as a bundled plugin (`extensions/anthropic/`). Stream wrappers (beta headers, service tier, fast mode) live in `extensions/anthropic/stream-wrappers.ts` and are composed via the `wrapStreamFn` provider hook.
+
+Key stream wrappers:
+- `createAnthropicBetaHeadersWrapper` - injects `anthropic-beta` header (context-1m, fine-grained-tool-streaming, interleaved-thinking, OAuth betas)
+- `createAnthropicServiceTierWrapper` - sets `service_tier` (`auto`|`standard_only`) on anthropic-messages requests
+- `createAnthropicFastModeWrapper` - resolves `fastMode`/`fast_mode` extra param to `service_tier`
+
+Context-1M beta (`context-1m-2025-08-07`) is auto-added for `claude-opus-4`/`claude-sonnet-4` prefixes when `extraParams.context1m === true`. Skipped for OAuth auth (Anthropic rejects it with OAuth tokens).
+
+Default Anthropic betas: `fine-grained-tool-streaming-2025-05-14`, `interleaved-thinking-2025-05-14`. OAuth adds: `claude-code-20250219`, `oauth-2025-04-20`.
+
+Thinking level defaults to `"adaptive"` for Opus 4.6 and Sonnet 4.6 models.
+
+## SearXNG Web Search Provider
+
+Bundled plugin (`extensions/searxng/`) providing self-hosted meta-search via SearXNG. Registered via `api.registerWebSearchProvider()`.
+
+Config path: `plugins.entries.searxng.config.webSearch.baseUrl`. Env var: `SEARXNG_BASE_URL`. No API key required - only a base URL to a SearXNG instance.
+
+Tool parameters: `query` (required), `count` (1-10), `categories` (comma-separated: general, news, science, etc.), `language` (e.g. en, de, fr).
+
+Plugin manifest declares `contracts.webSearchProviders: ["searxng"]`. Auto-detect order: 200 (low priority - prefers other configured web search providers first).
+
 ## Provider Registration via Plugin
 
 ```typescript
@@ -155,6 +181,13 @@ Note: `registerProvider()` is auth-only. It does NOT populate the model catalog.
 | `resolveConfigApiKey` | Custom API key resolution from config/env |
 | `createStreamFn` | Factory for provider-specific streaming implementation |
 | `createEmbeddingProvider` | Memory embeddings via provider plugin (for memory plugins) |
+| `wrapStreamFn` | Compose provider-specific stream wrappers (beta headers, service tier, etc.) |
+
+## Plugin Auto-Enable for Provider Auth
+
+Plugins with `autoEnableWhenConfiguredProviders` in their manifest are automatically enabled when the corresponding provider has auth configured (auth profiles, model providers, or model refs). For example, the MiniMax plugin declares `autoEnableWhenConfiguredProviders: ["minimax", "minimax-portal"]` and is auto-enabled when a MiniMax API key auth route is configured - even without an explicit `plugins.entries.minimax.enabled: true`.
+
+Detection checks: auth profiles with matching provider, `models.providers` keys, and provider prefixes in model refs (e.g. `minimax/MiniMax-M2.7` in agent defaults).
 
 ## Plugin Model Auth API
 
@@ -208,6 +241,12 @@ Transient HTTP status codes that trigger model fallback:
 
 HTTP 499 (Client Closed Request) is classified as `timeout` for fallback purposes (or `overloaded` if the response body contains an `overloaded_error` payload). This handles proxies/load balancers that return 499 when upstream is slow.
 
+### Rate-Limit Profile Rotation Cap
+
+When a model hits rate-limit errors, the runner rotates through auth profiles. After exceeding `rateLimitProfileRotationLimit` rotations (configurable), the runner escalates to **cross-provider model fallback** instead of spinning forever across profiles that share the same model quota. This mirrors the existing overload rotation cap behavior.
+
+Without this, per-model quota exhaustion (e.g. Anthropic Sonnet-only rate limits) causes infinite profile rotation when all profiles share the same underlying quota. The escalation throws a `FailoverError` with reason `rate_limit`, triggering the standard model fallback chain.
+
 ### Fallback Classifier Priority Order
 
 `classifyFailoverReason()` evaluates in this order (first match wins):
@@ -229,6 +268,12 @@ Transient signals: `internal server error`, `overload`, `temporarily unavailable
 
 Billing/auth errors inside `api_error` payloads are excluded from transient classification - they fall through to their specific classifiers.
 
+### Failover Reasons
+
+Full `FailoverReason` union: `auth`, `auth_permanent`, `format`, `rate_limit`, `overloaded`, `billing`, `timeout`, `model_not_found`, `session_expired`, `unknown`.
+
+`session_expired` (HTTP 410 Gone) handles expired/deleted upstream sessions - not retried via profile rotation.
+
 ## Auth Profile Cooldowns
 
 Failure reasons (priority order): `auth_permanent`, `auth`, `billing`, `format`, `model_not_found`, `overloaded`, `timeout`, `rate_limit`, `unknown`.
@@ -238,6 +283,43 @@ Cooldown backoff: 1min, 5min, 25min, max 1 hour (exponential). Billing/auth_perm
 **Cooldown expiry resets error counters.** When `cooldownUntil`/`disabledUntil` expires, `errorCount` and `failureCounts` are cleared so the profile gets a fresh backoff window. Without this, stale error counts from expired cooldowns cause the next transient failure to immediately escalate to a much longer cooldown.
 
 **Single-provider billing probes.** When only one provider is configured (no fallback chain), billing cooldowns are probed on the standard 30s throttle so the setup can recover if the user fixes their balance - without requiring a restart. Multi-provider setups only probe near cooldown expiry so the fallback chain stays preferred.
+
+### Cooldown Probe Policy by Reason
+
+| Reason | Allow cooldown probe | Use transient probe slot | Preserve transient probe slot |
+|--------|---------------------|--------------------------|-------------------------------|
+| `rate_limit` | yes | yes | no |
+| `overloaded` | yes | yes | no |
+| `billing` | yes | no | no |
+| `unknown` | yes | yes | no |
+| `model_not_found` | no | no | yes |
+| `format` | no | no | yes |
+| `auth` / `auth_permanent` | no | no | yes |
+| `session_expired` | no | no | yes |
+
+## Error Sanitization for Chat Replies
+
+Raw provider error payloads are never shown directly to users. `formatAssistantErrorText()` rewrites errors into safe user-facing messages:
+
+- Context overflow -> suggests `/reset` or larger-context model
+- Reasoning constraint -> suggests `/think minimal`
+- Invalid streaming order -> generic retry message
+- Role ordering conflicts -> retry + `/new` suggestion
+- Rate-limit/overload -> transient retry message
+- Transport errors (ECONNRESET, ETIMEDOUT, etc.) -> connectivity message
+- Billing errors -> provider-specific billing message
+- Raw HTTP/JSON API payloads -> `formatRawAssistantErrorForUi()` extracts status + message
+- Long unhandled errors -> truncated to 600 chars
+
+`sanitizeUserFacingText()` also catches provider error payloads that leak into non-error stream chunks (e.g. Codex error prefixes) and rewrites them.
+
+## Anthropic Thinking Replay Preservation
+
+Anthropic Claude endpoints can reject replayed `thinking` blocks unless original signatures are preserved byte-for-byte. The transcript policy (`transcript-policy.ts`) handles this per-provider:
+
+- `preservesAnthropicThinkingSignatures` capability flag determines whether the provider preserves thinking block signatures
+- `dropThinkingBlocks` policy strips thinking blocks at send-time for providers where replay would fail
+- Latest assistant turn's thinking blocks are preserved for providers that support replay (Anthropic direct, Amazon Bedrock, GitHub Copilot)
 
 ## Default Context Windows
 

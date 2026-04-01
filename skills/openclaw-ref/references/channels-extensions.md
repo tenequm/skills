@@ -4,13 +4,13 @@
 
 | Channel | Code Path | Config Key | Notes |
 |---------|-----------|------------|-------|
-| Telegram | `src/telegram/` | `channels.telegram` | Long polling or webhook, bot token required |
-| Discord | `src/discord/` | `channels.discord` | Bot token, guild-based |
-| Slack | `src/slack/` | `channels.slack` | App token + bot token |
-| Signal | `src/signal/` | `channels.signal` | signal-cli based, phone number required |
-| iMessage | `src/imessage/` | `channels.imessage` | macOS only, BlueBubbles or native |
-| WhatsApp (Web) | `src/web/` | `channels.whatsapp` | Browser-based web automation |
-| Web UI | `src/provider-web.ts` | `channels.web` | Built-in web chat interface |
+| Telegram | `extensions/telegram/src/` | `channels.telegram` | Long polling or webhook, bot token required |
+| Discord | `extensions/discord/src/` | `channels.discord` | Bot token, guild-based |
+| Slack | `extensions/slack/src/` | `channels.slack` | App token + bot token |
+| Signal | `extensions/signal/src/` | `channels.signal` | signal-cli based, phone number required |
+| iMessage | `extensions/imessage/src/` | `channels.imessage` | macOS only, BlueBubbles or native |
+| WhatsApp | `extensions/whatsapp/` | `channels.whatsapp` | Baileys library for WhatsApp Web protocol |
+| Web UI | `src/channels/web/` | `channels.web` | Built-in web chat interface |
 
 ## Extension Channels
 
@@ -27,6 +27,21 @@
 | WhatsApp | `extensions/whatsapp/` | via plugin config | WhatsApp via Baileys, npm-publishable |
 | ACPX | `extensions/acpx/` | via plugin config | ACP runtime backend (acpx CLI) |
 | QQ Bot | `extensions/qqbot/` | via plugin config | QQ Bot API (PR #52986) (NEW) |
+| SearXNG | `extensions/searxng/` | via plugin config | Self-hosted meta-search web search provider (PR #57317) (NEW) |
+| Nostr | `extensions/nostr/` | via plugin config | NIP-04 encrypted DMs via nostr-tools |
+| Google Chat | `extensions/googlechat/` | via plugin config | Google Chat via google-auth-library |
+| LINE | `extensions/line/` | via plugin config | LINE Messaging API |
+| IRC | `extensions/irc/` | via plugin config | IRC protocol |
+| Twitch | `extensions/twitch/` | via plugin config | Twitch chat via Twurple |
+| Nextcloud Talk | `extensions/nextcloud-talk/` | via plugin config | Nextcloud Talk API |
+| Synology Chat | `extensions/synology-chat/` | via plugin config | Synology Chat webhook/bot |
+| Tlon | `extensions/tlon/` | via plugin config | Tlon/Urbit Landscape messaging |
+
+## Extension Plugins (Non-Channel)
+
+| Extension | Path | Type | Notes |
+|-----------|------|------|-------|
+| SearXNG | `extensions/searxng/` | Web search provider | Registers via `api.registerWebSearchProvider()`; self-hosted SearXNG meta-search, no API key required; configurable categories and language (PR #57317) (NEW) |
 
 ## Channel Plugin Registration
 
@@ -66,13 +81,13 @@ Telegram, Discord, and Matrix support thread-bound sessions via `threadBindings`
 - `spawnSubagentSessions`: auto-create + bind threads for `sessions_spawn({ thread: true })`
 - `spawnAcpSessions`: auto-create + bind threads for `/acp spawn`
 
-Thread binding spawn policy defaults (`src/channels/thread-bindings-policy.ts`):
+Thread binding spawn policy defaults (`src/channels/thread-bindings-policy.ts` or channel-specific policy):
 - Discord and Matrix default spawn flags to `false`
 - Other channels default to `true`
 
 Matrix thread binding commands: `/acp spawn`, `/session spawn`, `/focus`, `/unfocus` - wired through `bindings.compileConfiguredBinding`/`matchInboundConversation`.
 
-Key files: `src/telegram/thread-bindings.ts`, Discord thread binding via plugin SDK
+Key files: `extensions/telegram/src/thread-bindings.ts`, Discord thread binding via plugin SDK
 
 ## Telegram Channel Config
 
@@ -100,10 +115,13 @@ Key files: `src/telegram/thread-bindings.ts`, Discord thread binding via plugin 
 - **Streaming modes**: `"off"`, `"partial"`, `"block"`, `"progress"`
 - **Direct DMs**: `direct` config keyed by chat ID for per-user settings
 - **Topics**: support `agentId` for topic-specific agent routing
-- **Network fallback**: resolver-scoped dispatchers with IPv4 fallback retry on `ETIMEDOUT`/`ENETUNREACH`/`UND_ERR_CONNECT_TIMEOUT` (`src/telegram/fetch.ts`)
+- **Network fallback**: resolver-scoped dispatchers with IPv4 fallback retry on `ETIMEDOUT`/`ENETUNREACH`/`UND_ERR_CONNECT_TIMEOUT` (`extensions/telegram/src/fetch.ts`)
 - **Duplicate prevention**: deduplicates messages when preview edit times out before delivery confirmation
-- **Exec approvals**: per-account `execApprovals` config with `approvers` list, `target` (`"dm"`, `"channel"`, `"both"`), and inline approval buttons for OpenCode/Codex flows (`src/telegram/exec-approvals.ts`)
-- **Direct delivery hooks**: bridges direct delivery to internal `message:sent` hooks (`src/telegram/bot/delivery.replies.ts`); media loader now injected via plugin-sdk path
+- **Exec approvals**: per-account `execApprovals` config with `approvers` list, `target` (`"dm"`, `"channel"`, `"both"`), and inline approval buttons for OpenCode/Codex flows (`extensions/telegram/src/exec-approvals.ts`)
+- **Direct delivery hooks**: bridges direct delivery to internal `message:sent` hooks (`extensions/telegram/src/bot/delivery.replies.ts`); media loader now injected via plugin-sdk path
+- **Safe send retry**: `isSafeToRetrySendError()` only retries pre-connect errors (`ECONNREFUSED`, `ENOTFOUND`, `EAI_AGAIN`, `ENETUNREACH`, `EHOSTUNREACH`) to prevent duplicate messages; post-connect errors like `ECONNRESET`/`ETIMEDOUT` are not retried for non-idempotent sends (`extensions/telegram/src/network-errors.ts`, PR #51895) (NEW)
+- **Topic delivery routing preserved**: DM topic `threadId` propagated correctly in announce/delivery contexts so replies land in the correct topic thread (#58489) (NEW)
+- **Media retry with file-too-big guard**: `resolveTelegramFileWithRetry()` retries `getFile` up to 3 attempts with 1-4s jitter delay; permanently skips Telegram Bot API >20MB `file is too big` errors instead of retrying (`extensions/telegram/src/bot/delivery.resolve-media.ts`) (NEW)
 
 ## Discord Channel Config
 
@@ -128,18 +146,27 @@ Key files: `src/telegram/thread-bindings.ts`, Discord thread binding via plugin 
 - **Event queue**: configurable `listenerTimeout`, `maxQueueSize`, `maxConcurrency`
 - **Streaming modes**: `"off"`, `"partial"`, `"block"`, `"progress"`
 - **Reaction notification**: `"off"`, `"own"`, `"all"`, `"allowlist"`
-- **maxLinesPerMessage**: effective value applied in live replies; resolved per-account with root/account config merge (`src/discord/accounts.ts`)
+- **maxLinesPerMessage**: effective value applied in live replies; resolved per-account with root/account config merge (`extensions/discord/src/accounts.ts`)
 - **Account helper cycle broken**: account resolution and inspect now import from `extensions/discord/src/runtime-api.ts` cleanly
 - **Strict DM allowlist auth**: enforced for DM component interactions (PR #49997)
 - **Native command auth replies**: privileged native slash commands (e.g. `/config show`, `/plugins list`) now return explicit "You are not authorized" reply on auth failure instead of falling through to Discord's generic empty-interaction fallback; gated on `CommandSource === "native"` in `rejectUnauthorizedCommand()`/`rejectNonOwnerCommand()` gates (PR #53072)
+- **Bounded inbound media downloads**: attachment and sticker fetches use `DISCORD_ATTACHMENT_IDLE_TIMEOUT_MS` (60s idle) and `DISCORD_ATTACHMENT_TOTAL_TIMEOUT_MS` (120s total) timeouts per individual download; the inbound worker abort signal remains the outer bound for the full message (`extensions/discord/src/monitor/timeouts.ts`, #58593) (NEW)
 
 ## Discord Architecture
 
 Inbound event processing system:
-- `src/discord/monitor/inbound-worker.ts` - keyed async queue per session
-- `src/discord/monitor/inbound-job.ts` - job serialization and execution
-- `src/discord/monitor/timeouts.ts` - timeout normalization and abort signal management
-- `src/discord/monitor/message-handler.ts` - debounce + worker integration
+- `extensions/discord/src/monitor/inbound-worker.ts` - keyed async queue per session
+- `extensions/discord/src/monitor/inbound-job.ts` - job serialization and execution
+- `extensions/discord/src/monitor/timeouts.ts` - timeout normalization and abort signal management
+- `extensions/discord/src/monitor/message-handler.ts` - debounce + worker integration
+
+## Discord & Slack Exec Approvals
+
+Both Discord and Slack now handle `exec` and `plugin` approval kinds via their exec approval handlers:
+
+- **Discord**: `DiscordExecApprovalHandler` subscribes to `eventKinds: ["exec", "plugin"]`; renders `ExecApprovalContainer` or `PluginApprovalContainer` based on approval kind; `resolveApprovalKindFromId()` distinguishes `plugin:` prefixed IDs; button interactions resolve via `exec.approval.resolve` or `plugin.approval.resolve` methods (`extensions/discord/src/monitor/exec-approvals.ts`)
+- **Slack**: `shouldHandleSlackExecApprovalRequest()` accepts both `ExecApprovalRequest` and `PluginApprovalRequest`; approval auth via `isSlackExecApprovalAuthorizedSender()` (`extensions/slack/src/exec-approvals.ts`)
+- Agent session resumes after approval completion (#58792) (NEW)
 
 ## Matrix Extension
 
@@ -170,6 +197,7 @@ Exec approval handling was significantly refactored:
 - Telegram account binding shared (`refactor(approvals): share telegram account binding`)
 - Native request binding centralized (`fix(approvals): centralize native request binding`)
 - Approval auth capabilities added to more channels (`refactor: add approval auth capabilities to more channels`)
+- Remote approval regressions resolved (#58792) (NEW)
 
 ## Diagnostics
 
@@ -191,9 +219,9 @@ type InspectedAccount = {
 ```
 
 Key files:
-- `src/discord/account-inspect.ts`
-- `src/telegram/account-inspect.ts`
-- `src/slack/account-inspect.ts`
+- `extensions/discord/src/account-inspect.ts`
+- `extensions/telegram/src/account-inspect.ts`
+- `extensions/slack/src/account-inspect.ts`
 - `src/channels/account-snapshot-fields.ts` - shared utilities for credential status projection (supports `tokenStatus`, `botTokenStatus`, `appTokenStatus`, `signingSecretStatus`, `userTokenStatus`)
 
 ## Channel Status
@@ -254,13 +282,12 @@ extensions/my-channel/
 
 Key paths:
 - `src/routing/` - message routing between channels
-- `src/channels/` - shared channel infrastructure (dock, summary, snapshot fields)
-- `src/channels/dock.ts` - channel docking with group policy resolution per channel
+- `src/channels/` - shared channel infrastructure (summary, snapshot fields)
 - `src/channels/native-command-session-targets.ts` - native command session target resolution
 - `src/channels/plugins/helpers.ts` - plugin helpers (default account resolution, pairing hints, DM security policy builder)
-- `src/channels/plugins/group-mentions.test.ts` - group mention handling
 - `src/channels/plugins/group-policy-warnings.ts` - group policy warning collectors (open policy, allowlist provider, missing route allowlist)
-- `src/channels/plugins/onboarding/` - channel-specific onboarding helpers
+- `src/channels/plugins/session-conversation.ts` - session conversation resolution; resolves thread IDs, base conversation IDs, and parent conversation candidates per channel via plugin messaging hooks or bundled fallback modules (NEW)
+- `src/channels/model-overrides.ts` - per-channel model overrides via `channels.modelByChannel` config; resolves group/channel/thread candidates with wildcard fallback (NEW)
 - `src/auto-reply/` - auto-reply logic, skill commands
 
 Messages flow: Channel -> Routing -> Agent -> Response -> Channel
@@ -274,7 +301,7 @@ WebChat replies now stay on WebChat instead of being rerouted by persisted deliv
 
 **Mattermost** (`extensions/mattermost/`):
 - Reads `replyTo` param as fallback when `replyToId` is blank in plugin `handleAction` send paths (`src/channel.ts`)
-- Fixes DM media upload for unprefixed 26-char user IDs (`src/mattermost/send.ts`)
+- Fixes DM media upload for unprefixed 26-char user IDs (`extensions/mattermost/src/send.ts`)
 - Sanitized `actionId` to alphanumeric-only with empty-id and collision guards (PR #49920)
 
 **Feishu/Lark** (`extensions/feishu/`):
@@ -282,6 +309,8 @@ WebChat replies now stay on WebChat instead of being rerouted by persisted deliv
 - `@_all` no longer treated as bot-specific mention (PR #50440)
 - Bot-menu event keys mapped to slash commands (PR #49986)
 - Config schema uses `name` (not `botName`) for account display name (PR #52753)
+- **Drive comment event handling**: new `comment-handler.ts` / `comment-dispatcher.ts` flow processes Feishu Drive comment notice events; resolves comment turn, applies allowlist/pairing policy, dispatches to agent with `Surface: "feishu-comment"` context; supports dynamic agent creation for comment flows (#58497) (NEW)
+- **Drive tool expanded with comment CRUD**: `feishu_drive` tool now supports `list_comments`, `list_comment_replies`, `add_comment`, and `reply_comment` actions alongside existing file operations (`extensions/feishu/src/drive.ts`) (NEW)
 
 **ACPX** (`extensions/acpx/`):
 - ACP runtime backend plugin: registers via `api.registerService()`, not `registerChannel()`
@@ -296,6 +325,22 @@ WebChat replies now stay on WebChat instead of being rerouted by persisted deliv
 - Now npm-publishable (`private: true` removed from package.json)
 - Uses Baileys library for WhatsApp Web connection
 - Test harness stabilized: session exports preserved in login coverage and shared workers, media test module exports preserved, CI extension checks stabilized
+- **Reaction guidance levels**: `resolveWhatsAppReactionLevel()` resolves per-account reaction level from config with `defaultLevel: "minimal"` and `invalidFallback: "minimal"`; levels control ack reaction behavior (`extensions/whatsapp/src/reaction-level.ts`, #58622) (NEW)
+
+**QQ Bot** (`extensions/qqbot/`):
+- `/bot-logs` requires explicit allowlist: `hasExplicitCommandAllowlist()` checks that `allowFrom` contains non-wildcard entries before permitting log export; keeps `/bot-logs` closed when setup leaves allowFrom in permissive mode (`extensions/qqbot/src/slash-commands.ts`, #58895) (NEW)
+
+## SearXNG Extension
+
+Bundled self-hosted web search provider plugin (`extensions/searxng/`):
+- Registers via `api.registerWebSearchProvider()` using `definePluginEntry()` (`extensions/searxng/index.ts`)
+- **No API key required** - only needs a SearXNG base URL (`SEARXNG_BASE_URL` env var or `plugins.entries.searxng.config.webSearch.baseUrl` config)
+- Configurable `categories` (comma-separated: general, news, science, etc.) and `language` (en, de, fr, etc.) via config or per-query tool parameters
+- Auto-detect order: 200 (lower priority than commercial providers)
+- Web search provider contract: `webSearchProviders: ["searxng"]` in `openclaw.plugin.json`
+- Tool: `searxng_search` - search query with optional `count` (1-10), `categories`, `language` parameters
+- Config resolution: `resolveSearxngBaseUrl()` checks plugin config, inline env SecretRef, then `SEARXNG_BASE_URL` env var (`extensions/searxng/src/config.ts`)
+- (PR #57317) (NEW)
 
 ## Allowlists & Pairing
 

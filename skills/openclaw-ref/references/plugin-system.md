@@ -20,16 +20,31 @@ Key files: `src/plugins/discovery.ts`, `src/plugins/loader.ts`
   "kind": "memory",
   "channels": ["channel-id"],
   "providers": ["provider-id"],
+  "autoEnableWhenConfiguredProviders": ["provider-id"],
+  "providerAuthEnvVars": { "provider-id": ["PROVIDER_API_KEY"] },
   "skills": ["skill-id"],
   "configSchema": { "type": "object", "properties": { ... } },
-  "uiHints": { "token": { "label": "API Token", "sensitive": true } }
+  "uiHints": { "token": { "label": "API Token", "sensitive": true } },
+  "contracts": {
+    "webSearchProviders": ["provider-id"],
+    "mediaUnderstandingProviders": ["provider-id"],
+    "imageGenerationProviders": ["provider-id"],
+    "speechProviders": ["provider-id"],
+    "tools": ["tool-id"]
+  }
 }
 ```
 
 - `kind`: optional, set `"memory"` for memory backend plugins, or array `["memory", "context-engine"]` for multi-kind plugins (PR #57507)
 - `channels`/`providers`: declare capabilities for UI/discovery
+- `autoEnableWhenConfiguredProviders`: provider ids that trigger auto-enable when referenced in auth profiles, provider config, or model refs (see "Auto-Enable for API Key Auth" below)
+- `providerAuthEnvVars`: cheap env-var lookup for provider auth without booting plugin runtime. Map of provider id to env var names (e.g. minimax manifest maps `"minimax" -> ["MINIMAX_API_KEY"]`)
+- `contracts`: static capability ownership snapshot (`PluginManifestContracts`) for manifest-driven discovery and compat wiring without importing plugin runtime. Optional arrays: `speechProviders`, `mediaUnderstandingProviders`, `imageGenerationProviders`, `webSearchProviders`, `tools`
+- `providerAuthChoices`: array of auth choice objects for provider onboarding UI. Fields: `provider`, `method`, `choiceId`, `choiceLabel`, `groupId`, `groupLabel`, `optionKey`, `cliFlag`, `cliOption`, `cliDescription`, `onboardingScopes`
 - `configSchema`: validated against plugin's `entries.<id>.config`
 - `uiHints`: drive config UI (labels, sensitive masking)
+
+> **Deprecated**: top-level `speechProviders`, `mediaUnderstandingProviders`, `imageGenerationProviders` in the manifest are deprecated. Move them under `contracts`. Run `openclaw doctor --fix` to auto-migrate.
 
 ## Package.json Convention
 
@@ -188,6 +203,41 @@ Runtime is lazy-loaded via Proxy to avoid heavy dependencies in test/validation 
 
 Gateway subagent runtime uses `Symbol.for("openclaw.plugin.gatewaySubagentRuntime")` for late binding.
 
+### Local Runtime Module Loading
+
+Key file: `src/plugins/runtime/local-runtime-module.ts`
+
+`loadSiblingRuntimeModuleSync<T>()` loads a sibling module relative to a caller's `import.meta.url` using jiti. Resolution logic:
+
+1. Compute `baseDir` from `fileURLToPath(moduleUrl)`
+2. Search candidate directories: `[baseDir, baseDir/plugins/runtime]`
+3. Try extensions in order: `.js`, `.ts`, `.mjs`, `.mts`, `.cjs`, `.cts`
+4. First existing file wins; throws if none found
+
+Jiti instances are cached by a composite key of `{ tryNative, aliasMap, moduleUrl }` to avoid re-creating loaders for the same configuration. Uses `buildPluginLoaderAliasMap()` and `buildPluginLoaderJitiOptions()` from `src/plugins/sdk-alias.ts`.
+
+```typescript
+function loadSiblingRuntimeModuleSync<T>(params: {
+  moduleUrl: string;      // caller's import.meta.url
+  relativeBase: string;   // e.g. "./my-module" (extension auto-resolved)
+}): T;
+```
+
+### Bundled Plugin Runtime Dependencies
+
+Key file: `src/plugins/bundled-dir.ts`
+
+`resolveBundledPluginsDir()` locates the bundled extensions directory with this resolution priority:
+
+1. `OPENCLAW_BUNDLED_PLUGINS_DIR` env override (falls back to argv-based package root for stale overrides in packaged installs)
+2. Source checkout: `<packageRoot>/extensions/` (preferred when `.git` + `src/` + `extensions/` exist, or in VITEST)
+3. Runtime staging: `<packageRoot>/dist-runtime/extensions/` - only used when the paired `dist/extensions/` also exists (prevents wrapper drift after partial builds, fix from #58782)
+4. Built distribution: `<packageRoot>/dist/extensions/`
+5. Bun `--compile` sibling: `<execDir>/dist/extensions/` or `<execDir>/extensions/`
+6. Walk-up from module: traverse up to 6 parent dirs looking for `extensions/`
+
+Package roots are resolved from three sources (deduplicated): `argv[1]`, `process.cwd()`, `import.meta.url`.
+
 ## Plugin Config Type
 
 ```typescript
@@ -252,6 +302,36 @@ Options: `mode: "validate"` validates without executing plugins.
 Untracked plugins (no provenance) generate diagnostics warnings.
 
 Key file: `src/plugins/loader.ts`
+
+### Bundled Channel Plugin Enable Resolution
+
+Key file: `src/plugins/config-state.ts`
+
+`resolveEffectiveEnableState()` wraps the base `resolveEnableState()` with an additional override for bundled channel plugins. When a bundled plugin is disabled by default (reason `"bundled (disabled by default)"` or `"not in allowlist"`), it calls `isBundledChannelEnabledByChannelConfig()` which checks if `channels.<channelId>.enabled === true` exists in the root config (#58873).
+
+```typescript
+function resolveEffectiveEnableState(params: {
+  id: string;
+  origin: PluginRecord["origin"];
+  config: NormalizedPluginsConfig;
+  rootConfig?: OpenClawConfig;
+  enabledByDefault?: boolean;
+}): { enabled: boolean; reason?: string };
+```
+
+The channel id is resolved via `normalizeChatChannelId(pluginId)`. If the root config has `channels.<id>.enabled === true`, the plugin is force-enabled regardless of allowlist or default-disabled state. This allows `applyPluginAutoEnable()` to set `channels.<id>.enabled: true` and have it take effect during loading.
+
+### Auto-Enable for API Key Auth
+
+Key file: `src/config/plugin-auto-enable.ts`
+
+`applyPluginAutoEnable()` supports `mode: "api_key"` auth profiles (not just OAuth) for triggering auto-enable via `autoEnableWhenConfiguredProviders` (#57127). The `isProviderConfigured()` function checks three sources:
+
+1. `auth.profiles` - matches `profile.provider` against the target provider id (works for both OAuth and API key mode profiles)
+2. `models.providers` - matches keys in the provider config map
+3. Model refs - extracts provider prefix from `agents.defaults.model`, `agents.list[].model`, and model fallbacks
+
+`resolveAutoEnableProviderPluginIds()` merges the built-in `BUNDLED_AUTO_ENABLE_PROVIDER_PLUGIN_IDS` map with manifest-declared `autoEnableWhenConfiguredProviders` from the `PluginManifestRegistry`. Plugins that are explicitly disabled or denied are skipped. The `preferOver` mechanism prevents enabling superseded plugins when a preferred alternative is also configured.
 
 ### Uninstall Resolution
 
@@ -336,7 +416,8 @@ Key exports: types, config access, channel interfaces, tool builders, hook types
 
 New SDK modules:
 - `src/plugin-sdk/diffs.ts` - narrow facade for diff/artifact context routing
-- `src/plugin-sdk/message-tool-schema.ts` - `createMessageToolButtonsSchema()` and `createMessageToolCardSchema()` moved from core to SDK
+- `src/plugin-sdk/channel-actions.ts` - `createMessageToolButtonsSchema()` and `createMessageToolCardSchema()` moved from core to SDK
+- `src/plugin-sdk/approval-delivery-helpers.ts` - `createApproverRestrictedNativeApprovalAdapter()` factory for channel-specific approval delivery. Produces an adapter with `auth` (authorize actor, availability state), `delivery` (DM route detection, forwarding suppression), and optional `native` (origin/approver-DM target resolution, delivery capabilities) sections. Used by discord, slack, and telegram extensions.
 
 Channel-specific SDK subpaths:
 - `openclaw/discord` - thread binding management (`autoBindSpawnedDiscordSubagent`, `listThreadBindingsBySessionKey`, `unbindThreadBindingsBySessionKey`)
@@ -361,6 +442,72 @@ extensions/my-plugin/
 Keep plugin deps in the extension `package.json`, not root. Use `devDependencies` or `peerDependencies` for `openclaw` (resolved at runtime via jiti alias).
 
 Removed `api.registerHttpHandler()` - plugins using it get a clear migration error pointing to `api.registerHttpRoute()` (#36794).
+
+## Bundled Web Search Provider: SearXNG (#57317)
+
+Key files: `extensions/searxng/`
+
+Self-hosted meta-search provider with no API key required. Registered as a bundled web search provider plugin.
+
+### Manifest
+
+```json
+{
+  "id": "searxng",
+  "contracts": { "webSearchProviders": ["searxng"] },
+  "configSchema": {
+    "type": "object",
+    "properties": {
+      "webSearch": {
+        "type": "object",
+        "properties": {
+          "baseUrl": { "type": ["string", "object"] },
+          "categories": { "type": "string" },
+          "language": { "type": "string" }
+        }
+      }
+    }
+  }
+}
+```
+
+### Registration
+
+Uses `definePluginEntry()` + `api.registerWebSearchProvider()` with the `WebSearchProviderPlugin` interface:
+
+```typescript
+const provider: WebSearchProviderPlugin = {
+  id: "searxng",
+  label: "SearXNG Search",
+  hint: "Self-hosted meta-search with no API key required",
+  requiresCredential: true,            // base URL acts as credential
+  credentialLabel: "SearXNG Base URL",
+  envVars: ["SEARXNG_BASE_URL"],
+  autoDetectOrder: 200,
+  credentialPath: "plugins.entries.searxng.config.webSearch.baseUrl",
+  // ...credential get/set helpers, tool factory
+};
+```
+
+### Runtime Client (`src/searxng-client.ts`)
+
+`runSearxngSearch()` performs the search:
+1. Resolve config: `baseUrl` from plugin config, inline env secret ref, or `SEARXNG_BASE_URL` env var
+2. SSRF validation: `validateSearxngBaseUrl()` uses `assertHttpUrlTargetsPrivateNetwork()` - HTTP URLs must target private/loopback network; HTTPS allowed for public hosts
+3. Cache check via `normalizeCacheKey()` / `readCache()` with `DEFAULT_CACHE_TTL_MINUTES`
+4. Build URL: `<baseUrl>/search?q=...&format=json&categories=...&language=...`
+5. Fetch via `withTrustedWebSearchEndpoint()` with configurable timeout (default 20s) and 1MB response limit
+6. Parse results: normalize each `SearxngResult` (`url`, `title`, `content`), cap at `count`
+7. Wrap results with `wrapWebContent()` (untrusted external content markers) and `writeCache()`
+
+### Config Resolution Chain (`src/config.ts`)
+
+Base URL resolution order:
+1. `plugins.entries.searxng.config.webSearch.baseUrl` (string or secret-input object)
+2. Inline env secret ref (`{ source: "env", id: "VAR_NAME" }`)
+3. `SEARXNG_BASE_URL` environment variable
+
+Categories and language from `plugins.entries.searxng.config.webSearch.categories`/`language`.
 
 ## New Provider Plugin Types
 
@@ -481,8 +628,44 @@ Used for lazy root CLI registration - when descriptors cover every top-level com
 - `before_install` hook removed (commit `fcb802e`)
 - Dangerous skill installs now fail closed by default (commit `0d7f1e2`)
 - New override: `--dangerously-force-unsafe-install` bypasses built-in blocking
+- `dangerouslyForceUnsafeInstall` is now threaded through all install paths including archive extraction (#58879), via `InstallSafetyOverrides` type in `PackageInstallCommonParams` and `FileInstallCommonParams` (`src/plugins/install.ts`). `FileInstallCommonParams` picks `dangerouslyForceUnsafeInstall` from `PackageInstallCommonParams`. All scan functions (`scanBundleInstallSource`, `scanPackageInstallSource`, `scanFileInstallSource`) accept `InstallSafetyOverrides`. Also threaded through marketplace (`src/plugins/marketplace.ts`), ClawHub (`src/plugins/clawhub.ts`), and CLI install command (`src/cli/plugins-install-command.ts`).
 - Marketplace and Ollama network requests are guarded (commit `8deb952`)
 - Plugin install blocked when source scan fails (commit `7a953a5`)
+
+## Plugin Shapes
+
+OpenClaw classifies every loaded plugin into a shape:
+
+| Shape | Meaning |
+|-------|---------|
+| `plain-capability` | One capability type (e.g. provider-only like `mistral`) |
+| `hybrid-capability` | Multiple capability types (e.g. `openai` owns text, speech, media, images) |
+| `hook-only` | Only hooks, no capabilities/tools/commands/services |
+| `non-capability` | Tools/commands/services but no capabilities |
+
+Use `openclaw plugins inspect <id>` to see shape.
+
+## Bundle Compatibility
+
+OpenClaw can install plugins from three external ecosystems: Codex, Claude, Cursor. These are content packs mapped into native features.
+
+- Bundle formats: `.codex-plugin/plugin.json`, `.claude-plugin/plugin.json`, `.cursor-plugin/plugin.json`
+- Auto-detected during install from local paths and archives
+- Mapped features: skill roots, command roots (Claude/Cursor), hook packs (Codex), MCP tools, Claude `settings.json` defaults
+- Show up as `Format: bundle` with subtype in `plugins list` / `plugins inspect`
+- Bundles are NOT in-process native plugins - narrower trust boundary
+
+## ClawHub Install Flow
+
+- `openclaw plugins install <spec>` checks ClawHub first, falls back to npm
+- Explicit: `openclaw plugins install clawhub:<package>`
+- ClawHub downloads archive, checks plugin API / min gateway compat
+- Marketplace support: `<plugin>@<marketplace>` shorthand, `--marketplace` flag
+- Marketplace sources: known-marketplace name, local path, GitHub repo shorthand, git URL
+
+## Community Plugins
+
+Community plugins are available on ClawHub and npm. Notable ones: Codex App Server Bridge, DingTalk, Lossless Claw (LCM), Opik, QQbot, WeCom.
 
 ## ExecApprovalManager Generics
 

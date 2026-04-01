@@ -1,14 +1,14 @@
 ---
 name: openclaw-ref
 description: OpenClaw platform reference - plugin system, extensions, configuration, boot/provisioning, channels, models, CLI. Use when working on openclaw codebase, building openclaw plugins/extensions, configuring openclaw instances, provisioning openclaw gateways, designing agent provisioning flows (e.g. agentbox), or debugging openclaw config/plugin/channel issues. Triggers on openclaw, openclaw config, openclaw plugin, openclaw extension, openclaw channel, openclaw gateway, openclaw provisioning, openclaw onboarding, openclaw boot, openclaw skills, BOOT.md, openclaw.plugin.json, openclaw-x402, agentbox provisioning.
-version: "2026.3.31"
 metadata:
-  last_refresh_sha: bf0f33db32c5cca2736e938b61eec49b3ca24616
+  version: "2026.4.1"
+  last_refresh_sha: f70ad924a65d8c55f031a5e0e1e1393fbc38234c
 ---
 
 # OpenClaw Platform Reference
 
-Structured reference for the OpenClaw assistant platform. Source repo: `~/Projects/openclaw/`. Tracking version: **2026.3.31**.
+Structured reference for the OpenClaw assistant platform. Source repo: `~/Projects/openclaw/`. Tracking version: **2026.4.1** (refresh: 2026-04-01).
 
 ## Quick Navigation
 
@@ -51,13 +51,13 @@ docs/                  - Documentation (Mintlify)
 
 ## Config File Locations
 
-- Main config: `~/.openclaw/config.json` (or `.json5`)
-- Plugins: `~/.openclaw/plugins/`
+- Main config: `~/.openclaw/openclaw.json` (parsed as JSON5)
+- Extensions: `~/.openclaw/extensions/`
 - Skills: `~/.openclaw/skills/` (managed) + workspace skills
 - Agents: `~/.openclaw/agents/<agent-id>/`
 - Sessions: `~/.openclaw/agents/<agent-id>/sessions/`
 - Credentials: `~/.openclaw/credentials/`
-- Override: `OPENCLAW_CONFIG` env var
+- Override: `OPENCLAW_CONFIG_PATH` env var
 
 ## Plugin Manifest Quick Ref
 
