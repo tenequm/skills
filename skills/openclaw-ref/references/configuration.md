@@ -93,17 +93,21 @@ Key types: `src/config/types.openclaw.ts`, `src/config/types.plugins.ts`, `src/c
 
 ### Notable structural changes since last refresh
 
-- `mcp` added as top-level key for MCP server definitions
-- `browser` key ordering moved (now before `ui`)
-- `meta.lastTouchedAt` now accepts numeric Unix timestamps (coerced to ISO via Zod transform)
-- Session reset defaults changed: mode `"idle"` + idleMinutes `0` = sessions never auto-reset (was daily at 4am)
-- Per-agent defaults: `thinkingDefault`, `reasoningDefault`, `fastModeDefault` on `AgentConfig` (PR #51974)
-- Telegram `apiRoot` for custom Bot API endpoints (PR #48842)
-- Compaction: `truncateAfterCompaction` (PR #41021) and `timeoutSeconds` (PR #46889)
-- Install records: `clawhub` source with `clawhubUrl`, `clawhubPackage`, `clawhubFamily`, `clawhubChannel`
-- Auth profile store: locked writers reload from disk to prevent stale reverts (PR #53211)
-- Mistral: per-model safe max-token caps via `resolveNormalizedProviderModelMaxTokens`
-- Gateway reload: `deferralTimeoutMs` for graceful restart grace period
+- Branded config state types: `SourceConfig`, `ResolvedSourceConfig`, `RuntimeConfig` distinguish config lifecycle stages
+- `ConfigFileSnapshot` now has `sourceConfig` (pre-defaults) and `runtimeConfig` (post-defaults); `config` deprecated in favor of `runtimeConfig`
+- New `src/config/materialize.ts` module with profiles: `load`, `missing`, `snapshot` for config default application
+- `hooks.internal.enabled` now defaults to `true` (was `false`) so bundled hooks load on fresh installs
+- `exec.host` default changed from `"sandbox"` to `"auto"` (picks best available target at runtime)
+- `exec.applyPatch.enabled` default changed from `false` to `true`
+- Auth cooldowns: new `overloadedProfileRotations` (max same-provider rotations, default 1) and `overloadedBackoffMs` (fixed delay, default 0)
+- MCP server config: new `transport` (`"sse"` | `"streamable-http"`), `headers`, `connectionTimeoutMs` fields
+- Web search config rewritten: legacy per-provider shapes (`brave`, `firecrawl`, etc.) replaced with generic `Record<string, unknown>`; new `openaiCodex` and `x_search` scoped blocks
+- `web.fetch.maxResponseBytes` added (default 2000000)
+- Memory search: `provider`/`fallback` changed from union to generic `string`; new `qmd.extraCollections` for cross-agent search; new `store.fts.tokenizer` (`"unicode61"` | `"trigram"`) for CJK
+- Auth profile: new `displayName` field
+- `subagents.requireAgentId` blocks sessions_spawn without explicit agentId
+- SecretRef: unsupported policies now hard-fail; gateway restart token drift fixed
+- `awk` and `sed` excluded from exec safeBins fast path (injection prevention)
 
 ### MCP Config (new)
 

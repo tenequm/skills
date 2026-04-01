@@ -45,6 +45,7 @@ openclaw plugins info <id> [--json]
 openclaw plugins uninstall <id|clawhub-spec> [--keep-files] [--force]
 openclaw plugins update [--all] [--dry-run]
 openclaw plugins doctor
+openclaw plugins install <spec> --dangerously-force-unsafe-install  # bypass security scan (NEW)
 ```
 
 ## Channels
@@ -221,7 +222,7 @@ openclaw reset                               # reset config/sessions
 openclaw uninstall                           # uninstall openclaw
 ```
 
-Doctor `--fix` repairs include: cron normalization, daemon/sandbox checks, stale `plugins.allow` and `plugins.entries` pruning (removes refs to plugins no longer installed). Non-interactive cron repair is properly gated (requires `--fix` flag in non-interactive mode). Uninstall accepts plugin IDs, names, installed specs, resolved specs, marketplace plugin names, and `clawhub:<package>` specs (versionless match supported).
+Doctor `--fix` repairs include: cron normalization, daemon/sandbox checks, stale `plugins.allow` and `plugins.entries` pruning (removes refs to plugins no longer installed), legacy web search config migration (moves `tools.web.search.brave`/`firecrawl`/etc. to plugin-owned paths), Telegram `groupMentionsOnly` key migration, QMD probe alignment. Non-interactive cron repair is properly gated (requires `--fix` flag in non-interactive mode). Uninstall accepts plugin IDs, names, installed specs, resolved specs, marketplace plugin names, and `clawhub:<package>` specs (versionless match supported).
 
 ## Exec Environment
 
@@ -231,6 +232,10 @@ Child commands spawned via `exec` receive `OPENCLAW_CLI=1` in their environment 
 - `tui-local` - local TUI `!` shell commands
 
 Shell-wrapper positional-argv allowlist matching (`src/infra/exec-approvals-allowlist.ts`) only permits direct carrier invocations: rejects single-quoted `$0`/`$n` tokens and newline-separated exec to prevent payload smuggling, while still accepting `exec -- carrier` forms.
+
+`exec.host` default changed from `"sandbox"` to `"auto"` - picks the best available exec target at runtime.
+
+`awk` and `sed` are excluded from the safeBins fast path to prevent injection via their expression arguments.
 
 ## Sub-CLIs (additional)
 

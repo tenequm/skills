@@ -26,6 +26,7 @@
 | Mattermost | `extensions/mattermost/` | via plugin config | Mattermost WebSocket + slash HTTP |
 | WhatsApp | `extensions/whatsapp/` | via plugin config | WhatsApp via Baileys, npm-publishable |
 | ACPX | `extensions/acpx/` | via plugin config | ACP runtime backend (acpx CLI) |
+| QQ Bot | `extensions/qqbot/` | via plugin config | QQ Bot API (PR #52986) (NEW) |
 
 ## Channel Plugin Registration
 
@@ -115,6 +116,7 @@ Key files: `src/telegram/thread-bindings.ts`, Discord thread binding via plugin 
       "threadBindings": { "enabled": true },
       "slashCommand": { "ephemeral": true },
       "autoPresence": true,
+      "autoArchiveDuration": 1440,
       "intents": { "presence": false, "guildMembers": false }
     }
   }
@@ -141,18 +143,33 @@ Inbound event processing system:
 
 ## Matrix Extension
 
-New capabilities added:
+Capabilities:
 
 - **Thread binding commands**: `/acp spawn`, `/session spawn`, `/focus`, `/unfocus` wired through binding compilation
 - **Persistent sync state**: `FileBackedMatrixSyncStore` with debounced writes and `cleanShutdown` tracking
 - **Startup migration**: legacy Matrix state migration wired into `openclaw doctor` and gateway startup; doctor migration previews restored
 - **Poll vote alias**: `messageId` accepted as alias for `pollId` parameter in poll votes
 - **Onboarding**: runtime-safe status checks (PR #49995)
+- **Thread-isolated sessions**: per-chat-type `threadReplies` config for thread-based session isolation (PR #57995) (NEW)
+- **Group chat history context**: agent triggers include room history context (PR #57022) (NEW)
+- **Draft streaming**: edit-in-place partial replies via message edits (PR #56387) (NEW)
+- **Explicit proxy config**: `channels.matrix.proxy` for HTTP proxy support (PR #56930) (NEW)
+- **Sender allowlist filtering**: fetched room context filtered by sender allowlist (commit `8a563d6`) (NEW)
 
 ## Slack Channel
 
 - **Delivery-mirror guard**: embedded Pi session subscriber now filters `provider: "openclaw"` + `model: "delivery-mirror"` synthetic transcript entries via `isDeliveryMirrorAssistantMessage()`, preventing duplicate re-delivery to Slack ~3.6s after original
 - **Chunk limit raised**: `SLACK_TEXT_LIMIT` raised from 4000 to 8000 (`extensions/slack/src/limits.ts`); passed as `fallbackLimit` to `resolveTextChunkLimit()`; config override via `textChunkLimit` still works
+
+## Approval Architecture Refactoring
+
+Exec approval handling was significantly refactored:
+- Approval origin/target reconciliation shared across channels (`refactor(approvals): share origin target reconciliation`)
+- Native delivery runtime shared across channels (`refactor(approvals): share native delivery runtime`)
+- Request filter matching centralized (`refactor(approvals): share request filter matching`)
+- Telegram account binding shared (`refactor(approvals): share telegram account binding`)
+- Native request binding centralized (`fix(approvals): centralize native request binding`)
+- Approval auth capabilities added to more channels (`refactor: add approval auth capabilities to more channels`)
 
 ## Diagnostics
 
@@ -272,6 +289,8 @@ WebChat replies now stay on WebChat instead of being rerouted by persisted deliv
 - MCP server injection: named MCP server definitions injected into ACPX session bootstrap via proxy agent command
 - Pinned version: `0.1.15`, auto-installs plugin-local if bundled binary missing/mismatched
 - Spawned processes receive `OPENCLAW_SHELL=acp` env marker
+- **NEW**: `pluginToolsMcpBridge` config option - when enabled, injects the built-in OpenClaw plugin-tools MCP server into ACPX sessions so ACP agents can call plugin-registered tools
+- Config schema now requires `minLength: 1` for `command`, `expectedVersion`, `cwd` fields
 
 **WhatsApp** (`extensions/whatsapp/`):
 - Now npm-publishable (`private: true` removed from package.json)

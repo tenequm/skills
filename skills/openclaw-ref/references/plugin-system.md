@@ -26,7 +26,7 @@ Key files: `src/plugins/discovery.ts`, `src/plugins/loader.ts`
 }
 ```
 
-- `kind`: optional, set `"memory"` for memory backend plugins (exclusive slot, fast-path disabled logic)
+- `kind`: optional, set `"memory"` for memory backend plugins, or array `["memory", "context-engine"]` for multi-kind plugins (PR #57507)
 - `channels`/`providers`: declare capabilities for UI/discovery
 - `configSchema`: validated against plugin's `entries.<id>.config`
 - `uiHints`: drive config UI (labels, sensitive masking)
@@ -83,7 +83,7 @@ type OpenClawPluginApi = {
   description: string;                         // plugin description
   source: string;                              // install source
   rootDir: string;                             // plugin root directory
-  registrationMode: "full" | "setup-only" | "setup-runtime";
+  registrationMode: "full" | "setup-only" | "setup-runtime" | "cli-metadata";  // cli-metadata NEW
   runtime: PluginRuntime;
   pluginConfig: Record<string, unknown>;       // resolved plugin config
   registerChannel(opts: { plugin: ChannelPlugin }): void;
@@ -133,13 +133,22 @@ Plugin commands are processed before built-in commands and before agent invocati
 
 ## Plugin Hooks
 
-25 typed hooks via `PluginHookHandlerMap`. Key prompt mutation hooks can return:
+26 typed hooks via `PluginHookHandlerMap`. Key prompt mutation hooks can return:
 - `systemPrompt` - replace system prompt
 - `prependContext` - dynamic content prepended to context
 - `prependSystemContext` - static, cacheable content prepended to system prompt
 - `appendSystemContext` - static, cacheable content appended to system prompt
 
-New hook: `subagent_delivery_target` - controls subagent message delivery routing.
+Notable hooks:
+- `subagent_delivery_target` - controls subagent message delivery routing
+- `before_dispatch` - intercept inbound messages before agent dispatch (NEW). Returns `{ handled: boolean; text?: string }` to skip default dispatch and optionally reply directly.
+
+New hook context fields:
+- `PluginHookAgentContext.runId` - unique identifier for the agent run (NEW)
+- `PluginHookBeforeToolCallResult.requireApproval` - plugin-driven approval gates on tool calls (NEW), with severity levels, timeout behavior, and `onResolution` callback
+- `PluginCommandContext.threadParentId` - parent conversation id for thread-capable channels (NEW)
+
+Approval resolution types: `allow-once`, `allow-always`, `deny`, `timeout`, `cancelled` (via `PluginApprovalResolutions` const).
 
 Sync-only hooks: `before_message_write` and `tool_result_persist` reject async handlers at registration time.
 
