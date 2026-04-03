@@ -2,39 +2,112 @@
 
 Claude Code skills for founders, developers, and web3 builders.
 
+This repository publishes reusable skill folders under `skills/<slug>/`, ships stable bundle downloads through GitHub Releases, and publishes changed skills to ClawHub.
+
+## Table of Contents
+
+- [Background](#background)
+- [Install](#install)
+- [Usage](#usage)
+- [Skill Catalog](#skill-catalog)
+- [Release Automation](#release-automation)
+- [Contributing](#contributing)
+- [License](#license)
+
+## Background
+
+Each skill is a directory with a `SKILL.md` file plus optional references, scripts, evals, or assets. The repository is designed to support three consumption paths:
+
+- ClawHub for normal installation and discovery
+- GitHub Releases for raw portable zip bundles and release history
+- GitHub source for review and contribution
+
 ## Install
 
 ```bash
 npx skills install tenequm/skills/<skill-name>
 ```
 
-## Skills
+## Usage
 
-| Skill | Description |
-|-------|-------------|
-| biome | Lint and format with Biome 2.4 |
-| chrome-extension-wxt | Chrome extensions with WXT |
-| cloudflare-workers | Serverless apps on Cloudflare |
-| erc-8004 | ERC-8004 Trustless Agents |
-| founder-playbook | Decision frameworks for founders |
-| foundry-solidity | Solidity with Foundry |
-| gh-cli | GitHub CLI for repo analysis |
-| impactful-writing | High-impact writing |
-| python-dev | Python with uv, ty, ruff, pytest |
-| react-typescript | React 19 + TypeScript |
-| shadcn-tailwind | Tailwind v4 + shadcn/ui |
-| skill-factory | Autonomous skill creation |
-| skill-finder | Find and evaluate skills |
-| solana-compression | ZK Compression on Solana |
-| solana-development | Solana programs with Anchor |
-| solana-security | Solana security auditing |
-| swift-macos | macOS apps with Swift 6.2 |
-| tanstack | TanStack Query, Router, Start |
-| uv-ruff-python-tools | Python with uv and ruff |
-| vite | Vite 7 for React |
-| web3-protocol-gtm | Web3 go-to-market strategy |
-| x402 | x402 payment protocol |
+```bash
+# Install a skill from this repository
+npx skills install tenequm/skills/react-typescript
+
+# Or download the latest raw bundle from GitHub Releases
+curl -LO https://github.com/tenequm/skills/releases/download/skills-latest/react-typescript.zip
+```
+
+Use the catalog below to pick a skill. Prefer ClawHub for normal installs. Use the zip bundles when you want a portable artifact or need to inspect the packaged files directly.
+
+## Skill Catalog
+
+Each skill has a stable latest bundle link and a ClawHub page:
+
+<!-- GENERATED_SKILLS_TABLE_START -->
+| Skill | Version | Bundle | ClawHub | Description |
+|-------|---------|--------|---------|-------------|
+| `audio-quality-check` | 0.1.0 | [zip](https://github.com/tenequm/skills/releases/download/skills-latest/audio-quality-check.zip) | [page](https://clawhub.ai/skills/audio-quality-check) | Analyze audio recording quality - echo detection, loudness, speech intelligibility, SNR, spectral analysis. Use when the user wants to check a recording's quality, detect echo or duplication in audio files, measure speech clarity, compare original vs processed audio, diagnose why a recording sounds bad, or analyze audio tracks from Blackbox or any call recording app. Triggers on audio quality, recording analysis, echo detection, check recording, sound quality, analyze audio, speech quality, PESQ, STOI, loudness, SNR, audio diagnostics, recording sounds bad, echo in recording, audio duplication. |
+| `biome` | 0.2.0 | [zip](https://github.com/tenequm/skills/releases/download/skills-latest/biome.zip) | [page](https://clawhub.ai/skills/biome) | Lint and format frontend code with Biome 2.4. Covers type-aware linting, GritQL custom rules, domains, import organizer, and migration from ESLint/Prettier. Use when configuring linting rules, formatting code, writing custom lint rules, or setting up CI checks. Triggers on biome, biome config, biome lint, biome format, biome check, biome ci, gritql, migrate from eslint, migrate from prettier, import sorting, code formatting, lint rules, type-aware linting, noFloatingPromises. |
+| `chrome-extension-wxt` | 1.1.0 | [zip](https://github.com/tenequm/skills/releases/download/skills-latest/chrome-extension-wxt.zip) | [page](https://clawhub.ai/skills/chrome-extension-wxt) | Build Chrome extensions using WXT framework with TypeScript, React, Vue, or Svelte. Use when creating browser extensions, developing cross-browser add-ons, or working with Chrome Web Store projects. Triggers on phrases like "chrome extension", "browser extension", "WXT framework", "manifest v3", or file patterns like wxt.config.ts. |
+| `cloudflare-workers` | 3.0.0 | [zip](https://github.com/tenequm/skills/releases/download/skills-latest/cloudflare-workers.zip) | [page](https://clawhub.ai/skills/cloudflare-workers) | Rapid development with Cloudflare Workers - build and deploy serverless applications on Cloudflare's global network. Use when building APIs, full-stack web apps, edge functions, background jobs, or real-time applications. Triggers on phrases like "cloudflare workers", "wrangler", "edge computing", "serverless cloudflare", "workers bindings", or files like wrangler.toml, worker.ts, worker.js. |
+| `command-skill-creator` | 0.1.0 | [zip](https://github.com/tenequm/skills/releases/download/skills-latest/command-skill-creator.zip) | [page](https://clawhub.ai/skills/command-skill-creator) | Create automation command skills (slash commands) for Claude Code projects. Use when building `/slash-commands` that automate multi-step workflows - deploys, commits, releases, migrations, cross-repo operations, or any repeatable process. Triggers on "create a command", "make a slash command", "automate this workflow", "turn this into a command", "build a command skill", or when designing phased execution skills with approval gates. For command-type skills (imperative prompts in `.claude/skills/`), NOT knowledge/reference skills. |
+| `effect-ts` | 0.1.0 | [zip](https://github.com/tenequm/skills/releases/download/skills-latest/effect-ts.zip) | [page](https://clawhub.ai/skills/effect-ts) | Effect-TS (Effect) comprehensive development guide for TypeScript. Use when building, debugging, reviewing, or generating Effect code. Covers typed error modeling (expected errors vs defects), structured concurrency (fibers), dependency injection (ServiceMap/Context + Layers), resource management (Scope), retry/scheduling (Schedule), streams, Schema validation, observability (OpenTelemetry), HTTP client/server, Effect AI (LLM integration), and MCP servers. Critical for AI code generation: includes exhaustive wrong-vs-correct API tables preventing hallucinated Effect code. Supports both Effect v3 (stable) and v4 (beta). Use this skill whenever code imports from 'effect', '@effect/platform', '@effect/ai', or the user mentions Effect-TS, typed errors with Effect, functional TypeScript with Effect, ServiceMap, Layer, or Schema from Effect. Also trigger when generating new TypeScript projects that could benefit from Effect patterns, even if the user doesn't explicitly name the library. |
+| `erc-8004` | 0.1.0 | [zip](https://github.com/tenequm/skills/releases/download/skills-latest/erc-8004.zip) | [page](https://clawhub.ai/skills/erc-8004-development) | Build with ERC-8004 Trustless Agents - on-chain agent identity, reputation, validation, and discovery on EVM chains. Use when registering AI agents on-chain, building agent reputation systems, searching/discovering agents, working with the Agent0 SDK (agent0-sdk), or implementing the ERC-8004 standard. Triggers on ERC-8004, Agent0, agent identity, agent registry, agent reputation, trustless agents, agent discovery. |
+| `founder-playbook` | 0.1.1 | [zip](https://github.com/tenequm/skills/releases/download/skills-latest/founder-playbook.zip) | [page](https://clawhub.ai/skills/founder-playbook-web3) | Decision validation and thinking frameworks for startup founders. Use when you need to pressure-test a decision, validate your next steps, think through strategic options, or sanity-check your approach. Triggers on phrases like "should I", "help me think through", "is this the right move", "validate my thinking", "what am I missing". Covers fundraising, customer development, runway management, prioritization, and crypto/web3 founder challenges. |
+| `foundry-solidity` | 0.1.0 | [zip](https://github.com/tenequm/skills/releases/download/skills-latest/foundry-solidity.zip) | [page](https://clawhub.ai/skills/foundry-solidity) | Build and test Solidity smart contracts with Foundry toolkit. Use when developing Ethereum contracts, writing Forge tests, deploying with scripts, or debugging with Cast/Anvil. Triggers on Foundry commands (forge, cast, anvil), Solidity testing, smart contract development, or files like foundry.toml, *.t.sol, *.s.sol. |
+| `gh-cli` | 1.1.1 | [zip](https://github.com/tenequm/skills/releases/download/skills-latest/gh-cli.zip) | [page](https://clawhub.ai/skills/gh-cli) | GitHub CLI for remote repository analysis, file fetching, codebase comparison, and discovering trending code/repos. Use when analyzing repos without cloning, comparing codebases, or searching for popular GitHub projects. |
+| `impactful-writing` | 0.1.0 | [zip](https://github.com/tenequm/skills/releases/download/skills-latest/impactful-writing.zip) | [page](https://clawhub.ai/skills/impactful-writing) | Write clear, emotionally resonant, and well-structured content that readers remember and act upon. Use when writing or editing any text—Twitter posts, articles, documentation, emails, comments, updates—for maximum clarity, engagement, and impact. |
+| `mcp-best-practices` | 0.1.0 | [zip](https://github.com/tenequm/skills/releases/download/skills-latest/mcp-best-practices.zip) | [page](https://clawhub.ai/skills/mcp-best-practices) | Build production MCP servers with the TypeScript SDK. Covers spec 2025-11-25, SDK v1.28+/v2, transport selection, tool design, error handling, security, performance, and known bugs with workarounds. Use this skill whenever building MCP servers, designing MCP tools, choosing MCP transports, handling MCP errors, migrating to MCP v2, reviewing MCP security, optimizing MCP token usage, or working with registerTool, McpServer, streamable HTTP, outputSchema, structuredContent, or tool annotations. |
+| `mpp` | 0.5.1 | [zip](https://github.com/tenequm/skills/releases/download/skills-latest/mpp.zip) | [page](https://clawhub.ai/skills/mpp) | Build with MPP (Machine Payments Protocol) - the open protocol for machine-to-machine payments over HTTP 402. Use when developing paid APIs, payment-gated content, AI agent payment flows, MCP tool payments, pay-per-token streaming, or any service using HTTP 402 Payment Required. Covers the mppx TypeScript SDK with Hono/Express/Next.js/Elysia middleware, pympp Python SDK, and mpp Rust SDK. Supports Tempo stablecoins, Stripe cards, Lightning Bitcoin, and custom payment methods. Includes charge (one-time) and session (streaming pay-as-you-go) intents. Make sure to use this skill whenever the user mentions mpp, mppx, machine payments, HTTP 402 payments, Tempo payments, payment channels, pay-per-token, paid API endpoints, or payment-gated services. |
+| `openclaw-ref` | 2026.4.1 | [zip](https://github.com/tenequm/skills/releases/download/skills-latest/openclaw-ref.zip) | [page](https://clawhub.ai/skills/openclaw-reference) | OpenClaw platform reference - plugin system, extensions, configuration, boot/provisioning, channels, models, CLI. Use when working on openclaw codebase, building openclaw plugins/extensions, configuring openclaw instances, provisioning openclaw gateways, designing agent provisioning flows (e.g. agentbox), or debugging openclaw config/plugin/channel issues. Triggers on openclaw, openclaw config, openclaw plugin, openclaw extension, openclaw channel, openclaw gateway, openclaw provisioning, openclaw onboarding, openclaw boot, openclaw skills, BOOT.md, openclaw.plugin.json, openclaw-x402, agentbox provisioning. |
+| `polish` | 2.2.0 | [zip](https://github.com/tenequm/skills/releases/download/skills-latest/polish.zip) | [page](https://clawhub.ai/skills/code-polish) | Pre-release code review - runs lint/type checks, then launches 3 parallel review agents (cleanliness, design, efficiency) to analyze the diff, synthesizes a unified report, and fixes with approval. Use before committing, pushing, or releasing changes. Triggers on "review code", "check before commit", "cleanup before release", "review changes", "is this ready to ship", "polish before release", "simplify". |
+| `privy-integration` | 0.1.0 | [zip](https://github.com/tenequm/skills/releases/download/skills-latest/privy-integration.zip) | [page](https://clawhub.ai/skills/privy-integration) | Integrate Privy authentication and wallet infrastructure into web and mobile apps. Covers React SDK setup (PrivyProvider, hooks, whitelabel auth), embedded wallets (EVM + Solana), smart wallets (ERC-4337), wagmi/viem integration, server-side Node.js SDK (@privy-io/node), token verification, gas sponsorship, external wallet connectors, and transaction signing. Use when building apps with Privy auth, creating embedded wallets, integrating web3 login, setting up wagmi with Privy, verifying Privy tokens on the server, sponsoring gas, or working with Privy's wallet API. Triggers on privy, privy auth, privy wallet, privy embedded wallet, privy login, privy react, privy wagmi, privy solana, privy smart wallet, privy server SDK, privy token verification, @privy-io/react-auth, @privy-io/node, @privy-io/wagmi, PrivyProvider. |
+| `python-dev` | 0.1.1 | [zip](https://github.com/tenequm/skills/releases/download/skills-latest/python-dev.zip) | [page](https://clawhub.ai/skills/python-dev) | Opinionated Python development setup with uv + ty + ruff + pytest + just. Use when creating new Python projects, setting up pyproject.toml, configuring linting, type checking, testing, or build tooling. Triggers on "python project", "uv init", "pyproject.toml", "ruff config", "ty check", "pytest setup", "justfile", "python linting", "python formatting", "type checking python". |
+| `react-typescript` | 0.1.0 | [zip](https://github.com/tenequm/skills/releases/download/skills-latest/react-typescript.zip) | [page](https://clawhub.ai/skills/react-typescript) | Build React 19 applications with TypeScript. Covers Actions, Activity, use() hook, React Compiler, ref-as-prop, useEffectEvent, and strict TypeScript patterns. Use when creating components, managing state, typing props, handling events, using hooks, or working with React 19 features. Triggers on react, typescript, tsx, component types, hook types, react 19, react compiler, actions, use hook, useEffectEvent, activity, import defer. |
+| `shadcn-tailwind` | 0.1.0 | [zip](https://github.com/tenequm/skills/releases/download/skills-latest/shadcn-tailwind.zip) | [page](https://clawhub.ai/skills/shadcn-tailwind) | Build UIs with Tailwind CSS v4 and shadcn/ui. Covers CSS variables with OKLCH colors, component variants with CVA, responsive design, dark mode, and Tailwind v4.2 features. Supports Radix UI and Base UI primitives, CLI 3.0, and visual styles. Use when building interfaces with Tailwind, styling shadcn/ui components, implementing themes, or working with utility-first CSS. Triggers on tailwind, shadcn, utility classes, CSS variables, OKLCH, component styling, theming, dark mode, radix ui. |
+| `skill-factory` | 0.2.0 | [zip](https://github.com/tenequm/skills/releases/download/skills-latest/skill-factory.zip) | [page](https://clawhub.ai/skills/claude-skill-factory) | Autonomous skill creation agent that analyzes requests, automatically selects the best creation method (documentation scraping via Skill_Seekers, manual TDD construction, or hybrid), ensures quality compliance with Anthropic best practices, and delivers production-ready skills without requiring user decision-making or navigation |
+| `skill-finder` | 1.1.0 | [zip](https://github.com/tenequm/skills/releases/download/skills-latest/skill-finder.zip) | [page](https://clawhub.ai/skills/claude-skill-finder) | Find and evaluate Claude skills for specific use cases using semantic search, Anthropic best practices assessment, and fitness scoring. Use when the user asks to find skills for a particular task (e.g., "find me a skill for pitch decks"), not for generic "show all skills" requests. |
+| `skill-seekers` | 0.1.0 | [zip](https://github.com/tenequm/skills/releases/download/skills-latest/skill-seekers.zip) | [page](https://clawhub.ai/skills/skill-seekers) | Convert documentation, GitHub repos, PDFs, codebases, videos, and more into structured AI skills using the skill-seekers CLI. Use this skill whenever the user wants to create an AI skill from any knowledge source, scrape docs into a skill, analyze a codebase for patterns, enhance skill quality with AI, package skills for Claude/Gemini/OpenAI/Cursor/RAG platforms, or work with the skill-seekers tool in any capacity. Triggers on "skill-seekers", "create a skill from docs", "scrape documentation", "convert repo to skill", "extract knowledge from PDF", "codebase analysis", "enhance SKILL.md", "package skill for Claude", "AI skill creation", "skill from YouTube video", "RAG skill pipeline". |
+| `skills-best-practices` | 0.1.0 | [zip](https://github.com/tenequm/skills/releases/download/skills-latest/skills-best-practices.zip) | [page](https://clawhub.ai/skills/skills-best-practices) | Build high-quality Agent Skills for Claude following official Anthropic best practices. Covers SKILL.md structure, frontmatter, description writing, progressive disclosure, testing, patterns, troubleshooting, and distribution across all surfaces (Claude.ai, Claude Code, API, Agent SDK). Use when creating new skills, reviewing skill quality, debugging skill triggering, structuring skill directories, writing skill descriptions, or improving existing skills. Triggers on "build a skill", "create a skill", "skill structure", "SKILL.md", "skill best practices", "skill not triggering", "skill quality". |
+| `solana-compression` | 0.6.0 | [zip](https://github.com/tenequm/skills/releases/download/skills-latest/solana-compression.zip) | [page](https://clawhub.ai/skills/solana-compression) | Build with ZK Compression on Solana using Light Protocol. Use when creating compressed tokens, compressed PDAs, or integrating ZK compression into Solana programs. Covers compressed account model, state trees, validity proofs, and client integration with Helius/Photon RPC. |
+| `solana-development` | 0.6.0 | [zip](https://github.com/tenequm/skills/releases/download/skills-latest/solana-development.zip) | [page](https://clawhub.ai/skills/solana-development) | Build Solana programs with Anchor framework or native Rust. Use when developing Solana smart contracts, implementing token operations, testing programs, deploying to networks, or working with Solana development. Covers both high-level Anchor framework (recommended) and low-level native Rust for advanced use cases. |
+| `solana-security` | 0.6.0 | [zip](https://github.com/tenequm/skills/releases/download/skills-latest/solana-security.zip) | [page](https://clawhub.ai/skills/solana-security) | Audit Solana programs (Anchor or native Rust) for security vulnerabilities. Use when reviewing smart contract security, finding exploits, analyzing attack vectors, performing security assessments, or when explicitly asked to audit, review security, check for bugs, or find vulnerabilities in Solana programs. |
+| `standard-readme` | 0.1.0 | [zip](https://github.com/tenequm/skills/releases/download/skills-latest/standard-readme.zip) | [page](https://clawhub.ai/skills/standard-readme) | Write or audit README files following the Standard Readme specification (github.com/RichardLitt/standard-readme). Use this skill whenever the user asks to create, write, rewrite, improve, audit, or fix a README - even if they don't mention "standard readme" explicitly. Also trigger when the user says "add a README", "write docs for this repo", "check my README", or anything about README quality or structure. |
+| `swift-macos` | 0.3.0 | [zip](https://github.com/tenequm/skills/releases/download/skills-latest/swift-macos.zip) | [page](https://clawhub.ai/skills/swift-macos) | Comprehensive macOS app development with Swift 6.2, SwiftUI, SwiftData, Swift Concurrency, Foundation Models, Swift Testing, ScreenCaptureKit, and app distribution. Use when building native Mac apps, implementing windows/scenes/navigation/menus/toolbars, SwiftData models and queries, modern concurrency, on-device AI, testing, screen/audio capture, menu bar apps, AppKit bridges, login items, process monitoring, or App Store and Developer ID distribution. Triggers on macOS app, SwiftUI macOS, SwiftData, Swift concurrency, Foundation Models, Swift Testing, ScreenCaptureKit, screen capture, screen recording, AVFoundation, MenuBarExtra, NSViewRepresentable, notarize, login item, and process monitoring. |
+| `tanstack` | 0.1.0 | [zip](https://github.com/tenequm/skills/releases/download/skills-latest/tanstack.zip) | [page](https://clawhub.ai/skills/tanstack) | Build type-safe React apps with TanStack Query (data fetching, caching, mutations), Router (file-based routing, search params, loaders), and Start (SSR, server functions, middleware). Use when working with react-query, data fetching, server state, routing, search params, loaders, SSR, server functions, or full-stack React. Triggers on tanstack, react query, query client, useQuery, useMutation, invalidateQueries, tanstack router, file-based routing, search params, route loader, tanstack start, createServerFn, server functions, SSR. |
+| `vite` | 0.1.0 | [zip](https://github.com/tenequm/skills/releases/download/skills-latest/vite.zip) | [page](https://clawhub.ai/skills/vite-react) | Configure and optimize Vite 7 for React projects. Covers build tooling, dev server, plugins, HMR, chunk splitting, Environment API, and Rolldown integration. Use when setting up Vite, configuring builds, optimizing bundles, managing plugins, or troubleshooting dev server. Triggers on vite, vite config, vite plugin, HMR, dev server, build optimization, chunk splitting, rolldown, vite proxy, environment api, rolldown-vite. |
+| `web3-protocol-gtm` | 0.2.1 | [zip](https://github.com/tenequm/skills/releases/download/skills-latest/web3-protocol-gtm.zip) | [page](https://clawhub.ai/skills/web3-protocol-gtm) | Go-to-market strategy for web3 builders - protocols, products, services, and solo founders. Use when planning growth for a crypto protocol, building developer community, crafting CT narrative, planning ecosystem partnerships, preparing grant applications, launching tokens, pricing crypto-native products, or growing as a solo founder in web3. Covers community-led growth, CT strategy, developer relations, hackathon playbooks, standards adoption, token launch tactics, micropayment pricing, and agent-as-customer models. |
+| `x402` | 0.4.0 | [zip](https://github.com/tenequm/skills/releases/download/skills-latest/x402.zip) | [page](https://clawhub.ai/skills/x402-development) | Build internet-native payments with the x402 open protocol. Use when developing paid APIs, paywalled content, AI agent payment flows, or any service using HTTP 402 Payment Required for on-chain micropayments. Covers TypeScript, Python, and Go SDKs across EVM (Base, MegaETH, Monad, Polygon), Solana, Stellar, and Aptos networks with HTTP, MCP, and A2A transports. Supports exact and upto (usage-based) payment schemes. |
+<!-- GENERATED_SKILLS_TABLE_END -->
+
+## Release Automation
+
+Pushes to `main` use a skill-aware release workflow that:
+
+- runs `pre-commit`
+- detects which `skills/<slug>/` directories changed
+- requires a version bump in each changed skill
+- publishes changed skills to ClawHub
+- creates an immutable GitHub Release for that push
+- refreshes the rolling `skills-latest` release used by the README bundle links
+
+Setup details live in [docs/release-automation.md](docs/release-automation.md).
+
+## Contributing
+
+Issues and pull requests are welcome.
+
+Before opening a PR:
+
+- run the repository checks with `just check`
+- update `README.md` with `just readme` if skill metadata changed
+- bump the skill version when editing files inside `skills/<slug>/`
+
+```bash
+just check
+```
 
 ## License
 
-MIT
+[MIT](LICENSE)

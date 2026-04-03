@@ -1,8 +1,6 @@
 ---
 name: skill-factory
 description: Autonomous skill creation agent that analyzes requests, automatically selects the best creation method (documentation scraping via Skill_Seekers, manual TDD construction, or hybrid), ensures quality compliance with Anthropic best practices, and delivers production-ready skills without requiring user decision-making or navigation
-when_to_use: when you need to create any Claude skill and want it done automatically with guaranteed quality - works for documentation-based skills, GitHub repositories, PDFs, custom workflows, or hybrid approaches
-version: 0.1.0
 metadata:
   version: "0.2.0"
 ---

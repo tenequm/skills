@@ -1,0 +1,85 @@
+name: Release Skills
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-skills-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - uses: taiki-e/install-action@just
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - uses: astral-sh/setup-uv@v4
+
+      - name: Validate repository
+        run: just check
+
+      - name: Prepare release artifacts
+        id: prepare
+        run: |
+          just release-prepare "${{ github.event.before }}" "${{ github.sha }}" "$GITHUB_OUTPUT"
+
+      - name: Stop when no skills changed
+        if: steps.prepare.outputs.changed != 'true'
+        run: echo "No skill changes detected."
+
+      - uses: actions/setup-node@v4
+        if: steps.prepare.outputs.publishable == 'true'
+        with:
+          node-version: "20"
+
+      - name: Install ClawHub CLI
+        if: steps.prepare.outputs.publishable == 'true'
+        run: npm install -g clawhub
+
+      - name: Authenticate to ClawHub
+        if: steps.prepare.outputs.publishable == 'true'
+        env:
+          CLAWHUB_TOKEN: ${{ secrets.CLAWHUB_TOKEN }}
+        run: |
+          [ -n "$CLAWHUB_TOKEN" ] || (echo "CLAWHUB_TOKEN secret is required." && exit 1)
+          clawhub login --token "$CLAWHUB_TOKEN" --no-browser
+
+      - name: Publish changed skills to ClawHub
+        if: steps.prepare.outputs.publishable == 'true'
+        env:
+          CLAWHUB_DISABLE_TELEMETRY: "1"
+        run: just release-publish "${{ steps.prepare.outputs.manifest_path }}"
+
+      - name: Create GitHub release with bundles
+        if: steps.prepare.outputs.publishable == 'true'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.prepare.outputs.tag }}
+          name: ${{ steps.prepare.outputs.title }}
+          body_path: ${{ steps.prepare.outputs.notes_path }}
+          files: |
+            dist/releases/manifest.json
+            dist/releases/release-notes.md
+            dist/releases/bundles/*.zip
+
+      - name: Create GitHub release without bundles
+        if: steps.prepare.outputs.changed == 'true' && steps.prepare.outputs.publishable != 'true'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.prepare.outputs.tag }}
+          name: ${{ steps.prepare.outputs.title }}
+          body_path: ${{ steps.prepare.outputs.notes_path }}
+          files: |
+            dist/releases/manifest.json
+            dist/releases/release-notes.md

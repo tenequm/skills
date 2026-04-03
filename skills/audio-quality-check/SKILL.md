@@ -1,6 +1,8 @@
 ---
 name: audio-quality-check
 description: Analyze audio recording quality - echo detection, loudness, speech intelligibility, SNR, spectral analysis. Use when the user wants to check a recording's quality, detect echo or duplication in audio files, measure speech clarity, compare original vs processed audio, diagnose why a recording sounds bad, or analyze audio tracks from Blackbox or any call recording app. Triggers on audio quality, recording analysis, echo detection, check recording, sound quality, analyze audio, speech quality, PESQ, STOI, loudness, SNR, audio diagnostics, recording sounds bad, echo in recording, audio duplication.
+metadata:
+  version: "0.1.0"
 ---
 
 # Audio Recording Quality Analyzer
