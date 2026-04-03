@@ -1,8 +1,8 @@
 ---
 name: mcp-best-practices
-description: Build production MCP servers with the TypeScript SDK. Covers spec 2025-11-25, SDK v1.28+/v2, transport selection, tool design, error handling, security, performance, and known bugs with workarounds. Use this skill whenever building MCP servers, designing MCP tools, choosing MCP transports, handling MCP errors, migrating to MCP v2, reviewing MCP security, optimizing MCP token usage, or working with registerTool, McpServer, streamable HTTP, outputSchema, structuredContent, or tool annotations.
+description: Build production MCP servers with the TypeScript SDK. Covers spec 2025-11-25, SDK v1.28+/v2, transport selection, tool design, error handling, security, performance, known bugs with workarounds, MCP extensions, MCP Apps (interactive UIs), authorization extensions, and the MCP Registry. Use this skill whenever building MCP servers, designing MCP tools, choosing MCP transports, handling MCP errors, migrating to MCP v2, reviewing MCP security, optimizing MCP token usage, building MCP Apps, using MCP extensions, publishing to the MCP Registry, or working with registerTool, McpServer, streamable HTTP, outputSchema, structuredContent, tool annotations, ext-apps, or ext-auth.
 metadata:
-  version: "0.1.0"
+  version: "0.2.0"
 ---
 
 # MCP Best Practices
@@ -18,6 +18,8 @@ Decision reference for building production MCP servers with the TypeScript SDK. 
 | TS SDK (v2) | Pre-alpha (`@modelcontextprotocol/server`, `/client`, `/core`) | Q1 2026 stable |
 | JSON Schema | **2020-12** default (explicit `$schema` supported) | - |
 | Transport | **Streamable HTTP** (remote), **stdio** (local) | SSE removed in v2 |
+| Extensions | **MCP Apps** (GA), **Auth Extensions** (official) | Domain-specific WGs |
+| Registry | **Preview** ([registry](https://modelcontextprotocol.io/registry/about)) | GA pending |
 
 **v1 imports** (production today):
 ```typescript
@@ -164,6 +166,22 @@ All are optional hints (untrusted from untrusted servers per spec):
 
 Set them accurately - clients use them for consent prompts and auto-approval decisions.
 
+**Open SEPs expanding annotations**:
+- `#1913` Trust and Sensitivity - data classification hints
+- `#1984` Comprehensive annotations for governance/UX
+- `#1561` `unsafeOutputHint` - output may contain untrusted content
+- `#1560` `secretHint` - tool handles secrets/credentials
+- `#1487` `trustedHint` - server attestation of tool trustworthiness
+
+**The "Lethal Trifecta"**: Combining (1) access to private data + (2) exposure to untrusted content + (3) external communication ability creates data theft conditions. Researchers demonstrated this with a malicious calendar event, an MCP calendar server, and a code execution tool. Design tool sets to avoid granting all three simultaneously.
+
+**Evaluation framework for new annotation proposals**:
+1. What client behavior changes? (No concrete action = don't add it)
+2. Does it require trust to be useful? (If yes, doesn't help against untrusted servers)
+3. Could `_meta` handle it? (Namespaced metadata better for single-deployment needs)
+4. Does it help reason about tool combinations?
+5. Is it a hint or contract? (Contracts belong in auth/transport/runtime layer)
+
 ## Error Handling
 
 Two distinct mechanisms with different LLM visibility:
@@ -270,7 +288,11 @@ inputSchema: { type: "object" as const, additionalProperties: false }
 | **Supply chain** | Malicious npm packages (Smithery breach, Oct 2025) | Pin versions, audit dependencies |
 | **Command injection** | `child_process.exec` with unsanitized input (CVE-2025-53967) | Never interpolate user input into shell commands |
 | **Cross-server shadowing** | Malicious server overrides legitimate tool names | Service-prefix tool names; validate tool sources |
-| **Token theft** | Over-privileged PATs with broad scopes | Minimal scopes; OAuth Resource Indicators (RFC 8707) |
+| **Token theft** | Over-privileged PATs with broad scopes | Minimal scopes; OAuth 2.1 Resource Indicators (RFC 8707) |
+| **Token passthrough** | Server accepts/forwards tokens not issued for it | Validate audience claim; never transit client tokens to upstream APIs |
+| **SSRF** | Malicious OAuth metadata URLs targeting internal services | HTTPS enforcement, block private IPs, validate redirect targets |
+| **Confused deputy** | Proxy server consent cookies exploited via DCR | Per-client consent before forwarding to third-party auth |
+| **Session hijacking** | Stolen/guessed session IDs for impersonation | Cryptographically random IDs, bind to user identity, never use for auth |
 
 ### Server-Side Requirements (spec normative)
 
@@ -282,9 +304,20 @@ inputSchema: { type: "object" as const, additionalProperties: false }
 - **Require `MCP-Protocol-Version` header** on all requests after initialization (spec 2025-06-18+)
 - **Bind local servers to localhost** (127.0.0.1) only
 
-### Auth
+### Auth (OAuth 2.1)
 
-MCP servers are OAuth 2.0 Resource Servers (spec 2025-06-18+). Clients must include Resource Indicators (RFC 8707) binding tokens to specific servers. For programmatic/agent auth without browser redirects, see [ext-auth#19](https://github.com/modelcontextprotocol/ext-auth/issues/19).
+MCP normatively requires **OAuth 2.1** ([draft-ietf-oauth-v2-1-13](https://datatracker.ietf.org/doc/html/draft-ietf-oauth-v2-1-13)). The spec states: "Authorization servers MUST implement OAuth 2.1." PKCE is mandatory, implicit flow is removed. Always build against OAuth 2.1 - not 2.0.
+
+MCP servers are OAuth 2.1 Resource Servers. Clients MUST include Resource Indicators (RFC 8707) binding tokens to specific servers. Key requirements:
+
+- **Validate audience** - reject tokens not issued for your server (token passthrough is explicitly forbidden)
+- **PKCE mandatory** - use `S256` code challenge method
+- **Short-lived tokens** - reduce blast radius of leaked credentials
+- **Scope minimization** - start with minimal scopes, elevate incrementally via `WWW-Authenticate` challenges
+- **Don't implement token validation yourself** - use tested libraries (Keycloak, Auth0, etc.)
+- **Don't log credentials** - never log Authorization headers, tokens, or secrets
+
+> For full security attack/mitigation patterns and auth implementation details: see `references/security-auth.md`
 
 ## Known SDK Bugs
 
@@ -313,3 +346,31 @@ MCP servers are OAuth 2.0 Resource Servers (spec 2025-06-18+). Clients must incl
 9. DNS rebinding protection enabled by default for localhost servers
 
 v1.x gets 6 more months of support after v2 stable ships. No rush, but write new code with v2 patterns in mind.
+
+## Extensions
+
+MCP extensions are optional, strictly additive capabilities on top of the core protocol. Both sides negotiate support during initialization via `extensions` in capabilities.
+
+**Identifiers**: `{vendor-prefix}/{extension-name}`. Official: `io.modelcontextprotocol/*`. Third-party: reversed domain (e.g., `com.example/my-ext`).
+
+### Official Extensions
+
+| Extension | Identifier | Purpose |
+|-----------|-----------|---------|
+| **MCP Apps** | `io.modelcontextprotocol/ui` | Interactive HTML UIs in chat (charts, forms, dashboards) |
+| **OAuth Client Credentials** | `io.modelcontextprotocol/oauth-client-credentials` | Machine-to-machine auth (CI/CD, daemons, server-to-server) |
+| **Enterprise-Managed Auth** | `io.modelcontextprotocol/enterprise-managed-authorization` | Centralized access control via enterprise IdP |
+
+**Client support**: Claude (web + Desktop), ChatGPT, VS Code Copilot, Goose, Postman, MCPJam all support MCP Apps. Auth extensions not yet widely adopted.
+
+> For MCP Apps architecture, ext-apps SDK, and build patterns: see `references/mcp-apps.md`
+> For extensions system, auth extensions, and MCP Registry: see `references/extensions-registry.md`
+
+### Server Capabilities Beyond Tools
+
+| Capability | Purpose | v2 API |
+|-----------|---------|--------|
+| **Elicitation** | Request structured user input mid-tool | `ctx.mcpReq.elicitInput()` |
+| **Sampling** | Request LLM completion from client | `ctx.mcpReq.requestSampling()` |
+| **Tasks** (SEP-1686) | Long-running ops with lifecycle management | Pending |
+| **Progress** | Incremental progress on requests | `ctx.mcpReq.sendProgress()` |
