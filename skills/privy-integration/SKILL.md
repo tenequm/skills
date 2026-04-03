@@ -1,22 +1,33 @@
 ---
 name: privy-integration
-description: Integrate Privy authentication and wallet infrastructure into web and mobile apps. Covers React SDK setup (PrivyProvider, hooks, whitelabel auth), embedded wallets (EVM + Solana), smart wallets (ERC-4337), wagmi/viem integration, server-side Node.js SDK (@privy-io/node), token verification, gas sponsorship, external wallet connectors, and transaction signing. Use when building apps with Privy auth, creating embedded wallets, integrating web3 login, setting up wagmi with Privy, verifying Privy tokens on the server, sponsoring gas, or working with Privy's wallet API. Triggers on privy, privy auth, privy wallet, privy embedded wallet, privy login, privy react, privy wagmi, privy solana, privy smart wallet, privy server SDK, privy token verification, @privy-io/react-auth, @privy-io/node, @privy-io/wagmi, PrivyProvider.
+description: Integrates Privy authentication, embedded wallets, and agent payment protocols into web and agentic apps. Covers React SDK (PrivyProvider, hooks, wagmi), Node.js SDK, smart wallets (ERC-4337), x402 and MPP machine payments, Tempo chain, and agentic wallets with policies. Use when setting up Privy auth, creating embedded or agentic wallets, adding x402 or MPP payments, integrating with Tempo, configuring wallet policies, or connecting Privy to MCP/Agent Auth flows.
 metadata:
-  version: "0.1.0"
+  version: "0.2.0"
 ---
 
 # Privy Integration
 
-Privy provides authentication and wallet infrastructure for apps built on crypto rails. Embed self-custodial wallets, authenticate users via email/SMS/socials/passkeys/wallets, and transact on EVM and Solana chains.
+Privy provides authentication and wallet infrastructure for apps built on crypto rails. Embed self-custodial wallets, authenticate users via email/SMS/socials/passkeys/wallets, and transact on EVM and Solana chains. Also supports agent payment protocols (x402, MPP) and autonomous agentic wallets.
 
 Key packages:
-- `@privy-io/react-auth` - React SDK (auth + wallets)
+- `@privy-io/react-auth` - React SDK (auth + wallets + x402)
 - `@privy-io/react-auth/solana` - Solana wallet hooks
 - `@privy-io/react-auth/smart-wallets` - Smart wallets (ERC-4337)
 - `@privy-io/wagmi` - wagmi v2 connector
 - `@privy-io/node` - Server-side SDK (replaces deprecated `@privy-io/server-auth`)
+- `mppx` - MPP client/server SDK (settles on Tempo)
 
 Docs index: `https://docs.privy.io/llms.txt`
+
+## Workflow Decision Tree
+
+**Setting up Privy auth in a React app?** -> Quick Start below, then [references/react-sdk.md](references/react-sdk.md)
+**Adding wagmi/viem to a Privy app?** -> Wagmi Integration below, then [references/react-sdk.md](references/react-sdk.md)
+**Working server-side (Node.js)?** -> Server-Side section below, then [references/server-sdk.md](references/server-sdk.md)
+**Adding x402 or MPP payments?** -> x402/MPP sections below, then [references/agent-payments.md](references/agent-payments.md)
+**Building agentic wallets or agent auth?** -> Agentic Wallets below, then [references/agent-auth.md](references/agent-auth.md)
+**Solana-specific integration?** -> [references/solana.md](references/solana.md)
+**Wallet management (smart wallets, policies, funding)?** -> [references/wallets.md](references/wallets.md)
 
 ## Quick Start (React + Next.js)
 
@@ -193,6 +204,70 @@ All auth flows can be fully whitelabeled with custom UI. Key hooks:
 | `useLoginWithTelegram` | Telegram |
 | `useLogin` | General login with callbacks |
 
+## x402 Payments (Quick Start)
+
+Built into `@privy-io/react-auth` since v3.7.0. Handles HTTP 402 payment flows automatically using USDC.
+
+```tsx
+import {useX402Fetch, useWallets} from '@privy-io/react-auth';
+
+function PaidContent() {
+  const {wallets} = useWallets();
+  const {wrapFetchWithPayment} = useX402Fetch();
+
+  const fetchContent = async () => {
+    const fetchWithPayment = wrapFetchWithPayment({
+      walletAddress: wallets[0]?.address,
+      fetch,
+      maxValue: BigInt(1000000) // Max 1 USDC
+    });
+    const res = await fetchWithPayment('https://api.example.com/premium');
+    return res.json();
+  };
+}
+```
+
+Server-side (Node.js):
+```ts
+import {createX402Client} from '@privy-io/node/x402';
+import {wrapFetchWithPayment} from '@x402/fetch';
+
+const x402client = createX402Client(privy, {walletId: wallet.id, address: wallet.address});
+const fetchWithPayment = wrapFetchWithPayment(fetch, x402client);
+const response = await fetchWithPayment('https://api.example.com/premium');
+```
+
+## MPP Payments (Quick Start)
+
+MPP (Machine Payments Protocol) settles on Tempo using PathUSD. Supports sessions for high-frequency payments.
+
+```ts
+import {Mppx, tempo} from 'mppx/client';
+
+// Create Privy-backed viem account (see references/agent-payments.md for full pattern)
+const account = createPrivyAccount(wallet.id, wallet.address);
+
+const mppx = Mppx.create({polyfill: false, methods: [tempo({account})]});
+const response = await mppx.fetch('https://api.example.com/weather');
+```
+
+## Agentic Wallets (Quick Start)
+
+Server-controlled wallets with policy-based constraints for autonomous agents.
+
+```ts
+// Create agent wallet
+const wallet = await privy.wallets().create({chain_type: 'ethereum'});
+
+// Execute transactions - validated against attached policies
+const {hash} = await privy.wallets().ethereum().sendTransaction(wallet.id, {
+  caip2: 'eip155:8453',
+  params: {transaction: {to: '0x...', value: '0x1', chain_id: 8453}}
+});
+```
+
+Two control models: **agent-controlled** (fully autonomous, developer-owned) and **user-owned with agent signers** (user retains revocation authority). See [references/agent-auth.md](references/agent-auth.md) for policy examples and setup.
+
 ## Reference Docs
 
 Read the appropriate reference file for detailed integration guides:
@@ -201,6 +276,8 @@ Read the appropriate reference file for detailed integration guides:
 - **[references/server-sdk.md](references/server-sdk.md)** - Node.js SDK (`@privy-io/node`), token types and verification, user management API, REST API, webhooks
 - **[references/wallets.md](references/wallets.md)** - Embedded wallets (EVM + Solana), smart wallets (ERC-4337), gas sponsorship, external connectors, policies and controls, funding, wallet export
 - **[references/solana.md](references/solana.md)** - Solana-specific setup, connectors, @solana/kit and @solana/web3.js integration, transaction signing, gas sponsorship via fee payer
+- **[references/agent-payments.md](references/agent-payments.md)** - x402 protocol (React + Node.js), MPP with mppx SDK (client + server), Tempo blockchain (PathUSD, TIP-20), sessions, facilitators, x402 vs MPP comparison
+- **[references/agent-auth.md](references/agent-auth.md)** - Agentic wallets (policies, authorization keys, OpenClaw), Agent Auth Protocol (per-agent identity, capabilities), MCP authorization, Better Auth bridge
 
 ## Key Documentation URLs
 
@@ -225,3 +302,14 @@ Read the appropriate reference file for detailed integration guides:
 | Connectors overview | https://docs.privy.io/wallets/connectors/overview |
 | Custom auth provider | https://docs.privy.io/authentication/user-authentication/custom-auth |
 | Webhooks | https://docs.privy.io/wallets/webhooks/overview |
+| x402 integration | https://docs.privy.io/recipes/agent-integrations/x402 |
+| MPP integration | https://docs.privy.io/recipes/agent-integrations/mpp |
+| Agentic wallets | https://docs.privy.io/recipes/agent-integrations/agentic-wallets |
+| OpenClaw integration | https://docs.privy.io/recipes/agent-integrations/openclaw-agentic-wallets |
+| Tempo chain | https://docs.privy.io/recipes/evm/tempo |
+| Wallet policies | https://docs.privy.io/wallets/policies/overview |
+| Wallet signers | https://docs.privy.io/wallets/using-wallets/signers/overview |
+| x402 protocol | https://x402.org |
+| MPP protocol | https://mpp.dev |
+| Agent Auth Protocol | https://agentauthprotocol.com |
+| MCP auth spec | https://modelcontextprotocol.io/specification/2025-11-25/basic/authorization |

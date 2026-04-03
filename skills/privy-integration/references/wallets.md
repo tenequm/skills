@@ -449,6 +449,12 @@ Recipe: https://docs.privy.io/recipes/wallets/hd-wallets
 - CSP guidance: https://docs.privy.io/security/csp
 - Open-source SSS library: https://github.com/privy-io/shamir-secret-sharing
 
+## Agentic Wallets
+
+For autonomous agent wallets with policy-based controls, authorization keys, OpenClaw integration, and the Agent Auth Protocol, see **[agent-auth.md](agent-auth.md)**.
+
+For x402 and MPP payment integration with Privy wallets, see **[agent-payments.md](agent-payments.md)**.
+
 ## Official Links
 
 - Wallets overview: https://docs.privy.io/wallets/overview

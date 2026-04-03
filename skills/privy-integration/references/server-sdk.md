@@ -389,6 +389,10 @@ Configure in Dashboard: set your JWKS endpoint or public key, issuer, and audien
 
 Docs: https://docs.privy.io/authentication/user-authentication/custom-auth
 
+## Agent Payments (x402 + MPP)
+
+For x402 integration (`createX402Client` from `@privy-io/node/x402`), MPP integration with `mppx` SDK, Tempo chain transactions, and the `createPrivyAccount` pattern for custom viem signing, see **[agent-payments.md](agent-payments.md)**.
+
 ## Official Links
 
 - Node.js setup: https://docs.privy.io/basics/nodeJS/setup
