@@ -1,5 +1,5 @@
 ---
-name: skill-seekers
+name: skill-seekers-ref
 description: Convert documentation, GitHub repos, PDFs, codebases, videos, and more into structured AI skills using the skill-seekers CLI. Use this skill whenever the user wants to create an AI skill from any knowledge source, scrape docs into a skill, analyze a codebase for patterns, enhance skill quality with AI, package skills for Claude/Gemini/OpenAI/Cursor/RAG platforms, or work with the skill-seekers tool in any capacity. Triggers on "skill-seekers", "create a skill from docs", "scrape documentation", "convert repo to skill", "extract knowledge from PDF", "codebase analysis", "enhance SKILL.md", "package skill for Claude", "AI skill creation", "skill from YouTube video", "RAG skill pipeline".
 metadata:
   version: "0.1.0"
