@@ -239,7 +239,7 @@ const response = await fetchWithPayment('https://api.example.com/premium');
 
 ## MPP Payments (Quick Start)
 
-MPP (Machine Payments Protocol) settles on Tempo using PathUSD. Supports sessions for high-frequency payments.
+MPP (Machine Payments Protocol) settles on Tempo using stablecoins (PathUSD, USDC, or others). Supports sessions for high-frequency payments.
 
 ```ts
 import {Mppx, tempo} from 'mppx/client';

@@ -111,7 +111,7 @@ const data = await response.json();
 
 ## MPP (Machine Payments Protocol)
 
-MPP is an open protocol for machine-to-machine payments over HTTP. Like x402, it uses HTTP 402 to signal payment required. Unlike x402, MPP settles on the **Tempo** blockchain using **PathUSD**, supports **sessions** for high-frequency payments, and is payment-method agnostic (stablecoins, cards, Lightning, custom rails).
+MPP is an open protocol for machine-to-machine payments over HTTP. Like x402, it uses HTTP 402 to signal payment required. Unlike x402, MPP settles on the **Tempo** blockchain (using PathUSD, USDC, or other stablecoins), supports **sessions** for high-frequency payments, and is payment-method agnostic (stablecoins, cards, Lightning, custom rails).
 
 Protocol site: https://mpp.dev
 
@@ -216,7 +216,7 @@ const mppx = Mppx.create({
   methods: [
     tempo.charge({
       testnet: true,
-      currency: '0x20c0000000000000000000000000000000000000', // PathUSD
+      currency: '0x20c0000000000000000000000000000000000000', // PathUSD (or use USDC: 0x20C000000000000000000000b9537d11c60E8b50)
       recipient: process.env.MPP_RECIPIENT as `0x${string}`
     })
   ]
@@ -300,8 +300,11 @@ Tempo is a low-cost, high-throughput EVM-compatible blockchain optimized for pay
 |-------|---------|----------|----------|
 | PathUSD | `0x20c0000000000000000000000000000000000000` | 6 | TIP-20 |
 | alphaUSD | `0x20c0000000000000000000000000000000000001` | 6 | TIP-20 |
+| USDC | `0x20C000000000000000000000b9537d11c60E8b50` | 6 | TIP-20 |
 
 TIP-20 is Tempo's equivalent of ERC-20. Access via `Abis.tip20` from `tempo.ts/viem`.
+
+**Important**: Tempo supports multiple stablecoins including USDC - not just PathUSD. The Privy MPP demo uses PathUSD, but production deployments commonly use USDC on Tempo. The `currency` field in MPP server config and the `feeToken` in Tempo chain config accept any TIP-20 token address.
 
 ### Tempo with Privy (Client-Side)
 
@@ -438,7 +441,7 @@ const recipientAddress = wallet?.address;
 | Dimension | x402 | MPP |
 |-----------|------|-----|
 | Settlement chain | Base, Solana (via facilitators) | Tempo blockchain |
-| Currency | USDC | PathUSD (+ other rails) |
+| Currency | USDC | PathUSD, USDC, or other TIP-20 stablecoins |
 | Execution model | One transaction per request | Sessions (off-chain vouchers + periodic settlement) |
 | Performance | Per-request on-chain tx | Sub-100ms via sessions |
 | Payment methods | Blockchain only (USDC) | Multi-rail: stablecoins, cards, Lightning, custom |
