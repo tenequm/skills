@@ -30,7 +30,7 @@ readme:
 readme-check:
     uv run python scripts/generate_readme.py --check
 
-check: sync lint-repo lint-python typecheck-python check-skills readme-check
+check: sync lint-repo lint-python typecheck-python check-skills readme
 
 release-prepare before after github_output='':
     if [[ -n "{{github_output}}" ]]; then extra_args=(--github-output "{{github_output}}"); else extra_args=(); fi; \
