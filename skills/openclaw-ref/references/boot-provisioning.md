@@ -9,17 +9,21 @@ Key files: `src/gateway/server-startup.ts`, `src/gateway/boot.ts`
 1. **Load config** - `loadConfig()` reads + validates config
 2. **Seed control UI origins** - `maybeSeedControlUiAllowedOriginsAtStartup()` persists `gateway.controlUi.allowedOrigins` for non-loopback installs upgraded to v2026.2.26+ without required origins
 3. **Record startup write hash** - if config was mutated (generated token or seeded origins), re-read snapshot and capture `startupInternalWriteHash` so the config reloader ignores this self-inflicted write
-4. **Load plugins** - `loadOpenClawPlugins()` discovers and registers all plugins
-5. **Clean stale locks** - remove stale session lock files (stale threshold: 30min)
-6. **Start browser control** - if browser automation enabled
-7. **Start Gmail watcher** - if `hooks.gmail.account` configured; validates `hooks.gmail.model` against catalog
-8. **Load internal hooks** - clear previous hooks, load from config + directory discovery
-9. **Start channels** - Telegram, Discord, Slack, etc. (skippable via `OPENCLAW_SKIP_CHANNELS=1`)
-10. **Fire `gateway:startup` event** - delayed 250ms, plugins can hook into this (requires `hooks.internal.enabled`)
-11. **Start plugin services** - `startPluginServices()` for registry lifecycle
-12. **ACP identity reconcile** - if `acp.enabled`, reconcile pending session identities on startup
-13. **Start memory backend** - `startGatewayMemoryBackend()` for qmd memory initialization (LanceDB runtime bootstrapped on demand at first use)
-14. **Schedule restart sentinel** - wake check for updates (delayed 750ms)
+4. **Channel plugin startup maintenance** - `runChannelPluginStartupMaintenance()` replaces the old per-channel startup migration (e.g. Matrix migration). Runs generic channel plugin lifecycle hooks before channel start
+5. **Session migration** - `runStartupSessionMigration()` migrates legacy session state
+6. **Load plugins** - `loadOpenClawPlugins()` discovers and registers all plugins
+7. **Clean stale locks** - remove stale session lock files (stale threshold: 30min)
+8. **Start Gmail watcher** - if `hooks.gmail.account` configured; validates `hooks.gmail.model` against catalog
+9. **Load internal hooks** - clear previous hooks, load from config + directory discovery
+10. **Prewarm primary model** - `prewarmConfiguredPrimaryModel()` resolves the configured default model via static resolution (no runtime hooks) to surface configuration errors early
+11. **Start channels** - Telegram, Discord, Slack, etc. (skippable via `OPENCLAW_SKIP_CHANNELS=1`)
+12. **Fire `gateway:startup` event** - delayed 250ms, plugins can hook into this (requires `hooks.internal.enabled`)
+13. **Start plugin services** - `startPluginServices()` for registry lifecycle
+14. **ACP identity reconcile** - if `acp.enabled`, reconcile pending session identities on startup
+15. **Start memory backend** - `startGatewayMemoryBackend()` for qmd memory initialization (LanceDB runtime bootstrapped on demand at first use)
+16. **Schedule restart sentinel** - wake check for updates (delayed 750ms)
+17. **Subagent orphan recovery** - `scheduleSubagentOrphanRecovery()` runs on every startup cycle (not only cold restore) because same-process SIGUSR1 restarts keep subagent registry memory alive
+18. **Start MCP loopback server** - `startMcpLoopbackServer()` starts an HTTP JSON-RPC server on a random loopback port for MCP tool bridging (e.g. Claude CLI loopback MCP)
 
 ### Plugin Loading During Boot
 
@@ -55,6 +59,7 @@ On gateway startup:
 - Agent runs with `senderIsOwner: true`, `deliver: false`
 - BOOT.md prompt instructs agent to use message tool with `action=send` and `channel` + `target` fields
 - Silent reply token used to suppress unnecessary output
+- Error formatting uses `formatErrorMessage()` (unified error serializer)
 
 Use BOOT.md for one-shot initialization tasks that need agent intelligence (not just config).
 
@@ -71,6 +76,12 @@ Prevention mechanism:
 4. After the first non-self write, `lastAppliedWriteHash` is cleared (set to `null`) so future external changes reload normally
 
 In-process config writes use `subscribeToWrites` listener to bypass the file watcher entirely: the listener receives the runtime config and persisted hash directly, sets `pendingInProcessConfig`, and schedules an immediate reload with `scheduleAfter(0)`.
+
+### Shared Gateway Session Generation
+
+Key file: `src/gateway/server/ws-shared-generation.ts`
+
+On config write or reload, the gateway computes a `sharedGatewaySessionGeneration` - a SHA-256 hash of the shared auth mode + secret. When the generation changes (e.g. token rotation), all WS clients authenticated via the old shared secret are disconnected with code 4001 ("gateway auth changed"). This ensures stale credentials cannot persist across hot-reload token rotations.
 
 ## HTTP Request Pipeline
 
@@ -89,7 +100,15 @@ async function runGatewayHttpRequestStages(
 ): Promise<boolean>;
 ```
 
-Each stage returns `true` if it handled the request (short-circuits remaining stages) or `false` to pass through. If a stage throws, the error is logged and the stage is skipped - subsequent stages (control-ui, gateway probes, etc.) remain reachable. This prevents a single broken plugin facade or missing optional dependency (e.g. `@slack/bolt`) from producing cascade 500s across unrelated routes.
+Each stage returns `true` if it handled the request (short-circuits remaining stages) or `false` to pass through. If a stage throws, the error is logged and the stage is skipped - subsequent stages (control-ui, gateway probes, etc.) remain reachable. This prevents plugin-owned route/runtime code that fails to load (e.g. missing optional dependency) from producing cascade 500s across unrelated routes.
+
+### Gateway Auth Bypass Paths
+
+Previously hardcoded Mattermost slash callback paths. Now generalized: `resolvePluginGatewayAuthBypassPaths()` iterates all bundled channel plugins and collects paths from `plugin.gateway.resolveGatewayAuthBypassPaths({ cfg })`. This allows any channel plugin to declare paths that bypass gateway auth (e.g. webhook callback endpoints).
+
+### Plugin Route Operator Scopes
+
+After plugin route auth succeeds, `resolvePluginRouteRuntimeOperatorScopes()` extracts the authenticated request's operator scopes and passes them as `gatewayRequestOperatorScopes` to the plugin HTTP handler. This enables plugin routes to enforce fine-grained operator-scoped access control.
 
 ## Node Command Policy
 
@@ -133,8 +152,9 @@ Key file: `src/gateway/node-connect-reconcile.ts`
 1. Resolves `nodeId` from device ID or client ID
 2. Resolves command allowlist via `resolveNodeCommandAllowlist()` using platform/deviceFamily from connect params
 3. Filters declared commands against allowlist via `normalizeDeclaredNodeCommands()`
-4. If node is not already paired, calls `requestPairing()` to create a pending pairing request
-5. Returns `{ nodeId, effectiveCommands, pendingPairing? }`
+4. For already-paired nodes: compares declared commands against previously approved commands. If new commands are declared that were not previously approved, a new pairing request is issued (command upgrade flow). The effective commands remain the previously approved set until the upgrade is approved
+5. If node is not already paired, calls `requestPairing()` to create a pending pairing request
+6. Returns `{ nodeId, effectiveCommands, pendingPairing? }`
 
 ## Node Catalog
 
@@ -214,10 +234,14 @@ CLI subcommands for managing background tasks:
 | `tasks show <id>` | Detailed view of a single task (lookup by ID or token prefix). All fields including timestamps, labels, errors, progress. |
 | `tasks notify <id> <policy>` | Update a task's notify policy (`TaskNotifyPolicy`). |
 | `tasks cancel <id>` | Cancel a running task. Calls `cancelTaskById()` which coordinates with the task runtime. |
-| `tasks audit` | List audit findings with `--severity` / `--code` / `--limit` filters. Shows severity, code, task ID, status, age, detail. |
-| `tasks maintenance` | Reconcile, stamp cleanup, prune. Dry-run by default; `--apply` to write changes. Reports audit health before/after. |
+| `tasks audit` | List audit findings with `--severity` / `--code` / `--limit` filters. Now unified across both Tasks and TaskFlows - each finding includes a `Scope` column (`Task` or `TaskFlow`). |
+| `tasks maintenance` | Reconcile, stamp cleanup, prune. Dry-run by default; `--apply` to write changes. Reports audit health before/after. Now includes TaskFlow registry maintenance alongside task registry maintenance. |
 
 All subcommands support `--json` for machine-readable output. Task lookup uses `reconcileTaskLookupToken()` for prefix matching on shortened IDs.
+
+### TaskFlow Support
+
+Tasks now integrate with `TaskFlowRecord` - multi-step task orchestration records with `flowId`, `status` (running/succeeded/failed/lost/blocked), revision tracking, and control mode. The `flows` CLI command (`src/commands/flows.ts`) provides list/show/cancel subcommands for TaskFlow records.
 
 ## LanceDB Runtime Bootstrap
 
@@ -279,16 +303,27 @@ openclaw onboard [OPTIONS]
 | `--secret-input-mode plaintext\|ref` | Secret storage mode |
 | `--accept-risk` | Required for non-interactive |
 
-### Auth Choice Deprecations
+### Auth Choice Changes
 
+- Auth choices are now plugin-owned contract IDs. The `BuiltInAuthChoice` type no longer enumerates every provider - it is a small set of legacy aliases (`oauth`, `setup-token`, `token`) that are normalized elsewhere
 - `claude-cli` deprecated: falls back to setup-token flow with warning
 - `codex-cli` deprecated: falls back to OpenAI Codex OAuth with warning
 - Non-interactive mode rejects deprecated auth choices with error
+- `setup-token` and `token` now produce a unified error guiding users to the correct `--auth-choice`/`--token-provider` combination instead of silently failing
+- `oauth` choice now produces an explicit error explaining it is no longer supported directly
 
 ### Onboard Talk Fallback Fix
 
 - Fresh setup no longer persists talk fallback secrets into config
 - Talk API key resolution (`applyTalkApiKey`) only injects env-resolved key when no provider-specific or legacy key is already configured
+
+### Gateway Probe Modernization
+
+`probeGatewayReachable()` now uses `probeGateway()` (a dedicated health probe utility) instead of `callGateway()` with `method: "health"`. Returns structured `{ ok, detail }` results.
+
+### Control UI Link Resolution
+
+`resolveControlUiLinks()` moved from `onboard-helpers.ts` to `src/gateway/control-ui-links.ts` as a shared utility.
 
 ### Interactive Flow
 
@@ -324,14 +359,61 @@ class ExecApprovalManager {
   awaitDecision(recordId): Promise<...>;  // DEPRECATED: use register() instead
   lookupPendingId(input): ExecApprovalIdLookupResult;  // exact, prefix, or ambiguous match
   getSnapshot(recordId): ExecApprovalSnapshot | undefined;  // read-only snapshot of current state
+  listPendingRecords(): ExecApprovalRecord[];  // all records that have not been resolved yet
 }
 ```
 
-- `ExecApprovalDecision`: `"allow-once"` or other decision types
+- `ExecApprovalDecision`: `"allow-once"`, `"allow-always"`, or `"deny"`
 - Resolved entries kept for 15s grace period for late `awaitDecision` calls
 - Supports caller metadata: `requestedByConnId`, `requestedByDeviceId`, `requestedByClientId`
-- `lookupPendingId` supports prefix matching for shortened approval IDs
+- `lookupPendingId` supports prefix matching for shortened approval IDs (uses `normalizeLowercaseStringOrEmpty` for case-insensitive matching)
 - After approval completion, the agent session is resumed via `sendExecApprovalFollowup()` which dispatches a `callGatewayTool("agent", ...)` with the original session key and a structured prompt containing the exec result. Denied commands get a distinct prompt instructing the agent not to retry.
+
+### Approval Replay on Startup
+
+Key files: `src/infra/exec-approval-channel-runtime.ts`, `src/gateway/server-methods/exec-approval.ts`
+
+When a channel's approval runtime connects (or reconnects) to the gateway:
+1. After the gateway client connects and the `ready` promise settles, the runtime calls `exec.approval.list` and `plugin.approval.list` to fetch all currently pending approval records
+2. Each pending request is replayed through `handleRequested()` with `{ ignoreIfInactive: true }` so requests are only processed if the channel runtime is still active
+3. Duplicate requests (same `id`) are deduplicated and silently ignored
+4. This ensures approval requests created while a channel was disconnected are surfaced to the operator without waiting for the next incoming request
+
+### Shared Approval Helpers
+
+Key file: `src/gateway/server-methods/approval-shared.ts`
+
+Common approval lifecycle helpers extracted from exec-approval and plugin-approval handlers:
+- `isApprovalDecision()` - type guard for valid decision strings
+- `resolvePendingApprovalRecord()` - lookup by exact ID or prefix with ambiguity detection
+- `respondPendingApprovalLookupError()` - standardized error response for missing/ambiguous IDs
+- `handlePendingApprovalRequest()` - unified request broadcast, delivery routing, and two-phase response flow
+- `handleApprovalResolve()` - unified resolve with validation, broadcast, and forwarding
+
+### New Gateway Methods
+
+- `exec.approval.get` - fetch a single pending approval by ID (supports prefix matching). Returns command text, preview, allowed decisions, host, nodeId, agentId, expiry
+- `exec.approval.list` - list all pending exec approval records
+- `plugin.approval.list` - list all pending plugin approval records
+- Reserved prefix: approval IDs starting with `plugin:` are rejected for exec approvals
+
+### iOS Push Notification Delivery
+
+Key file: `src/gateway/exec-approval-ios-push.ts`
+
+New delivery channel for exec approval notifications to paired iOS devices via APNs (Apple Push Notification service):
+
+- Targets paired devices with iOS platform, operator role, and `operator.approvals` scope
+- Supports two transports: `direct` (APNs auth from env) and `relay` (via gateway relay config)
+- On `handleRequested`: sends alert push to all qualifying devices with command preview and approval ID
+- On `handleResolved`: sends silent wake push so the iOS app can update UI
+- On `handleExpired`: sends silent wake push for cleanup
+- Stale APNs registrations are auto-cleared based on APNs error responses
+- Delivery state tracked per approval ID with pushed nodeIds
+
+### Per-Decision Validation
+
+`resolveExecApprovalAllowedDecisions()` computes the valid decision set for each approval request based on the effective policy. When a resolve request includes `allow-always` but the policy only permits `allow-once`, the resolve is rejected with `APPROVAL_ALLOW_ALWAYS_UNAVAILABLE`.
 
 ## Channel Health Monitor
 
@@ -348,7 +430,7 @@ Periodically checks channel health and auto-restarts unhealthy channels.
 - `stuck` - busy but no run activity within 25min
 - `busy` - actively processing (healthy short-circuit)
 - `startup-connect-grace` - within connect grace window after start
-- `unmanaged` - disabled/unconfigured accounts (NEW)
+- `unmanaged` - disabled/unconfigured accounts
 
 ### Restart Reasons
 
@@ -379,8 +461,15 @@ Periodically checks channel health and auto-restarts unhealthy channels.
 
 ### Stale Socket Exclusions
 
-- Telegram (long-polling) and webhook-mode channels excluded from stale-socket checks
+- Previously hardcoded Telegram exclusion is now plugin-declared via `plugin.status.skipStaleSocketHealthCheck`
+- Webhook-mode channels excluded from stale-socket checks
 - Lifecycle-aware: ignores stale `lastEventAt` from previous lifecycle when channel restarted
+
+### Channel Approval Handler Bootstrap
+
+Key file: `src/infra/approval-handler-bootstrap.ts`
+
+`startChannelApprovalHandlerBootstrap()` is called during channel account start. It initializes the channel's approval handler lifecycle (exec and plugin approvals). The approval runtime is scoped per channel account and disposed when the channel stops. This replaces per-channel inline approval wiring with a centralized assembly pattern.
 
 ### Restart Flow
 
@@ -419,12 +508,16 @@ Auth resolution returns a method value: `none`, `token`, `password`, `trusted-pr
 ### Auth Resolution
 
 - Mode auto-detected: override > config > password presence > token presence > default (token)
-- Tailscale: Whois-verified identity for WS Control UI surface only (not HTTP)
-- Rate limiting: per-IP sliding window, lockout on exceeded threshold
+- Tailscale: Whois-verified identity for WS Control UI surface only (not HTTP). Skipped when the client provides an explicit shared secret (token/password), preventing Tailscale header auth from shadowing valid credential-based connections
+- Rate limiting: per-IP sliding window, lockout on exceeded threshold. Tailscale branch now uses `withSerializedRateLimitAttempt()` to serialize attempts for the same {scope, ip} key across pre-check and failure write, preventing race conditions
 - Missing credentials (no token/password provided) do not burn rate-limit slots
 - Lockout expired entries reset attempt counters correctly (prevents infinite escalation)
 - `GatewaySecretRefUnavailableError` thrown when SecretRef is used but secrets provider not initialized
 - `allowRealIpFallback`: trusts X-Real-IP only when explicitly enabled (default: false)
+
+### Effective Shared Gateway Auth
+
+`resolveEffectiveSharedGatewayAuth()` returns `{ mode, secret }` for token or password modes, `null` otherwise. Used by the shared session generation hash and config-write enforcement.
 
 ### Trusted Proxy Auth
 
@@ -443,6 +536,68 @@ Key files: `src/gateway/credentials.ts`, `src/gateway/credential-planner.ts`
 - `GatewayCredentialPlan` type for structured credential resolution
 - `resolveGatewayProbeCredentialsFromConfig` - probe-specific, remote-only fallback
 - `resolveGatewayDriftCheckCredentialsFromConfig` - drift check, local mode, config-first, empty env
+
+### Startup Auth Preflight
+
+During `prepareGatewayStartupConfig()`, if the secrets runtime snapshot resolves a plaintext `gateway.auth.token` or `gateway.auth.password`, those values are merged into the auth override before `ensureGatewayStartupAuth()`. This ensures SecretRef-resolved credentials are available for startup auth bootstrap.
+
+## Container Bind Detection
+
+Key file: `src/gateway/net.ts`
+
+`isContainerEnvironment()` detects Docker, Podman, and Kubernetes containers using:
+1. Sentinel files: `/.dockerenv`, `/run/.containerenv`, `/var/run/.containerenv`
+2. cgroup markers in `/proc/1/cgroup`: docker, containerd, kubepods, lxc patterns
+
+Result is cached per-process. Used by:
+- `resolveGatewayBindHost()`: in `auto` mode, containers default to `0.0.0.0` instead of loopback (makes port-forwarding work)
+- `defaultGatewayBindMode()`: returns `"auto"` inside containers, `"loopback"` on bare-metal/VMs. Tailscale serve/funnel always returns `"loopback"` regardless of container detection
+
+### Localhost Canonicalization
+
+`parseHostForAddressChecks()` now strips trailing dots from the normalized host before comparison (e.g. `localhost.` -> `localhost`).
+
+## SSRF Guard and Proxy Configuration
+
+Key file: `src/infra/net/fetch-guard.ts`
+
+The guarded fetch pipeline (`guardedFetch`) validates URLs against SSRF policies before dispatching.
+
+### Operator-Configured Proxy Fix
+
+When `dispatcherPolicy.allowPrivateProxy === true`, the explicit proxy hostname is operator-configured and trusted. The SSRF guard previously checked the proxy hostname against the target-scoped `hostnameAllowlist` (e.g. `["api.telegram.org"]`), which rejected `localhost` and other local proxy hostnames. Fix: `assertExplicitProxyAllowed()` clears the `hostnameAllowlist` for the proxy hostname check while keeping private-network IP validation in place via `allowPrivateNetwork`. This restores Telegram media downloads (and any channel using a local proxy) after the url-fetch security hardening in 2026.4.x.
+
+### Cross-Origin Redirect Replay
+
+New option `allowCrossOriginUnsafeRedirectReplay`: when true, allows replaying unsafe request methods and bodies across cross-origin redirects. Sensitive cross-origin headers (Authorization/Cookie) are still stripped.
+
+### Non-Pinned DNS Dispatchers
+
+`createPolicyDispatcherWithoutPinnedDns()` creates HTTP/1.1 dispatchers (direct, env-proxy, or explicit-proxy) without DNS pinning. Used when the caller opts out of DNS-pinned security for trusted operator-controlled URLs.
+
+## MCP Loopback Server
+
+Key files: `src/gateway/mcp-http.ts`, `src/gateway/mcp-http.*.ts`
+
+JSON-RPC 2.0 HTTP server for MCP (Model Context Protocol) tool bridging. Starts on a random loopback port during gateway startup.
+
+- **Auth**: bearer token generated at startup, validated per-request
+- **Protocol**: POST to `/mcp` with JSON-RPC body (single or batch requests)
+- **Tool cache**: `McpLoopbackToolCache` caches resolved tool sets per session/provider/account scope
+- **Request context**: session key and provider resolved from request headers
+- **Handlers**: `handleMcpJsonRpc()` dispatches to MCP-spec method handlers (tools/list, tools/call, etc.)
+- **Transport helpers**: split into `mcp-http.loopback-runtime.ts` (activation state), `mcp-http.request.ts` (validation/parsing), `mcp-http.runtime.ts` (tool resolution cache), `mcp-http.schema.ts` (response schema)
+
+## Session Compaction Checkpoints
+
+Key file: `src/gateway/session-compaction-checkpoints.ts`
+
+Session compaction now saves checkpoints (pre-compaction snapshots) that can be restored:
+- Max 25 checkpoints per session (`MAX_COMPACTION_CHECKPOINTS_PER_SESSION`)
+- Checkpoint reasons: `manual`, `timeout-retry`, `budget`, `overflow`
+- Gateway methods: `sessions.compaction.list`, `sessions.compaction.get`, `sessions.compaction.restore`, `sessions.compaction.branch`
+- Each checkpoint captures `sessionId`, `sessionFile`, `leafId`
+- Restore clones the checkpoint's session entry with a new session ID and file
 
 ## AgentBox Provisioning Flow
 
@@ -485,6 +640,8 @@ curl -s "$BACKEND_URL/instances/config?serverId=$SERVER_ID&secret=$SECRET" | \
 
 ## Health Check
 
+Key file: `src/gateway/server/health-state.ts`
+
 After starting gateway, verify:
 ```bash
 # Check port
@@ -496,6 +653,21 @@ curl -s http://localhost:18789/health
 # Check channel status
 openclaw channels status --probe
 ```
+
+### Gateway Snapshot Privacy
+
+`buildGatewaySnapshot()` now accepts `{ includeSensitive?: boolean }`. When false (default for unauthenticated callers), `configPath`, `stateDir`, and `authMode` are omitted from the response. Authenticated admin callers still receive the full snapshot.
+
+### Readiness Check
+
+`/ready` and `/readyz` endpoints return detailed readiness state (channel health, startup grace, etc.) only when the request is authenticated or from a local direct connection. Unauthenticated external requests receive only `{ ready: boolean }`.
+
+### Graceful WebSocket Shutdown
+
+`createGatewayCloseHandler()` now implements a timed shutdown for WebSocket connections:
+1. Call `wss.close()` and wait up to 1s (`WEBSOCKET_CLOSE_GRACE_MS`)
+2. If not closed within grace period, terminate all tracked clients
+3. Wait an additional 250ms (`WEBSOCKET_CLOSE_FORCE_CONTINUE_MS`) then continue shutdown regardless
 
 ## Key Provisioning Gotchas
 
@@ -519,3 +691,16 @@ openclaw channels status --probe
 18. **Node command policy is config-only** - allowlist resolution is decoupled from pairing state; determined by platform defaults + `gateway.nodes.allowCommands` - `gateway.nodes.denyCommands`
 19. **Cron recurring wake-now drift** - recurring main-session cron jobs no longer busy-wait when the main lane is busy; they fire a `requestHeartbeatNow` nudge and release the cron lane immediately
 20. **Bundled plugin runtime deps** - packaged installs may be missing native deps from bundled plugins; `openclaw doctor --fix` runs `npm install` with pinned versions into the package root
+21. **Container auto-bind** - inside Docker/Podman/K8s containers, the gateway auto-binds to `0.0.0.0` instead of loopback so port-forwarding works. `isContainerEnvironment()` detects via sentinel files and cgroup markers
+22. **SSRF guard vs operator proxy** - when `allowPrivateProxy: true`, the SSRF guard clears the target-scoped hostname allowlist for the proxy hostname check so `localhost` proxies are not rejected. Private-network IP checks still apply
+23. **Approval replay on startup** - channel approval runtimes replay `exec.approval.list` and `plugin.approval.list` on connect to surface approvals created while the channel was offline
+24. **Shared auth session generation** - token/password rotation triggers a SHA-256 generation hash change that disconnects all stale shared-auth WS clients (code 4001)
+25. **Node command upgrade** - when a reconnecting paired node declares new commands not in its previously approved set, a new pairing request is issued and the effective commands remain the old approved set until the upgrade is approved
+26. **iOS exec approval push** - paired iOS devices with `operator.approvals` scope receive APNs push notifications for pending exec approvals; supports direct APNs auth and relay transport
+27. **Plugin gateway auth bypass** - channel plugins can now declare custom auth-bypass paths via `plugin.gateway.resolveGatewayAuthBypassPaths()` instead of hardcoded path lists
+28. **Stale socket health check is plugin-declared** - channels opt out of stale-socket health checks via `plugin.status.skipStaleSocketHealthCheck` instead of hardcoded channel ID checks
+29. **MCP loopback server** - gateway starts a JSON-RPC MCP server on a random loopback port for tool bridging (e.g. Claude CLI MCP). Bearer-token authenticated; tool results cached per session scope
+30. **Session compaction checkpoints** - compactions now save restore points (max 25 per session) that can be listed, inspected, restored, or branched via gateway methods
+31. **Startup secrets pruning** - when `OPENCLAW_SKIP_CHANNELS=1`, channel secret surfaces are pruned from the config before secrets runtime preparation, avoiding unnecessary secret resolution for skipped channels
+32. **Subagent orphan recovery** - runs on every startup cycle (not just cold restore) to handle orphaned subagent entries left by SIGUSR1 in-process restarts
+33. **Restart sentinel threading** - post-restart notification delivery now uses the channel plugin's `resolveReplyTransport()` to determine thread routing, replacing the hardcoded Slack `replyToId` mapping

@@ -7,6 +7,7 @@ openclaw gateway run [--bind loopback|lan|auto|custom|tailnet] [--port N] [--for
 openclaw gateway run [--auth-mode none|token|password|trusted-proxy]
 openclaw gateway run [--ws-log] [--dev] [--reset]
 openclaw gateway run [--password-file <path>]
+openclaw gateway run [--allow-unconfigured]          # allow start without gateway.mode=local
 openclaw gateway stop
 openclaw gateway status [--json]
 openclaw gateway install                    # install as system service
@@ -38,14 +39,17 @@ openclaw config validate                   # validate current config
 ```bash
 openclaw plugins install <spec>              # npm, clawhub, path, or archive
 openclaw plugins install --link <path>       # symlink local
+openclaw plugins install --force             # overwrite existing installed plugin or hook pack
 openclaw plugins disable <id>
 openclaw plugins enable <id>
-openclaw plugins list [--json] [--verbose]
+openclaw plugins list [--json] [--verbose] [--enabled]
 openclaw plugins info <id> [--json]
-openclaw plugins uninstall <id|clawhub-spec> [--keep-files] [--force]
-openclaw plugins update [--all] [--dry-run]
+openclaw plugins inspect [id] [--all] [--json]
+openclaw plugins uninstall <id|clawhub-spec> [--keep-files] [--force] [--dry-run]
+openclaw plugins update [--all] [--dry-run] [--dangerously-force-unsafe-install]
 openclaw plugins doctor
-openclaw plugins install <spec> --dangerously-force-unsafe-install  # bypass security scan (NEW)
+openclaw plugins install <spec> --dangerously-force-unsafe-install  # bypass security scan
+openclaw plugins marketplace list <source> [--json]  # list plugins from marketplace source
 ```
 
 ## Channels
@@ -118,7 +122,15 @@ openclaw models auth order get|set|clear     # auth profile order management
 ```bash
 openclaw sessions list                       # list active sessions
 openclaw sessions info <key>                 # show session details
+openclaw sessions --agent <id>               # list sessions for one agent
+openclaw sessions --all-agents               # aggregate across agents
+openclaw sessions --active <minutes>         # only sessions updated within N minutes
+openclaw sessions cleanup [--dry-run] [--enforce] [--fix-missing]
+openclaw sessions cleanup [--agent <id>] [--all-agents] [--store <path>]
+openclaw sessions cleanup [--active-key <key>] [--json]
 ```
+
+Session cleanup previews stale/cap pruning (`--dry-run`), applies maintenance (`--enforce`), and can prune entries with missing transcript files (`--fix-missing`).
 
 ## Tasks
 
@@ -129,12 +141,72 @@ openclaw tasks show <lookup> [--json]                         # show one task by
 openclaw tasks notify <lookup> <policy>                       # set notify policy (done_only|state_changes|silent)
 openclaw tasks cancel <lookup>                                # cancel a running task
 openclaw tasks audit [--json] [--severity <level>] [--code <name>] [--limit <n>]  # audit findings
-openclaw tasks maintenance [--json] [--apply]                 # preview or apply task ledger maintenance
+openclaw tasks maintenance [--json] [--apply]                 # preview or apply tasks and TaskFlow maintenance
+openclaw tasks flow list [--json] [--status <name>]           # list tracked TaskFlows
+openclaw tasks flow show <lookup> [--json]                    # show one TaskFlow by flow id or owner key
+openclaw tasks flow cancel <lookup>                           # cancel a running TaskFlow
 ```
 
-Runtime filter values: `subagent`, `acp`, `cron`, `cli`. Status filter values: `queued`, `running`, `succeeded`, `failed`, `timed_out`, `cancelled`, `lost`. Audit severity: `warn`, `error`. Audit codes: `stale_queued`, `stale_running`, `lost`, `delivery_failed`, `missing_cleanup`, `inconsistent_timestamps`. Maintenance without `--apply` is a dry run; `--apply` runs reconciliation, cleanup stamping, and pruning.
+Runtime filter values: `subagent`, `acp`, `cron`, `cli`. Status filter values: `queued`, `running`, `succeeded`, `failed`, `timed_out`, `cancelled`, `lost`. Flow status values: `queued`, `running`, `waiting`, `blocked`, `succeeded`, `failed`, `cancelled`, `lost`. Audit severity: `warn`, `error`. Audit codes: `stale_queued`, `stale_running`, `lost`, `delivery_failed`, `missing_cleanup`, `inconsistent_timestamps`, `restore_failed`, `stale_waiting`, `stale_blocked`, `cancel_stuck`, `missing_linked_tasks`, `blocked_task_missing`. Maintenance without `--apply` is a dry run; `--apply` runs reconciliation, cleanup stamping, and pruning (covers both tasks and TaskFlows).
 
 Chat command: `/tasks` - shows task status for the current session (active + total counts, up to 5 visible tasks with timing and detail). Falls back to agent-scoped view when no session-scoped tasks exist.
+
+## Infer (Capability CLI)
+
+Stable CLI surface for provider-backed inference. Registered as both `openclaw infer` and `openclaw capability` (fallback alias).
+
+```bash
+# Capability catalog
+openclaw infer list [--json]                 # list canonical capability ids and transports
+openclaw infer inspect --name <id> [--json]  # inspect one capability
+
+# Model inference
+openclaw infer model run --prompt <text> [--model <p/m>] [--local] [--gateway] [--json]
+openclaw infer model list [--json]           # list known models from catalog
+openclaw infer model inspect --model <p/m> [--json]
+openclaw infer model providers [--json]      # list model providers
+
+# Model auth
+openclaw infer model auth login --provider <id>
+openclaw infer model auth logout --provider <id> [--json]
+openclaw infer model auth status [--json]
+
+# Image generation and description
+openclaw infer image generate --prompt <text> [--model <p/m>] [--count N] [--size WxH] [--aspect-ratio R] [--resolution 1K|2K|4K] [--output <path>] [--json]
+openclaw infer image edit --file <path> --prompt <text> [--model <p/m>] [--output <path>] [--json]
+openclaw infer image describe --file <path> [--model <p/m>] [--json]
+openclaw infer image describe-many --file <path> [--file <path>...] [--model <p/m>] [--json]
+openclaw infer image providers [--json]
+
+# Audio transcription
+openclaw infer audio transcribe --file <path> [--language <code>] [--prompt <text>] [--model <p/m>] [--json]
+openclaw infer audio providers [--json]
+
+# Text to speech
+openclaw infer tts convert --text <text> [--channel <id>] [--voice <id>] [--model <p/m>] [--output <path>] [--local] [--gateway] [--json]
+openclaw infer tts voices [--provider <id>] [--json]
+openclaw infer tts providers [--local] [--gateway] [--json]
+openclaw infer tts status [--gateway] [--json]
+openclaw infer tts enable [--local] [--gateway] [--json]
+openclaw infer tts disable [--local] [--gateway] [--json]
+openclaw infer tts set-provider --provider <id> [--local] [--gateway] [--json]
+
+# Video generation and description
+openclaw infer video generate --prompt <text> [--model <p/m>] [--output <path>] [--json]
+openclaw infer video describe --file <path> [--model <p/m>] [--json]
+openclaw infer video providers [--json]
+
+# Web search and fetch
+openclaw infer web search --query <text> [--provider <id>] [--limit N] [--json]
+openclaw infer web fetch --url <url> [--provider <id>] [--format <fmt>] [--json]
+openclaw infer web providers [--json]
+
+# Embeddings
+openclaw infer embedding create --text <text> [--text <text>...] [--provider <id>] [--model <p/m>] [--json]
+openclaw infer embedding providers [--json]
+```
+
+All subcommands also work under `openclaw capability ...`.
 
 ## Daemon (legacy alias)
 
@@ -147,7 +219,7 @@ openclaw daemon restart
 openclaw daemon status [--json]
 ```
 
-Install/manage the gateway as a system service (launchd on macOS, systemd on Linux, schtasks on Windows). Restart checks for gateway token drift (service token vs config token) before proceeding. Disabled in Nix mode.
+Install/manage the gateway as a system service (launchd on macOS, systemd on Linux, schtasks on Windows). Restart checks for gateway token drift (service token vs config token) before proceeding. On macOS, `start` attempts launchd agent recovery if the service is not loaded. Disabled in Nix mode.
 
 ## Onboarding
 
@@ -310,25 +382,35 @@ openclaw uninstall                           # uninstall openclaw
 Repair contributions run in order:
 
 1. **Gateway config** - checks gateway.mode and auth.mode ambiguity
-2. **Auth profiles** - repairs legacy OAuth profile IDs, removes deprecated CLI auth profiles
-3. **Gateway auth** - generates gateway token when missing (unless SecretRef-managed)
-4. **Legacy state** - migrates legacy sessions/agent/WhatsApp auth state
-5. **Legacy plugin manifests** - repairs legacy plugin manifest contracts
-6. **Bundled plugin runtime deps** - installs missing npm dependencies required by bundled plugins (`npm install --omit=dev --no-save`)
-7. **State integrity** - checks state directory structure
-8. **Session locks** - checks for stale session locks
-9. **Legacy cron normalization** - normalizes cron store: `jobId` to `id`, bare-string schedules to `{kind,expr}`, `schedule.cron` to `schedule.expr`, payload kind casing, legacy top-level payload/delivery fields, `deliver` mode to `announce`, legacy `notify: true` webhook fallback migration, stagger defaults, sessionTarget inference
-10. **Sandbox** - repairs sandbox images, warns about scope
-11. **Gateway services** - scans extra gateway installs, repairs service config, checks launchd overrides
-12. **Startup matrix** - runs startup matrix migration on `--fix`
-13. **Security** - notes security warnings
-14. **Browser** - checks Chrome MCP browser readiness
-15. **OAuth TLS** - checks OpenAI OAuth TLS prerequisites (deep mode)
+2. **Auth profiles** - repairs legacy OAuth profile IDs
+3. **Claude CLI** - notes Claude CLI binary, headless auth, OpenClaw auth profile, workspace, and project dir health (informational, no auto-repair)
+4. **Gateway auth** - generates gateway token when missing (unless SecretRef-managed)
+5. **Legacy state** - migrates legacy sessions/agent/WhatsApp auth state
+6. **Legacy plugin manifests** - repairs legacy plugin manifest contracts
+7. **Bundled plugin runtime deps** - installs missing npm dependencies required by bundled plugins (`npm install --omit=dev --no-save`)
+8. **State integrity** - checks state directory structure
+9. **Session locks** - checks for stale session locks
+10. **Legacy cron normalization** - normalizes cron store: `jobId` to `id`, bare-string schedules to `{kind,expr}`, `schedule.cron` to `schedule.expr`, payload kind casing, legacy top-level payload/delivery fields, `deliver` mode to `announce`, legacy `notify: true` webhook fallback migration, stagger defaults, sessionTarget inference
+11. **Sandbox** - repairs sandbox images, warns about scope
+12. **Gateway services** - scans extra gateway installs, repairs service config, checks launchd overrides
+13. **Startup channel maintenance** - runs channel plugin startup maintenance via plugin-driven doctor adapters (replaces per-provider Matrix/Telegram/Discord sequences)
+14. **Security** - notes security warnings, reports effective exec policy scope snapshots
+15. **Browser** - checks Chrome MCP browser readiness (delegated to plugin-driven detection)
+16. **OAuth TLS** - checks OpenAI OAuth TLS prerequisites (deep mode)
+17. **Hooks model** - checks hook model references
+18. **systemd linger** - checks systemd linger for Linux service persistence
+19. **Workspace status** - workspace health and suggestions
+20. **Bootstrap size** - checks bootstrap context size
+21. **Shell completion** - checks/installs shell completion
+22. **Gateway health** - runs gateway health checks
+23. **Memory search** - checks memory backend config, embedding providers, QMD binary; repairs short-term promotion artifacts when fixable
+24. **Gateway daemon** - checks daemon service health
+25. **Write config** - persists config changes when repairs applied
+26. **Workspace suggestions** - offers workspace-level configuration hints
 
 Config repair sequence (runs during config flow when `--fix` active):
 
-- **Telegram allowFrom usernames** - normalizes username entries in allowFrom lists
-- **Discord numeric IDs** - fixes string/number type mismatches in Discord IDs
+- **Channel doctor repairs** - plugin-driven per-channel config normalization, compatibility migration, stale config cleanup, and allowlist repair (replaces hardcoded Telegram/Discord/Matrix repairs)
 - **Open-policy allowFrom normalization** - adds missing `"*"` wildcard to `allowFrom` when `dmPolicy="open"` (top-level or nested `dm.allowFrom` depending on channel)
 - **Bundled plugin load path migration** - rewrites legacy `dist/extensions/` or `dist-runtime/extensions/` paths to current `extensions/` paths in `plugins.load.paths`
 - **Stale plugin config** - prunes `plugins.allow` and `plugins.entries` refs to plugins no longer installed; removes legacy web search config migration paths
@@ -337,8 +419,23 @@ Config repair sequence (runs during config flow when `--fix` active):
 - **Legacy tools-by-sender migration** - migrates untyped `toolsBySender` keys to typed `id:` prefix entries (deprecated bare keys become `id:<key>`)
 - **Exec safe-bin coverage** - scaffolds missing `safeBinProfiles` entries for custom safeBins, warns about interpreter/runtime bins without profiles and risky semantics entries
 - **Expanded cron normalization** - `delivery.mode` normalization, `sessionTarget` inference/normalization, legacy delivery input hoisting from payload to delivery object, stagger defaults for cron-type schedules, `schedule.anchorMs` coercion for every-type schedules
+- **Legacy web search config migration** - migrates legacy `tools.web.search.<provider>.*` config to plugin-owned config paths
+- **Legacy web fetch config migration** - migrates legacy `tools.web.fetch.firecrawl.*` config to plugin-owned config paths
+- **Legacy X search config migration** - migrates legacy `tools.web.x_search.*` config to `plugins.entries.xai.config.webSearch.*`
+- **Legacy internal hooks handler warning** - warns about `hooks.internal.handlers` (no auto-migration; must be manually converted to managed hook directories)
+- **Plugin-contributed legacy config rules** - detects and migrates additional legacy config paths declared by plugin manifest contracts
 
 Non-interactive cron repair is properly gated (requires `--fix` flag in non-interactive mode). Uninstall accepts plugin IDs, names, installed specs, resolved specs, marketplace plugin names, and `clawhub:<package>` specs (versionless match supported).
+
+## Approvals
+
+```bash
+openclaw approvals get [--node <node>] [--gateway] [--json]
+openclaw approvals set [--node <node>] [--gateway] [--file <path>] [--stdin]
+openclaw approvals allowlist <pattern> [--node <node>] [--gateway] [--agent <id>]
+```
+
+`approvals get` now includes an effective policy report showing per-scope exec policy snapshots (requested vs host vs effective security/ask values) when config is available. JSON output includes the `effectivePolicy` field.
 
 ## Exec Environment
 
@@ -371,7 +468,7 @@ When `commands.plugins: true` is enabled in config, plugin management is availab
 
 ```bash
 openclaw tui                                 # terminal UI
-openclaw logs                                # view logs
+openclaw logs                                # view logs (falls back to local log file when gateway pairing required)
 openclaw system                              # system info
 openclaw approvals                           # manage approvals
 openclaw nodes                               # manage browser nodes
@@ -388,6 +485,7 @@ openclaw directory                           # agent directory
 openclaw security                            # security audit
 openclaw update                              # check for updates
 openclaw completion                          # shell completions
+openclaw clawbot                             # legacy clawbot command aliases
 ```
 
 ## Dev Commands

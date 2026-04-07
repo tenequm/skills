@@ -1,11 +1,15 @@
 # OpenClaw GitHub Context
-> Last refreshed: 2026-04-01T12:00:00Z
+> Last refreshed: 2026-04-07T12:00:00Z
 
 ## Open Bugs (critical for development)
 
 ### Plugin System
+- **#62511** - External plugins fail to load on 2026.4.5: normalizeAccountId is not a function (REGRESSION)
+- **#62372** - RangeError: Maximum call stack size exceeded - google/minimax plugins fail to load on Windows (REGRESSION)
+- **#62320** - CLI Stack Overflow in loadOpenClawPlugins / recordPluginError on 2026.4.5 (REGRESSION)
+- **#62347** - memory-core plugin fails to load during onboard: "Unable to load plugin public-surface runtime" (REGRESSION)
+- **#62277** - Feishu bundled plugin fails to load: missing register/activate export (REGRESSION)
 - **#58427** - Plugin subagent calls intermittently fail with "Plugin runtime subagent methods are only available during a gateway request"
-- **#58723** - dangerouslyForceUnsafeInstall param not effective (REGRESSION in 2026.3.31)
 - **#53046** - Missing extension runtime API entry points in package.json in extensions (v2026.3.22 regression)
 - **#52633** - openclaw-mem0 plugin loads but agent never calls memory_store tool, autoCapture not triggered
 - **#52433** - ACPX plugin always reverts to 0.1.16, ignores npm/manual upgrade (0.3.1 never sticks)
@@ -23,7 +27,11 @@
 - **#36377** - Native bindings (sqlite3) broken under jiti
 
 ### Config Validation
-- **#58934** - Validation failure when using exec with host=node and cwd is omitted (gateway path inheritance)
+- **#62472** - Context token / context window persisted incorrectly when multiple providers share the same model id
+- **#62470** - google-vertex/gemini-3.1-pro-preview empty replies due to incorrect thinkingConfig disable path
+- **#62405** - Control UI dropdown uses wrong value for OpenRouter models (missing openrouter/ prefix)
+- **#62390** - buildQualifiedChatModelValue ignores provider when model already contains slash (REGRESSION)
+- **#62388** - Comfy config path mismatch: plugins.entries.comfy.config accepted, runtime requires models.providers.comfy
 - **#58932** - normalizeHyphenSlug strips all CJK characters, breaking group display names for non-Latin languages
 - **#58880** - OpenRouter: "400 Reasoning is mandatory for this endpoint and cannot be disabled" (REGRESSION)
 - **#58355** - Failed to set model for Ollama - model not allowed
@@ -36,6 +44,20 @@
 - **#36792** - Gateway promises "best-effort config" on invalid config but exits instead
 
 ### Gateway Startup
+- **#62691** - `message send` crashes with `ERR_INTERNAL_ASSERTION` in v2026.4.5 (REGRESSION)
+- **#62564** - ERR_UNSUPPORTED_ESM_URL_SCHEME on Windows (REGRESSION in v2026.4.5)
+- **#62502** - ERR_UNSUPPORTED_ESM_URL_SCHEME on Windows non-C drives (REGRESSION)
+- **#62446** - Install and first configuration fails: Cannot find module '@buape/carbon'
+- **#62430** - openclaw tui crashes with Maximum call stack size exceeded during schema compilation (REGRESSION)
+- **#62410** - Maximum call stack size exceeded during JSON Schema validation (REGRESSION)
+- **#62408** - openclaw onboard --install-daemon ERR_UNSUPPORTED_ESM_URL_SCHEME on Windows (REGRESSION)
+- **#62400** - CLI Local Commands Hang Indefinitely in OpenClaw 4.5 (REGRESSION)
+- **#62356** - CLI enters CPU 100% infinite loop on unknown/unregistered subcommands (v2026.4.5)
+- **#62342** - Agent listener invoked outside active run causes Gateway crash
+- **#62329** - Gateway segfaults on every message when session history contains a cached PNG image (REGRESSION)
+- **#62326** - openclaw devices command unresponsive (REGRESSION)
+- **#62285** - openclaw command hang and gateway service not working after upgrading to 2026.4.5 (REGRESSION)
+- **#62302** - RangeError: Maximum call stack size exceeded on startup due to talk-voice invoking JITI AST compilation (REGRESSION)
 - **#58956** - Pre-compaction memory flush leaks into chat UI and blocks the user's active turn in 2026.3.31 (REGRESSION)
 - **#58807** - falling back to HTTP: ENETUNREACH (REGRESSION)
 - **#58415** - ws-stream WebSocket connect fails with 500 and always falls back to HTTP
@@ -53,9 +75,10 @@
 - **#22972** - Health check times out on slow startups
 
 ### Secrets/Auth
+- **#62546** - Canvas returns 401 Unauthorized on Windows despite correct token (v2026.4.5) (REGRESSION)
+- **#62380** - Windows Node system.run completely non-functional - exec-approvals.sock never created (REGRESSION)
 - **#58768** - Incompatible security approval config
 - **#58687** - Security prompt is too long to approve, clicking "Allow All" is ineffective
-- **#57956** - Anthropic type:"token" auth profiles broken in v2026.3.28 - classified as OAuth, causes HTTP 401 (REGRESSION)
 - **#52488** - `openclaw status --all` shows "missing scope: operator.read" even after full pairing
 - **#51911** - Anthropic setup-token onboarding path has multiple failure modes
 - **#49885** - google-vertex fails with "No credentials found for profile" even when ADC is valid
@@ -66,20 +89,30 @@
 - **#11829** - [SEC] API keys leak to LLM via tool outputs, error messages, system prompts
 
 ### Channels
-- **#58931** - Matrix not sending intermediate messages since 2026.3.31 (REGRESSION)
+- **#62699** - ACP/acpx persistent sessions die with `queue owner unavailable`; Telegram topic-bound ACP issues
+- **#62690** - Telegram 401 Unauthorized Error - Valid Token Not Accepted (REGRESSION)
+- **#62670** - Agent listener invoked outside active run - concurrent WhatsApp + Telegram sessions
+- **#62623** - v2026.4.5 regression: Slack DM file attachments no longer download to inbound (REGRESSION)
+- **#62610** - Telegram channel missing from npm installs on macOS
+- **#62580** - Response Contamination / Cross-Session Leakage
+- **#62576** - Telegram approval/system messages broadcast to multiple authorized users (REGRESSION)
+- **#62558** - QQBot channel - Framework slash commands (/new, /reset, /status) not working
+- **#62551** - Agent is not being able to read files that were sent on Slack
+- **#62498** - Media download failed in v2026.4.5 (re-occurrence of #32326) (REGRESSION)
+- **#62324** - v2026.4.5 regression: non-main agents in Telegram multi-agent stop replying unless contextEngine=legacy (REGRESSION)
+- **#62318** - Slack inbound images broken in 2026.4.5 - speech-core/runtime-api.js resolution failure (REGRESSION)
+- **#62311** - Control UI completely blank on main branch: "process is not defined" (REGRESSION)
 - **#58905** - Feishu(Lark) Webhook URL verification fails with 401 Invalid signature when encryptKey is set
 - **#58884** - Numerous calls to statsig.anthropic.com when not using Claude/Anthropic models
 - **#58781** - include_usage not auto-added to LLM calls, console stats broken (REGRESSION)
 - **#58738** - ClawBot WeCom service account unresponsive after pairing (REGRESSION)
 - **#58737** - Agent display name/avatar reverts to bot default on edited Slack messages (REGRESSION)
-- **#58734** - Matrix bootstrap runtime broken in 2026.3.31: references ./plugin-entry.runtime.ts (REGRESSION)
 - **#58639** - Gmail to Telegram/Discord notifications stopped: /gmail-pubsub push endpoint broken
 - **#58535** - Discord announce removing fields from input
 - **#58523** - Slack multi-workspace: outbound works on second workspace but inbound DM replies never reach OpenClaw
 - **#58514** - Google Chat: Space/Group messages silently ignored
 - **#58408** - WhatsApp Inbound Works But Outbound CLI Fails With "No Active Listener"
 - **#58402** - message tool "Operation aborted" + WhatsApp reconnect storm + xai-auth log spam
-- **#58337** - MiniMax toolCall pre-text block completely dropped on Telegram
 - **#58268** - Slack socket-mode mentions silently dropped as no-mention after stale-socket reconnect
 - **#58249** - Teams webhook broken in 2026.3.24+: publicUrl removed breaks JWT validation (REGRESSION)
 - **#58107** - Multiple Feishu group agents - only main reply delivered, others silently dropped (REGRESSION)
@@ -99,13 +132,24 @@
 - **#41581** - Telegram DM partial streaming regressed to choppy editMessageText
 - **#41576** - Channel leaks `[[reply_to:ID]]` tags into visible message text
 - **#36687** - `session.dmScope` reset causes cross-channel reply leakage
-- **#57776** - Matrix device verification fails with "m.mismatched_sas" despite matching emoji (REGRESSION)
-- **#57746** - Telegram: Long messages truncated instead of split after update 2026.03.13 (REGRESSION)
 - **#57731** - Discord plugin aggressively drops connections (stale-socket) causing delayed and duplicated messages (REGRESSION)
 - **#57660** - Telegram polling stall detector fires too aggressively (110s), causes message delivery failures
-- **#57618** - Mattermost channel config rejected after upgrade to 2026.3.28 - "must NOT have additional properties" (REGRESSION)
 
 ### Agent Runtime
+- **#62706** - Chrome MCP attach fails when OpenClaw passes both --browserUrl and --userDataDir
+- **#62684** - Local Ollama agent pipeline times out with no provider logs on 2026.4.5
+- **#62672** - Fallback chain propagates primary model's 429 error to secondary providers
+- **#62614** - Retry storm can repeatedly resend oversized session context after timeouts/rate limits
+- **#62604** - Control UI image paste injects massive base64 text into composer
+- **#62580** - Cross-Session Leakage / Response Contamination
+- **#62564** - ERR_UNSUPPORTED_ESM_URL_SCHEME on Windows (REGRESSION)
+- **#62561** - Inline image attachments dropped before imageModel fallback fires
+- **#62550** - browser snapshot --format ai returns role refs instead of numeric AI refs on 2026.4.5
+- **#62541** - Cannot create new agent after enable dreaming config (REGRESSION)
+- **#62533** - Model "Not Found" (404) errors when using a remote Ollama provider as a fallback
+- **#62517** - edit tool fails with tilde paths, error broadcasts to Telegram (REGRESSION)
+- **#62505** - Coding Agent never completes anything (worked in 2026.4.2) (REGRESSION)
+- **#62282** - Ollama embedding broke in 2026.4.5 (REGRESSION)
 - **#58962** - pdf tool / model not being used
 - **#58880** - OpenRouter reasoning mandatory, cannot be disabled (REGRESSION)
 - **#58842** - model hanging
@@ -116,7 +160,6 @@
 - **#58442** - Model failover fails on Coding Plan quota 429 errors - infinite loop
 - **#58363** - kimi web_search run error
 - **#58358** - OpenClaw mishandles message_stop for KimiCodingPlan Anthropic format
-- **#58347** - LiveSessionModelSwitchError defeats fallback chain during provider outages
 - **#58235** - Gemini 3.1 Pro Preview via OpenAI-compat API missing thought_signature in tool_calls
 - **#58189** - VLLM-deployed QWEN3-32B gets stuck in a loop
 - **#57826** - v2026.3.28 agent systematically omits required tool parameters (REGRESSION)
@@ -165,6 +208,11 @@
 - **#49258** - Cron job state inconsistency
 
 ### TUI / Control UI
+- **#62604** - Control UI image paste injects massive base64 text into composer
+- **#62418** - WebChat Control UI displays internal exec notifications in user-visible chat (REGRESSION)
+- **#62411** - Gemma 4 thinking-off semantics broken in Control UI
+- **#62371** - Control UI drag-and-drop images not attached to messages (REGRESSION)
+- **#62311** - Control UI completely blank on main branch: "process is not defined" (REGRESSION)
 - **#58694** - Can only chat in TUI mode
 - **#58631** - Haiku outputs with formatted tables crash webchat session
 - **#57964** - Repeated characters collapse when displayed in dashboard or TUI (REGRESSION)
@@ -180,10 +228,12 @@
 - **#37243** - TUI replies routed to Telegram instead of TUI
 
 ### Critical / Data Loss
+- **#62339** - Unknown phone number appeared in OpenClaw allowFrom without user authorization (WhatsApp)
 - **#57827** - OpenClaw 2026.3.28 `config.openFile` / OPENCLAW_CONFIG_PATH command injection vulnerability
 - **#58140** - Running official install command triggers Windows Defender - malicious batch file and registry keys added
 
 ### Exec Approvals (new in v2026.3.31)
+- **#62380** - Windows Node system.run completely non-functional - exec-approvals.sock never created (REGRESSION)
 - **#58768** - Incompatible security approval config
 - **#58687** - Security prompt too long to approve, "Allow All" ineffective
 - **#58479** - Approval dialog succeeds but exec never consumes it (REGRESSION)
@@ -191,22 +241,35 @@
 
 ## Breaking Changes & Regressions
 
-### Breaking in v2026.3.31 (current)
+### Breaking in v2026.4.5 (current)
+- External plugins fail to load: normalizeAccountId is not a function (#62511)
+- Maximum call stack size exceeded on Windows - plugins fail to load (#62372, #62320, #62302)
+- ERR_UNSUPPORTED_ESM_URL_SCHEME on Windows for all non-file:// paths (#62564, #62502, #62374, #62408)
+- CLI commands hang indefinitely consuming 90%+ CPU (#62400, #62356)
+- Gateway segfaults on sessions containing cached PNG images (#62329)
+- `openclaw devices` command unresponsive (#62326)
+- Slack DM file attachments no longer download to inbound (#62623)
+- Slack inbound images broken - speech-core/runtime-api.js resolution failure (#62318)
+- Coding Agent never completes anything (worked in 2026.4.2) (#62505)
+- Ollama embedding broke (#62282)
+- Canvas returns 401 Unauthorized on Windows (#62546)
+- Cannot create new agent after enable dreaming config (#62541)
+- Edit tool fails with tilde paths (#62517)
+- Telegram approval messages broadcast to multiple users (#62576)
+- Non-main agents in Telegram multi-agent stop replying unless contextEngine=legacy (#62324)
+- memory-core plugin fails to load: "Unable to load plugin public-surface runtime" (#62347)
+- Feishu bundled plugin fails to load: missing register/activate export (#62277)
+- Port 18789 in use when configuring new dreaming schedule (#62276)
+- Control UI completely blank: "process is not defined" (#62311)
+- Media download failed (re-occurrence of #32326) (#62498)
+
+### Breaking in v2026.3.31 (still relevant)
 - Pre-compaction memory flush leaks into chat UI and blocks user turns (#58956)
-- Matrix bootstrap runtime broken - references ./plugin-entry.runtime.ts (#58734)
-- Matrix not sending intermediate messages (#58931)
-- dangerouslyForceUnsafeInstall param not effective (#58723)
-- Exec approval system overhauled - excessive prompts, allow-always behaves as allow-once (fixed in #58792, #58860)
-- Gateway panel Internal Server Error after upgrade (#58697 - CLOSED)
-- All HTTP endpoints returned 500 after upgrade (#58689 - CLOSED)
-- LINE channel fails to start: Unable to resolve runtime module (#58708 - CLOSED)
-- Windows Telegram plugin fails to load: Cannot find module 'grammy' (#58676 - CLOSED)
+- Exec approval system overhauled - excessive prompts, allow-always behaves as allow-once (fixed in #58792, #58860, #58745)
 
 ### Breaking in v2026.3.28+ (still relevant)
 - Browser server removed from gateway - "openclaw browser start" not found (#58256, #58221)
-- Anthropic type:"token" auth profiles broken - classified as OAuth, causes HTTP 401 (#57956)
 - Teams webhook broken: publicUrl removed breaks JWT validation (#58249)
-- Mattermost channel config rejected: "must NOT have additional properties" (#57618)
 - Cron model override ignored (#58575, #58065, #57947, #58927)
 - SecretRef-backed headers sent as literal "secretref-managed" (#58087)
 - Agent systematically omits required tool parameters (#57826)
@@ -218,40 +281,57 @@
 ### Active Regressions
 | Issue | Summary |
 |-------|---------|
+| #62691 | `message send` crashes with ERR_INTERNAL_ASSERTION in v2026.4.5 |
+| #62623 | Slack DM file attachments no longer download in 2026.4.5 |
+| #62564 | ERR_UNSUPPORTED_ESM_URL_SCHEME on Windows (2026.4.5) |
+| #62541 | Cannot create new agent after enable dreaming config |
+| #62517 | Edit tool fails with tilde paths, error broadcasts to Telegram |
+| #62511 | External plugins fail to load: normalizeAccountId is not a function |
+| #62505 | Coding Agent never completes (worked in 2026.4.2) |
+| #62498 | Media download failed in v2026.4.5 |
+| #62418 | WebChat Control UI displays internal exec notifications |
+| #62410 | Maximum call stack size exceeded during JSON Schema validation |
+| #62400 | CLI local commands hang indefinitely (2026.4.5) |
+| #62390 | buildQualifiedChatModelValue ignores provider when model has slash |
+| #62380 | Windows Node exec-approvals.sock never created |
+| #62372 | RangeError: Maximum call stack size exceeded (plugin loading) |
+| #62347 | memory-core plugin fails to load during onboard |
+| #62329 | Gateway segfaults on cached PNG image in session history |
+| #62326 | openclaw devices command unresponsive |
+| #62324 | Non-main Telegram agents stop replying unless contextEngine=legacy |
+| #62320 | CLI Stack Overflow in loadOpenClawPlugins |
+| #62318 | Slack inbound images broken in 2026.4.5 |
+| #62311 | Control UI blank: "process is not defined" |
+| #62302 | RangeError: Maximum call stack on startup (talk-voice/JITI) |
+| #62285 | Gateway not working after upgrading to 2026.4.5 |
+| #62282 | Ollama embedding broke in 2026.4.5 |
+| #62277 | Feishu bundled plugin fails to load |
+| #62276 | Port 18789 in use when configuring dreaming |
+| #62261 | Dev channel fails to build (preflight lint fails) |
 | #58956 | Pre-compaction memory flush leaks into UI, blocks user turn |
-| #58931 | Matrix not sending intermediate messages since 2026.3.31 |
 | #58880 | OpenRouter reasoning mandatory, cannot be disabled |
 | #58807 | WebSocket fallback to HTTP with ENETUNREACH |
 | #58781 | include_usage not auto-added, console stats broken |
 | #58738 | ClawBot WeCom unresponsive after pairing |
 | #58737 | Slack agent display name/avatar reverts on edited messages |
-| #58734 | Matrix bootstrap runtime broken in 2026.3.31 |
-| #58723 | dangerouslyForceUnsafeInstall not effective |
 | #58712 | Skills WSL path issue shows disabled but works |
 | #58628 | Browser tool missing from agent tool list despite enabled |
 | #58599 | Edit tool schema mismatch (edits[] vs flat) |
-| #58595 | esbuild binary incompatible with macOS 10.15 since ~2026.3.8 |
 | #58575 | Cron --model flag does not override session model |
 | #58560 | Browser tools AJV schema error |
-| #58544 | openclaw update fails with preflight-no-good-commit |
 | #58479 | Control UI exec approval never consumed |
 | #58249 | Teams webhook broken (publicUrl removed) |
 | #58256 | Browser server removed from gateway, command not found |
 | #58221 | Chrome extension browser relay unavailable on macOS |
-| #58214 | Feishu intermittent 401 Incorrect API key |
 | #58107 | Multiple Feishu agents - only main reply delivered |
 | #58087 | SecretRef headers sent as literal string |
 | #58065 | Cron model override ignored |
 | #57964 | Repeated characters collapse in dashboard/TUI |
-| #57956 | Anthropic token auth profiles broken, classified as OAuth |
 | #57947 | Cron payload model override ignored |
 | #57826 | Agent omits required tool parameters |
-| #57776 | Matrix device verification fails with mismatched_sas |
 | #57753 | Anthropic SSE state machine fails to reset between tool-use loops |
-| #57746 | Telegram long messages truncated instead of split |
 | #57731 | Discord stale-socket drops causing delayed/duplicate messages |
 | #57663 | MiniMax M2.7 408 timeouts not surfaced, 4+ min delays |
-| #57618 | Mattermost config rejected after upgrade to 2026.3.28 |
 
 ### Config Migration Hazards
 - **#49666** - Telegram proxy config silently wiped on restart
@@ -259,8 +339,8 @@
 - Browser control server removed - configs referencing `browser.server` need migration
 - `hooks.internal.enabled` default changed to `true` - may affect setups relying on it being off
 - `exec.host` default changed from `"sandbox"` to `"auto"`
-- Mattermost channel config schema tightened in 2026.3.28 - rejects additional properties (#57618)
 - Exec approval system overhauled in 2026.3.31 - new approval flow can block all remote usage if not configured
+- v2026.4.5 Windows ESM URL scheme handling is broadly broken - avoid upgrading Windows installs until patched
 
 ## Plugin/Extension/Config Known Issues
 
@@ -273,8 +353,10 @@
 - Custom plugin tools invisible to sandboxed sessions (#41757)
 - Plugin subagent methods fail outside gateway request context (#58427)
 - ACPX version pinning broken - always reverts to 0.1.16 (#52433)
-- dangerouslyForceUnsafeInstall not working in 2026.3.31 (#58723, fixed by PR #58879)
-- Dangerous installs now fail closed by default - use `--dangerously-force-unsafe-install` to override
+- v2026.4.5: External plugins fail with normalizeAccountId is not a function (#62511)
+- v2026.4.5: Maximum call stack size exceeded on plugin loading (#62372, #62320, #62302)
+- v2026.4.5: memory-core plugin fails to load during onboard (#62347)
+- v2026.4.5: Feishu bundled plugin missing register/activate export (#62277)
 
 ### Skills
 - Sub-agents cannot see globally installed skills (#35272)
@@ -288,22 +370,35 @@
 - Slack ESM interop crash: "App is not a constructor" (#50441)
 - Slack multi-workspace inbound DM replies missing (#58523)
 - Slack socket-mode mentions dropped after stale-socket reconnect (#58268)
+- Slack DM file attachments no longer download in 2026.4.5 (#62623)
+- Slack inbound images broken in 2026.4.5 (#62318)
 - WhatsApp outbound fails despite connected status (#58408)
 - WhatsApp groupPolicy "allowlist" bypassed (#52763)
 - Teams webhook broken in 2026.3.24+ (#58249)
 - Feishu multi-group only main reply delivered (#58107)
 - Feishu webhook verification fails with encryptKey (#58905)
+- Feishu bundled plugin fails to load in 2026.4.5 (#62277)
 - Google Chat space/group messages silently ignored (#58514)
 - Matrix plugin syncs but never routes inbound messages (#51158)
-- Matrix bootstrap runtime broken in 2026.3.31 (#58734)
-- Matrix not sending intermediate messages (#58931)
 - Signal group messages silently dropped on Node 24 (#51716)
 - LINE webhook 404 with hooks.internal.enabled (#52729)
 - Discord channel running=true while connected=false (#51190)
 - Discord stale-socket aggressive drops (#57731)
-- Mattermost config rejected after 2026.3.28 upgrade (#57618)
+- Telegram 401 Unauthorized in 2026.4.5 (#62690)
+- Telegram approval messages broadcast to multiple users (#62576)
+- Telegram non-main agents stop replying in multi-agent (#62324)
 
 ## Recently Closed / Fixed (removed from previous tracking)
+- **#58931** - Matrix not sending intermediate messages since 2026.3.31 - CLOSED (fixed 2026-04-01, MiniMax-specific + Matrix blockStreaming added)
+- **#58934** - Validation failure exec host=node cwd omitted - CLOSED (PR #58977)
+- **#58723** - dangerouslyForceUnsafeInstall param not effective - CLOSED (PR #58879, confirmed fixed in 2026.4.1)
+- **#58734** - Matrix bootstrap runtime broken in 2026.3.31 - CLOSED (fixed 2026-04-01)
+- **#57956** - Anthropic token auth profiles broken in 2026.3.28 - CLOSED (Anthropic ended third-party subscription support April 4, 2026)
+- **#57776** - Matrix device verification fails with mismatched_sas - CLOSED (fixed 2026-04-03)
+- **#57746** - Telegram long messages truncated instead of split - CLOSED (fixed 2026-04-06)
+- **#57618** - Mattermost channel config rejected after upgrade - CLOSED (fixed 2026-04-04)
+- **#58347** - LiveSessionModelSwitchError defeats fallback chain - CLOSED (PR #60266, regression coverage added)
+- **#58337** - MiniMax toolCall pre-text block completely dropped on Telegram - CLOSED (fixed 2026-04-04)
 - **#58546** - Multi-agent routing session under wrong agent - CLOSED (fixed)
 - **#58466** - Model switch blocks failover on overloaded_error - CLOSED (PR #58589)
 - **#58409** - CRITICAL heartbeat session reset - CLOSED (PR #58605, #58447)
@@ -317,10 +412,67 @@
 - **#58689** - All HTTP endpoints 500 after upgrade to 2026.3.31 - CLOSED
 - **#58697** - Gateway panel Internal Server Error - CLOSED
 
-## Recent Impactful PRs (last 30 days, since 2026-03-01)
+## Recent Impactful PRs (last 30 days, since 2026-03-07)
 
 | PR | Title | Area |
 |---|---|---|
+| #62658 | Require re-pairing for node reconnect command upgrades | Gateway |
+| #62650 | feat(ios): improve gateway connection error ux | iOS |
+| #62600 | fix: compaction after tool use abortion cause agent infinite loop calls | Agents |
+| #62439 | fix(exec): detect cmd wrapper carriers | Exec |
+| #62411 | fix(google): preserve Gemma 4 thinking-off semantics | Agents |
+| #62401 | fix(exec): align node shell allowlist wrappers | Exec |
+| #62383 | fix(allowlist): gate write commands behind owner check | Security |
+| #62369 | fix(feishu): enforce workspace-only localRoots in docx upload | Feishu |
+| #62357 | fix(fetch-guard): drop request body on cross-origin unsafe-method redirects | Security |
+| #62355 | fix(browser): harden SSRF redirect guard against non-navigation document hops | Security |
+| #62350 | fix(gateway): invalidate shared-token/password WS sessions on secret rotation | Gateway |
+| #62316 | fix(docker): use built bundled plugins in runtime images | Docker |
+| #62312 | fix(gateway): stop SSRF guard rejecting operator-configured proxy hostnames | Gateway |
+| #62291 | fix: expand host-exec env blocklist for Java, Rust, and Cargo toolchains | Security |
+| #62286 | fix(channels): keep bundled dist loads off native Jiti on Windows | Channels |
+| #62275 | fix(memory): respect selected slot in dreaming config | Memory |
+| #62264 | Add lightContext support for spawned subagents | Agents |
+| #62263 | Fix Telegram doctor migration for multi-account configs | Telegram |
+| #62251 | Cron: normalize jobId to id when loading jobs.json | Cron |
+| #62244 | Fix: HTTP 404 classification for model fallback chain | Agents |
+| #62239 | fix(slack): prevent undici dispatcher leak to globalThis.fetch causing media download failure | Slack |
+| #62237 | Mistral: send reasoning_effort for mistral-small-latest | Agents |
+| #62234 | Plugins: allowlist compat for capability provider fallback | Plugins |
+| #62227 | feat(memory-core): ingest session transcripts into dreaming corpus | Memory |
+| #62193 | feat(ollama): detect vision capability from /api/show and set image input | Ollama |
+| #62179 | feat: expose prompt-cache runtime context to context engines | Agents |
+| #62168 | Matrix: prompt invite auto-join during onboarding | Matrix |
+| #62148 | chore: bump bundled acpx to 0.5.1 | ACPX |
+| #62146 | feat(gateway): add compaction checkpoints | Gateway |
+| #62136 | fix: openclaw allows normal reply text to carry media | Security |
+| #62135 | Refactor: centralize native approval lifecycle assembly | Exec |
+| #62132 | ACP: harden Discord recovery and reset flow | ACP/Discord |
+| #62129 | feat: Add first-class infer CLI for inference workflows | CLI |
+| #62111 | fix: lower trust background runtime output injected into system events | Security |
+| #62082 | fix: QQ Bot extension media URLs not guarded | QQ Bot/Security |
+| #62079 | fix: Mercurial/Rust/Make env vars not sanitized in host exec | Security |
+| #62078 | fix: timed-out exec approval can proceed when strictInlineEval enabled | Security |
+| #62068 | feat: add Arcee AI provider plugin | Plugins |
+| #62050 | stabilize media live coverage and add shared harness | Media |
+| #62023 | fix(browser): guard interaction-driven navigations | Security |
+| #62003 | fix(hooks): mark wake hook events untrusted | Security |
+| #62001 | Protect gateway exec approval config paths | Security |
+| #61985 | fix: suppress commentary history leaks | Agents |
+| #61968 | fix(agents): keep phaseless OpenAI WS text buffered until phase resolves | Agents |
+| #61935 | fix(gateway-status): use local TLS probe targets with fingerprint | Gateway |
+| #61933 | fix(command-queue): crash on SIGUSR1 restart after upgrade from pre-4.5 | Gateway |
+| #61925 | fix: lazily recreate bound ACP sessions after reset | ACP |
+| #61924 | fix(memory): surface warning when sqlite-vec unavailable during index | Memory |
+| #61921 | fix(browser): retry remote CDP websocket readiness before failing | Browser |
+| #61909 | fix: preserve code block indentation in normalizeDirectiveWhitespace | Agents |
+| #61907 | fix(matrix): compact loose list HTML for consistent Element rendering | Matrix |
+| #61903 | fix(agents): prevent ReDoS in interpreter heuristic regexes | Security |
+| #61892 | plugins: add bundled webhooks TaskFlow bridge | Plugins |
+| #61873 | fix: approval card buttons off-screen on mobile | UI |
+| #61872 | fix: prevent Canvas/Copy icons from overlapping chat bubble text | UI |
+| #61871 | fix: recognize api.grok.x.ai as xAI-native endpoint | Agents |
+| #61869 | fix: detect ?token= and suggest #token= fragment syntax | UI |
 | #58929 | fix(ci): allow plugin npm preview without publish token | Plugins |
 | #58918 | fix: hide raw provider errors from external chat replies | Agents |
 | #58916 | fix: preserve anthropic thinking blocks on replay | Agents |
@@ -363,7 +515,6 @@
 | #58573 | fix(sandbox): resolve pinned fs helper python without PATH | Sandbox |
 | #58562 | fix: differentiate overloaded vs rate-limit user-facing error messages | Agents |
 | #58555 | fix: harden embedded text normalization | Agents |
-| #58554 | test: dedupe extension-owned coverage | Tests/Extensions |
 | #58548 | feat: add agents.defaults.params for global default model params | Agents |
 | #58521 | fix(tasks): make task-store writes atomic | Tasks |
 | #58516 | refactor(tasks): add owner-key task access boundaries | Tasks |
@@ -392,57 +543,40 @@
 | #58341 | fix: skip stale-socket restart when Discord channel is still connected | Discord |
 | #58336 | ClawFlow: add runtime substrate | Tasks |
 | #58325 | fix(sessions): clear model override on /reset and /new | Sessions |
-| #58299 | fix: normalize MCP tool schemas missing properties field for OpenAI Responses API | Agents |
-| #58253 | fix(qqbot): align speech schema and setup validation | QQ Bot |
-| #58245 | fix(discord): gate voice ingress by allowlists | Discord |
-| #58236 | fix(nostr): verify inbound dm signatures before pairing replies | Nostr |
-| #58226 | fix(media): reject oversized image inputs before decode | Media |
-| #58225 | fix(hooks): rebind hook agent session keys to the target agent | Hooks |
-| #58208 | fix: omit disabled OpenAI reasoning payloads | Agents |
-| #58175 | fix(exec): keep awk and sed out of safeBins fast path | Security |
-| #58167 | fix(gateway): narrow plugin route runtime scopes | Gateway |
-| #58141 | Secrets: hard-fail unsupported SecretRef policy and fix gateway restart token drift | Secrets |
-| #58100 | Sessions: parse thread suffixes by channel | Sessions |
-| #58025 | Sandbox: relabel managed workspace mounts for SELinux | Sandbox |
-| #57995 | feat(matrix): thread-isolated sessions and per-chat-type threadReplies | Matrix |
-| #57848 | Sandbox: sanitize SSH subprocess env | Security |
-| #57729 | Plugins: block install when source scan fails | Security |
-| #57507 | fix: support multi-kind plugins for dual slot ownership | Plugins |
-| #56930 | feat(matrix): add explicit channels.matrix.proxy config | Matrix |
-| #56710 | fix(compaction): resolve model override in runtime context for all context engines | Agents |
-| #56387 | feat(matrix): add draft streaming (edit-in-place partial replies) | Matrix |
-| #56060 | fix(telegram): forum topic replies route to root chat + ACP spawn fails from forum topics | Telegram |
-| #52986 | Feature/add qq channel | Channels |
 
 ## Dev Gotchas (synthesized)
 
-- **v2026.3.31 exec approval overhaul** - The exec approval system was significantly reworked. Expect excessive approval prompts; allow-always may behave as allow-once. Multiple hotfixes landed (PRs #58792, #58860, #58745). Remote usage on Windows may be blocked without workaround.
-- **v2026.3.31 pre-compaction memory flush** (#58956) - Memory flush leaks into chat UI and blocks the user's active turn. New regression in latest version.
-- **v2026.3.31 Matrix bootstrap broken** (#58734, #58931) - Matrix plugin references wrong runtime file. Intermediate messages not sending. Affects all Matrix deployments on latest.
+- **v2026.4.5 is extremely unstable on Windows** - ERR_UNSUPPORTED_ESM_URL_SCHEME (#62564, #62502, #62374, #62408), Maximum call stack size exceeded (#62372, #62320, #62302, #62410, #62430), plugins fail to load (#62511, #62347, #62277). Avoid upgrading Windows installs to 2026.4.5 until a hotfix release. Multiple critical regressions affect onboarding, CLI, and plugin loading.
+- **v2026.4.5 Slack file handling broken** - Both DM file attachments (#62623) and inbound images (#62318) are broken. Root cause is likely the undici dispatcher leak fix (#62239) or speech-core runtime-api.js resolution failure. Images shared in Slack are not forwarded to the model.
+- **v2026.4.5 CLI hangs and crashes** - CLI local commands hang indefinitely consuming 90%+ CPU (#62400), unknown subcommands cause infinite loops (#62356), `openclaw devices` is unresponsive (#62326). These may share a root cause with the Maximum call stack size issues.
+- **v2026.4.5 memory-core / dreaming config issues** - memory-core plugin fails to load during onboard (#62347), cannot create new agent after enabling dreaming config (#62541), Ollama embedding broke (#62282). The dreaming feature appears unstable.
+- **v2026.4.5 Coding Agent regression** - Coding Agent never completes anything, only produces vague status updates (#62505). Worked in 2026.4.2.
+- **v2026.3.31 exec approval overhaul** - The exec approval system was significantly reworked. Expect excessive approval prompts; allow-always may behave as allow-once. Multiple hotfixes landed (PRs #58792, #58860, #58745). Remote usage on Windows may be blocked without workaround. Additionally, timed-out approvals could bypass strictInlineEval (fixed in PR #62078).
+- **v2026.3.31 pre-compaction memory flush** (#58956) - Memory flush leaks into chat UI and blocks the user's active turn. Still open.
 - **v2026.3.28 removes browser control server from gateway** - "openclaw browser start" is gone (#58256, #58221). Chrome extension browser relay stops working. This is a structural change, not a bug.
-- **Cron model override is still broken across 4 issues** (#58575, #58065, #57947, #58927) - --model flag, payload.model, and agentTurn model override all fail; always uses agent default. Despite multiple reports, no fix merged yet.
-- **Anthropic token auth profiles broken in 2026.3.28** (#57956) - type:"token" classified as OAuth, causing HTTP 401. Affects API-key-based setups.
-- **Model failover improvements landed but gaps remain** - PRs #58589, #58716, #58707 fixed several failover issues (overloaded_error, rate limits, LiveSessionModelSwitchError). But #58347 (LiveSessionModelSwitchError defeats fallback) and #58442 (Coding Plan 429 infinite loop) remain open.
-- **Compaction circuit breaker added** (PR #58846) - Prevents infinite retry loops during compaction. Also prevents splitting mid tool-call pairs (#58844). Important for stability.
-- **Plugin installs now fail closed on dangerous code** - use `--dangerously-force-unsafe-install` to override. Plugin source scan failures also block install. Note: the param itself was broken in 2026.3.31 (#58723), fixed by PR #58879.
+- **Cron model override is still broken across 4 issues** (#58575, #58065, #57947, #58927) - --model flag, payload.model, and agentTurn model override all fail; always uses agent default. PRs #58992 and #58998 were submitted but issues remain open.
+- **Anthropic subscription support ended April 4, 2026** - Anthropic ended third-party harness subscription access. Users must enable pay-as-you-go "extra usage" to continue using Anthropic models through OpenClaw. One-time credit available until April 17. (#57956)
+- **Model failover improvements landed but gaps remain** - PRs #58589, #58716, #58707, #60266 fixed several failover issues (overloaded_error, rate limits, LiveSessionModelSwitchError). But #58442 (Coding Plan 429 infinite loop) remains open. PR #62244 adds HTTP 404 classification to the fallback chain. Compaction abort now correctly handles tool use (#62600).
+- **Compaction circuit breaker added** (PR #58846) - Prevents infinite retry loops during compaction. Also prevents splitting mid tool-call pairs (#58844). Compaction checkpoints added (PR #62146) for better recovery.
+- **Plugin installs now fail closed on dangerous code** - use `--dangerously-force-unsafe-install` to override. Plugin source scan failures also block install. The param was broken in 2026.3.31 (#58723) but fixed in PR #58879 (confirmed working in 2026.4.1).
+- **Massive security hardening wave** - Multiple PRs since April 1: SSRF redirect guard hardened for browser (#62355, #62023, #62312), exec env blocklist expanded for Java/Rust/Cargo/Mercurial/Make (#62291, #62079), timed-out exec approvals fixed (#62078), wake hook events marked untrusted (#62003), exec approval config paths protected (#62001), reply text media path sanitized (#62136), QQ Bot media URLs guarded (#62082), cross-origin redirect body dropped (#62357), ReDoS prevented in interpreter heuristic (#61903).
 - **Teams webhook broken since 2026.3.24** (#58249) - publicUrl removal breaks JWT validation. Still open.
 - **hooks.internal.enabled now defaults to true** - bundled hooks load on fresh installs. Old configs relying on false default may see new behavior. PR #58896 now requires explicit opt-in for internal startup hooks.
 - **exec.host defaults to "auto" instead of "sandbox"** - may change exec routing behavior for existing setups.
-- **Multi-kind plugins supported** (PR #57507) - `kind` field can be an array `["memory", "context-engine"]`. New `slots.ts` module handles slot resolution.
-- **Prompt cache invalidated every turn** (#36520) - still open. PR #53212 (split static/dynamic blocks) helps for Anthropic but doesn't fully fix.
+- **New features: infer CLI, TaskFlow webhooks, dreaming** - `openclaw infer` CLI for provider-backed inference (PR #62129), bundled webhooks TaskFlow bridge (PR #61892), memory-core dreaming corpus ingestion (PR #62227). Dreaming is still unstable on 2026.4.5.
+- **New features: compaction checkpoints, lightContext subagents** - Compaction checkpoints for recovery (PR #62146), lightContext support for spawned subagents (PR #62264).
+- **Prompt cache invalidated every turn** (#36520) - still open. PR #62179 exposes prompt-cache runtime context to context engines.
 - **Shared process model = no plugin isolation** (#12517, #12518) - all plugins share one Node.js process.
 - **Sub-agents can't see globally installed skills** (#35272) - still no fix.
 - **Config keys still silently wipe sections** (#24008) - validate config carefully across upgrades.
-- **Plugin prompt hooks need explicit allowlist** (PR #36567) - `hooks.allowPromptInjection` required.
-- **`gateway.auth.mode` now mandatory** (PR #35094) - fails if both token+password without explicit mode.
-- **Google provider usageMetadata not mapped** (#51743) - all Gemini calls record 0 tokens.
+- **Google provider usageMetadata not mapped** (#51743) - all Gemini calls record 0 tokens. PR #62193 adds Ollama vision capability detection.
 - **SecretRef-backed headers resolve to literal string** (#58087) - regression affecting model providers using SecretRef for custom headers.
 - **Long sessions break model inference** (#58553) - 600+ message sessions get "invalid function call parameters".
 - **Edit tool schema mismatch** (#58599) - edits[] array in schema vs flat oldText/newText in implementation.
 - **CJK character handling** (#58932) - normalizeHyphenSlug strips CJK characters, breaking non-Latin group display names.
-- **Security: SSRF bypass in browser closed** (PR #58368) - redirect guard and follow-up action gates added. Important for browser-enabled setups.
 - **Security: config.openFile command injection** (#57827) - OPENCLAW_CONFIG_PATH vulnerable in 2026.3.28.
 - **Wildcard peer bindings** (PR #58609) - peer.id="*" now supported for multi-agent routing.
 - **agents.defaults.params** (PR #58548) - New config key for global default model params.
 - **thinkingByChannel** (PR #58446) - Per-channel thinking level overrides now available.
-- **Mattermost config schema tightened** (#57618) - Additional properties rejected after 2026.3.28 upgrade.
+- **Cross-session leakage reported** (#62580) - Response contamination between sessions. Needs investigation.
+- **WhatsApp allowFrom security concern** (#62339) - Unknown phone number appeared in allowFrom without user authorization. Cron job sent messages to unknown number. Potential security issue.

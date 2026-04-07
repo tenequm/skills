@@ -95,22 +95,41 @@ Key types: `src/config/types.openclaw.ts`, `src/config/types.plugins.ts`, `src/c
 
 - Branded config state types: `SourceConfig`, `ResolvedSourceConfig`, `RuntimeConfig` distinguish config lifecycle stages
 - `ConfigFileSnapshot` now has `sourceConfig` (pre-defaults) and `runtimeConfig` (post-defaults); `config` deprecated in favor of `runtimeConfig`
-- New `src/config/materialize.ts` module with profiles: `load`, `missing`, `snapshot` for config default application
+- `src/config/materialize.ts` module with profiles: `load`, `missing`, `snapshot` for config default application
 - `hooks.internal.enabled` now defaults to `true` (was `false`) so bundled hooks load on fresh installs
 - `exec.host` default changed from `"sandbox"` to `"auto"` (picks best available target at runtime)
 - `exec.applyPatch.enabled` default changed from `false` to `true`
-- Auth cooldowns: new `overloadedProfileRotations` (max same-provider rotations, default 1), `overloadedBackoffMs` (fixed delay, default 0), and `rateLimitedProfileRotations` (max same-provider rotations for rate-limit errors, default 1)
-- MCP server config: new `transport` (`"sse"` | `"streamable-http"`), `headers`, `connectionTimeoutMs` fields
-- Web search config rewritten: legacy per-provider shapes (`brave`, `firecrawl`, etc.) replaced with generic `Record<string, unknown>`; new `openaiCodex` and `x_search` scoped blocks
-- `web.fetch.maxResponseBytes` added (default 2000000)
-- Memory search: `provider`/`fallback` changed from union to generic `string`; new `qmd.extraCollections` for cross-agent search; new `store.fts.tokenizer` (`"unicode61"` | `"trigram"`) for CJK
+- Auth cooldowns: `overloadedProfileRotations` (default 1), `overloadedBackoffMs` (default 0), `rateLimitedProfileRotations` (default 1), new `authPermanentBackoffMinutes` (default 10), `authPermanentMaxMinutes` (default 60)
+- MCP server config: `transport` (`"sse"` | `"streamable-http"`), `headers`, `connectionTimeoutMs` fields
+- Web search config rewritten: legacy per-provider shapes (`brave`, `firecrawl`, etc.) replaced with generic `Record<string, unknown>`; `openaiCodex` and `x_search` scoped blocks
+- `web.fetch.maxResponseBytes` added (default 2000000); `web.fetch.provider` added for fallback provider id
+- Memory search: `provider`/`fallback` changed from union to generic `string`; `qmd.extraCollections` for cross-agent search; `store.fts.tokenizer` (`"unicode61"` | `"trigram"`) for CJK
 - Auth profile: new `displayName` field
 - `subagents.requireAgentId` blocks sessions_spawn without explicit agentId
 - SecretRef: unsupported policies now hard-fail; gateway restart token drift fixed
 - `awk` and `sed` excluded from exec safeBins fast path (injection prevention)
-- Gateway: new `webchat.chatHistoryMaxChars` controls max chars per text field in `chat.history` responses (default: 12000, max: 500000)
-- WhatsApp: new `reactionLevel` field (`"off" | "ack" | "minimal" | "extensive"`) controls agent reaction behavior per account
-- Agent defaults compaction: new `truncateAfterCompaction` boolean - truncates session JSONL after compaction to prevent unbounded file growth (default: false)
+- Gateway: `webchat.chatHistoryMaxChars` controls max chars per text field in `chat.history` responses (default: 12000, max: 500000)
+- WhatsApp: `reactionLevel` field (`"off" | "ack" | "minimal" | "extensive"`) controls agent reaction behavior per account
+- Agent defaults compaction: `truncateAfterCompaction` boolean (default: false); `notifyUser` boolean (default: false); `provider` for plugin compaction providers
+- Model aliases updated: `gpt-mini` -> `openai/gpt-5.4-mini`, new `gpt-nano` -> `openai/gpt-5.4-nano`
+- Streaming config unified: Telegram/Discord/Slack legacy flat streaming keys replaced with structured `ChannelPreviewStreamingConfig` / `SlackChannelStreamingConfig`
+- `ReplyToMode` expanded: now includes `"batched"` mode across all channels
+- `ContextVisibilityMode` (`"all" | "allowlist" | "allowlist_quote"`) added to Telegram, Discord, and Slack channel configs
+- `TalkProviderConfig` simplified: legacy ElevenLabs fields (`voiceId`, `voiceAliases`, `modelId`, `outputFormat`, `apiKey`) removed; providers use generic `[key: string]: unknown` extensibility
+- Context pruning defaults now delegated to `applyProviderConfigDefaultsWithPlugin` (plugin-driven per-provider defaults)
+- New agent defaults: `videoGenerationModel`, `musicGenerationModel`, `mediaGenerationAutoProviderFallback`, `skills`, `systemPromptOverride`, `contextInjection`, `subagents.allowAgents`
+- Heartbeat: `includeSystemPromptSection` boolean; `target` type simplified to `ChannelId`
+- New `ModelDefinitionConfig.contextTokens` for effective runtime cap separate from native `contextWindow`
+- `ModelProviderConfig.request` added for provider-level HTTP transport overrides (auth, proxy, TLS)
+- `ModelsConfig` discovery toggles: `copilotDiscovery`, `huggingfaceDiscovery`, `ollamaDiscovery` added
+- Exec approvals: `enabled` field changed from `boolean` to `boolean | "auto"` (`NativeExecApprovalEnableMode`) across Discord, Telegram, and Slack
+- Telegram: `errorPolicy`/`errorCooldownMs` at account, group, topic, and direct levels; `trustedLocalFileRoots`; `dangerouslyAllowPrivateNetwork`; `ingest` on topics/groups
+- Slack: `thread.requireExplicitMention` for suppressing implicit thread mentions
+- `tools.experimental.planTool` enables structured `update_plan` tool
+- `media.tools.asyncCompletion.directSend` for direct channel sends on async media generation
+- `MediaProviderRequestConfig.request` for provider HTTP transport overrides
+- Config IO refactored: audit logging, write-prepare, observe-recovery, owner-display-secret, invalid-config, and runtime-snapshot extracted into separate modules
+- Shell env expected keys now dynamically resolved from registered provider/channel env var lists
 
 ### MCP Config
 
@@ -126,6 +145,9 @@ type McpServerConfig = {
   cwd?: string;
   workingDirectory?: string;
   url?: string;
+  transport?: "sse" | "streamable-http";
+  headers?: Record<string, string | number | boolean>;
+  connectionTimeoutMs?: number;
   [key: string]: unknown;          // extensible for future fields
 };
 ```
@@ -185,12 +207,21 @@ type GatewayWebchatConfig = {
 - Lockout expired entries now correctly reset attempt counters (prevents infinite escalation)
 - Tailscale: Whois-verified header auth for WS Control UI surface
 
-### Config Reload
+### Gateway Reload
+
+```typescript
+type GatewayReloadConfig = {
+  mode?: GatewayReloadMode;       // "off" | "restart" | "hot" | "hybrid" (default: hybrid)
+  debounceMs?: number;            // default: 300
+  deferralTimeoutMs?: number;     // max wait for in-flight ops before SIGUSR1 restart (default: 300000)
+};
+```
 
 - Watches config file via chokidar, debounced (default 300ms)
 - `hybrid` (default): hot-reload channels, restart for structural changes
 - Missing config file retried up to 2 times before skip
 - `diffConfigPaths` compares old/new config structurally (handles arrays via `isDeepStrictEqual`)
+- `deferralTimeoutMs`: caps how long the gateway waits for in-flight operations (e.g. active subagent LLM calls) before forcing a restart; lower values risk aborting active calls
 
 ## WhatsApp Config
 
@@ -210,6 +241,7 @@ type WhatsAppSharedConfig = {
   defaultTo?: string;               // default delivery target (E.164 or group JID)
   groupAllowFrom?: string[];
   groupPolicy?: GroupPolicy;        // default: "allowlist"
+  contextVisibility?: ContextVisibilityMode;
   historyLimit?: number;
   dmHistoryLimit?: number;
   dms?: Record<string, DmConfig>;
@@ -238,66 +270,123 @@ The `reactionLevel` field controls how the agent uses message reactions on Whats
 
 Validated via `z.enum(["off", "ack", "minimal", "extensive"])`. Resolved at runtime through `resolveReactionLevel()` in `src/utils/reaction-level.ts`.
 
-## Telegram Config Additions
+## Telegram Config
 
 ```typescript
 type TelegramAccountConfig = {
-  // ... existing fields ...
-  threadBindings?: {              // thread-bound session lifecycle
-    enabled?: boolean;
-    idleHours?: number;           // default: 24
-    maxAgeHours?: number;         // default: 0 (disabled)
-    spawnSubagentSessions?: boolean;  // opt-in
-    spawnAcpSessions?: boolean;       // opt-in
-  };
+  name?: string;
+  capabilities?: TelegramCapabilitiesConfig;
+  execApprovals?: TelegramExecApprovalConfig;  // enabled: boolean | "auto"
+  markdown?: MarkdownConfig;
+  commands?: ProviderCommandsConfig;
   customCommands?: TelegramCustomCommand[];  // custom menu commands
-  network?: {                     // IPv4/IPv6 prioritization
-    autoSelectFamily?: boolean;
-    dnsResultOrder?: string;
-  };
-  dmHistoryLimit?: number;        // separate from group historyLimit
-  direct?: Record<string, DirectDmConfig>;  // per-chat-id DM config
+  configWrites?: boolean;
+  dmPolicy?: DmPolicy;
+  enabled?: boolean;
+  botToken?: string;
+  tokenFile?: string;               // path to token file; symlinks rejected
+  replyToMode?: ReplyToMode;        // off|first|all|batched
+  groups?: Record<string, TelegramGroupConfig>;
+  direct?: Record<string, TelegramDirectConfig>;  // per-chat-id DM config
+  allowFrom?: Array<string | number>;
+  defaultTo?: string | number;
+  groupAllowFrom?: Array<string | number>;
+  groupPolicy?: GroupPolicy;
+  contextVisibility?: ContextVisibilityMode;  // all|allowlist|allowlist_quote
+  historyLimit?: number;
+  dmHistoryLimit?: number;
+  dms?: Record<string, DmConfig>;
+  textChunkLimit?: number;          // default: 4000
+  streaming?: ChannelPreviewStreamingConfig;  // unified streaming config
+  mediaMaxMb?: number;
+  timeoutSeconds?: number;
+  retry?: OutboundRetryConfig;
+  network?: TelegramNetworkConfig;  // IPv4/IPv6 prioritization + dangerouslyAllowPrivateNetwork
+  proxy?: string;
+  webhookUrl?: string;
+  webhookSecret?: string;
+  webhookPath?: string;
+  webhookHost?: string;             // default: 127.0.0.1
+  webhookPort?: number;             // default: 8787
+  webhookCertPath?: string;
+  actions?: TelegramActionConfig;
+  threadBindings?: TelegramThreadBindingsConfig;
+  reactionNotifications?: "off" | "own" | "all";
+  reactionLevel?: "off" | "ack" | "minimal" | "extensive";  // default: ack
+  heartbeat?: ChannelHeartbeatVisibilityConfig;
+  healthMonitor?: ChannelHealthMonitorConfig;
+  linkPreview?: boolean;            // default: true
+  silentErrorReplies?: boolean;     // default: false
+  errorPolicy?: "always" | "once" | "silent";
+  errorCooldownMs?: number;
+  responsePrefix?: string;
+  ackReaction?: string;             // unicode emoji (e.g. "eyes")
+  apiRoot?: string;                 // custom Bot API root URL
+  trustedLocalFileRoots?: string[]; // for self-hosted Bot API file_path values
+  autoTopicLabel?: AutoTopicLabelConfig;
 };
 ```
 
 - Thread bindings: persistent thread-session mapping with idle/max-age expiration and auto-sweep
 - Custom commands: validated via `normalizeTelegramCommandName` (pattern: `/^[a-z0-9_]{1,32}$/`)
 - Topics now support `agentId` for topic-specific agent routing
+- `errorPolicy`/`errorCooldownMs`: per-account, per-group, per-topic, and per-direct error reporting control
+- `ingest` field on `TelegramGroupConfig` and `TelegramTopicConfig`: emit internal message hooks for mention-skipped messages
+- `dangerouslyAllowPrivateNetwork` on `TelegramNetworkConfig`: opt-in for trusted fake-IP/transparent-proxy environments
+- `trustedLocalFileRoots`: filesystem roots for self-hosted Telegram Bot API absolute file_path values
+- Exec approvals: `enabled` now accepts `boolean | "auto"` (`NativeExecApprovalEnableMode`)
 
-## Discord Config Additions
+## Discord Config
 
 ```typescript
 type DiscordAccountConfig = {
-  // ... existing fields ...
-  threadBindings?: {              // same structure as Telegram
-    enabled?: boolean;
-    idleHours?: number;           // default: 24
-    maxAgeHours?: number;         // default: 0
-    spawnSubagentSessions?: boolean;
-    spawnAcpSessions?: boolean;
-  };
-  inboundWorker?: {               // event processing
-    runTimeoutMs?: number;        // default: 30 minutes
-  };
-  eventQueue?: {                  // queue controls
-    listenerTimeout?: number;
-    maxQueueSize?: number;
-    maxConcurrency?: number;
-  };
-  slashCommand?: { ephemeral?: boolean };
-  autoPresence?: DiscordAutoPresenceConfig;  // runtime/quota-based status
-  activity?: string;              // bot activity settings
+  name?: string;
+  capabilities?: string[];
+  markdown?: MarkdownConfig;
+  commands?: ProviderCommandsConfig;
+  configWrites?: boolean;
+  enabled?: boolean;
+  token?: SecretInput;
+  proxy?: string;
+  allowBots?: boolean | "mentions";
+  dangerouslyAllowNameMatching?: boolean;
+  groupPolicy?: GroupPolicy;
+  contextVisibility?: ContextVisibilityMode;  // all|allowlist|allowlist_quote
+  textChunkLimit?: number;          // default: 2000
+  streaming?: ChannelPreviewStreamingConfig;  // unified streaming config
+  maxLinesPerMessage?: number;      // default: 17
+  mediaMaxMb?: number;
+  historyLimit?: number;
+  dmHistoryLimit?: number;
+  dms?: Record<string, DmConfig>;
+  retry?: OutboundRetryConfig;
+  actions?: DiscordActionConfig;
+  replyToMode?: ReplyToMode;        // off|first|all|batched
+  dmPolicy?: DmPolicy;
+  allowFrom?: string[];
+  defaultTo?: string;
+  dm?: DiscordDmConfig;
+  guilds?: Record<string, DiscordGuildEntry>;
+  heartbeat?: ChannelHeartbeatVisibilityConfig;
+  healthMonitor?: ChannelHealthMonitorConfig;
+  execApprovals?: DiscordExecApprovalConfig;  // enabled: boolean | "auto"
+  agentComponents?: DiscordAgentComponentsConfig;
+  ui?: DiscordUiConfig;
+  slashCommand?: DiscordSlashCommandConfig;
+  threadBindings?: DiscordThreadBindingsConfig;
+  intents?: DiscordIntentsConfig;
+  voice?: DiscordVoiceConfig;
+  pluralkit?: DiscordPluralKitConfig;
+  responsePrefix?: string;
+  ackReaction?: string;
+  ackReactionScope?: "group-mentions" | "group-all" | "direct" | "all" | "off" | "none";
+  activity?: string;
+  status?: "online" | "dnd" | "idle" | "invisible";
+  autoPresence?: DiscordAutoPresenceConfig;
   activityType?: 0 | 1 | 2 | 3 | 4 | 5;
   activityUrl?: string;
-  status?: "online" | "dnd" | "idle" | "invisible";
-  intents?: {                     // privileged gateway intents
-    presence?: boolean;
-    guildMembers?: boolean;
-  };
-  agentComponents?: DiscordAgentComponentsConfig;  // agent-controlled interactive components
-  ui?: DiscordUiConfig;           // UI customization (component accent color)
-  execApprovals?: DiscordExecApprovalConfig;  // exec approval forwarding to DMs/channels
-  voice?: DiscordVoiceConfig;     // voice channel conversations
+  inboundWorker?: { runTimeoutMs?: number };   // default: 30 minutes
+  eventQueue?: { listenerTimeout?: number; maxQueueSize?: number; maxConcurrency?: number };
 };
 ```
 
@@ -332,7 +421,7 @@ type DiscordUiConfig = {
 
 ```typescript
 type DiscordExecApprovalConfig = {
-  enabled?: boolean;              // default: false
+  enabled?: boolean | "auto";     // NativeExecApprovalEnableMode; default: auto when approvers can be resolved
   approvers?: string[];           // Discord user IDs; falls back to commands.ownerAllowFrom
   agentFilter?: string[];         // only forward for these agent IDs
   sessionFilter?: string[];       // session key patterns (substring or regex)
@@ -341,24 +430,58 @@ type DiscordExecApprovalConfig = {
 };
 ```
 
-## Slack Config Additions
+## Slack Config
 
 ```typescript
 type SlackAccountConfig = {
-  // ... existing fields ...
+  name?: string;
   mode?: "socket" | "http";       // connection mode (default: socket)
   signingSecret?: string;         // required for HTTP mode
   webhookPath?: string;           // default: /slack/events
-  nativeStreaming?: boolean;      // Slack chat.startStream/appendStream/stopStream (default: true)
-  execApprovals?: SlackExecApprovalConfig;
-  slashCommand?: SlackSlashCommandConfig;
-  thread?: SlackThreadConfig;     // thread session behavior
+  capabilities?: SlackCapabilitiesConfig;
+  execApprovals?: SlackExecApprovalConfig;  // enabled: boolean | "auto"
+  markdown?: MarkdownConfig;
+  commands?: ProviderCommandsConfig;
+  configWrites?: boolean;
+  enabled?: boolean;
+  botToken?: string;
+  appToken?: string;
+  userToken?: string;
+  userTokenReadOnly?: boolean;    // default: true
+  allowBots?: boolean;
+  dangerouslyAllowNameMatching?: boolean;
+  requireMention?: boolean;       // default: true
+  groupPolicy?: GroupPolicy;
+  contextVisibility?: ContextVisibilityMode;  // all|allowlist|allowlist_quote
+  historyLimit?: number;
+  dmHistoryLimit?: number;
+  dms?: Record<string, DmConfig>;
+  textChunkLimit?: number;
+  streaming?: SlackChannelStreamingConfig;  // mode, chunkMode, preview, block, nativeTransport
+  mediaMaxMb?: number;
+  reactionNotifications?: SlackReactionNotificationMode;
+  reactionAllowlist?: Array<string | number>;
+  replyToMode?: ReplyToMode;      // off|first|all|batched
   replyToModeByChatType?: Partial<Record<"direct" | "group" | "channel", ReplyToMode>>;
+  thread?: SlackThreadConfig;     // thread session behavior
+  actions?: SlackActionConfig;
+  slashCommand?: SlackSlashCommandConfig;
+  dmPolicy?: DmPolicy;
+  allowFrom?: Array<string | number>;
+  defaultTo?: string;
+  dm?: SlackDmConfig;
+  channels?: Record<string, SlackChannelConfig>;
+  heartbeat?: ChannelHeartbeatVisibilityConfig;
+  healthMonitor?: ChannelHealthMonitorConfig;
+  responsePrefix?: string;
+  ackReaction?: string;           // shortcodes (e.g. "eyes")
   typingReaction?: string;        // reaction emoji while processing (e.g. "hourglass_flowing_sand")
 };
 ```
 
 - `typingReaction`: emoji shortcode added while processing a reply, removed when done. Useful as a typing indicator fallback when assistant mode is not enabled.
+- `thread.requireExplicitMention`: when true, suppresses implicit thread mentions - only explicit @bot mentions trigger replies in threads where the bot has previously participated.
+- Slack streaming unified into `SlackChannelStreamingConfig` (includes `nativeTransport` toggle for `chat.startStream`/`appendStream`/`stopStream`)
 
 ## Session Config
 
@@ -395,6 +518,8 @@ type AuthConfig = {
     billingBackoffHours?: number;          // default: 5
     billingBackoffHoursByProvider?: Record<string, number>;
     billingMaxHours?: number;              // default: 24
+    authPermanentBackoffMinutes?: number;  // base backoff for permanent-auth failures (default: 10)
+    authPermanentMaxMinutes?: number;      // cap for permanent-auth backoff (default: 60)
     failureWindowHours?: number;           // default: 24
     overloadedProfileRotations?: number;   // max same-provider rotations for overloaded errors (default: 1)
     overloadedBackoffMs?: number;          // fixed delay before retry (default: 0)
@@ -428,12 +553,40 @@ type AgentCompactionConfig = {
   postCompactionSections?: string[];   // defaults to ["Session Startup", "Red Lines"]
   model?: string;                      // override compaction model
   timeoutSeconds?: number;             // default: 900
+  provider?: string;                   // plugin compaction provider id
   truncateAfterCompaction?: boolean;   // truncate session JSONL after compaction (default: false)
+  notifyUser?: boolean;                // send compaction notice to user (default: false)
   memoryFlush?: AgentCompactionMemoryFlushConfig;
 };
 ```
 
 - `truncateAfterCompaction`: When enabled, removes summarized entries from the session JSONL file after compaction to prevent unbounded file growth in long-running sessions. Default: false (preserves existing behavior).
+- `notifyUser`: When enabled, sends a compaction notice to the user when compaction starts. Default: false (silent).
+- `provider`: When set, delegates compaction summarization to a registered plugin provider instead of the built-in `summarizeInStages()`. Falls back to built-in on failure.
+
+## Agent Defaults - New Fields
+
+```typescript
+type AgentDefaultsConfig = {
+  // ... existing fields ...
+  videoGenerationModel?: AgentModelConfig;
+  musicGenerationModel?: AgentModelConfig;
+  mediaGenerationAutoProviderFallback?: boolean;  // default: true; auto-append cross-provider fallbacks
+  skills?: string[];                  // default skill allowlist for agents without explicit agents.list[].skills
+  systemPromptOverride?: string;      // full system prompt replacement (debugging/experiments)
+  contextInjection?: "always" | "continuation-skip";  // bootstrap file injection policy (default: always)
+  subagents?: {
+    allowAgents?: string[];           // default allowlist for sessions_spawn target agent ids
+    // ... existing subagent fields ...
+  };
+  heartbeat?: {
+    // ... existing heartbeat fields ...
+    includeSystemPromptSection?: boolean;  // include ## Heartbeats section for default agent (default: true)
+    target?: ChannelId;               // simplified from "last" | "none" | ChannelId
+  };
+  cliBackends?: Record<string, CliBackendConfig>;  // includes new imagePathScope: "temp" | "workspace"
+};
+```
 
 ## Memory Search Configuration
 
@@ -457,6 +610,11 @@ Auto-detection order (first available wins): `local` -> `openai` -> `gemini` -> 
 | `baseUrl` | `string` | Custom API base URL |
 | `apiKey` | `string` | Override API key |
 | `headers` | `object` | Extra HTTP headers |
+| `batch.enabled` | `boolean` | Enable batch API for embedding indexing (OpenAI/Gemini; default: true) |
+| `batch.wait` | `boolean` | Wait for batch completion (default: true) |
+| `batch.concurrency` | `number` | Max concurrent batch jobs (default: 2) |
+| `batch.pollIntervalMs` | `number` | Poll interval in ms (default: 5000) |
+| `batch.timeoutMinutes` | `number` | Timeout in minutes (default: 60) |
 
 ### Hybrid search - `memorySearch.query.hybrid`
 
@@ -498,7 +656,7 @@ Requires `gemini-embedding-2-preview`. Only applies to files in `extraPaths`.
 
 | Key | Type | Default | Description |
 | --- | --- | --- | --- |
-| `enabled` | `boolean` | `false` | Cache chunk embeddings in SQLite |
+| `enabled` | `boolean` | `true` | Cache chunk embeddings in SQLite |
 | `maxEntries` | `number` | `50000` | Max cached embeddings |
 
 ### Session memory (experimental)
@@ -554,19 +712,23 @@ Set `memory.backend` to `"qmd"` to enable. Settings live under `memory.qmd`:
 - `onMissing` callback mode: preserves placeholder + emits warning instead of throwing
 - `containsEnvVarReference(value)`: check without substituting
 
+### `shell-env-expected-keys.ts` - Dynamic key resolution
+
+Shell env expected keys are now dynamically resolved from registered provider/channel env var lists via `resolveShellEnvExpectedKeys()` instead of a hardcoded list. Core keys always included: `OPENCLAW_GATEWAY_TOKEN`, `OPENCLAW_GATEWAY_PASSWORD`.
+
 ## Config Paths
 
 ```
 ~/.openclaw/
-  ├── openclaw.json             # main config
-  ├── extensions/              # global plugin installs
-  ├── skills/                  # managed skills
-  ├── credentials/             # web provider creds
-  ├── agents/
-  │   └── <agent-id>/
-  │       ├── workspace/       # agent workspace
-  │       └── sessions/        # session storage
-  └── agentbox/                # agentbox-specific data (if applicable)
+  +-  openclaw.json             # main config
+  +-  extensions/              # global plugin installs
+  +-  skills/                  # managed skills
+  +-  credentials/             # web provider creds
+  +-  agents/
+  |   +-- <agent-id>/
+  |       +-  workspace/       # agent workspace
+  |       +-- sessions/        # session storage
+  +-- agentbox/                # agentbox-specific data (if applicable)
 ```
 
 Key file: `src/config/config-paths.ts`
@@ -634,14 +796,58 @@ Included file is merged, then local keys override.
 
 Key file: `src/config/defaults.ts`
 
-- **Model aliases**: `opus` -> `anthropic/claude-opus-4-6`, `sonnet` -> `anthropic/claude-sonnet-4-6`, `gpt` -> `openai/gpt-5.4`, `gpt-mini` -> `openai/gpt-5-mini`, `gemini` -> `google/gemini-3.1-pro-preview`, `gemini-flash` -> `google/gemini-3-flash-preview`, `gemini-flash-lite` -> `google/gemini-3.1-flash-lite-preview`
+- **Model aliases**: `opus` -> `anthropic/claude-opus-4-6`, `sonnet` -> `anthropic/claude-sonnet-4-6`, `gpt` -> `openai/gpt-5.4`, `gpt-mini` -> `openai/gpt-5.4-mini`, `gpt-nano` -> `openai/gpt-5.4-nano`, `gemini` -> `google/gemini-3.1-pro-preview`, `gemini-flash` -> `google/gemini-3-flash-preview`, `gemini-flash-lite` -> `google/gemini-3.1-flash-lite-preview`
 - **Agent defaults**: `maxConcurrent` (from `DEFAULT_AGENT_MAX_CONCURRENT`), `subagents.maxConcurrent` (from `DEFAULT_SUBAGENT_MAX_CONCURRENT`)
-- **Context pruning**: auto-enabled with `mode: "cache-ttl"` when Anthropic auth is configured; heartbeat interval set to `1h` (OAuth) or `30m` (API key)
+- **Context pruning**: delegated to `applyProviderConfigDefaultsWithPlugin` for plugin-driven per-provider defaults (Anthropic cache-ttl + heartbeat interval auto-applied when auth is configured)
 - **Anthropic cache retention**: `cacheRetention: "short"` auto-applied for Anthropic/Bedrock models when using API key auth
 - **Compaction**: defaults to `mode: "safeguard"`
 - **Logging**: defaults `redactSensitive: "tools"`
 - **Messages**: defaults `ackReactionScope: "group-mentions"`
-- **Talk**: normalized via `normalizeTalkConfig`; fallback API key resolved from env
+- **Talk**: normalized via `normalizeTalkConfig`; legacy ElevenLabs fields removed; provider-specific config via `providers` map
+- **Model defaults**: provider-specific normalization via `normalizeProviderSpecificConfig`; Mistral safe max tokens per model; cost/input/contextWindow/maxTokens defaults applied per model
+
+## Models Config
+
+```typescript
+type ModelsConfig = {
+  mode?: "merge" | "replace";
+  providers?: Record<string, ModelProviderConfig>;
+  bedrockDiscovery?: BedrockDiscoveryConfig;
+  copilotDiscovery?: DiscoveryToggleConfig;    // new
+  huggingfaceDiscovery?: DiscoveryToggleConfig; // new
+  ollamaDiscovery?: DiscoveryToggleConfig;      // new
+};
+
+type ModelProviderConfig = {
+  baseUrl: string;
+  apiKey?: SecretInput;
+  auth?: "api-key" | "aws-sdk" | "oauth" | "token";
+  api?: ModelApi;
+  injectNumCtxForOpenAICompat?: boolean;
+  headers?: Record<string, SecretInput>;
+  authHeader?: boolean;
+  request?: ConfiguredModelProviderRequest;  // new: provider-level HTTP transport overrides
+  models: ModelDefinitionConfig[];
+};
+
+type ModelDefinitionConfig = {
+  id: string;
+  name: string;
+  api?: ModelApi;
+  reasoning: boolean;
+  input: Array<"text" | "image">;
+  cost: { input: number; output: number; cacheRead: number; cacheWrite: number };
+  contextWindow: number;
+  contextTokens?: number;          // new: effective runtime cap separate from native contextWindow
+  maxTokens: number;
+  headers?: Record<string, string>;
+  compat?: ModelCompatConfig;      // includes new requiresStringContent field
+};
+```
+
+- `ModelApi` values: `"openai-completions"`, `"openai-responses"`, `"openai-codex-responses"`, `"anthropic-messages"`, `"google-generative-ai"`, `"github-copilot"`, `"bedrock-converse-stream"`, `"ollama"`, `"azure-openai-responses"`
+- `contextTokens`: optional effective runtime cap used for compaction/session budgeting, keeps native `contextWindow` intact
+- `ModelProviderConfig.request`: `ConfiguredProviderRequest` with auth (bearer/header), proxy (env/explicit), and TLS overrides
 
 ## Validation
 
@@ -673,6 +879,79 @@ openclaw config validate                   # validate current config
 
 `config set` supports three modes: direct value, SecretRef builder (`--ref-provider`/`--ref-source`/`--ref-id`), and batch (`--batch-json`/`--batch-file`).
 
+## Tools Config - Notable Changes
+
+```typescript
+type ToolsConfig = {
+  // ... standard allow/deny/profile ...
+  web?: {
+    search?: {
+      enabled?: boolean;
+      provider?: string;
+      apiKey?: SecretInput;
+      maxResults?: number;
+      timeoutSeconds?: number;
+      cacheTtlMinutes?: number;
+      openaiCodex?: {              // native Codex web search
+        enabled?: boolean;
+        mode?: "cached" | "live";
+        allowedDomains?: string[];
+        contextSize?: "low" | "medium" | "high";
+        userLocation?: { country?: string; region?: string; city?: string; timezone?: string };
+      };
+    } & Record<string, unknown>;   // generic extensible search config
+    x_search?: {                   // xAI Grok X search (apiKey removed - uses plugin config or XAI_API_KEY)
+      enabled?: boolean;
+      model?: string;
+      inlineCitations?: boolean;
+      maxTurns?: number;
+      timeoutSeconds?: number;
+      cacheTtlMinutes?: number;
+    };
+    fetch?: {
+      enabled?: boolean;
+      provider?: string;           // new: fallback provider id
+      maxChars?: number;
+      maxCharsCap?: number;        // default: 50000
+      maxResponseBytes?: number;   // default: 2000000
+      timeoutSeconds?: number;
+      cacheTtlMinutes?: number;
+      maxRedirects?: number;       // default: 3
+      userAgent?: string;
+      readability?: boolean;       // default: true
+    };
+  };
+  media?: MediaToolsConfig;        // includes asyncCompletion.directSend
+  experimental?: {
+    planTool?: boolean;            // structured update_plan tool
+  };
+};
+```
+
+- Legacy Firecrawl-specific fetch config removed; replaced by generic `provider` field
+- `x_search.apiKey` removed; auth resolved via plugin config or `XAI_API_KEY` env var
+- `tools.experimental.planTool`: enables the structured `update_plan` tool for all providers (OpenAI-family runs auto-enable it)
+
+## Streaming Config (Unified)
+
+Legacy per-channel flat streaming keys (`streaming`, `blockStreaming`, `blockStreamingCoalesce`, `streamMode`, `draftChunk`) replaced with structured types:
+
+```typescript
+type ChannelPreviewStreamingConfig = {
+  mode?: "off" | "partial" | "block" | "progress";
+  chunkMode?: "length" | "newline";
+  preview?: { chunk?: BlockStreamingChunkConfig };
+  block?: { enabled?: boolean; coalesce?: BlockStreamingCoalesceConfig };
+};
+
+// Slack extends with nativeTransport
+type SlackChannelStreamingConfig = ChannelPreviewStreamingConfig & {
+  nativeTransport?: boolean;      // Slack chat.startStream/appendStream/stopStream
+};
+```
+
+Used by Telegram, Discord, and Slack account configs via `streaming` field.
+
 ## AgentBox Config Pattern
 
 AgentBox serves a base config via API and merges per-instance values at boot:
@@ -690,3 +969,14 @@ AgentBox serves a base config via API and merges per-instance values at boot:
 // - rpcUrl, telegramBotToken, dashboardUrl
 // - Written to ~/.openclaw/openclaw.json via jq
 ```
+
+## Config IO Architecture
+
+The config IO module (`src/config/io.ts`) has been refactored with functionality extracted into focused submodules:
+
+- `io.audit.ts` - Config write/observe audit logging (JSONL records with file metadata, suspicious change detection)
+- `io.write-prepare.ts` - Config write preparation (merge patch creation, env ref restoration, validation formatting, path collection)
+- `io.observe-recovery.ts` - Suspicious config read detection and backup recovery
+- `io.owner-display-secret.ts` - Auto-generation and persistence of `commands.ownerDisplaySecret`
+- `io.invalid-config.ts` - Structured invalid config error handling
+- `runtime-snapshot.ts` - Runtime config snapshot state management (get/set/clear/refresh/write-notification listeners)

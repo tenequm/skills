@@ -29,6 +29,9 @@ Key files: `src/plugins/discovery.ts`, `src/plugins/loader.ts`
     "webSearchProviders": ["provider-id"],
     "mediaUnderstandingProviders": ["provider-id"],
     "imageGenerationProviders": ["provider-id"],
+    "videoGenerationProviders": ["provider-id"],
+    "musicGenerationProviders": ["provider-id"],
+    "webFetchProviders": ["provider-id"],
     "speechProviders": ["provider-id"],
     "tools": ["tool-id"]
   }
@@ -39,7 +42,7 @@ Key files: `src/plugins/discovery.ts`, `src/plugins/loader.ts`
 - `channels`/`providers`: declare capabilities for UI/discovery
 - `autoEnableWhenConfiguredProviders`: provider ids that trigger auto-enable when referenced in auth profiles, provider config, or model refs (see "Auto-Enable for API Key Auth" below)
 - `providerAuthEnvVars`: cheap env-var lookup for provider auth without booting plugin runtime. Map of provider id to env var names (e.g. minimax manifest maps `"minimax" -> ["MINIMAX_API_KEY"]`)
-- `contracts`: static capability ownership snapshot (`PluginManifestContracts`) for manifest-driven discovery and compat wiring without importing plugin runtime. Optional arrays: `speechProviders`, `mediaUnderstandingProviders`, `imageGenerationProviders`, `webSearchProviders`, `tools`
+- `contracts`: static capability ownership snapshot (`PluginManifestContracts`) for manifest-driven discovery and compat wiring without importing plugin runtime. Optional arrays: `speechProviders`, `mediaUnderstandingProviders`, `imageGenerationProviders`, `videoGenerationProviders` (NEW), `musicGenerationProviders` (NEW), `webFetchProviders` (NEW), `webSearchProviders`, `tools`
 - `providerAuthChoices`: array of auth choice objects for provider onboarding UI. Fields: `provider`, `method`, `choiceId`, `choiceLabel`, `groupId`, `groupLabel`, `optionKey`, `cliFlag`, `cliOption`, `cliDescription`, `onboardingScopes`
 - `configSchema`: validated against plugin's `entries.<id>.config`
 - `uiHints`: drive config UI (labels, sensitive masking)
@@ -83,6 +86,9 @@ const plugin: OpenClawPluginDefinition = {
     api.registerWebSearchProvider(wsImpl);           // web search
     api.registerInteractiveHandler(handler);         // interactive message handler
     api.onConversationBindingResolved(handler);      // binding lifecycle hook
+    api.registerVideoGenerationProvider(vigImpl);   // video generation (NEW)
+    api.registerMusicGenerationProvider(mugImpl);   // music generation (NEW)
+    api.registerWebFetchProvider(wfImpl);           // web fetch (NEW)
   }
 };
 export default plugin;
@@ -115,7 +121,10 @@ type OpenClawPluginApi = {
   registerSpeechProvider(provider: SpeechProviderDef): void;
   registerMediaUnderstandingProvider(provider: MediaUnderstandingProviderDef): void;
   registerImageGenerationProvider(provider: ImageGenerationProviderDef): void;
+  registerVideoGenerationProvider(provider: VideoGenerationProviderDef): void;  // NEW
+  registerMusicGenerationProvider(provider: MusicGenerationProviderDef): void;  // NEW
   registerWebSearchProvider(provider: WebSearchProviderDef): void;
+  registerWebFetchProvider(provider: WebFetchProviderDef): void;                // NEW
   registerInteractiveHandler(handler: InteractiveHandlerDef): void;
   onConversationBindingResolved(handler: BindingResolvedHandler): void;
   resolvePath(...segments: string[]): string;
@@ -418,6 +427,11 @@ New SDK modules:
 - `src/plugin-sdk/diffs.ts` - narrow facade for diff/artifact context routing
 - `src/plugin-sdk/channel-actions.ts` - `createMessageToolButtonsSchema()` and `createMessageToolCardSchema()` moved from core to SDK
 - `src/plugin-sdk/approval-delivery-helpers.ts` - `createApproverRestrictedNativeApprovalAdapter()` factory for channel-specific approval delivery. Produces an adapter with `auth` (authorize actor, availability state), `delivery` (DM route detection, forwarding suppression), and optional `native` (origin/approver-DM target resolution, delivery capabilities) sections. Used by discord, slack, and telegram extensions.
+- `src/plugin-sdk/approval-native-helpers.ts` - `createChannelNativeOriginTargetResolver()` factory for resolving approval request origin targets across approval kinds (`exec`/`plugin`). Decouples target resolution from delivery logic. (NEW)
+- `src/plugin-sdk/approval-client-helpers.ts` - client-side approval helper utilities for extension approval interactions. (NEW)
+- `src/plugin-sdk/approval-auth-runtime.ts`, `approval-client-runtime.ts`, `approval-delivery-runtime.ts`, `approval-gateway-runtime.ts`, `approval-handler-adapter-runtime.ts`, `approval-handler-runtime.ts`, `approval-native-runtime.ts`, `approval-reply-runtime.ts` - granular runtime seams for the approval subsystem, enabling staged loading and extension-specific approval adapter composition. (NEW)
+- `src/plugin-sdk/acp-binding-runtime.ts` - ACP binding runtime seam extracted from core. (NEW)
+- Browser SDK split: `browser-bridge.ts`, `browser-cdp.ts`, `browser-config.ts`, `browser-config-runtime.ts`, `browser-config-support.ts`, `browser-control-auth.ts`, `browser-host-inspection.ts`, `browser-maintenance.ts`, `browser-node-host.ts` - browser subsystem split into fine-grained SDK modules for smaller import footprints. (NEW)
 
 Channel-specific SDK subpaths:
 - `openclaw/discord` - thread binding management (`autoBindSpawnedDiscordSubagent`, `listThreadBindingsBySessionKey`, `unbindThreadBindingsBySessionKey`)
@@ -560,6 +574,14 @@ type ProviderCreateEmbeddingProviderContext = {
 
 `WebSearchProviderPlugin` gained `runSetup?` hook for interactive provider setup.
 
+## Video & Music Generation Providers (NEW)
+
+`VideoGenerationProviderPlugin` and `MusicGenerationProviderPlugin` follow the same pattern as image generation providers. Register via `api.registerVideoGenerationProvider()` and `api.registerMusicGenerationProvider()`. Declare in manifest under `contracts.videoGenerationProviders` and `contracts.musicGenerationProviders`.
+
+## Web Fetch Provider (NEW)
+
+`WebFetchProviderPlugin` - custom web fetch implementation. Register via `api.registerWebFetchProvider()`. Declare in manifest under `contracts.webFetchProviders`. SDK contract artifacts available via the `web-fetch` contract subpath.
+
 ## Memory Plugin State (`src/plugins/memory-state.ts` - NEW)
 
 Centralized module for memory plugin exclusive slots:
@@ -662,6 +684,30 @@ OpenClaw can install plugins from three external ecosystems: Codex, Claude, Curs
 - ClawHub downloads archive, checks plugin API / min gateway compat
 - Marketplace support: `<plugin>@<marketplace>` shorthand, `--marketplace` flag
 - Marketplace sources: known-marketplace name, local path, GitHub repo shorthand, git URL
+
+## New Bundled Extensions (2026.4)
+
+13 new extensions shipped since 2026.4.1:
+
+| Extension | ID | Purpose |
+|-----------|-----|---------|
+| `extensions/alibaba/` | `alibaba` | Alibaba Model Studio (DashScope/Qwen) video generation provider |
+| `extensions/amazon-bedrock-mantle/` | `amazon-bedrock-mantle` | Amazon Bedrock enhanced provider with mantle token generation |
+| `extensions/arcee/` | `arcee` | Arcee AI inference provider |
+| `extensions/comfy/` | `comfy` | ComfyUI workflow bridge - image, video, and music generation via local or cloud ComfyUI |
+| `extensions/fireworks/` | `fireworks` | Fireworks AI inference provider |
+| `extensions/memory-wiki/` | `memory-wiki` | Persistent wiki compiler and Obsidian-friendly knowledge vault |
+| `extensions/qa-channel/` | `qa-channel` | QA harness channel for automated testing |
+| `extensions/qa-lab/` | `qa-lab` | QA lab runner and frontier bakeoff infrastructure |
+| `extensions/qwen/` | `qwen` | Qwen model provider |
+| `extensions/runway/` | `runway` | Runway video generation provider |
+| `extensions/stepfun/` | `stepfun` | StepFun (CN/Intl) inference provider |
+| `extensions/vydra/` | `vydra` | Vydra provider |
+| `extensions/webhooks/` | `webhooks` | Authenticated inbound webhooks binding external automation to TaskFlows |
+
+**Comfy**: `mode: "local"` (connects to self-hosted ComfyUI) or `"cloud"`. Supports separate `image`, `video`, `music` workflow configs with `workflowPath`, `promptNodeId`, `outputNodeId`, `pollIntervalMs`, `timeoutMs`. Declares all three generation contracts: `imageGenerationProviders`, `videoGenerationProviders`, `musicGenerationProviders`.
+
+**Webhooks**: `plugins.entries.webhooks.config.routes` is a record of named routes, each with `sessionKey` (required), `secret` (required, SecretInput), optional `path`, `enabled`, `controllerId`, `description`.
 
 ## Community Plugins
 
