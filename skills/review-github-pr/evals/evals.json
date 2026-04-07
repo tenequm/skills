@@ -1,0 +1,45 @@
+{
+  "skill_name": "review-github-pr",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "Set up the fixture repo by running `bash evals/fixtures/correctness-convention/setup.sh`, then follow the printed instructions to export PATH and cd into the repo. Then run /review-pr 1",
+      "expected_output": "Report should find: (1) null safety bug in GetTicket - ticket can be nil after GetTicket returns no error, (2) unnamed CHECK constraint in 003_add_tickets.sql deviating from named constraint convention in existing migrations, (3) Scan default case returns error instead of nil like existing OrderStatus.Scan. Should cite specific existing files as evidence for convention findings. Should NOT suggest fixes directly - should produce review comments. Should wait for user to choose review type before posting.",
+      "files": ["evals/fixtures/correctness-convention/setup.sh"],
+      "expectations": [
+        "Report flags the null safety issue in GetTicket - ticket can be nil if not found but is accessed without nil check",
+        "Report flags the unnamed CHECK constraint in 003_add_tickets.sql, citing existing migrations (001 or 002) that use named constraints like chk_<table>_<field>",
+        "Report flags the Scan method default case difference - new code returns error while existing OrderStatus.Scan returns nil",
+        "Convention findings cite specific existing files and line references as evidence",
+        "All three review agents are launched in parallel",
+        "Report uses severity levels (critical/significant/minor)",
+        "Report ends by asking user to choose review type (approve/request-changes/comment-only) before posting"
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "Set up the fixture repo by running `bash evals/fixtures/efficiency-design/setup.sh`, then follow the printed instructions to export PATH and cd into the repo. Then run /review-pr 1",
+      "expected_output": "Report should find: (1) hand-rolled slugify in blog.ts that duplicates existing slugify in src/utils/string.ts, (2) sequential awaits in getBlogPage on independent calls that should use Promise.all like the existing dashboard.ts pattern, (3) TOCTOU anti-pattern with fs.existsSync checks before operations. Should cite the existing utility path and the existing parallel pattern in dashboard.ts.",
+      "files": ["evals/fixtures/efficiency-design/setup.sh"],
+      "expectations": [
+        "Report identifies hand-rolled slugify in blog.ts duplicating existing slugify in src/utils/string.ts",
+        "Report flags sequential awaits in getBlogPage and suggests Promise.all, ideally referencing the existing pattern in dashboard.ts",
+        "Report flags the TOCTOU pattern with fs.existsSync checks before fs.mkdirSync/fs.copyFileSync",
+        "Reuse finding points to the specific path src/utils/string.ts",
+        "Report uses severity levels and waits for user to choose review type before posting"
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "Set up the fixture repo by running `bash evals/fixtures/clean/setup.sh`, then follow the printed instructions to export PATH and cd into the repo. Then run /review-pr 1",
+      "expected_output": "Report should say LGTM or no issues found. The PR reuses existing slugify, follows existing route patterns, has proper error handling. Should not nitpick style or flag pre-existing code.",
+      "files": ["evals/fixtures/clean/setup.sh"],
+      "expectations": [
+        "Report states LGTM or no issues found",
+        "Report does NOT flag any issues in the changed code",
+        "Report does NOT suggest improvements to pre-existing code",
+        "Report does NOT nitpick style choices that follow existing patterns"
+      ]
+    }
+  ]
+}
