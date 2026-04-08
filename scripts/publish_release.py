@@ -80,6 +80,15 @@ def publish_clawhub(args: argparse.Namespace, repo_root: Path) -> int:
             run(command, repo_root)
         except subprocess.CalledProcessError as exc:
             error = exc.stderr.strip() or exc.stdout.strip() or str(exc)
+            if "Version already exists" in error:
+                print("  Already published, skipping.", flush=True)
+                successes.append(
+                    {
+                        "slug": skill["slug"],
+                        "version": skill["current_version"],
+                    }
+                )
+                continue
             category, retryable = classify_clawhub_error(error)
             failures.append(
                 {
