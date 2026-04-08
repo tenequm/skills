@@ -1,6 +1,6 @@
 # Upto Scheme Reference
 
-> **Status: Spec finalized, not yet production-ready.** The upto scheme spec was merged in March 2026. The `x402UptoPermit2Proxy` contract is deployed, but SDK client/server/facilitator implementations are still in progress and no facilitators support it yet. Use the `exact` scheme for production workloads. This reference documents the spec for awareness and early adoption preparation.
+> **Status: Implemented in TypeScript and Go SDKs.** Full client/server/facilitator implementations are available via `@x402/evm/upto/*` subpaths (TypeScript) and `go/mechanisms/evm/upto/*` (Go). The `x402UptoPermit2Proxy` contract is deployed. Python SDK does not yet support upto.
 
 The `upto` scheme enables usage-based payments where the client authorizes a **maximum amount** and the server settles for the **actual amount consumed**. Ideal for LLM token generation, bandwidth metering, time-based API access, and dynamic compute pricing.
 
@@ -205,8 +205,8 @@ Witness type string for the contract:
 
 | SDK | Upto Scheme Support |
 |-----|:---:|
-| TypeScript (`@x402/evm`) | Constants and proxy ABI defined |
-| Go | Constants defined (`x402UptoPermit2ProxyAddress`) |
+| TypeScript (`@x402/evm/upto/*`) | Full client/server/facilitator (v2.9.0) |
+| Go (`go/mechanisms/evm/upto/*`) | Full client/server/facilitator (v2.7.0) |
 | Python | Not yet implemented |
 
-The upto scheme spec is finalized. SDK client/server/facilitator implementations are in progress. The `x402UptoPermit2Proxy` contract is deployed at `0x402039b3d6E6BEC5A02c2C9fd937ac17A6940002`.
+The `x402UptoPermit2Proxy` contract is deployed at `0x402039b3d6E6BEC5A02c2C9fd937ac17A6940002` (same address across all EVM chains via CREATE2). See `references/typescript-sdk.md` and `references/go-sdk.md` for SDK usage examples.

@@ -63,7 +63,7 @@ extensions: {
 
 **Go:**
 ```go
-import "github.com/coinbase/x402/go/extensions/bazaar"
+import "github.com/x402-foundation/x402/go/extensions/bazaar"
 
 Extensions: bazaar.DeclareDiscoveryExtension(bazaar.DiscoveryInfo{
     Output: map[string]interface{}{
@@ -193,7 +193,7 @@ appendPaymentIdentifierToExtensions(extensions); // Adds ID only if server decla
 
 **Go (client):**
 ```go
-import "github.com/coinbase/x402/go/extensions/paymentidentifier"
+import "github.com/x402-foundation/x402/go/extensions/paymentidentifier"
 err := paymentidentifier.AppendPaymentIdentifierToExtensions(extensions, "")
 ```
 
@@ -286,6 +286,6 @@ Go: `erc20approvalgassponsor.DeclareExtension()`
 | bazaar | Yes | Yes | Yes |
 | offer-receipt | Yes | No | No |
 | sign-in-with-x | Yes | No | No |
-| payment-identifier | Yes | Yes | No |
-| eip2612GasSponsoring | Yes | Yes | No |
-| erc20ApprovalGasSponsoring | Yes | Yes | No |
+| payment-identifier | Yes | Yes | Yes |
+| eip2612GasSponsoring | Yes | Yes | Yes |
+| erc20ApprovalGasSponsoring | Yes | Yes | Yes |

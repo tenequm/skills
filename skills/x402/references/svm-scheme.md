@@ -113,7 +113,7 @@ new ExactSvmScheme(signer, cache); // optional - one is created if omitted
 **Go**: Thread-safe `SettlementCache` with `sync.Mutex`. Must pass a shared instance to both V1 and V2 scheme registrations:
 
 ```go
-import "github.com/coinbase/x402/go/mechanisms/svm"
+import "github.com/x402-foundation/x402/go/mechanisms/svm"
 cache := svm.NewSettlementCache()
 ```
 

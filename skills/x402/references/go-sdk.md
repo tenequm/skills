@@ -1,21 +1,21 @@
 # Go SDK Reference
 
-Version: 2.6.0 | Module: `github.com/coinbase/x402/go` | Go 1.24+
+Version: 2.7.0 | Module: `github.com/x402-foundation/x402/go` | Go 1.24+
 
 ## Installation
 
 ```bash
-go get github.com/coinbase/x402/go
+go get github.com/x402-foundation/x402/go
 ```
 
 ## Server: Gin
 
 ```go
 import (
-    x402http "github.com/coinbase/x402/go/http"
-    ginmw "github.com/coinbase/x402/go/http/gin"
-    evm "github.com/coinbase/x402/go/mechanisms/evm/exact/server"
-    svm "github.com/coinbase/x402/go/mechanisms/svm/exact/server"
+    x402http "github.com/x402-foundation/x402/go/http"
+    ginmw "github.com/x402-foundation/x402/go/http/gin"
+    evm "github.com/x402-foundation/x402/go/mechanisms/evm/exact/server"
+    svm "github.com/x402-foundation/x402/go/mechanisms/svm/exact/server"
 )
 
 facilitator := x402http.NewHTTPFacilitatorClient(&x402http.FacilitatorConfig{URL: facilitatorURL})
@@ -42,14 +42,48 @@ r.Use(ginmw.X402Payment(ginmw.Config{
 }))
 ```
 
+## Server: Echo
+
+```go
+import (
+    x402http "github.com/x402-foundation/x402/go/http"
+    echomw "github.com/x402-foundation/x402/go/http/echo"
+    evm "github.com/x402-foundation/x402/go/mechanisms/evm/exact/server"
+)
+
+e.Use(echomw.X402Payment(echomw.Config{
+    Routes:      routes,
+    Facilitator: facilitator,
+    Schemes:     []echomw.SchemeConfig{{Network: "eip155:84532", Server: evm.NewExactEvmScheme()}},
+}))
+```
+
+## Server: net/http (Standard Library)
+
+```go
+import (
+    x402http "github.com/x402-foundation/x402/go/http"
+    nethttpmw "github.com/x402-foundation/x402/go/http/nethttp"
+    evm "github.com/x402-foundation/x402/go/mechanisms/evm/exact/server"
+)
+
+handler := nethttpmw.X402Payment(nethttpmw.Config{
+    Routes:      routes,
+    Facilitator: facilitator,
+    Schemes:     []nethttpmw.SchemeConfig{{Network: "eip155:84532", Server: evm.NewExactEvmScheme()}},
+})(yourHandler)
+
+http.ListenAndServe(":4021", handler)
+```
+
 ## Client: HTTP
 
 ```go
 import (
-    x402 "github.com/coinbase/x402/go"
-    x402http "github.com/coinbase/x402/go/http"
-    evm "github.com/coinbase/x402/go/mechanisms/evm/exact/client"
-    evmsigners "github.com/coinbase/x402/go/signers/evm"
+    x402 "github.com/x402-foundation/x402/go"
+    x402http "github.com/x402-foundation/x402/go/http"
+    evm "github.com/x402-foundation/x402/go/mechanisms/evm/exact/client"
+    evmsigners "github.com/x402-foundation/x402/go/signers/evm"
 )
 
 client := x402.Newx402Client()
@@ -152,7 +186,7 @@ routes := x402http.RoutesConfig{
 ## Bazaar Discovery Extension
 
 ```go
-import "github.com/coinbase/x402/go/extensions/bazaar"
+import "github.com/x402-foundation/x402/go/extensions/bazaar"
 
 Extensions: bazaar.DeclareDiscoveryExtension(bazaar.DiscoveryInfo{
     Output: map[string]interface{}{"type": "json", "example": map[string]interface{}{"weather": "sunny"}},
@@ -166,9 +200,9 @@ resources, _ := facilitator.ListDiscoveryResources(ctx, &bazaar.ListDiscoveryRes
 ## Other Extensions
 
 ```go
-import "github.com/coinbase/x402/go/extensions/paymentidentifier"   // Payment identifier
-import "github.com/coinbase/x402/go/extensions/eip2612gassponsor"    // EIP-2612 gas sponsor
-import "github.com/coinbase/x402/go/extensions/erc20approvalgassponsor" // ERC-20 approval gas sponsor
+import "github.com/x402-foundation/x402/go/extensions/paymentidentifier"   // Payment identifier
+import "github.com/x402-foundation/x402/go/extensions/eip2612gassponsor"    // EIP-2612 gas sponsor
+import "github.com/x402-foundation/x402/go/extensions/erc20approvalgassponsor" // ERC-20 approval gas sponsor
 ```
 
 ## Custom PaywallProvider
@@ -185,7 +219,7 @@ server.RegisterPaywallProvider(provider)
 ## MCP Server
 
 ```go
-import x402mcp "github.com/coinbase/x402/go/mcp"
+import x402mcp "github.com/x402-foundation/x402/go/mcp"
 
 paymentWrapper := x402mcp.NewPaymentWrapper(resourceServer, requirements)
 
@@ -223,6 +257,33 @@ evmScheme := evm.NewExactEvmScheme().RegisterMoneyParser(
 )
 ```
 
+## Upto Scheme (Usage-Based Billing)
+
+```go
+import (
+    uptoclient "github.com/x402-foundation/x402/go/mechanisms/evm/upto/client"
+    uptoserver "github.com/x402-foundation/x402/go/mechanisms/evm/upto/server"
+)
+
+// Server: register upto scheme
+server.Register("eip155:84532", uptoserver.NewUptoEvmScheme())
+
+// Route config with scheme "upto" and max price
+routes := x402http.RoutesConfig{
+    "GET /api/generate": {
+        Accepts: x402http.PaymentOptions{
+            {Scheme: "upto", Price: "$0.10", Network: "eip155:84532", PayTo: address},
+        },
+    },
+}
+
+// In handler: set actual settlement amount
+x402http.SetSettlementOverrides(w, x402http.SettlementOverrides{Amount: "50000"}) // raw atomic units
+
+// Client: register upto scheme
+client.Register("eip155:*", uptoclient.NewUptoEvmScheme(evmSigner))
+```
+
 ## Wildcard Registration
 
 ```go
@@ -235,18 +296,23 @@ client.
 
 | Purpose | Import |
 |---------|--------|
-| Core types | `github.com/coinbase/x402/go` |
-| HTTP utilities | `github.com/coinbase/x402/go/http` |
-| Gin middleware | `github.com/coinbase/x402/go/http/gin` |
-| EVM server scheme | `github.com/coinbase/x402/go/mechanisms/evm/exact/server` |
-| EVM client scheme | `github.com/coinbase/x402/go/mechanisms/evm/exact/client` |
-| EVM facilitator | `github.com/coinbase/x402/go/mechanisms/evm/exact/facilitator` |
-| SVM server scheme | `github.com/coinbase/x402/go/mechanisms/svm/exact/server` |
-| SVM client scheme | `github.com/coinbase/x402/go/mechanisms/svm/exact/client` |
-| EVM signers | `github.com/coinbase/x402/go/signers/evm` |
-| SVM signers | `github.com/coinbase/x402/go/signers/svm` |
-| MCP support | `github.com/coinbase/x402/go/mcp` |
-| Bazaar extension | `github.com/coinbase/x402/go/extensions/bazaar` |
-| Payment identifier | `github.com/coinbase/x402/go/extensions/paymentidentifier` |
-| EIP-2612 gas sponsor | `github.com/coinbase/x402/go/extensions/eip2612gassponsor` |
-| ERC-20 approval sponsor | `github.com/coinbase/x402/go/extensions/erc20approvalgassponsor` |
+| Core types | `github.com/x402-foundation/x402/go` |
+| HTTP utilities | `github.com/x402-foundation/x402/go/http` |
+| Gin middleware | `github.com/x402-foundation/x402/go/http/gin` |
+| Echo middleware | `github.com/x402-foundation/x402/go/http/echo` |
+| net/http middleware | `github.com/x402-foundation/x402/go/http/nethttp` |
+| EVM exact server | `github.com/x402-foundation/x402/go/mechanisms/evm/exact/server` |
+| EVM exact client | `github.com/x402-foundation/x402/go/mechanisms/evm/exact/client` |
+| EVM exact facilitator | `github.com/x402-foundation/x402/go/mechanisms/evm/exact/facilitator` |
+| EVM upto server | `github.com/x402-foundation/x402/go/mechanisms/evm/upto/server` |
+| EVM upto client | `github.com/x402-foundation/x402/go/mechanisms/evm/upto/client` |
+| EVM upto facilitator | `github.com/x402-foundation/x402/go/mechanisms/evm/upto/facilitator` |
+| SVM exact server | `github.com/x402-foundation/x402/go/mechanisms/svm/exact/server` |
+| SVM exact client | `github.com/x402-foundation/x402/go/mechanisms/svm/exact/client` |
+| EVM signers | `github.com/x402-foundation/x402/go/signers/evm` |
+| SVM signers | `github.com/x402-foundation/x402/go/signers/svm` |
+| MCP support | `github.com/x402-foundation/x402/go/mcp` |
+| Bazaar extension | `github.com/x402-foundation/x402/go/extensions/bazaar` |
+| Payment identifier | `github.com/x402-foundation/x402/go/extensions/paymentidentifier` |
+| EIP-2612 gas sponsor | `github.com/x402-foundation/x402/go/extensions/eip2612gassponsor` |
+| ERC-20 approval sponsor | `github.com/x402-foundation/x402/go/extensions/erc20approvalgassponsor` |

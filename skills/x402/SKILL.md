@@ -1,13 +1,13 @@
 ---
 name: x402
-description: "Build internet-native payments with the x402 open protocol. Use when developing paid APIs, paywalled content, AI agent payment flows, or any service using HTTP 402 Payment Required for on-chain micropayments. Covers TypeScript, Python, and Go SDKs across EVM (Base, MegaETH, Monad, Polygon), Solana, Stellar, and Aptos networks with HTTP, MCP, and A2A transports. Supports exact and upto (usage-based) payment schemes."
+description: "Build internet-native payments with the x402 open protocol (x402 Foundation, Apache-2.0). Use when developing paid APIs, paywalled content, AI agent payment flows, or any service using HTTP 402 Payment Required for on-chain micropayments. Covers TypeScript (2.9.0), Python (2.6.0), and Go (2.7.0) SDKs across EVM (Base, MegaETH, Monad, Polygon, Stable, Arbitrum), Solana, Stellar, and Aptos networks with HTTP, MCP, and A2A transports. Supports exact and upto (usage-based) payment schemes, self-facilitation, and extensions (bazaar, gas sponsoring, sign-in-with-x)."
 metadata:
-  version: "0.4.0"
+  version: "0.5.0"
 ---
 
 # x402 Protocol Development
 
-x402 is an open standard (Apache-2.0, by Coinbase) that activates the HTTP `402 Payment Required` status code for programmatic, on-chain payments. No accounts, sessions, or API keys required - clients pay with signed crypto transactions directly over HTTP.
+x402 is an open standard (Apache-2.0) that activates the HTTP `402 Payment Required` status code for programmatic, on-chain payments. Originally created by Coinbase, now maintained by the [x402 Foundation](https://github.com/x402-foundation/x402). No accounts, sessions, or API keys required - clients pay with signed crypto transactions directly over HTTP.
 
 ## When to Use
 
@@ -16,8 +16,9 @@ x402 is an open standard (Apache-2.0, by Coinbase) that activates the HTTP `402 
 - Enabling **AI agents** to autonomously pay for resources
 - Integrating **MCP tools** that require payment
 - Building **agent-to-agent** (A2A) payment flows
-- Working with **EVM** (Base, Ethereum, MegaETH, Monad, Polygon), **Solana**, **Stellar**, or **Aptos** payment settlement
+- Working with **EVM** (Base, Ethereum, MegaETH, Monad, Polygon, Stable, Arbitrum), **Solana**, **Stellar**, or **Aptos** payment settlement
 - Implementing **usage-based billing** with the `upto` scheme (LLM tokens, bandwidth, compute)
+- Running an **in-process facilitator** (self-facilitation) without external facilitator dependency
 
 ## Core Architecture
 
@@ -129,9 +130,9 @@ Install: `pip install "x402[fastapi,evm]"`
 
 ```go
 import (
-    x402http "github.com/coinbase/x402/go/http"
-    ginmw "github.com/coinbase/x402/go/http/gin"
-    evm "github.com/coinbase/x402/go/mechanisms/evm/exact/server"
+    x402http "github.com/x402-foundation/x402/go/http"
+    ginmw "github.com/x402-foundation/x402/go/http/gin"
+    evm "github.com/x402-foundation/x402/go/mechanisms/evm/exact/server"
 )
 
 facilitator := x402http.NewHTTPFacilitatorClient(&x402http.FacilitatorConfig{URL: facilitatorURL})
@@ -153,7 +154,7 @@ r.Use(ginmw.X402Payment(ginmw.Config{
 }))
 ```
 
-Install: `go get github.com/coinbase/x402/go`
+Install: `go get github.com/x402-foundation/x402/go`
 
 ## Multi-Network Support (EVM + Solana)
 
@@ -200,21 +201,27 @@ registerExactSvmScheme(client, { signer: svmSigner });
 | Monad Mainnet | `eip155:143` | Mainnet |
 | Polygon Mainnet | `eip155:137` | Mainnet |
 | Polygon Amoy | `eip155:80002` | Testnet |
+| Stable Mainnet | `eip155:988` | Mainnet |
+| Stable Testnet | `eip155:2201` | Testnet |
+| Arbitrum One | `eip155:42161` | Mainnet |
+| Arbitrum Sepolia | `eip155:421614` | Testnet |
+| Mezo Testnet | `eip155:31611` | Testnet (mUSD, Permit2 + EIP-2612) |
 | Avalanche | `eip155:43114` | Via community facilitators |
 
 Default facilitator (`https://x402.org/facilitator`) supports Base Sepolia, Solana Devnet, and Stellar Testnet.
 
 ## SDK Packages
 
-### TypeScript (npm)
+### TypeScript v2.9.0 ([npm](https://www.npmjs.com/org/x402), [GitHub](https://github.com/x402-foundation/x402/tree/main/typescript))
 | Package | Purpose |
 |---------|---------|
 | `@x402/core` | Core types, client, server, facilitator |
-| `@x402/evm` | EVM scheme (EIP-3009 + Permit2) |
+| `@x402/evm` | EVM exact + upto schemes (EIP-3009, Permit2). Upto via `@x402/evm/upto/*` subpaths |
 | `@x402/svm` | Solana scheme (SPL TransferChecked) |
 | `@x402/stellar` | Stellar scheme (SEP-41 Soroban token transfers) |
 | `@x402/aptos` | Aptos scheme (Fungible Asset transfers) |
 | `@x402/express` | Express middleware |
+| `@x402/fastify` | Fastify middleware (not yet published on npm) |
 | `@x402/hono` | Hono edge middleware |
 | `@x402/next` | Next.js middleware |
 | `@x402/axios` | Axios interceptor |
@@ -222,9 +229,8 @@ Default facilitator (`https://x402.org/facilitator`) supports Base Sepolia, Sola
 | `@x402/paywall` | Browser paywall UI |
 | `@x402/mcp` | MCP client + server |
 | `@x402/extensions` | Bazaar, offer-receipt, payment-identifier, sign-in-with-x, gas sponsoring |
-| `@x402/upto` | Upto (usage-based) scheme |
 
-### Python (pip)
+### Python v2.6.0 ([PyPI](https://pypi.org/project/x402/), [GitHub](https://github.com/x402-foundation/x402/tree/main/python))
 ```bash
 pip install "x402[httpx]"      # Async HTTP client
 pip install "x402[requests]"   # Sync HTTP client
@@ -232,13 +238,13 @@ pip install "x402[fastapi]"    # FastAPI server
 pip install "x402[flask]"      # Flask server
 pip install "x402[svm]"        # Solana support
 pip install "x402[mcp]"        # MCP integration
-pip install "x402[extensions]" # Extensions (bazaar, etc.)
+pip install "x402[extensions]" # Extensions (bazaar, gas sponsoring, etc.)
 pip install "x402[all]"        # Everything
 ```
 
-### Go
+### Go v2.7.0 ([GitHub](https://github.com/x402-foundation/x402/tree/main/go))
 ```bash
-go get github.com/coinbase/x402/go
+go get github.com/x402-foundation/x402/go
 ```
 
 ## Key Concepts
@@ -246,7 +252,8 @@ go get github.com/coinbase/x402/go
 - **Client/Server/Facilitator**: The three roles in every payment. Client signs, server enforces, facilitator settles on-chain. See `references/core-concepts.md`
 - **Wallet**: Both payment mechanism and identity for buyers/sellers. See `references/core-concepts.md`
 - **Networks & Tokens**: CAIP-2 identifiers, EIP-3009 tokens on EVM, SPL on Solana, custom token config. See `references/core-concepts.md`
-- **Scheme**: Payment method. `exact` = transfer exact amount (production-ready); `upto` = authorize max, settle actual usage (spec finalized, not yet supported by facilitators). See `references/evm-scheme.md`, `references/svm-scheme.md`, `references/stellar-scheme.md`, `references/upto-scheme.md`, `references/aptos-scheme.md`
+- **Scheme**: Payment method. `exact` = transfer exact amount; `upto` = authorize max, settle actual usage (TS + Go, EVM Permit2 only). See `references/evm-scheme.md`, `references/svm-scheme.md`, `references/stellar-scheme.md`, `references/upto-scheme.md`, `references/aptos-scheme.md`
+- **Self-facilitation**: Run an in-process facilitator instead of calling an external URL. See `references/typescript-sdk.md`, `references/go-sdk.md`
 - **Transport**: How payment data is transmitted (HTTP headers, MCP `_meta`, A2A metadata). See `references/transports.md`
 - **Extensions**: Optional features (bazaar discovery, offer-receipt attestations, payment-identifier idempotency, sign-in-with-x auth, gas sponsoring). See `references/extensions.md`
 - **Hooks**: Lifecycle callbacks on client/server/facilitator (TS, Python, Go). See `references/lifecycle-hooks.md`
@@ -274,8 +281,9 @@ go get github.com/coinbase/x402/go
 
 ## Official Resources
 
-- GitHub: https://github.com/coinbase/x402
-- Spec: https://github.com/coinbase/x402/tree/main/specs
+- GitHub: https://github.com/x402-foundation/x402
+- Spec: https://github.com/x402-foundation/x402/tree/main/specs
 - Docs: https://docs.x402.org
 - Website: https://x402.org
 - Ecosystem: https://x402.org/ecosystem
+- Foundation Charter: https://github.com/x402-foundation/x402/tree/main/foundation
