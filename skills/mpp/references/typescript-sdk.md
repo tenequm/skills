@@ -23,6 +23,8 @@ npm install mppx viem
 | `mppx/proxy` | Proxy server with service routing |
 | `mppx/stripe` | Stripe payment method |
 | `mppx/tempo` | Tempo payment method |
+| `mppx/html` | Payment link UI customization (Config, Text, Theme types, init()) |
+| `mppx/discovery` | OpenAPI-first discovery tooling |
 | `mppx/mcp-sdk/client` | MCP client wrapper |
 | `mppx/mcp-sdk/server` | MCP server wrapper |
 | `mppx/hono` | Hono framework middleware |
@@ -470,6 +472,101 @@ const store = Store.from({
 // Pass to session method config
 tempo.session({ currency, recipient, store, sse: { poll: true } })
 ```
+
+## AtomicStore
+
+`AtomicStore` extends `Store` with a safe `update(key, fn)` method for concurrent read-modify-write operations (0.5.7+):
+
+```ts
+import { Store, type AtomicStore } from 'mppx/server'
+
+// All built-in adapters support atomic updates
+const store: AtomicStore<MyItemMap> = Store.redis(redisClient)
+
+// Atomic read-modify-write
+const result = await store.update('channel:0x123', (current) => {
+  if (!current) return { value: initialState, result: 'created' }
+  return { value: { ...current, settled: current.settled + amount }, result: 'updated' }
+})
+```
+
+The type system uses a two-slot generic pattern:
+- `Store<itemMap, extended>` - base store with optional extension slot
+- `AtomicStore<itemMap>` = `Store<itemMap, AtomicActions<itemMap>>` - store with `update()` filled in
+- Custom adapters via `Store.from()` get an optimistic-retry `update()` implementation automatically
+- Native adapters (redis, upstash, cloudflare) use their built-in atomic primitives
+
+Use cases: replay protection (atomic deduplication of proof credentials), channel state updates in distributed deployments, SSE session state management.
+
+## Privy Server Wallets
+
+Use [Privy](https://docs.privy.io) server-managed wallets as MPP signers for agentic payment flows. Install: `npm install @privy-io/node mppx viem`.
+
+The pattern: create a custom viem `Account` that delegates signing to Privy's API, then pass it to `tempo({ account })`:
+
+```ts
+import { PrivyClient } from '@privy-io/node'
+import { Mppx, tempo } from 'mppx/client'
+import { toAccount } from 'viem/accounts'
+import { keccak256 } from 'viem'
+
+const privy = new PrivyClient({
+  appId: process.env.PRIVY_APP_ID!,
+  appSecret: process.env.PRIVY_APP_SECRET!,
+})
+
+function createPrivyAccount(walletId: string, address: `0x${string}`) {
+  return toAccount({
+    address,
+
+    async signMessage({ message }) {
+      const result = await privy.wallets().ethereum().signMessage(walletId, {
+        message: typeof message === 'string' ? message : message.raw,
+      })
+      return result.signature as `0x${string}`
+    },
+
+    async signTransaction(transaction, options) {
+      // Tempo uses a custom serializer - must use raw signSecp256k1
+      const serializer = options?.serializer
+      if (!serializer) throw new Error('Tempo serializer required')
+      const unsignedSerialized = await serializer(transaction)
+      const hash = keccak256(unsignedSerialized)
+      const { signature } = await privy
+        .wallets()
+        .ethereum()
+        .signSecp256k1(walletId, { params: { hash } })
+      const { SignatureEnvelope } = await import('ox/tempo')
+      return (await serializer(
+        transaction,
+        SignatureEnvelope.from(signature) as any,
+      )) as `0x${string}`
+    },
+
+    async signTypedData(typedData) {
+      const result = await privy
+        .wallets()
+        .ethereum()
+        .signTypedData(walletId, { params: typedData as any })
+      return result.signature as `0x${string}`
+    },
+  })
+}
+
+// Create wallet + MPP client
+const wallet = await privy.wallets().create({ chain_type: 'ethereum' })
+const account = createPrivyAccount(wallet.id, wallet.address as `0x${string}`)
+const mppx = Mppx.create({ polyfill: false, methods: [tempo({ account })] })
+const response = await mppx.fetch('https://api.example.com/paid')
+```
+
+**Key details:**
+- `signTransaction` uses `signSecp256k1` (raw hash signing) because Tempo has a custom serialization format (type `0x76`). Privy's higher-level `signTransaction` doesn't support custom serializers.
+- `signMessage` maps directly to Privy's `signMessage` for EIP-191 personal signatures
+- `signTypedData` maps directly for EIP-712 typed data (used by zero-dollar auth proofs)
+- For Tempo testnet (Moderato, chain 42431): use `tempo({ account, testnet: true })` in `Mppx.create`
+
+See the [Privy MPP demo](https://github.com/privy-io/examples/tree/main/privy-next-mpp-agent-demo) for a full Next.js reference implementation including wallet creation, funding from a treasury, and executing paid API calls.
 
 ## Zod Validators
 
