@@ -92,23 +92,23 @@ The biggest API change. Positional overloads replaced with config object:
 ```typescript
 // v1 - server.tool() with positional args (deprecated)
 server.tool(
-  "search_tweets",                                    // name
-  "Search Twitter posts",                             // description
+  "search_docs",                                      // name
+  "Search documents",                                 // description
   { query: z.string(), limit: z.number().optional() }, // schema (raw shape)
   { readOnlyHint: true, idempotentHint: true },       // annotations
   async ({ query, limit }) => { /* handler */ },       // handler
 );
 
 // v2 - registerTool() with config object
-server.registerTool("search_tweets", {
-  title: "Tweet Search",
-  description: "Search Twitter posts",
+server.registerTool("search_docs", {
+  title: "Document Search",
+  description: "Search documents",
   inputSchema: z.object({
     query: z.string().describe("Search query"),
     limit: z.number().optional().describe("Max results"),
   }),
   outputSchema: z.object({
-    tweets: z.array(z.object({ id: z.string(), text: z.string() })),
+    results: z.array(z.object({ id: z.string(), text: z.string() })),
     has_more: z.boolean(),
   }),
   annotations: { readOnlyHint: true, idempotentHint: true },

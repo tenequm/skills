@@ -2,7 +2,7 @@
 name: web3-protocol-gtm
 description: Go-to-market strategy for web3 builders - protocols, products, services, and solo founders. Use when planning growth for a crypto protocol, building developer community, crafting CT narrative, planning ecosystem partnerships, preparing grant applications, launching tokens, pricing crypto-native products, or growing as a solo founder in web3. Covers community-led growth, CT strategy, developer relations, hackathon playbooks, standards adoption, token launch tactics, micropayment pricing, and agent-as-customer models.
 metadata:
-  version: "0.2.1"
+  version: "0.2.2"
 ---
 
 # Web3 Protocol GTM
@@ -515,4 +515,4 @@ For full mechanics, survival checklist, and launchpad comparison, see `reference
 - ETHGlobal: https://ethglobal.com
 - Optimism Retro Funding: https://retrofunding.optimism.io
 - Electric Capital Developer Report: https://developerreport.com
-- 1kx Onchain Revenue Report: https://1kx.network
+- 1kx Onchain Revenue Report (search "1kx 2025 onchain revenue report")

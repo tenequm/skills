@@ -207,8 +207,8 @@ MCP servers MUST implement RFC 9728 to advertise their authorization servers:
 
 ```json
 {
-  "resource": "https://your-server.com/mcp",
-  "authorization_servers": ["https://auth.your-server.com"],
+  "resource": "https://mcp.example.com",
+  "authorization_servers": ["https://auth.example.com"],
   "scopes_supported": ["mcp:tools"]
 }
 ```
