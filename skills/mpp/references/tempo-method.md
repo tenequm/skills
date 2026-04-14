@@ -284,7 +284,7 @@ for await (const event of stream) {
 | Network | Token | Address |
 |---|---|---|
 | Testnet | pathUSD | `0x20c0000000000000000000000000000000000000` |
-| Mainnet | USDC | `0x20c000000000000000000000b9537d11c60e8b50` |
+| Mainnet | USDC.e (Bridged USDC) | `0x20c000000000000000000000b9537d11c60e8b50` |
 
 ### Escrow Contracts
 
@@ -303,12 +303,39 @@ const charge = tempo.charge({
   testnet: true,
 });
 
-// Mainnet - use USDC, remove testnet flag
+// Mainnet - use USDC.e (Bridged USDC), remove testnet flag
 const charge = tempo.charge({
   currency: "0x20c000000000000000000000b9537d11c60e8b50",
   recipient: "0xRecipient",
 });
 ```
+
+## Split Payments
+
+Distribute a single charge across multiple recipients in one transaction (0.4.12+). The client constructs a multi-transfer transaction; the server verifies all splits match the challenge requirements.
+
+```ts
+// Server - configure split recipients
+const charge = tempo.charge({
+  currency: "0x20c0000000000000000000000000000000000000",
+  recipients: [
+    { address: "0xPlatform", share: 0.9 },  // 90% to platform
+    { address: "0xCreator", share: 0.1 },    // 10% to creator
+  ],
+  testnet: true,
+});
+
+// Per-request with dynamic splits
+const result = await mppx.charge({
+  amount: "1.00",
+  recipients: [
+    { address: "0xPlatform", amount: "0.90" },
+    { address: "0xCreator", amount: "0.10" },
+  ],
+})(request);
+```
+
+The server verifies that the sum of split amounts equals the total charge amount and that each transfer targets the expected recipient. See [mpp.dev/guides/split-payments](https://mpp.dev/guides/split-payments) for the full guide.
 
 ## Stripe Integration
 

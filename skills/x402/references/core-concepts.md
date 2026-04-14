@@ -255,6 +255,13 @@ facilitator.register("eip155:43114", new ExactEvmScheme({
 | Aptos Testnet | `aptos:2` | Any Fungible Asset | Community |
 | Stellar Mainnet | `stellar:pubnet` | Any SEP-41 Soroban token | Community |
 | Stellar Testnet | `stellar:testnet` | Any SEP-41 Soroban token | x402.org (testnet) |
+| Polygon Mainnet | `eip155:137` | USDC | Production facilitators |
+| Polygon Amoy | `eip155:80002` | USDC | Community |
+| Stable Mainnet | `eip155:988` | USDT0 | Community |
+| Stable Testnet | `eip155:2201` | USDT0 | Community |
+| Arbitrum One | `eip155:42161` | USDC | Production facilitators |
+| Arbitrum Sepolia | `eip155:421614` | USDC | Community |
+| Mezo Testnet | `eip155:31611` | mUSD (Permit2 + EIP-2612) | Community |
 | Any EVM | `eip155:<chainId>` | Any EIP-3009 | Self-hosted or community |
 
 ### Why EIP-3009?
@@ -278,7 +285,7 @@ facilitator.register("eip155:43114", new ExactEvmScheme({
 
 | Role | TypeScript | Go | Python |
 |------|------------|-----|--------|
-| Server | Express, Hono, Next.js | Gin | FastAPI, Flask |
+| Server | Express, Fastify, Hono, Next.js | Gin, Echo, net/http | FastAPI, Flask |
 | Client | Fetch, Axios | net/http | httpx, requests |
 
 ## Going to Production (Mainnet)

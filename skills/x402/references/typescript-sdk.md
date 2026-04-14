@@ -1,15 +1,16 @@
 # TypeScript SDK Reference
 
-## Packages (v2.7.0)
+## Packages (v2.9.0)
 
 | Package | Purpose |
 |---------|---------|
 | `@x402/core` | Core types, `x402Client`, `x402ResourceServer`, `x402HTTPResourceServer`, `x402Facilitator`, `HTTPFacilitatorClient` |
-| `@x402/evm` | EVM scheme (EIP-3009 + Permit2) |
+| `@x402/evm` | EVM exact + upto schemes (EIP-3009, Permit2). Upto: `@x402/evm/upto/client`, `@x402/evm/upto/server`, `@x402/evm/upto/facilitator` |
 | `@x402/svm` | Solana scheme (SPL TransferChecked) |
 | `@x402/stellar` | Stellar scheme (SEP-41 Soroban token transfers) |
 | `@x402/aptos` | Aptos scheme (Fungible Asset transfers) |
 | `@x402/express` | Express.js middleware |
+| `@x402/fastify` | Fastify middleware (not yet published on npm) |
 | `@x402/hono` | Hono edge middleware |
 | `@x402/next` | Next.js middleware (`paymentProxy`, `withX402`) |
 | `@x402/axios` | Axios interceptor |
@@ -17,6 +18,16 @@
 | `@x402/paywall` | Browser paywall UI (EVM + SVM) |
 | `@x402/mcp` | MCP client + server |
 | `@x402/extensions` | Bazaar, offer-receipt, sign-in-with-x, payment-identifier, eip2612-gas-sponsoring, erc20-approval-gas-sponsoring |
+
+## Recent Changes
+
+**v2.9.0** - Upto scheme (usage-based billing) with full client/server/facilitator via `@x402/evm/upto/*`. Fastify adapter. New default assets: Stable (988/2201), Polygon (137), Arbitrum One/Sepolia, Mezo testnet. Exported hook types. Settlement overrides fix for upto. Repo moved to `x402-foundation/x402`.
+
+**v2.8.0** - `HTTPFacilitatorClient` follows 308 redirects. Randomized facilitator signer selection. MCP `structuredContent` preserved in payment wrapper. Discovery method auto-populated from adapter.
+
+**v2.7.0** - Bazaar dynamic routing. SIWx nonce/issuedAt auto-generation for auth-only routes. `extra: null` compatibility fix between Python facilitator and TS Zod schemas.
+
+**v2.6.0** - Stellar scheme (`@x402/stellar`). Offer-receipt extension (draft). Permit2 on-chain simulation. Express `:param` dynamic route parameters. Custom `settlementFailedResponseBody`. Solana in-flight settlement cache.
 
 ## Core Subpath Exports
 
@@ -69,6 +80,14 @@ Each mechanism (`@x402/evm`, `@x402/svm`, `@x402/stellar`, `@x402/aptos`) export
 | `/exact/facilitator` | `ExactEvmScheme`, `registerExactEvmScheme` | Facilitator verify/settle |
 
 Replace `Evm` with `Svm`, `Stellar`, or `Aptos` accordingly.
+
+### Upto Subpath Exports (`@x402/evm` only)
+
+| Subpath | Key Export | Role |
+|---------|-----------|------|
+| `@x402/evm/upto/client` | `UptoEvmScheme` | Client-side max-amount signing |
+| `@x402/evm/upto/server` | `UptoEvmScheme` | Server-side with `setSettlementOverrides` |
+| `@x402/evm/upto/facilitator` | `UptoEvmScheme` | Facilitator verify/settle (variable amount) |
 
 ## Server: Express
 
@@ -212,6 +231,18 @@ import { paymentMiddleware } from "@x402/hono";
 
 const app = new Hono();
 app.use("/weather", paymentMiddleware({ /* same route config */ }, server));
+
+// Also available: paymentMiddlewareFromHTTPServer, paymentMiddlewareFromConfig
+```
+
+## Server: Fastify
+
+```typescript
+import Fastify from "fastify";
+import { paymentMiddleware } from "@x402/fastify";
+
+const app = Fastify();
+app.register(paymentMiddleware({ /* same route config */ }, server));
 
 // Also available: paymentMiddlewareFromHTTPServer, paymentMiddlewareFromConfig
 ```
@@ -453,6 +484,45 @@ const paywall = createPaywall()
 paymentMiddleware(routes, server, undefined, paywall);
 ```
 
+## Self-Facilitation (In-Process)
+
+Run the facilitator in the same process as the resource server - no external facilitator URL needed:
+
+```typescript
+import { x402Facilitator } from "@x402/core/facilitator";
+import { paymentMiddleware, x402ResourceServer } from "@x402/express";
+import { toFacilitatorEvmSigner } from "@x402/evm";
+import { registerExactEvmScheme } from "@x402/evm/exact/facilitator";
+import { ExactEvmScheme } from "@x402/evm/exact/server";
+import { createWalletClient, http, publicActions } from "viem";
+import { privateKeyToAccount } from "viem/accounts";
+import { baseSepolia } from "viem/chains";
+
+const account = privateKeyToAccount(process.env.EVM_PRIVATE_KEY as `0x${string}`);
+const viemClient = createWalletClient({ account, chain: baseSepolia, transport: http() }).extend(publicActions);
+
+const evmSigner = toFacilitatorEvmSigner({
+  address: account.address,
+  getCode: viemClient.getCode,
+  readContract: viemClient.readContract,
+  verifyTypedData: viemClient.verifyTypedData,
+  writeContract: viemClient.writeContract,
+  sendTransaction: viemClient.sendTransaction,
+  waitForTransactionReceipt: viemClient.waitForTransactionReceipt,
+});
+
+const facilitator = new x402Facilitator();
+registerExactEvmScheme(facilitator, { signer: evmSigner, networks: "eip155:84532" });
+
+const server = new x402ResourceServer({
+  verify: facilitator.verify.bind(facilitator),
+  settle: facilitator.settle.bind(facilitator),
+  getSupported: async () => facilitator.getSupported(),
+}).register("eip155:84532", new ExactEvmScheme());
+
+app.use(paymentMiddleware(routes, server));
+```
+
 ## Facilitator: HTTPFacilitatorClient
 
 ```typescript
@@ -531,6 +601,38 @@ app.use(
     server,
   ),
 );
+```
+
+## Upto Scheme (Usage-Based Billing)
+
+Server advertises max price with `scheme: "upto"`, then calls `setSettlementOverrides` with actual usage:
+
+```typescript
+import { paymentMiddleware, setSettlementOverrides, x402ResourceServer } from "@x402/express";
+import { UptoEvmScheme } from "@x402/evm/upto/server";
+
+const server = new x402ResourceServer(facilitatorClient)
+  .register("eip155:84532", new UptoEvmScheme());
+
+const routes = {
+  "GET /api/generate": {
+    accepts: { scheme: "upto", price: "$0.10", network: "eip155:84532", payTo },
+    description: "AI text generation - billed by token usage",
+  },
+};
+
+app.get("/api/generate", (req, res) => {
+  const actualCost = computeActualCost(); // your billing logic
+  setSettlementOverrides(res, { amount: String(actualCost) }); // raw units, "$0.05", or "50%"
+  res.json({ result: "..." });
+});
+```
+
+Client registers both exact and upto schemes:
+
+```typescript
+import { UptoEvmScheme } from "@x402/evm/upto/client";
+client.register("eip155:*", new UptoEvmScheme(signer));
 ```
 
 ## Custom Unpaid/Settlement Failure Responses

@@ -224,14 +224,14 @@ Payment receipts are embedded in the result's `_meta` field:
 
 ## Comparison Table
 
-| Aspect | HTTP | MCP / JSON-RPC |
-|---|---|---|
-| **Challenge** | `WWW-Authenticate: Payment ...` header | JSON-RPC error code `-32042`, challenges in `error.data.challenges` |
-| **Credential** | `Authorization: Payment <base64url>` header | `_meta.org.paymentauth/credential` in tool call params |
-| **Receipt** | `Payment-Receipt: <base64url>` header | `_meta.org.paymentauth/receipt` in result._meta |
-| **Encoding** | Base64url without padding (RFC 4648) | Native JSON objects |
-| **Status code** | HTTP 402 | JSON-RPC error code -32042 |
-| **Multiple methods** | Multiple `WWW-Authenticate` headers | Multiple entries in `challenges` array |
+| Aspect | HTTP | MCP / JSON-RPC | WebSocket |
+|---|---|---|---|
+| **Challenge** | `WWW-Authenticate: Payment ...` header | JSON-RPC error `-32042` in `error.data.challenges` | `payment-error` message |
+| **Credential** | `Authorization: Payment <base64url>` header | `_meta.org.paymentauth/credential` in params | `authorization` message |
+| **Receipt** | `Payment-Receipt: <base64url>` header | `_meta.org.paymentauth/receipt` in result | `payment-receipt` message |
+| **Encoding** | Base64url without padding (RFC 4648) | Native JSON objects | Native JSON objects |
+| **Status code** | HTTP 402 | JSON-RPC error code -32042 | `payment-error` with status |
+| **Multiple methods** | Multiple `WWW-Authenticate` headers | Multiple entries in `challenges` array | N/A (single method per connection) |
 
 ---
 
@@ -240,6 +240,59 @@ Payment receipts are embedded in the result's `_meta` field:
 For non-MCP JSON-RPC services, the encoding is identical to the MCP transport. The same `-32042` error code, `_meta` namespacing, and JSON object encoding apply. This ensures any JSON-RPC service can adopt MPP without protocol-specific adaptations.
 
 The only difference is the absence of MCP-specific semantics (tool names, content arrays). The credential and receipt still use the `org.paymentauth/credential` and `org.paymentauth/receipt` keys in `_meta`.
+
+---
+
+## WebSocket Transport
+
+WebSocket transport enables real-time streaming payments alongside data delivery. Added in mppx 0.5.x for session-based billing over persistent connections (e.g. LLM token streaming).
+
+### Message Protocol
+
+All messages are JSON objects with a discriminated `mpp` field:
+
+| Message Type | Direction | Purpose |
+|---|---|---|
+| `{ mpp: 'authorization', authorization: string }` | Client → Server | Submit payment credential |
+| `{ mpp: 'message', data: string }` | Server → Client | Deliver paid content |
+| `{ mpp: 'payment-close-request' }` | Client → Server | Request channel close |
+| `{ mpp: 'payment-close-ready', data: SessionReceipt }` | Server → Client | Close confirmation with receipt |
+| `{ mpp: 'payment-need-voucher', data: NeedVoucherEvent }` | Server → Client | Request top-up voucher |
+| `{ mpp: 'payment-receipt', data: SessionReceipt }` | Server → Client | Payment receipt |
+| `{ mpp: 'payment-error', status: number, message: string }` | Server → Client | Payment error |
+
+### Server Integration
+
+```ts
+import { Ws } from 'mppx/tempo'
+
+// WebSocket upgrade handler
+const wsHandler = Ws.serve({
+  methods: [tempo.session({ currency, recipient, store })],
+  secretKey,
+  async onMessage(ws, data, stream) {
+    // Process paid message, charge per unit
+    await stream.charge()
+    ws.send(JSON.stringify({ mpp: 'message', data: result }))
+  },
+})
+```
+
+### How It Differs From SSE
+
+| Aspect | SSE | WebSocket |
+|---|---|---|
+| Direction | Server → Client (unidirectional) | Bidirectional |
+| Voucher delivery | Separate HTTP POST | In-band `authorization` message |
+| Close flow | Client POSTs close request | In-band `payment-close-request` |
+| Use case | Streaming responses (LLM output) | Interactive sessions, bidirectional streaming |
+
+### Security
+
+- Close receipts are bound to signed close amount (prevents open receipt replay)
+- Spend committed only when chunks are actually delivered (prevents overcharging)
+- Local `maxDeposit` enforced on streamed voucher requests
+- Delivered chunks tracked for fallback close on disconnect
 
 ---
 
@@ -254,7 +307,7 @@ The three core primitives - Challenge, Credential, and Receipt - remain identica
 This means payment method implementations (Tempo, Stripe, Lightning, custom) work across all transports without modification. The transport layer handles serialization; the payment method handles settlement.
 
 ```ts
-// Same payment method works with both transports
+// Same payment method works with all transports
 const method = tempo.charge({ currency: '0x...', recipient: '0x...' })
 
 // HTTP transport
@@ -262,4 +315,7 @@ const mppx = Mppx.create({ methods: [method], transport: 'http' })
 
 // MCP transport
 const server = McpServer.wrap(baseServer, { methods: [method] })
+
+// WebSocket transport (sessions only)
+const wsHandler = Ws.serve({ methods: [tempo.session({ ...opts })], secretKey })
 ```

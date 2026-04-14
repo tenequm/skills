@@ -1,6 +1,6 @@
 # Python SDK Reference
 
-Version: 2.4.0
+Version: 2.6.0
 
 ## Installation
 
@@ -11,7 +11,7 @@ pip install "x402[fastapi]"    # FastAPI server
 pip install "x402[flask]"      # Flask server
 pip install "x402[svm]"        # Solana support
 pip install "x402[mcp]"        # MCP integration
-pip install "x402[extensions]" # Extensions (bazaar, etc.)
+pip install "x402[extensions]" # Extensions (bazaar, gas sponsoring, payment-identifier, etc.)
 pip install "x402[all]"        # Everything
 ```
 
@@ -222,6 +222,27 @@ routes = {
         extensions={"bazaar": {"output": {"type": "json", "example": {"weather": "sunny"}}}},
     ),
 }
+```
+
+## Extensions: Gas Sponsoring
+
+```python
+from x402.extensions.eip2612_gas_sponsoring import declare_eip2612_gas_sponsoring_extension
+from x402.extensions.erc20_approval_gas_sponsoring import declare_erc20_approval_gas_sponsoring_extension
+
+# EIP-2612 gas sponsoring
+extensions = declare_eip2612_gas_sponsoring_extension()
+
+# ERC-20 approval gas sponsoring
+extensions = declare_erc20_approval_gas_sponsoring_extension()
+```
+
+## Extensions: Payment Identifier
+
+```python
+from x402.extensions.payment_identifier import declare_payment_identifier_extension
+
+extensions = declare_payment_identifier_extension(required=False)
 ```
 
 ## MCP Server

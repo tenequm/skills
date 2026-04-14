@@ -2,7 +2,7 @@
 name: mcp-best-practices
 description: Build production MCP servers with the TypeScript SDK. Covers spec 2025-11-25, SDK v1.28+/v2, transport selection, tool design, error handling, security, performance, known bugs with workarounds, MCP extensions, MCP Apps (interactive UIs), authorization extensions, and the MCP Registry. Use this skill whenever building MCP servers, designing MCP tools, choosing MCP transports, handling MCP errors, migrating to MCP v2, reviewing MCP security, optimizing MCP token usage, building MCP Apps, using MCP extensions, publishing to the MCP Registry, or working with registerTool, McpServer, streamable HTTP, outputSchema, structuredContent, tool annotations, ext-apps, or ext-auth.
 metadata:
-  version: "0.2.0"
+  version: "0.2.1"
 ---
 
 # MCP Best Practices
@@ -102,7 +102,7 @@ app.delete("/mcp", handleMcpDelete); // Optional: session termination
 
 **v1 (current stable)** - `server.tool()` works but has ambiguous overloads. Prefer the config-object form when possible:
 ```typescript
-server.tool("search_tweets", "Search Twitter", {
+server.tool("search_docs", "Search documents", {
   query: z.string().describe("Search query"),
   max_results: z.number().optional().describe("Max results (default 20)"),
 }, { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true },
@@ -112,20 +112,20 @@ server.tool("search_tweets", "Search Twitter", {
 
 **v2 (migration target)** - `registerTool()` with config object:
 ```typescript
-server.registerTool("search_tweets", {
-  title: "Tweet Search",
-  description: "Search Twitter posts by keyword or phrase",
+server.registerTool("search_docs", {
+  title: "Document Search",
+  description: "Search documents by keyword or phrase",
   inputSchema: z.object({
     query: z.string().describe("Search query"),
     max_results: z.number().optional().describe("Max results (default 20)"),
   }),
   outputSchema: z.object({
-    tweets: z.array(z.object({ id: z.string(), text: z.string() })),
+    results: z.array(z.object({ id: z.string(), text: z.string() })),
     has_more: z.boolean(),
   }),
   annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true },
 }, async ({ query, max_results }) => {
-  const result = await fetchTweets(query, max_results);
+  const result = await fetchDocs(query, max_results);
   return {
     structuredContent: result,
     content: [{ type: "text", text: JSON.stringify(result) }],
@@ -137,10 +137,10 @@ server.registerTool("search_tweets", {
 
 Spec (2025-11-25): 1-128 chars, case-sensitive. Allowed: `A-Za-z0-9_-.`
 
-**DO**: `surf_twitter_search`, `get_user_profile`, `admin.tools.list`
-**DON'T**: `search` (too generic, collides across servers), `Search Tweets` (spaces not allowed)
+**DO**: `search_docs`, `get_user_profile`, `admin.tools.list`
+**DON'T**: `search` (too generic, collides across servers), `Search Docs` (spaces not allowed)
 
-Service-prefix your tools (`surf_twitter_*`, `surf_reddit_*`) when multiple servers are active - LLMs confuse generic names across servers.
+Service-prefix your tools (`github_*`, `jira_*`) when multiple servers are active - LLMs confuse generic names across servers.
 
 ### Schema Rules
 
@@ -216,9 +216,9 @@ Set in the initialization response - acts as a system-level hint to the LLM abou
 
 ```typescript
 const server = new McpServer({
-  name: "surf-api",
+  name: "docs-api",
   version: "1.0.0",
-  instructions: "Data API for Twitter, Reddit, and web search. Use surf_twitter_search for social media, surf_web_search for general queries. All tools are read-only and paid via x402.",
+  instructions: "Knowledge base API. Use search_docs for full-text search, get_doc for retrieval by ID. All tools are read-only.",
 });
 ```
 

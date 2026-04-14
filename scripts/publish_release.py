@@ -80,6 +80,15 @@ def publish_clawhub(args: argparse.Namespace, repo_root: Path) -> int:
             run(command, repo_root)
         except subprocess.CalledProcessError as exc:
             error = exc.stderr.strip() or exc.stdout.strip() or str(exc)
+            if "Version already exists" in error:
+                print("  Already published, skipping.", flush=True)
+                successes.append(
+                    {
+                        "slug": skill["slug"],
+                        "version": skill["current_version"],
+                    }
+                )
+                continue
             category, retryable = classify_clawhub_error(error)
             failures.append(
                 {
@@ -192,38 +201,14 @@ def publish_latest_bundles(args: argparse.Namespace, repo_root: Path) -> int:
         encoding="utf-8",
     )
 
-    view = run(["gh", "release", "view", args.tag, "--json", "assets"], repo_root, check=False)
-    if view.returncode != 0:
-        run(
-            [
-                "gh",
-                "release",
-                "create",
-                args.tag,
-                "--title",
-                args.title,
-                "--notes-file",
-                str(notes_path),
-            ],
-            repo_root,
-        )
-    else:
-        run(
-            [
-                "gh",
-                "release",
-                "edit",
-                args.tag,
-                "--title",
-                args.title,
-                "--notes-file",
-                str(notes_path),
-            ],
-            repo_root,
-        )
-        assets = json.loads(view.stdout).get("assets", [])
-        for asset in assets:
-            run(["gh", "release", "delete-asset", args.tag, asset["name"], "--yes"], repo_root)
+    release_args = ["--title", args.title, "--notes-file", str(notes_path)]
+    create = run(
+        ["gh", "release", "create", args.tag, *release_args],
+        repo_root,
+        check=False,
+    )
+    if create.returncode != 0:
+        run(["gh", "release", "edit", args.tag, *release_args], repo_root)
 
     run(
         [
@@ -231,6 +216,7 @@ def publish_latest_bundles(args: argparse.Namespace, repo_root: Path) -> int:
             "release",
             "upload",
             args.tag,
+            "--clobber",
             str(index_path),
             str(notes_path),
             *[str(path) for path in bundle_paths],

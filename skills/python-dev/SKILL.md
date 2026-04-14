@@ -2,7 +2,7 @@
 name: python-dev
 description: Opinionated Python development setup with uv + ty + ruff + pytest + just. Use when creating new Python projects, setting up pyproject.toml, configuring linting, type checking, testing, or build tooling. Triggers on "python project", "uv init", "pyproject.toml", "ruff config", "ty check", "pytest setup", "justfile", "python linting", "python formatting", "type checking python".
 metadata:
-  version: "0.1.1"
+  version: "0.1.2"
 ---
 
 # Python Development Setup
@@ -22,7 +22,7 @@ Opinionated, production-ready Python development stack. No choices to make - jus
 | Tool | Role | Replaces |
 |------|------|----------|
 | [uv](https://docs.astral.sh/uv/) 0.10+ | Package manager, Python versions, runner | pip, poetry, pyenv, virtualenv |
-| [ty](https://github.com/astral-sh/ty) | Type checker (Astral, Rust) | mypy, pyright |
+| [ty](https://docs.astral.sh/ty/) | Type checker (Astral, Rust) | mypy, pyright |
 | [ruff](https://docs.astral.sh/ruff/) | Linter + formatter | flake8, black, isort, pyupgrade |
 | [pytest](https://docs.pytest.org/) | Testing | unittest |
 | [just](https://just.systems/) | Command runner | make |
@@ -275,7 +275,7 @@ Detailed guides for each tool in `references/`:
 ## Resources
 
 - [uv docs](https://docs.astral.sh/uv/) | [uv GitHub](https://github.com/astral-sh/uv)
-- [ty GitHub](https://github.com/astral-sh/ty)
+- [ty docs](https://docs.astral.sh/ty/) | [ty GitHub](https://github.com/astral-sh/ty)
 - [ruff docs](https://docs.astral.sh/ruff/) | [ruff GitHub](https://github.com/astral-sh/ruff)
 - [pytest docs](https://docs.pytest.org/en/stable/)
 - [just manual](https://just.systems/man/en/)

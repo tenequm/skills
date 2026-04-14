@@ -108,6 +108,81 @@ const receipt = await session.close()
 - If the balance is exhausted mid-stream, the server emits a `payment-need-voucher` event and pauses until the client sends a new voucher.
 - The client SSE handler auto-renews vouchers transparently, so the stream resumes without application-level intervention.
 
+## WebSocket Streaming
+
+WebSocket transport provides bidirectional streaming payments, where voucher delivery and content streaming happen over the same persistent connection (no separate HTTP POSTs for vouchers).
+
+### Server
+
+```typescript
+import { Ws } from 'mppx/tempo'
+import { Store, tempo } from 'mppx/server'
+
+const wsHandler = Ws.serve({
+  methods: [tempo.session({ currency: '0x20c0...', recipient: '0x...', store: Store.redis(redis) })],
+  secretKey: process.env.MPP_SECRET_KEY!,
+  async onMessage(ws, data, stream) {
+    const parsed = JSON.parse(data)
+    for (const token of generateTokens(parsed.prompt)) {
+      await stream.charge()
+      ws.send(JSON.stringify({ mpp: 'message', data: token }))
+    }
+  },
+})
+```
+
+### Message Types
+
+```typescript
+// Client → Server
+{ mpp: 'authorization', authorization: string }     // Payment credential
+{ mpp: 'payment-close-request' }                    // Request channel close
+
+// Server → Client
+{ mpp: 'message', data: string }                    // Paid content
+{ mpp: 'payment-need-voucher', data: NeedVoucherEvent } // Top-up request
+{ mpp: 'payment-receipt', data: SessionReceipt }    // Payment receipt
+{ mpp: 'payment-close-ready', data: SessionReceipt } // Close confirmation
+{ mpp: 'payment-error', status: number, message: string } // Error
+```
+
+### Key Differences from SSE
+
+- **Bidirectional**: Both credential submission and content delivery happen over the same WebSocket connection (SSE uses separate HTTP POST for vouchers)
+- **In-band close**: Channel close negotiation happens via WebSocket messages rather than HTTP requests
+- **Security hardening**: Close receipts bound to signed close amount, spend committed only on actual delivery, local `maxDeposit` enforced, delivered chunks tracked for fallback close on disconnect
+
+## Channel Recovery After Restarts
+
+Pass `channelId` to `mppx.session()` so returning clients recover existing on-chain channels instead of opening new ones. The `SessionMethodDetails` type has an optional `channelId` field. When included in the 402 challenge, the client SDK's `tryRecoverChannel()` reads on-chain state and resumes the existing channel.
+
+The server doesn't auto-populate this - it's the application's job:
+
+```typescript
+import { Credential } from 'mppx'
+
+// Extract channelId from the credential's payload before calling mppx.session()
+let channelId: string | undefined
+try {
+  const credential = Credential.fromRequest(request)
+  if (credential.challenge.intent === 'session') {
+    const payload = credential.payload as { channelId?: string }
+    channelId = payload.channelId
+  }
+} catch {
+  // No credential yet
+}
+
+// Pass channelId so the 402 challenge includes it for client-side recovery
+const result = await mppx.session({
+  amount: tickCost,
+  unitType: 'token',
+  ...(channelId && { channelId }),
+})(request)
+```
+
+**Why this matters:** After a server restart, even with a persistent store, the first voucher from a returning client may fail verification (e.g., store was briefly unavailable). Without `channelId` in the re-issued 402 challenge, the client opens a new channel - locking more USDC in escrow while the old deposit sits unclaimed. With `channelId`, the client recovers the existing on-chain channel and continues using it.
+
 ## Session Receipts
 
 Session receipts differ from charge receipts:
