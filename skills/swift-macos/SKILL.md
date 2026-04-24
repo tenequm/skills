@@ -2,7 +2,7 @@
 name: swift-macos
 description: Comprehensive macOS app development with Swift 6.2, SwiftUI, SwiftData, Swift Concurrency, Foundation Models, Swift Testing, ScreenCaptureKit, and app distribution. Use when building native Mac apps, implementing windows/scenes/navigation/menus/toolbars, SwiftData models and queries, modern concurrency, on-device AI, testing, screen/audio capture, menu bar apps, AppKit bridges, login items, process monitoring, or App Store and Developer ID distribution. Triggers on macOS app, SwiftUI macOS, SwiftData, Swift concurrency, Foundation Models, Swift Testing, ScreenCaptureKit, screen capture, screen recording, AVFoundation, MenuBarExtra, NSViewRepresentable, notarize, login item, and process monitoring.
 metadata:
-  version: "0.3.0"
+  version: "0.4.0"
 ---
 
 # macOS App Development - Swift 6.2
@@ -288,16 +288,20 @@ actor SharedState { var count = 0 }                       // mutable: use actors
 ### AsyncSequence & Observations
 
 ```swift
-// Stream @Observable changes (Swift 6.2)
-for await state in Observations(of: manager) {
-    print(state.progress)
-}
+// Stream @Observable changes (macOS 26+ / iOS 26+, SE-0475)
+// Observations uses a closure init, not Observations(of:).
+let progresses = Observations { manager.progress }
+for await p in progresses { print(p) }
 
-// Typed NotificationCenter (Swift 6.2)
-struct DocSaved: MainActorMessage { let id: UUID }
-NotificationCenter.default.post(DocSaved(id: doc.id))
-for await n in NotificationCenter.default.notifications(of: DocSaved.self) {
-    refresh(n.id)
+// Typed NotificationCenter (macOS 26+)
+struct DocSaved: NotificationCenter.MainActorMessage {
+    typealias Subject = Document
+    static var name: Notification.Name { .init("DocSaved") }
+    let id: UUID
+}
+NotificationCenter.default.post(DocSaved(id: document.id), subject: document)
+let token = NotificationCenter.default.addObserver(of: document, for: DocSaved.self) { msg in
+    refresh(msg.id)
 }
 ```
 
@@ -392,7 +396,7 @@ For build plugins, macros, and Swift Build, see `references/spm-build.md`.
 
 ## Liquid Glass (macOS 26)
 
-Apps rebuilt with Xcode 26 SDK get automatic Liquid Glass styling. Use `.glassEffect()` for custom glass surfaces, `GlassEffectContainer` for custom hierarchies. Opt out: `UIDesignRequiresLiquidGlass = NO` in Info.plist.
+Apps rebuilt with Xcode 26 SDK get automatic Liquid Glass styling. Use `.glassEffect()` for custom glass surfaces, `GlassEffectContainer` for custom hierarchies. Opt out: `UIDesignRequiresCompatibility = YES` in Info.plist (keeps legacy visual style; Apple positions this as a temporary migration aid).
 
 ## ScreenCaptureKit
 
@@ -460,7 +464,8 @@ See `references/architecture.md` for all patterns with examples.
 | `references/app-lifecycle.md` | Window management, scenes, DocumentGroup, MenuBarExtra gotchas, async termination, LSUIElement issues |
 | `references/swiftui-macos.md` | Sidebar, Inspector, Table, forms, popovers, sheets, search |
 | `references/appkit-interop.md` | NSViewRepresentable, hosting controllers, AppKit bridging, NSPanel/floating HUD |
-| `references/screen-capture-audio.md` | ScreenCaptureKit, SCStream gotchas, AVAudioEngine dual pipeline, AVAssetWriter crash safety, TCC gotchas |
+| `references/screen-capture-audio.md` | ScreenCaptureKit, SCStream gotchas, SCStream teardown hazards, AVAudioEngine dual pipeline, AVAssetWriter crash safety, non-interleaved stereo trap, TCC gotchas, CDHash degraded-state after reinstall |
+| `references/core-audio-tap.md` | CATap for per-process audio: tap-only aggregate (HFP-safe), drift compensation, rate-change anti-pattern, interleaved-stereo frame-count trap, IO proc isolation |
 | `references/system-integration.md` | Keyboard shortcuts, drag & drop, file access, App Intents, process monitoring, CoreAudio per-process APIs, login items, LSUIElement, idle sleep prevention |
 | `references/foundation-models.md` | On-device AI: guided generation, tool calling, streaming |
 | `references/architecture.md` | MVVM, TCA, dependency injection, project structure |

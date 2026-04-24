@@ -132,11 +132,14 @@ class DownloadState {
     }
 }
 
-// Stream all changes as AsyncSequence
+// Stream as AsyncSequence. `Observations` uses a closure initializer;
+// there is NO `Observations(of:)` factory and NO variadic-keypath tracking
+// form. SE-0475 rejected both. Apple platforms: macOS 26+ / iOS 26+.
 let state = DownloadState()
-for await snapshot in Observations(of: state) {
-    progressBar.value = snapshot.progress
-    if snapshot.isComplete { break }
+let progressStream = Observations { state.progress }
+for await value in progressStream {
+    progressBar.value = value
+    if state.isComplete { break }
 }
 ```
 
@@ -146,13 +149,16 @@ Key behavior:
 - Avoids redundant updates (if you change 3 properties synchronously, one update fires)
 - Works with any `@Observable` type
 
-### Selective observation
+### Observing multiple properties
 ```swift
-// Observe specific properties
-for await (bytes, total) in Observations(of: state, tracking: \.bytesReceived, \.totalBytes) {
+// Project the values you want into a tuple inside the closure.
+let progress = Observations { (state.bytesReceived, state.totalBytes) }
+for await (bytes, total) in progress {
     updateProgress(bytes: bytes, total: total)
 }
 ```
+
+Source: https://github.com/swiftlang/swift-evolution/blob/main/proposals/0475-observed.md. Docs: https://developer.apple.com/documentation/observation/observations
 
 ## Continuations
 

@@ -33,10 +33,13 @@ Package.swift:
 
 Xcode: Build Settings > Swift Compiler - Upcoming Features > Default Isolation > MainActor
 
-Per-file opt-out:
+Default isolation is a **target-level** compiler setting - there is no documented per-file `defaultIsolation(nil)` directive. Opt out per-declaration instead:
+
 ```swift
-// At the top of a specific file
-defaultIsolation(nil)
+// At the declaration level
+nonisolated class NetworkClient { /* not MainActor-isolated even inside a MainActor-default target */ }
+
+@concurrent func heavyWork() async -> Data { /* explicitly runs off the caller actor */ }
 ```
 
 ### What changes
@@ -155,7 +158,16 @@ class DataProcessor {
 }
 ```
 
-This change is enabled via the `NonisolatedNonsendingByDefault` upcoming feature flag, which is on by default in Swift 6.2 with default isolation.
+This change (SE-0461) is gated on the **`NonisolatedNonsendingByDefault` upcoming feature flag** — it is not on by default in Swift 6.2, not even when default isolation is set. Enable it explicitly in Package.swift:
+
+```swift
+swiftSettings: [
+    .defaultIsolation(MainActor.self),
+    .enableUpcomingFeature("NonisolatedNonsendingByDefault"),
+]
+```
+
+Without the flag, `nonisolated async` still runs on the global concurrent pool. Source: https://github.com/swiftlang/swift-evolution/blob/main/proposals/0461-async-function-isolation.md
 
 ## Migration Strategy
 
@@ -172,15 +184,8 @@ This change is enabled via the `NonisolatedNonsendingByDefault` upcoming feature
 4. Remove unnecessary `Sendable` annotations (compiler infers more)
 
 ### Gradual adoption
-```swift
-// Keep per-file control
-// File: NetworkLayer.swift
-defaultIsolation(nil) // This file opts out of default isolation
 
-actor NetworkClient {
-    // Explicitly managed isolation
-}
-```
+Split modules at the SPM level — give the converted target `.defaultIsolation(MainActor.self)` and leave the legacy target alone. Within the converted target, use `nonisolated` / `@concurrent` to opt individual declarations out (see the "Default MainActor Isolation" section above for why there's no per-file directive).
 
 ## Runtime Pitfalls with Default Isolation
 
@@ -222,9 +227,9 @@ NotificationCenter.default.addObserver(
 ) { [weak self] _ in self?.handleConfigChange() }
 ```
 
-### deinit is always nonisolated
+### deinit is nonisolated by default; SE-0371 offers an opt-in
 
-`deinit` cannot access MainActor-isolated properties or call MainActor-isolated methods. Properties needed for cleanup must be `nonisolated(unsafe)`:
+By default, `deinit` is `nonisolated` and cannot access actor-isolated properties or call MainActor-isolated methods. For classes that can't adopt `isolated deinit` (see `actors-isolation.md`), properties needed for cleanup must be `nonisolated(unsafe)`:
 
 ```swift
 @Observable
@@ -240,6 +245,8 @@ class ResourceManager: @unchecked Sendable {
     }
 }
 ```
+
+In Swift 6.2+, actors (and global-actor-isolated classes) can opt into **`isolated deinit`** (SE-0371) so cleanup runs on the actor's executor and can touch isolated state directly. Task-local values are cleared on entry to an isolated deinit. See `actors-isolation.md` for the full pattern. Source: https://github.com/swiftlang/swift-evolution/blob/main/proposals/0371-isolated-synchronous-deinit.md
 
 ### Types and enums need explicit nonisolated for cross-isolation use
 

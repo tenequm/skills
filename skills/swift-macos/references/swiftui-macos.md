@@ -7,6 +7,7 @@
 - Popovers & Sheets
 - Search
 - Split Views & Layout
+- Liquid Glass (macOS 26)
 - macOS Modifiers
 - Platform Conditionals
 
@@ -250,6 +251,72 @@ NavigationSplitView(columnVisibility: $columnVisibility) {
 .navigationSplitViewStyle(.balanced) // or .prominentDetail
 ```
 
+## Liquid Glass (macOS 26)
+
+Apps rebuilt with the Xcode 26 SDK automatically adopt Liquid Glass styling. For custom surfaces and animated shape changes, use the dedicated APIs rather than rolling material backgrounds by hand.
+
+### Basic glass surfaces
+
+```swift
+// On any view:
+Rectangle()
+    .glassEffect()                       // .regular by default
+Rectangle().glassEffect(.clear)          // less opaque
+Rectangle().glassEffect(.regular.tint(.blue).interactive())
+
+// On buttons:
+Button("Primary") { /* ... */ }
+    .buttonStyle(.glassProminent)
+Button("Secondary") { /* ... */ }
+    .buttonStyle(.glass)
+```
+
+### Morphing transitions between shapes
+
+`GlassEffectContainer` + `.glassEffectID(_:in:)` with a `@Namespace` produces a continuous glass morph when shapes swap rather than a cross-fade:
+
+```swift
+struct MorphingCard: View {
+    @Namespace private var glassNamespace
+    @State private var expanded = false
+
+    var body: some View {
+        GlassEffectContainer(spacing: 8) {
+            if expanded {
+                RoundedRectangle(cornerRadius: 24)
+                    .glassEffect()
+                    .glassEffectID("card", in: glassNamespace)
+                    .frame(width: 400, height: 280)
+            } else {
+                Circle()
+                    .glassEffect()
+                    .glassEffectID("card", in: glassNamespace)
+                    .frame(width: 80, height: 80)
+            }
+        }
+        .onTapGesture { withAnimation(.smooth) { expanded.toggle() } }
+    }
+}
+```
+
+### Glass toolbars
+
+Use `ToolbarSpacer` to group glass items so they render as distinct glass surfaces rather than one merged shape. Full signature is `init(_ sizing: SpacerSizing = .flexible, placement: ToolbarItemPlacement = .automatic)` — both parameters default, so the short form works:
+
+```swift
+.toolbar {
+    ToolbarItem { Button("New") { /* ... */ }.buttonStyle(.glass) }
+    ToolbarSpacer(.fixed)            // equivalent to: ToolbarSpacer(.fixed, placement: .automatic)
+    ToolbarItem { Button("Share") { /* ... */ }.buttonStyle(.glass) }
+}
+```
+
+Available macOS 26 / iOS 26+. Docs: https://developer.apple.com/documentation/swiftui/toolbarspacer
+
+### Opting out
+
+Set `UIDesignRequiresCompatibility = YES` (Boolean) in Info.plist to keep the legacy visual style app-wide. It's a temporary migration aid — Apple expects to remove it in a future release; there is no per-view or per-window opt-out. Docs: https://developer.apple.com/documentation/bundleresources/information-property-list/uidesignrequirescompatibility
+
 ## macOS Modifiers
 
 ```swift
@@ -261,8 +328,11 @@ NavigationSplitView(columnVisibility: $columnVisibility) {
     self.isHovered = isHovered
 }
 
-// Cursor
-.cursor(.pointingHand)
+// Pointer style (macOS 15+)
+.pointerStyle(.link)   // also: .grabIdle, .zoomIn, .horizontalText, etc.
+// Pre-macOS-15: there is no built-in SwiftUI cursor modifier; wrap an
+// NSViewRepresentable that overrides resetCursorRects. Docs:
+// https://developer.apple.com/documentation/swiftui/view/pointerstyle(_:)
 
 // Visual effect (vibrancy)
 .background(.ultraThinMaterial)

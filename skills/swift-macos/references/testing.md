@@ -8,6 +8,9 @@
 - Exit Tests
 - Attachments
 - Async Testing
+- Parallelism Pitfalls for Hardware / Bundle Tests
+- Traits
+- Swift Testing recent features (6.2 and 6.3)
 - UI Testing
 - XCTest Migration
 
@@ -166,14 +169,14 @@ Verify code terminates under specific conditions:
 
 ```swift
 @Test func preconditionFailsForNegativeIndex() async {
-    await #expect(exitsWith: .failure) {
+    await #expect(processExitsWith: .failure) {
         let array = [1, 2, 3]
         _ = array[-1] // Should trigger precondition failure
     }
 }
 
 @Test func fatalErrorOnInvalidState() async {
-    await #expect(exitsWith: .failure) {
+    await #expect(processExitsWith: .failure) {
         StateMachine.transition(from: .completed, to: .idle)
     }
 }
@@ -189,10 +192,9 @@ Include diagnostic data in test results:
 @Test func renderChart() throws {
     let chart = try ChartRenderer.render(data: sampleData)
 
-    // Attach screenshot for debugging
+    // Attach PNG bytes for debugging
     let imageData = try chart.pngData()
-    Attachment(data: imageData, name: "chart.png", contentType: .png)
-        .attach()
+    Attachment.record(imageData, named: "chart.png")
 
     #expect(chart.width == 800)
     #expect(chart.height == 600)
@@ -202,8 +204,7 @@ Include diagnostic data in test results:
     let response = try await api.fetchUsers()
 
     // Attach raw JSON for diagnosis
-    Attachment(data: response.rawData, name: "response.json", contentType: .json)
-        .attach()
+    Attachment.record(response.rawData, named: "response.json")
 
     #expect(response.users.count > 0)
 }
@@ -239,6 +240,95 @@ func longRunningOperation() async throws {
 }
 ```
 
+## Parallelism Pitfalls for Hardware / Bundle Tests
+
+Swift Testing runs tests **in parallel by default**. For tests that launch the same `.app` bundle, drive CoreAudio, or touch shared hardware state (microphone, Screen Recording TCC, a running process), this causes non-obvious races:
+- Two tests launch the same bundle, fight for the CATap, one ends up with silent buffers.
+- Two hardware tests both request microphone access, the second one's `AVCaptureDevice.requestAccess(...)` returns spuriously `false`.
+- Two UI-driving tests try to `open -a MyApp.app` concurrently and `NSWorkspace.runningApplications` reports inconsistent state.
+
+### Serialize with `.serialized`
+
+Apply the `.serialized` trait on the suite (or individual tests) that share a resource:
+
+```swift
+@Suite("Hardware Smoke", .serialized)
+struct HardwareSmokeTests {
+    @Test func recordsFaceTime() async throws { /* launches bundle, records */ }
+    @Test func recordsSystemAudio() async throws { /* launches bundle, records */ }
+    @Test func handlesDeviceSwitch() async throws { /* launches bundle, switches device */ }
+}
+```
+
+Tests outside the suite still run in parallel with suites that don't share the resource.
+
+### Kill by bundle identifier, not by path
+
+Test harnesses that tear down a stale app instance between tests commonly use:
+
+```swift
+// WRONG: only kills instances of THIS copy of the bundle.
+// A stale /Applications/MyApp.app running from a previous install stays alive
+// and keeps holding CoreAudio / SCStream resources.
+for app in NSWorkspace.shared.runningApplications where app.bundleURL == testBundleURL {
+    app.terminate()
+}
+```
+
+For LSUIElement / menu-bar apps especially, a stale `/Applications` copy from a previous `make install` is invisible (no Dock icon, no Cmd+Tab, no Force Quit listing) but contends for the CATap / microphone / Screen Recording TCC. Kill by bundle ID instead:
+
+```swift
+for app in NSWorkspace.shared.runningApplications
+    where app.bundleIdentifier == "com.example.MyApp" {
+    app.terminate()
+}
+// Or via AppKit's async termination for a cleaner shutdown before yielding.
+```
+
+### Polling helpers must be tolerant of transient errors
+
+Bundle-based tests often poll a JSON / IPC state file the app writes. Under full parallel suite load the app can briefly miss its poll interval; if the helper rethrows the inner read error, the outer deadline doesn't get a chance to govern:
+
+```swift
+// FRAGILE: any transient read failure aborts the wait, even though the outer
+// deadline hasn't been reached.
+func waitUntil<T>(_ timeout: Duration = .seconds(15),
+                  _ condition: () async throws -> T?) async throws -> T {
+    let deadline = Date().addingTimeInterval(timeout.seconds)
+    while Date() < deadline {
+        if let v = try await condition() { return v } // rethrows transient errors
+        try await Task.sleep(for: .milliseconds(200))
+    }
+    throw WaitError.timedOut
+}
+
+// ROBUST: outer deadline governs; inner errors are treated as "not yet".
+func waitUntil<T>(_ timeout: Duration = .seconds(15),
+                  _ condition: () async throws -> T?) async throws -> T {
+    let deadline = Date().addingTimeInterval(timeout.seconds)
+    while Date() < deadline {
+        if let v = try? await condition() { return v }
+        try await Task.sleep(for: .milliseconds(200))
+    }
+    throw WaitError.timedOut
+}
+```
+
+### Gate hardware tests behind an env var
+
+Tests that need live TCC permissions (screen recording, microphone) or specific hardware (AirPods, a running FaceTime call) shouldn't run on developer machines by default:
+
+```swift
+@Test(.enabled(if: ProcessInfo.processInfo.environment["RUN_HARDWARE_SMOKE"] == "1"))
+func recordsAgainstLiveSystem() async throws { /* ... */ }
+```
+
+A `Makefile` or `justfile` target that sets the env var is the canonical wrapper (`make smoke-test`). `swift test` without the var shows these as "skipped", which is the desired default.
+
+### Pipe buffering and `make` swallow test output
+
+Running `swift test` through `make` / `rtk` / any command that pipes through a second process can truncate Swift Testing output at ~120 lines and lose the exit code. When you need the full output (e.g. to see which test crashed and where), invoke `swift test --parallel` directly.
+
 ## Traits
 
 ```swift
@@ -267,7 +357,94 @@ func regressionTest() { /* ... */ }
 // Time limit
 @Test(.timeLimit(.seconds(30)))
 func quickTest() async throws { /* ... */ }
+
+// Serial execution (see Parallelism Pitfalls above)
+@Suite(.serialized)
+struct HardwareTests { /* ... */ }
 ```
+
+## Swift Testing recent features (6.2 and 6.3)
+
+A handful of workflow wins scattered across Swift Testing 6.2 (Xcode 26) and 6.3 (Xcode 26.4). Version gate noted per feature — they did not all ship at the same time.
+
+### Warning-severity issues (non-failing) — Swift 6.2
+
+```swift
+@Test func parsesPayload() throws {
+    let parsed = try parser.parse(payload)
+    #expect(parsed.id != nil)
+    if parsed.deprecatedField != nil {
+        // Does NOT fail the test, but surfaces in reports.
+        Issue.record("payload still uses deprecatedField", severity: .warning)
+    }
+}
+```
+
+Use for soft expectations (deprecations, perf regressions short of a hard bar, drift warnings). Shipped in [swift-testing 6.2](https://github.com/swiftlang/swift-testing/releases/tag/swift-6.2-RELEASE) (ST-0013).
+
+### Exit tests: `processExitsWith:` — Swift 6.2
+
+The `#expect(exitsWith:)` spelling was renamed to `#expect(processExitsWith:)` in swift-testing 6.2:
+
+```swift
+@Test func preconditionFailsForNegativeIndex() async {
+    await #expect(processExitsWith: .failure) {
+        let array = [1, 2, 3]
+        _ = array[-1]
+    }
+}
+```
+
+### `Attachment.record(...)` — Swift 6.2 (rename), Swift 6.3 (AppKit/CoreImage/UIKit images)
+
+The static `Attachment.record(_:named:...)` replaces the old instance `.attach()` method (rename shipped in [PR #1032](https://github.com/swiftlang/swift-testing/pull/1032), Swift 6.2). `CGImage` support landed in Swift 6.2 as well; the `NSImage` (AppKit), `CIImage` (CoreImage), `UIImage` (UIKit) overlays shipped in Swift 6.3 (ST-0014).
+
+```swift
+// Swift 6.2+ — bytes / CGImage
+Attachment.record(imageData, named: "chart.png")
+Attachment.record(cgImage, named: "chart", as: .png)
+
+// Swift 6.3+ — NSImage / UIImage / CIImage overlays
+@Test func rendersChart() throws {
+    let image: NSImage = try ChartRenderer.render(data)
+    Attachment.record(image, named: "chart", as: .png)
+    #expect(image.size == CGSize(width: 800, height: 600))
+}
+```
+
+Xcode's test report displays attached images inline; useful for golden-image tests and visual regressions.
+
+### Cooperative mid-test cancellation — Swift 6.3
+
+`Test.cancel(_:)` has signature `throws -> Never`: it always throws, so the call never returns normally and callers must use `try`. The comment argument is positional (no `reason:` label).
+
+```swift
+@Test func longRunningCheck() async throws {
+    for _ in 0..<1_000_000 {
+        if shouldStop() {
+            try Test.cancel("condition met early")
+        }
+        try await doOneStep()
+    }
+}
+```
+
+Cleaner than `throw XCTSkip("...")` — the test reports cancelled, not failed or skipped. (ST-0016, [swift-testing 6.3](https://github.com/swiftlang/swift-testing/releases/tag/swift-6.3-RELEASE) / Xcode 26.4.) The 6.2 release does not correctly handle task cancellation in all conditions, per the proposal note — require 6.3.
+
+### `SourceLocation.filePath` — Swift 6.3
+
+Non-underscored file-path access on `SourceLocation` for custom reporters:
+
+```swift
+let loc = #_sourceLocation
+print(loc.filePath)   // String
+```
+
+(ST-0020, PR #1538.)
+
+### ST-0021 XCTest / Swift Testing interop — accepted, not yet shipped
+
+Proposal status is `Accepted`, not `Implemented`. Only fallback-event-handler plumbing landed in swift-testing 6.3 (PRs #1369, #1503, #1543). The full interop-mode semantics and SwiftPM integration are not yet marked as shipped — don't rely on the `SWIFT_TESTING_XCTEST_INTEROP_MODE` surface yet. Source: https://github.com/swiftlang/swift-evolution/blob/main/proposals/testing/0021-targeted-interoperability-swift-testing-and-xctest.md
 
 ## UI Testing (XCTest-based)
 

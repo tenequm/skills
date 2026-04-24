@@ -1,11 +1,14 @@
 # Screen Capture & Audio Recording
 
+For per-process system audio without ScreenCaptureKit (call recording, background taps), see `core-audio-tap.md` - CATap is the lower-overhead alternative and has its own HFP / aggregate-device pitfalls.
+
 ## Table of Contents
 - SCShareableContent - Content Discovery
 - SCContentFilter - Filtering
 - SCStream & SCStreamConfiguration
 - SCStreamOutput - Receiving Samples
 - SCStream Production Gotchas
+- SCStream Teardown Gotchas
 - SCRecordingOutput (macOS 15+)
 - SCContentSharingPicker (macOS 14+)
 - SCScreenshotManager (macOS 14+)
@@ -283,16 +286,122 @@ SCStream sample buffers are framework-managed and potentially shared. Writing in
 
 ### SCStream error codes and recovery
 
-| Code | Meaning | Recovery |
-|------|---------|---------|
-| -3801 | Permission denied (TCC) | Stop, set `permissionNeeded = true`, prompt user |
-| -3802 | Display disconnected (undocking) | Auto-restart with new stream |
-| -3817 | User stopped via system UI | Respect user intent, save and stop |
-| -3818 | System audio failed | Restart without audio |
-| -3820 | Mic capture failed | Restart without mic |
-| -3821 | System stopped (sleep/wake) | Wait 1s, restart with new file |
+Full mapping from `SCError.h` in the macOS 26 SDK. Source (local path on any machine with Xcode 26 installed): `/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/System/Library/Frameworks/ScreenCaptureKit.framework/Versions/A/Headers/SCError.h`. API docs: https://developer.apple.com/documentation/screencapturekit/scstreamerrorcode
 
-Rate-limit restarts (e.g., max 3 in 30s) to prevent infinite loops.
+| Code | Enum case | Since | Meaning |
+|------|-----------|-------|---------|
+| -3801 | `userDeclined` | 12.3 | User did not authorize capture (TCC) |
+| -3802 | `failedToStart` | 12.3 | Stream failed to start (generic) |
+| -3803 | `missingEntitlements` | 12.3 | Missing required entitlements |
+| -3804 | `failedApplicationConnectionInvalid` | 12.3 | Recording connection became invalid |
+| -3805 | `failedApplicationConnectionInterrupted` | 12.3 | Recording connection was interrupted |
+| -3806 | `failedNoMatchingApplicationContext` | 12.3 | Context id does not match application |
+| -3807 | `attemptToStartStreamState` | 12.3 | Start attempted on a stream already running |
+| -3808 | `attemptToStopStreamState` | 12.3 | Stop attempted on a stream already stopped |
+| -3809 | `attemptToUpdateFilterState` | 12.3 | Update-filter attempted on stopped stream |
+| -3810 | `attemptToConfigState` | 12.3 | Update-config attempted on stopped stream |
+| -3811 | `internalError` | 12.3 | Video/audio capture failure |
+| -3812 | `invalidParameter` | 12.3 | Invalid parameter |
+| -3813 | `noWindowList` | 12.3 | No window list available |
+| -3814 | `noDisplayList` | 12.3 | No display list available |
+| -3815 | `noCaptureSource` | 12.3 | No display or window list to capture |
+| -3816 | `removingStream` | 12.3 | Failed to remove stream |
+| -3817 | `userStopped` | 12.3 | User stopped via system UI |
+| -3818 | `failedToStartAudioCapture` | 13.0 | Audio capture failed to start |
+| -3819 | `failedToStopAudioCapture` | 13.0 | Audio capture failed to stop |
+| -3820 | `failedToStartMicrophoneCapture` | 15.0 | Microphone capture failed to start |
+| -3821 | `systemStoppedStream` | 15.0 | System stopped the stream (sleep/wake, policy) |
+
+Recovery rules of thumb: `-3801` / `-3803` → permission or entitlement problem, stop and prompt user. `-3817` → user intent, save and stop. `-3818` / `-3820` → restart without the offending track. `-3821` → wait ~1 s and restart with a new stream. Rate-limit restarts (e.g. max 3 in 30 s) to prevent infinite loops. Remember SCStream is not reusable after error — destroy and recreate.
+
+Keep `mappedStartError` and the stop-time error handler in sync - in practice they drift (stop-time maps -3801/-3802/-3821, start-time only maps -3801), producing misleading user-facing error messages.
+
+## SCStream Teardown Gotchas
+
+Teardown is the phase where SCStream apps lose files, hang, and leak state. Three patterns worth internalizing.
+
+### `stopCapture()` can hang; wrap it in a timeout
+
+Under WindowServer stalls or TCC-revoked mid-stream state, `try await stream.stopCapture()` can block for 10+ seconds. `applicationShouldTerminate:` gives the app ~8 seconds total before force-kill, so an unguarded `stopCapture` call blows the budget and the writer never finalizes (partial file, or nothing).
+
+Wrap it in a bounded `withTimeout`:
+
+```swift
+func stopSafely() async {
+    _ = await withTimeout(seconds: 3) {
+        try? await self.stream?.stopCapture()
+    }
+    self.audioInput?.markAsFinished()
+    _ = await withTimeout(seconds: 3) {
+        await self.writer?.finishWriting()
+    }
+}
+
+func withTimeout<T: Sendable>(seconds: TimeInterval,
+                              _ op: @escaping @Sendable () async -> T) async -> T? {
+    await withTaskGroup(of: T?.self) { group in
+        group.addTask { await op() }
+        group.addTask {
+            try? await Task.sleep(for: .seconds(seconds))
+            return nil
+        }
+        let result = await group.next() ?? nil
+        group.cancelAll()
+        return result
+    }
+}
+```
+
+### Assign the stream reference *before* awaiting `startCapture()`
+
+```swift
+// FRAGILE: if TCC was revoked between preflight and start, catch cannot cleanly stop.
+func start() async throws {
+    let s = SCStream(filter: filter, configuration: config, delegate: self)
+    try s.addStreamOutput(self, type: .audio, sampleHandlerQueue: audioQueue)
+    do {
+        try await s.startCapture()
+        self.stream = s // assigned after success only
+    } catch {
+        // 's' is out of scope or half-initialized; hard to drive cleanup.
+        throw error
+    }
+}
+
+// BETTER: assign first, so the catch can drive teardown uniformly.
+func start() async throws {
+    let s = SCStream(filter: filter, configuration: config, delegate: self)
+    try s.addStreamOutput(self, type: .audio, sampleHandlerQueue: audioQueue)
+    self.stream = s
+    do {
+        try await s.startCapture()
+    } catch {
+        await self.stopSafely() // cleans up self.stream uniformly
+        throw error
+    }
+}
+```
+
+**Trade-off**: assigning before `startCapture` exposes a short window where `self.stream` is non-nil but not yet capturing. A concurrent `stop()` during that window must be tolerant of `stopCapture()` on an unstarted stream (SCStream handles this, but the undocumented error path is worth a test).
+
+### Prefer `SCShareableContent.current` over `excludingDesktopWindows(false, false)` in restart paths
+
+`SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: false)` is the slow variant - it enumerates off-screen windows, virtual desktops, and minimized windows. Auto-restart paths (up to 3 restarts in 30 s after `.systemStopped`) that re-query this on every attempt produce visible UI stalls.
+
+For audio streams you typically don't need the window list at all; cache the display handle at first start and reuse it. When you do need a fresh enumeration, prefer the narrower `SCShareableContent.current` (macOS 14+) or `excludingDesktopWindows(true, onScreenWindowsOnly: true)`.
+
+```swift
+// Keep this cached across restarts:
+private var cachedDisplay: SCDisplay?
+
+func refreshDisplayIfNeeded() async throws -> SCDisplay {
+    if let d = cachedDisplay { return d }
+    let content = try await SCShareableContent.current // fast
+    guard let d = content.displays.first else { throw CaptureError.noDisplay }
+    cachedDisplay = d
+    return d
+}
+```
 
 ## SCRecordingOutput (macOS 15+)
 
@@ -403,9 +512,15 @@ let hdrImage = try await SCScreenshotManager.captureImage(
 
 ## Audio-Only Capture Pattern
 
-ScreenCaptureKit does NOT support audio-only streams. A `.screen` output is always required.
+**ScreenCaptureKit has no documented audio-only mode, but `.audio`-only streams work in practice.** You can create an `SCStream` with `capturesAudio = true` and attach only `addStreamOutput(_:type:.audio,...)` - no `.screen` output. Audio buffers flow. Validated across macOS 14/15/26 in multiple shipping apps (Aperture, Blackbox across v0.3/v0.4/v0.6/v0.8, etc.).
 
-**Workaround**: minimize video overhead:
+Two caveats that are real but not fatal:
+1. The framework logs `stream output NOT found. Dropping frame` to the console for every video frame because the **video pipeline still runs** internally even without a `.screen` consumer. Purely cosmetic noise, but it'll appear in Console.app.
+2. That same still-running video pipeline costs CPU/GPU. Mitigate by collapsing the video work to a stub (see below) even though you're not consuming it.
+
+**Do not reach for CATap as the "zero-overhead" replacement without reading `core-audio-tap.md` first.** Production experience (one call-recorder shipped CATap in v0.7.0 and reverted to display-wide SCStream in v0.8.0 five days later) shows CATap has structural clock-fragility: its IO proc is driven by the hardware output clock, so when that clock is idle, pinned by Bluetooth HFP, or stalled, buffers stop flowing silently. Display-wide SCStream's clock comes from the OS-composited mix and is decoupled from hardware output, making it more robust for long-duration recording even with the cosmetic video-pipeline overhead. CATap is the right tool when you specifically need sub-20 ms capture latency (real-time AEC, live analysis); for disk-bound recording workloads (calls, meetings, lectures), SCStream wins on reliability.
+
+If you stay with SCStream audio-only, minimize the hidden video work:
 
 ```swift
 let config = SCStreamConfiguration()
@@ -419,7 +534,7 @@ config.width = 2
 config.height = 2
 config.minimumFrameInterval = CMTime(value: 1, timescale: CMTimeScale.max)
 
-// Must add screen output even if unused
+// For audio-only, add only the .audio output. For combined capture:
 try stream.addStreamOutput(self, type: .screen, sampleHandlerQueue: nil)
 try stream.addStreamOutput(self, type: .audio, sampleHandlerQueue: audioQueue)
 ```
@@ -640,6 +755,65 @@ let micSettings: [String: Any] = [
 
 Never use `CMBlockBufferCreateWithMemoryBlock` with `flags: 0` and `memoryBlock: nil` - this defers memory allocation and `CMBlockBufferReplaceDataBytes` writes to uninitialized memory. Use `kCMBlockBufferAssureMemoryNowFlag` or the `CMSampleBufferSetDataBufferFromAudioBufferList` pattern (see next section).
 
+### AVAssetWriterInput format is immutable after the first append
+
+The internal AAC encoder configures itself from the **first** appended sample buffer's format description. Appending a buffer with a different format later causes `append()` to fail silently (returns `false` and the writer eventually enters `.failed` state, losing **both** tracks in a dual-track output).
+
+This matters concretely when the mic device changes mid-recording:
+- AVAudioEngine rebuilds its tap on `AVAudioEngineConfigurationChange` with whatever the new device's native format is (different sample rate, channel count).
+- If you let that new format flow into the writer input directly, the writer goes to `.failed`.
+
+The fix: **resample/downmix into a fixed target format** (e.g. mono 48 kHz Float32) before appending, and reinstall the tap with whatever source format the device dictates. One production-hardened path: mic tap → `resampleToMono48k()` (linear interpolation, any source rate → 48 kHz mono) → `asSampleBuffer()` → writer input. System track (SCStream) bypasses resampling since SCStream always delivers at the configured `sampleRate`/`channelCount` regardless of hardware.
+
+### AVAssetWriter collapses PTS gaps; fill with explicit silence
+
+No AVAssetWriter property makes it preserve gaps between buffers. If buffer A ends at t=10.0 s and buffer B arrives with PTS=12.5 s, the AAC encoder writes them back-to-back and the track ends up 2.5 s shorter than it should be. In a dual-track recording this manifests as one track being seconds shorter than the other, growing over the course of the recording.
+
+Detection / fill pattern (run on the same queue as `append`, per input):
+
+```swift
+actor TrackState {
+    var nextExpectedPTS: CMTime = .invalid
+    let input: AVAssetWriterInput
+    let silenceFormat: CMFormatDescription   // clean LPCM, built once
+
+    func append(_ sample: CMSampleBuffer) {
+        let incoming = CMSampleBufferGetPresentationTimeStamp(sample)
+        if nextExpectedPTS.isValid,
+           CMTimeCompare(incoming, nextExpectedPTS) > 0,
+           CMTimeGetSeconds(incoming - nextExpectedPTS) > 0.005 {
+            fillGap(from: nextExpectedPTS, to: incoming)
+        }
+        if input.isReadyForMoreMediaData {
+            input.append(sample)
+        }
+        let dur = CMSampleBufferGetDuration(sample)
+        nextExpectedPTS = incoming + dur
+    }
+
+    private func fillGap(from start: CMTime, to end: CMTime) {
+        // Write SMALL chunks (~1024 samples each). One big silent buffer spanning
+        // the whole gap causes kCMSampleBufferError_ArrayTooSmall (-12737) or
+        // crashes the AAC encoder. Bail out on any failure - never risk the
+        // real buffer to chase gap accuracy.
+        var cursor = start
+        while CMTimeCompare(cursor, end) < 0, input.isReadyForMoreMediaData {
+            let silent = makeSilentSampleBuffer(at: cursor, frames: 1024,
+                                                 format: silenceFormat)
+            if !input.append(silent) { break }
+            cursor = cursor + CMTime(value: 1024, timescale: 48_000)
+        }
+    }
+}
+```
+
+Three constraints the pattern *must* respect:
+1. **Write silence in small chunks** matching normal buffer cadence (~1024 samples at 48 kHz). One large silent buffer covering the full gap fails with `kCMSampleBufferError_ArrayTooSmall` or crashes the AAC encoder.
+2. **Build a clean LPCM `CMFormatDescription` from scratch** for the silence (Float32, packed, interleaved, no channel-layout extensions). Do NOT reuse the format description from pipeline buffers - they may carry channel layouts or non-interleaved flags that don't match a flat zero-filled block buffer, and `input.append()` will reject or the writer will fail.
+3. **Never block the real buffer on gap-fill success.** If silence `append` fails or `isReadyForMoreMediaData` goes false mid-fill, break out and still try the real buffer. Accept partial desync over data loss. Log the partial fill for diagnostics.
+
+Gap detection threshold >5 ms (240 samples at 48 kHz) avoids false positives from normal PTS jitter.
+
 ## AVAudioFile for Audio
 
 Simpler but PCM-only, requires CMSampleBuffer-to-AVAudioPCMBuffer conversion.
@@ -673,6 +847,10 @@ audioFile = nil
 
 ## CMSampleBuffer to AVAudioPCMBuffer
 
+**If audio is silent after the conversion, check this first.** SCStream on macOS 26 delivers Float32 stereo as **non-interleaved** (two separate buffers in the `AudioBufferList`). Code written for interleaved layout that `memcpy`s the `CMBlockBuffer` bytes into `floatChannelData[0]` produces a valid-looking PCM buffer that decodes as silence / garbage. This has silently killed multi-minute recordings in production.
+
+The safe one-liner: let CoreMedia copy into the `AudioBufferList` and handle both layouts:
+
 ```swift
 extension AVAudioPCMBuffer {
     static func from(_ sampleBuffer: CMSampleBuffer) -> AVAudioPCMBuffer? {
@@ -688,6 +866,7 @@ extension AVAudioPCMBuffer {
         ) else { return nil }
 
         pcmBuffer.frameLength = AVAudioFrameCount(numSamples)
+        // Handles both interleaved and non-interleaved source layouts.
         CMSampleBufferCopyPCMDataIntoAudioBufferList(
             sampleBuffer, at: 0, frameCount: Int32(numSamples),
             into: pcmBuffer.mutableAudioBufferList
@@ -696,6 +875,8 @@ extension AVAudioPCMBuffer {
     }
 }
 ```
+
+Better yet for AVAssetWriter destinations: **skip the conversion entirely** and append the `CMSampleBuffer` directly to a stereo AAC `AVAssetWriterInput` (see "AVAssetWriter for Audio"). Passthrough is both simpler and avoids every class of PCM-layout bug.
 
 Modern Swift alternative using `copyPCMData(fromRange:into:)`:
 
@@ -860,15 +1041,30 @@ Info.plist (required for microphone):
 <string>Record audio alongside screen capture.</string>
 ```
 
+### macOS 26 TCC pane layout
+
+The pane is labeled **"Screen & System Audio Recording"** on macOS 14 Sonoma and later (it was renamed from "Screen Recording" in Sonoma; macOS 15.x and 26.x inherit the same label). On macOS 26 there is a separate "System Audio Recording Only" subsection below the main list. Granting Screen Recording on 26 implicitly grants system-audio capture; on 14/15 the `kTCCServiceAudioCapture` service is distinct from `kTCCServiceScreenCapture` — preflighting one does not answer for the other.
+
+The canonical deep-link prefix is `com.apple.settings.PrivacySecurity.extension` on macOS 26; the legacy `com.apple.preference.security` prefix still opens *something*, but on 26 it lands on the top Privacy pane rather than the subpane. Also: the `Privacy_AudioCapture` anchor lands on an inactive pane when the capturing app uses SCStream - use `Privacy_ScreenCapture` for anything SCStream-based.
+
 ### Open settings programmatically
 
+To avoid 5-site string duplication (and the Audio-vs-Screen URL drift that duplication invites), centralize the URLs in a small enum:
+
 ```swift
-// Screen Recording
-NSWorkspace.shared.open(URL(string:
-    "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture")!)
-// Microphone
-NSWorkspace.shared.open(URL(string:
-    "x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone")!)
+enum SystemPreferenceURL: String {
+    case screenCapture = "x-apple.systempreferences:com.apple.settings.PrivacySecurity.extension?Privacy_ScreenCapture"
+    case microphone   = "x-apple.systempreferences:com.apple.settings.PrivacySecurity.extension?Privacy_Microphone"
+    case notifications = "x-apple.systempreferences:com.apple.preference.notifications"
+    case accessibility = "x-apple.systempreferences:com.apple.settings.PrivacySecurity.extension?Privacy_Accessibility"
+    case loginItems    = "x-apple.systempreferences:com.apple.LoginItems-Settings.extension"
+
+    var url: URL { URL(string: rawValue)! }
+    func open() { NSWorkspace.shared.open(url) }
+}
+
+// Usage:
+SystemPreferenceURL.screenCapture.open()
 ```
 
 ### Reset permissions (development)
@@ -879,6 +1075,30 @@ tccutil reset Microphone com.yourcompany.yourapp
 ```
 
 ## TCC Operational Gotchas
+
+### `CGPreflightScreenCaptureAccess` vs `CGRequestScreenCaptureAccess`
+
+Two superficially similar APIs with very different UX:
+
+| Call | Triggers dialog | Triggers "app will relaunch" | Use when |
+|------|-----------------|------------------------------|----------|
+| `CGPreflightScreenCaptureAccess()` | No | No | Every permission-sensitive UI refresh. Cheap. |
+| `CGRequestScreenCaptureAccess()` | Yes (once) | Yes | Exactly once during onboarding, at the step the user sees. |
+
+Call the preflight on every recording start and on `didBecomeActive` rather than caching a `UserDefaults` flag - the user can revoke permission between launches, and a stale cached flag leads to silent recordings with no error surface.
+
+Call `CGRequestScreenCaptureAccess()` at the onboarding *step* (the "Grant Screen Recording" screen), not at "Complete Setup". Users who click "Open System Settings" before hitting "Complete Setup" otherwise never trigger the in-app request path, and your onboarding behaves asymmetrically with mic / notifications (which fire per step).
+
+### Reinstalling via `rm -rf` + `cp -R` can leave TCC in a degraded state
+
+TCC is keyed by code-signature CDHash. When you replace `/Applications/Blackbox.app` via `rm -rf /Applications/App.app && cp -R ./export/App.app /Applications/`, TCC *remembers* the grant (same Developer ID, same CDHash) but content delivery can be broken - permission reads as authorized, `SCStream` starts without error, buffers flow at zero amplitude (RMS stays at `-inf`).
+
+There is no programmatic recovery. Direct-reading `~/Library/Application Support/com.apple.TCC/TCC.db` is blocked by SIP. The remediation the user must take:
+
+1. System Settings → Privacy & Security → Screen & System Audio Recording
+2. Toggle the app **off**, then **on** again
+
+Design your installer / update path accordingly - prefer an in-place overwrite (let the OS handle the inode swap) or run a `tccutil reset ScreenCapture $BUNDLE_ID` from a signed installer, rather than `rm -rf` + `cp`. For `make install` dev scripts, always `killall App` before replacing the bundle, otherwise the still-running process keeps executing from its unlinked inode and `open -a` brings the stale instance to front instead of launching the new one.
 
 ### Ad-hoc signing resets TCC on every rebuild
 
