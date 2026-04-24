@@ -62,7 +62,20 @@ const program = Effect.scoped(
 Layers can manage resource lifecycles:
 
 ```typescript
+// v3
 const DatabaseLayer = Layer.scoped(
+  Database,
+  Effect.gen(function*() {
+    const pool = yield* Effect.acquireRelease(
+      Effect.tryPromise(() => createPool()),
+      (pool) => Effect.promise(() => pool.end())
+    )
+    return { query: (sql) => Effect.tryPromise(() => pool.query(sql)) }
+  })
+)
+
+// v4 — Layer.scoped is removed. Layer.effect strips Scope from R automatically.
+const DatabaseLayer = Layer.effect(
   Database,
   Effect.gen(function*() {
     const pool = yield* Effect.acquireRelease(

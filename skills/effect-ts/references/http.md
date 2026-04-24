@@ -60,6 +60,7 @@ const json = yield* response.json
 ### Retry with HttpClient
 
 ```typescript
+// v3 — Schedule.compose still works
 const resilientClient = client.pipe(
   HttpClient.retryTransient({
     schedule: Schedule.exponential("200 millis").pipe(
@@ -68,6 +69,8 @@ const resilientClient = client.pipe(
   })
 )
 ```
+
+> v4 note: `Schedule.compose` is removed. Use `Schedule.take(n)` instead — see `retry-scheduling.md`.
 
 ### Platform Layer
 

@@ -53,7 +53,21 @@ const DatabaseLive = Layer.effect(
 )
 
 // Scoped (with resource lifecycle)
+// v3
 const DatabaseLive = Layer.scoped(
+  Database,
+  Effect.gen(function*() {
+    const pool = yield* Effect.acquireRelease(
+      createPool(),
+      (pool) => Effect.promise(() => pool.end())
+    )
+    return { query: (sql) => Effect.tryPromise(() => pool.query(sql)) }
+  })
+)
+
+// v4 — Layer.scoped is removed. Use Layer.effect; it strips Scope from the
+// requirements automatically when the inner effect uses acquireRelease.
+const DatabaseLive = Layer.effect(
   Database,
   Effect.gen(function*() {
     const pool = yield* Effect.acquireRelease(

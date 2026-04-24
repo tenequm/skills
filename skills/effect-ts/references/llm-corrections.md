@@ -31,6 +31,15 @@ This is the exhaustive reference for preventing hallucinated Effect code. Check 
 | `Otlp.layer({ url, serviceName })` (v4) | Canonical split form: `OtlpTracer.layer({ url, resource: { serviceName } })` + `OtlpSerialization.layerJson` + `FetchHttpClient.layer`. The aggregator `Otlp.layer` exists but uses `baseUrl` + `resource.serviceName`, not `url` + `serviceName`. |
 | Chained `HttpApiEndpoint.get(n, p).pipe(HttpApiEndpoint.setPath(...), setPayload(...), setSuccess(...))` (v4) | Object-option form: `HttpApiEndpoint.get(name, path, { params, query, payload, success, error })` |
 | `HttpApiEndpoint` parse failures surface as typed errors (v4) | Since PR #2057 (2026-04-20) endpoint schema failures default to **defects** unless transformed via `HttpApiSchema` helpers. Use `HttpApiSchemaError` when you need typed error responses. |
+| `Layer.scoped(Tag, eff)` (v4) | Removed. `Layer.effect(Tag, eff)` strips `Scope` from the requirements automatically. |
+| `Effect.async((resume) => ...)` (v4) | Renamed to `Effect.callback`. Register signature is `(resume, signal: AbortSignal) => void \| Effect<void, never, R>`. |
+| `Effect.makeSemaphore(n)` (v4) | Removed from `Effect`. Use `Semaphore.make(n)` from the `Semaphore` module. `withPermits` is data-first: `Semaphore.withPermits(sem, n)(eff)`. |
+| `Effect.logSpan(label)(eff)` (v3 + v4) | Never existed. Use `Effect.withLogSpan(label)(eff)`. |
+| `Schedule.compose(other)` (v4) | Removed. Use `Schedule.take(n)` to bound by attempt count, or `Effect.retry(eff, { schedule, times })`. |
+| `Schedule.once` (v4) | Removed. Use `Schedule.recurs(0)` (run once, no retry) or `Schedule.recurs(1)`. |
+| `Tool.make("name", { ..., handler: ... })` | `Tool.make` defines schema only — there is no `handler` field. Attach handlers via `MyToolkit.toLayer({ ToolName: (params) => effect })`. |
+| `Chat.make()` / `Chat.send(session, msg)` | No such exports. Use `yield* Chat.empty` (or `Chat.fromPrompt`, `Chat.makePersisted`) and call methods on the instance: `chat.generateText({ prompt })`, `chat.streamText({ prompt })`, `chat.generateObject({ prompt, schema })`. |
+| `@effect/ai-amazon-bedrock` / `@effect/ai-google` (v4) | Not yet ported to v4. v4 ships only `@effect/ai-anthropic`, `@effect/ai-openai`, `@effect/ai-openai-compat`, `@effect/ai-openrouter`. |
 
 ## Wrong Import Paths
 
@@ -45,6 +54,7 @@ This is the exhaustive reference for preventing hallucinated Effect code. Check 
 | `import { HttpClient } from "@effect/platform"` | `import { HttpClient } from "@effect/platform"` (v3) or `"effect/unstable/http"` (v4) |
 | `import { HttpApi, HttpApiEndpoint, HttpApiGroup } from "@effect/platform"` (v4) | `import { HttpApi, HttpApiEndpoint, HttpApiGroup, HttpApiBuilder, HttpApiScalar } from "effect/unstable/httpapi"` |
 | `import { Otlp } from "effect/unstable/observability"` + single `Otlp.layer(...)` | `import { OtlpLogger, OtlpSerialization, OtlpTracer } from "effect/unstable/observability"` + `import { FetchHttpClient } from "effect/unstable/http"` |
+| `import { RateLimiter } from "effect"` (v4) | `import { RateLimiter } from "effect/unstable/persistence"`. v4 exposes a Service (`RateLimiter.layer` + `RateLimiter.layerStoreMemory`) and the `makeWithRateLimiter` accessor — there is no top-level `RateLimiter.make`/`withCost`. |
 
 ## Wrong Patterns
 

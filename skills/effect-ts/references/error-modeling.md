@@ -127,7 +127,17 @@ const withDefectHandling = program.pipe(
 ```typescript
 import { Cause, Effect } from "effect"
 
+// v3 — uses Effect.catchAllCause
 const diagnosed = program.pipe(
+  Effect.sandbox,
+  Effect.catchAllCause((cause) => {
+    console.log(Cause.pretty(cause))
+    return Effect.succeed(fallback)
+  })
+)
+
+// v4 — renamed to Effect.catchCause
+const diagnosedV4 = program.pipe(
   Effect.sandbox,
   Effect.catchCause((cause) => {
     console.log(Cause.pretty(cause))

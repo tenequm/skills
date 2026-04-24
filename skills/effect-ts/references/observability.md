@@ -20,7 +20,7 @@ const withContext = myEffect.pipe(
 )
 
 // Log spans (structured timing)
-const timed = Effect.logSpan("database.query")(queryEffect)
+const timed = Effect.withLogSpan("database.query")(queryEffect)
 ```
 
 ## Distributed Tracing

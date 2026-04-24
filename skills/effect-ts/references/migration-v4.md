@@ -201,6 +201,18 @@ FromSchema.pipe(
 
 `Equal.equals` performs deep structural comparison by default in v4. `Schema.Data` is removed (unnecessary).
 
+## Other API Removals & Renames
+
+| v3                                       | v4                                                                                |
+|------------------------------------------|-----------------------------------------------------------------------------------|
+| `Layer.scoped(Tag, eff)`                 | `Layer.effect(Tag, eff)` — strips `Scope` from requirements automatically         |
+| `Effect.async((resume) => ...)`          | `Effect.callback((resume, signal) => ...)` — `signal: AbortSignal` is positional  |
+| `Effect.makeSemaphore(n)`                | `Semaphore.make(n)` (import `Semaphore` from `"effect"`)                          |
+| `semaphore.withPermits(n)(eff)`          | `Semaphore.withPermits(semaphore, n)(eff)` — data-first                           |
+| `Schedule.compose(Schedule.recurs(n))`   | `Schedule.take(n)` (bound by attempt count) or `Effect.retry(_, { schedule, times })` |
+| `Schedule.once`                          | `Schedule.recurs(0)`                                                              |
+| `import { RateLimiter } from "effect"`   | `import { RateLimiter } from "effect/unstable/persistence"` — Service-based API; no `withCost`, use `tokens` option |
+
 ## Quick Checklist for v3 -> v4
 
 1. Replace `Context.Tag` / `Effect.Tag` / `Effect.Service` with `Context.Service`
@@ -213,6 +225,11 @@ FromSchema.pipe(
 8. Replace `Effect.either` with `Effect.result`
 9. Update layer naming (`.Default` -> `.layer`)
 10. Use `Effect.fn("name")` for new functions
+11. Replace `Layer.scoped` with `Layer.effect`
+12. Replace `Effect.async` with `Effect.callback`
+13. Replace `Effect.makeSemaphore` with `Semaphore.make`; switch `withPermits` to data-first
+14. Replace `Schedule.compose(Schedule.recurs(n))` with `Schedule.take(n)`; replace `Schedule.once` with `Schedule.recurs(0)`
+15. Move `RateLimiter` import from `"effect"` to `"effect/unstable/persistence"` and switch to its Service-based API
 
 ## v4 beta additions since 2026-03
 

@@ -6,22 +6,36 @@ The `@effect/ai` packages provide a provider-agnostic interface for language mod
 
 ## Packages
 
-| Package                    | Purpose                           |
-|----------------------------|-----------------------------------|
-| `@effect/ai`              | Core abstractions (LanguageModel, Tool, Chat) |
-| `@effect/ai-openai`       | OpenAI provider                    |
-| `@effect/ai-anthropic`    | Anthropic provider                 |
-| `@effect/ai-amazon-bedrock` | Amazon Bedrock provider          |
-| `@effect/ai-google`       | Google Gemini provider             |
-| `@effect/ai-openrouter`   | OpenRouter provider (undocumented, in repo) |
+### v3
 
-v4 consolidates AI modules into `effect/unstable/ai` (import from `"effect/unstable/ai/LanguageModel"` etc.).
+| Package                     | Purpose                                          |
+|-----------------------------|--------------------------------------------------|
+| `@effect/ai`                | Core abstractions (LanguageModel, Tool, Toolkit, Chat, McpServer) |
+| `@effect/ai-openai`         | OpenAI provider                                  |
+| `@effect/ai-anthropic`      | Anthropic provider                               |
+| `@effect/ai-amazon-bedrock` | Amazon Bedrock provider (v3 only)                |
+| `@effect/ai-google`         | Google Gemini provider (v3 only)                 |
+| `@effect/ai-openrouter`     | OpenRouter provider                              |
+
+### v4
+
+The core AI module is consolidated into `effect/unstable/ai` (no separate `@effect/ai` package). Provider packages still ship separately and currently include only `@effect/ai-anthropic`, `@effect/ai-openai`, `@effect/ai-openai-compat`, and `@effect/ai-openrouter` — Bedrock and Google providers are not yet ported to v4.
+
+```typescript
+// v4 imports
+import { Chat, LanguageModel, McpSchema, McpServer, Tool, Toolkit } from "effect/unstable/ai"
+```
 
 ## Basic Text Generation
 
 ```typescript
+// v3
 import { LanguageModel } from "@effect/ai"
 import { OpenAiLanguageModel } from "@effect/ai-openai"
+
+// v4 — equivalent imports:
+//   import { LanguageModel } from "effect/unstable/ai"
+//   import { OpenAiLanguageModel } from "@effect/ai-openai"
 
 const program = Effect.gen(function*() {
   const response = yield* LanguageModel.generateText({
@@ -70,38 +84,52 @@ const processed = stream.pipe(
 
 ## Tool Use
 
-```typescript
-import { Tool, Toolkit } from "@effect/ai"
+`Tool.make` defines only the *schema* of a tool — name, description, parameters, success/failure types. The runtime *handler* is attached separately via `Toolkit.toLayer`, which produces a Layer that the LanguageModel call requires.
 
-// Define a tool
-const weatherTool = Tool.make("getWeather", {
+```typescript
+import { Effect, Schema } from "effect"
+import { Tool, Toolkit } from "effect/unstable/ai" // v4 (or "@effect/ai" for v3)
+
+// Define a tool — note: NO `handler` field on Tool.make
+const GetWeather = Tool.make("GetWeather", {
   description: "Get current weather for a location",
-  parameters: Schema.Struct({
-    location: Schema.String
-  }),
-  handler: ({ location }) => fetchWeather(location)
+  parameters: Schema.Struct({ location: Schema.String }),
+  success: Schema.Struct({
+    temperature: Schema.Number,
+    condition: Schema.String
+  })
 })
 
 // Group tools into a toolkit
-const tools = Toolkit.make(weatherTool, calculatorTool)
+const MyToolkit = Toolkit.make(GetWeather)
 
-// Use with LanguageModel
-const response = yield* LanguageModel.generateText({
-  prompt: "What's the weather in San Francisco?",
-  tools
+// Attach handlers via toLayer (handler keys match the tool names)
+const MyToolkitLayer = MyToolkit.toLayer({
+  GetWeather: ({ location }) => fetchWeather(location)
 })
+
+// Use with LanguageModel — provide the toolkit layer
+const program = LanguageModel.generateText({
+  prompt: "What's the weather in San Francisco?",
+  toolkit: MyToolkit
+}).pipe(Effect.provide(MyToolkitLayer))
 ```
 
 ## Chat (Stateful Conversations)
 
+The Chat module returns a Service whose instance carries `generateText`, `streamText`, and `generateObject` methods. It threads conversation history through a Ref automatically — there is no static `Chat.send`.
+
 ```typescript
-import { Chat } from "@effect/ai"
+import { Chat } from "effect/unstable/ai" // v4 (or "@effect/ai" for v3)
 
-const chatSession = yield* Chat.make()
+const program = Effect.gen(function*() {
+  const chat = yield* Chat.empty // also: Chat.fromPrompt(initial), Chat.makePersisted(...)
 
-const response1 = yield* Chat.send(chatSession, "Hello, who are you?")
-const response2 = yield* Chat.send(chatSession, "What did I just say?")
-// Chat maintains conversation history automatically
+  const r1 = yield* chat.generateText({ prompt: "Hello, who are you?" })
+  const r2 = yield* chat.generateText({ prompt: "What did I just say?" })
+  // r2 sees the prior turn — history is appended in the chat's internal state
+  return [r1.text, r2.text]
+})
 ```
 
 ## MCP Server (v4)
