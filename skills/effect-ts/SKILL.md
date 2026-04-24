@@ -1,8 +1,8 @@
 ---
 name: effect-ts
-description: "Effect-TS (Effect) comprehensive development guide for TypeScript. Use when building, debugging, reviewing, or generating Effect code. Covers typed error modeling (expected errors vs defects), structured concurrency (fibers), dependency injection (ServiceMap/Context + Layers), resource management (Scope), retry/scheduling (Schedule), streams, Schema validation, observability (OpenTelemetry), HTTP client/server, Effect AI (LLM integration), and MCP servers. Critical for AI code generation: includes exhaustive wrong-vs-correct API tables preventing hallucinated Effect code. Supports both Effect v3 (stable) and v4 (beta). Use this skill whenever code imports from 'effect', '@effect/platform', '@effect/ai', or the user mentions Effect-TS, typed errors with Effect, functional TypeScript with Effect, ServiceMap, Layer, or Schema from Effect. Also trigger when generating new TypeScript projects that could benefit from Effect patterns, even if the user doesn't explicitly name the library."
+description: "Effect-TS (Effect) comprehensive development guide for TypeScript. Use when building, debugging, reviewing, or generating Effect code. Covers typed error modeling (expected errors vs defects), structured concurrency (fibers), dependency injection (Context + Layers), resource management (Scope), retry/scheduling (Schedule), streams, Schema validation, observability (OpenTelemetry), HTTP client/server, Effect AI (LLM integration), and MCP servers. Critical for AI code generation: includes exhaustive wrong-vs-correct API tables preventing hallucinated Effect code. Supports both Effect v3 (stable) and v4 (beta). Use this skill whenever code imports from 'effect', '@effect/platform', '@effect/ai', or the user mentions Effect-TS, typed errors with Effect, functional TypeScript with Effect, Context, ServiceMap, Layer, or Schema from Effect. Also trigger when generating new TypeScript projects that could benefit from Effect patterns, even if the user doesn't explicitly name the library."
 metadata:
-  version: "0.1.0"
+  version: "0.2.0"
 ---
 
 # Effect-TS
@@ -19,7 +19,9 @@ cat package.json | grep '"effect"'
 ```
 
 - **v3.x** (stable, most production codebases): `Context.Tag`, `Effect.catchAll`, `Effect.fork`, `Data.TaggedError`
-- **v4.x** (beta, Feb 2026+): `ServiceMap.Service`, `Effect.catch`, `Effect.forkChild`, `Schema.TaggedErrorClass`
+- **v4.x** (beta, Feb 2026+): `Context.Service`, `Effect.catch`, `Effect.forkChild`, `Schema.TaggedErrorClass`
+
+> Note: v4 beta briefly used a `ServiceMap` module, renamed back to `Context` on 2026-04-07 (PR #1961). If you see `ServiceMap.*` in any doc or older beta code, it is the current `Context.*`. Both v3 and v4 import `Context` from `"effect"`; the exports inside differ (`Context.Tag` in v3 vs `Context.Service` in v4).
 
 If the version is unclear, ask the user. Default to v3 patterns for existing codebases, v4 for new projects.
 
@@ -46,7 +48,7 @@ LLM outputs frequently contain incorrect Effect APIs. Verify every API against t
 | `import { Schema } from "@effect/schema"`    | `import { Schema } from "effect"` (v3.10+ and all v4)         |
 | `import { JSONSchema } from "@effect/schema"`| `import { JSONSchema } from "effect"` (v3.10+)                |
 | JSON Schema Draft 2020-12                    | Effect Schema generates **Draft-07**                          |
-| "thread-local storage"                       | "fiber-local storage" via `FiberRef` (v3) / `ServiceMap.Reference` (v4) |
+| "thread-local storage"                       | "fiber-local storage" via `FiberRef` (v3) / `Context.Reference` (v4) |
 | fibers are "cancelled"                       | fibers are "interrupted"                                      |
 | all queues have back-pressure                | only **bounded** queues; sliding/dropping do not               |
 | `new MyError("message")`                     | `new MyError({ message: "..." })` (Schema errors take objects) |
@@ -63,16 +65,23 @@ LLM outputs frequently contain incorrect Effect APIs. Verify every API against t
 
 | Wrong (v3 API used in v4 code)    | Correct (v4)                                         |
 |-----------------------------------|------------------------------------------------------|
-| `Context.Tag("X")`               | `ServiceMap.Service<X>(id)` or class syntax           |
+| `Context.Tag("X")` (v3 shape)    | `Context.Service<X>(id)` or class syntax              |
+| `ServiceMap.Service` / `ServiceMap.Reference` | Renamed back to `Context.Service` / `Context.Reference` on 2026-04-07 |
 | `Effect.catchAll(fn)`            | `Effect.catch(fn)`                                    |
 | `Effect.fork(effect)`            | `Effect.forkChild(effect)`                            |
 | `Effect.forkDaemon(effect)`      | `Effect.forkDetach(effect)`                           |
 | `Data.TaggedError`               | `Schema.TaggedErrorClass`                             |
-| `FiberRef.get(ref)`              | `yield* References.X` (ServiceMap.Reference)          |
+| `FiberRef.get(ref)`              | `yield* References.X` (a `Context.Reference`)         |
 | `yield* ref` (Ref as Effect)     | `yield* Ref.get(ref)` (Ref is no longer an Effect)    |
 | `yield* fiber` (Fiber as Effect) | `yield* Fiber.join(fiber)` (Fiber is no longer Effect) |
 | `Logger.Default` / `Logger.Live` | `Logger.layer` (v4 naming convention)                 |
 | `Schema.TaggedError`             | `Schema.TaggedErrorClass`                             |
+| `Schema.makeUnsafe(input)`       | `Schema.make(input)` (throws `SchemaError`); also `Schema.makeOption`, `Schema.makeEffect` |
+| `ParseResult` (from `"effect"`)  | `SchemaIssue` module + `SchemaError` class; narrow with `Schema.isSchemaError` |
+| `HttpApiEndpoint.get(n, p).pipe(HttpApiEndpoint.setPath(...), setPayload(...), setSuccess(...))` | `HttpApiEndpoint.get(n, p, { params, query, payload, success, error })` (object-option form) |
+| `Otlp.layer({ url, serviceName })` | `OtlpTracer.layer({ url, resource: { serviceName } })` + `OtlpSerialization.layerJson` + `FetchHttpClient.layer` |
+| `import { HttpApi } from "@effect/platform"` (v4) | `import { HttpApi } from "effect/unstable/httpapi"` |
+| HttpApi endpoint schema errors are typed errors by default | Since PR #2057 (2026-04-20) they default to **defects** unless transformed |
 
 **Read `references/llm-corrections.md` for the exhaustive corrections table.**
 
@@ -126,19 +135,31 @@ Start with these ~20 functions (the official recommended set):
 
 **Key modules:** `Effect`, `Schema`, `Layer`, `Option`, `Either` (v3) / `Result` (v4), `Array`, `Match`
 
+**DI (v3):** `Context.Tag`, `Context.Reference`
+**DI (v4):** `Context.Service`, `Context.Reference`, `Layer.effect`, `Effect.fn("name")`
+
 ## Import Patterns
 
 Always use barrel imports from `"effect"`:
 
 ```typescript
-import { Effect, Schema, Layer, Option, Stream } from "effect"
+import { Context, Effect, Schema, Layer, Option, Stream } from "effect"
 ```
 
-For companion packages, import from the package name:
+For companion packages, import from the package name. v3 and v4 differ here:
 
 ```typescript
+// v3 (stable) companion packages
 import { NodeRuntime } from "@effect/platform-node"
+import { HttpClient } from "@effect/platform"
 import { NodeSdk } from "@effect/opentelemetry"
+
+// v4 (beta) - platform transports still separate, but HttpApi / observability
+// moved under effect/unstable/*
+import { NodeRuntime } from "@effect/platform-node"
+import { FetchHttpClient } from "effect/unstable/http"
+import { HttpApi, HttpApiEndpoint, HttpApiGroup, HttpApiBuilder, HttpApiScalar } from "effect/unstable/httpapi"
+import { OtlpLogger, OtlpSerialization, OtlpTracer } from "effect/unstable/observability"
 ```
 
 Avoid deep module imports (`effect/Effect`) unless your bundler requires it for tree-shaking.

@@ -109,19 +109,51 @@ const OtelLayer = NodeSdk.layer(() => ({
 const main = program.pipe(Effect.provide(OtelLayer))
 ```
 
-### v4: effect/unstable/observability (lighter weight)
+### v4: effect/unstable/observability (fetch-based, no OTel SDK dependency)
+
+v4 ships its own lightweight OTLP exporters under `effect/unstable/observability`. The canonical setup is to compose split modules — `OtlpTracer.layer`, `OtlpLogger.layer` — with an `OtlpSerialization` encoding layer and an `HttpClient` transport. The whole stack depends on `FetchHttpClient.layer` from `effect/unstable/http`; there is no OpenTelemetry SDK dependency.
+
+```typescript
+import { Layer } from "effect"
+import { FetchHttpClient } from "effect/unstable/http"
+import { OtlpLogger, OtlpSerialization, OtlpTracer } from "effect/unstable/observability"
+
+const Tracing = OtlpTracer.layer({
+  url: "http://localhost:4318/v1/traces",
+  resource: { serviceName: "my-service", serviceVersion: "1.0.0" }
+})
+
+const Logging = OtlpLogger.layer({
+  url: "http://localhost:4318/v1/logs",
+  resource: { serviceName: "my-service" }
+})
+
+export const Observability = Layer.merge(Tracing, Logging).pipe(
+  Layer.provide(OtlpSerialization.layerJson), // or layerProtobuf
+  Layer.provide(FetchHttpClient.layer)
+)
+
+const main = program.pipe(Effect.provide(Observability))
+```
+
+An aggregator `Otlp.layer` also exists that bundles tracer + logger + metrics, but note its argument shape:
 
 ```typescript
 import { Otlp } from "effect/unstable/observability"
 
-const OtelLayer = Otlp.layer({
-  url: "http://localhost:4318",
-  serviceName: "my-service",
-  // Logs and traces exported via OTLP
-})
-
-const main = program.pipe(Effect.provide(OtelLayer))
+// aggregator form - baseUrl, NOT url; serviceName under resource, NOT top-level
+const All = Otlp.layer({
+  baseUrl: "http://localhost:4318",
+  resource: { serviceName: "my-service" }
+}).pipe(
+  Layer.provide(OtlpSerialization.layerJson),
+  Layer.provide(FetchHttpClient.layer)
+)
 ```
+
+Do NOT use `Otlp.layer({ url, serviceName })` — neither field exists in that shape. Prefer the split-module form above; it is the pattern in `ai-docs/src/08_observability/20_otlp-tracing.ts`.
+
+The v3 `@effect/opentelemetry` NodeSdk path is not available in v4 — if you need the OpenTelemetry SDK stack you should stay on v3.
 
 ## Testing Observability
 

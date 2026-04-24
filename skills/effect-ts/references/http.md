@@ -1,6 +1,11 @@
 # HTTP Client and Server
 
-## HTTP Client (@effect/platform)
+Import paths differ between versions:
+
+- **v3:** `@effect/platform` for client + API, `@effect/platform-node` for Node transports.
+- **v4:** `effect/unstable/http` for the client and transport helpers, `effect/unstable/httpapi` for the schema-first API layer. `@effect/platform-node` still provides Node-specific `NodeHttpServer` / `NodeHttpClient`.
+
+## HTTP Client (v3 — @effect/platform)
 
 ### Making Requests
 
@@ -76,15 +81,14 @@ const main = program.pipe(
 )
 ```
 
-## HTTP Server (@effect/platform)
+## HTTP Server (v3 — @effect/platform)
 
 ### Schema-First API Definition
 
 ```typescript
 import { HttpApi, HttpApiEndpoint, HttpApiGroup } from "@effect/platform"
-// v4: from "effect/unstable/httpapi"
 
-// Define endpoints
+// Define endpoints (chained setters - v3 style)
 const getUser = HttpApiEndpoint.get("getUser", "/users/:id").pipe(
   HttpApiEndpoint.setPath(Schema.Struct({ id: Schema.String })),
   HttpApiEndpoint.setSuccess(User)
@@ -107,7 +111,7 @@ const MyApi = HttpApi.make("my-api").pipe(
 )
 ```
 
-### Implement Handlers
+### Implement Handlers (v3)
 
 ```typescript
 import { HttpApiBuilder } from "@effect/platform"
@@ -130,7 +134,7 @@ const UsersLive = HttpApiBuilder.group(MyApi, "users", (handlers) =>
 )
 ```
 
-### Serve
+### Serve (v3)
 
 ```typescript
 import { HttpApiBuilder, HttpMiddleware } from "@effect/platform"
@@ -146,7 +150,7 @@ const ServerLive = HttpApiBuilder.serve(HttpMiddleware.logger).pipe(
 NodeRuntime.runMain(Layer.launch(ServerLive))
 ```
 
-### OpenAPI / Swagger
+### OpenAPI / Swagger (v3)
 
 ```typescript
 import { HttpApiSwagger } from "@effect/platform"
@@ -157,6 +161,111 @@ const ServerLive = HttpApiBuilder.serve(HttpMiddleware.logger).pipe(
   // ...
 )
 ```
+
+## HTTP API Server (v4 — effect/unstable/httpapi)
+
+v4 replaces the chained endpoint setters with an **object-option** form and moves all the HttpApi modules to `effect/unstable/httpapi`. Transport helpers live in `effect/unstable/http`. `HttpApiScalar` replaces `HttpApiSwagger` as the canonical docs UI (Swagger still exists).
+
+### Define endpoints with object options
+
+```typescript
+import { Schema } from "effect"
+import { HttpApi, HttpApiEndpoint, HttpApiGroup } from "effect/unstable/httpapi"
+
+const User = Schema.Struct({
+  id: Schema.Number,
+  name: Schema.String,
+  email: Schema.String
+})
+
+class UserNotFound extends Schema.TaggedErrorClass<UserNotFound>()("UserNotFound", {
+  id: Schema.Number
+}) {}
+
+// Endpoints take (name, path, options) — no chained setters
+const Users = HttpApiGroup.make("users")
+  .add(
+    HttpApiEndpoint.get("list", "/", {
+      query: { search: Schema.optional(Schema.String) },
+      success: Schema.Array(User)
+    })
+  )
+  .add(
+    HttpApiEndpoint.get("getById", "/:id", {
+      params: { id: Schema.NumberFromString },
+      success: User,
+      error: UserNotFound
+    })
+  )
+  .add(
+    HttpApiEndpoint.post("create", "/", {
+      payload: Schema.Struct({ name: Schema.String, email: Schema.String }),
+      success: User
+    })
+  )
+
+export const Api = HttpApi.make("api").add(Users)
+```
+
+### Implement handlers with `Effect.fn`
+
+```typescript
+import { Effect, Layer } from "effect"
+import { HttpApiBuilder } from "effect/unstable/httpapi"
+
+const UsersApiHandlers = HttpApiBuilder.group(
+  Api,
+  "users",
+  Effect.fn(function*(handlers) {
+    const db = yield* Database
+    return handlers
+      .handle("list", ({ urlParams }) => db.listUsers(urlParams.search))
+      .handle("getById", ({ path }) => db.findUser(path.id))
+      .handle("create", ({ payload }) => db.createUser(payload))
+  })
+)
+```
+
+### Serve + docs UI
+
+```typescript
+import { FetchHttpClient } from "effect/unstable/http"
+import { HttpApiBuilder, HttpApiScalar } from "effect/unstable/httpapi"
+import { NodeHttpServer, NodeRuntime } from "@effect/platform-node"
+import { createServer } from "node:http"
+
+const DocsRoute = HttpApiScalar.layer(Api, { path: "/docs" })
+
+const ApiRoutes = HttpApiBuilder.layer(Api, {
+  openapiPath: "/openapi.json"
+}).pipe(Layer.provide([UsersApiHandlers]))
+
+const ServerLive = Layer.mergeAll(ApiRoutes, DocsRoute).pipe(
+  Layer.provide(NodeHttpServer.layer(createServer, { port: 3000 }))
+)
+
+NodeRuntime.runMain(Layer.launch(ServerLive))
+```
+
+### HttpApi schema errors default to defects (v4, since PR #2057)
+
+Endpoint parse/schema failures no longer appear in the typed error channel by default — they surface as defects. If you want typed error responses (e.g. `400 Bad Request` with a structured body), transform the failure through `HttpApiSchema` helpers or add an explicit `error` schema on the endpoint:
+
+```typescript
+import { HttpApiSchema } from "effect/unstable/httpapi"
+
+class BadInput extends Schema.TaggedErrorClass<BadInput>()("BadInput", {
+  message: Schema.String
+}) {}
+
+HttpApiEndpoint.post("create", "/", {
+  payload: CreateUserBody.pipe(HttpApiSchema.withBadRequest(BadInput)),
+  success: User,
+  error: BadInput
+})
+```
+
+Without this transform, bad payloads cause a defect (500-style) instead of a typed error. This is a deliberate 2026-04-20 change (commit `8e04bfc9`).
 
 ## Integrating Effect with Hono
 

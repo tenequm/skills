@@ -26,6 +26,11 @@ This is the exhaustive reference for preventing hallucinated Effect code. Check 
 | `Layer.fromService`                   | `Layer.effect(Tag, Effect.gen(function*() { ... }))`          |
 | `Schema.nullable`                     | `Schema.NullOr(schema)`                                      |
 | `Schema.optional` (standalone)        | `Schema.optional(schema)` for struct fields only              |
+| `Schema.makeUnsafe(input)` (v4)       | `Schema.make(input)` - throws `SchemaError` on invalid input; also `Schema.makeOption`, `Schema.makeEffect` |
+| `ServiceMap.Service` / `ServiceMap.Reference` (v4) | Renamed back to `Context.Service` / `Context.Reference` on 2026-04-07 (PR #1961). Import `Context` from `"effect"`. |
+| `Otlp.layer({ url, serviceName })` (v4) | Canonical split form: `OtlpTracer.layer({ url, resource: { serviceName } })` + `OtlpSerialization.layerJson` + `FetchHttpClient.layer`. The aggregator `Otlp.layer` exists but uses `baseUrl` + `resource.serviceName`, not `url` + `serviceName`. |
+| Chained `HttpApiEndpoint.get(n, p).pipe(HttpApiEndpoint.setPath(...), setPayload(...), setSuccess(...))` (v4) | Object-option form: `HttpApiEndpoint.get(name, path, { params, query, payload, success, error })` |
+| `HttpApiEndpoint` parse failures surface as typed errors (v4) | Since PR #2057 (2026-04-20) endpoint schema failures default to **defects** unless transformed via `HttpApiSchema` helpers. Use `HttpApiSchemaError` when you need typed error responses. |
 
 ## Wrong Import Paths
 
@@ -33,11 +38,13 @@ This is the exhaustive reference for preventing hallucinated Effect code. Check 
 |----------------------------------------------|--------------------------------------------|
 | `import { Schema } from "@effect/schema"`    | `import { Schema } from "effect"`          |
 | `import { JSONSchema } from "@effect/schema"`| `import { JSONSchema } from "effect"`      |
-| `import { ParseResult } from "@effect/schema"` | `import { ParseResult } from "effect"` (v3) / removed in v4 |
+| `import { ParseResult } from "@effect/schema"` | `import { ParseResult } from "effect"` (v3). In v4 `ParseResult` is gone — use the `SchemaIssue` module for issue inspection and the `SchemaError` class (re-exported from `Schema`) as the thrown/failed value. Narrow with `Schema.isSchemaError(e)`, then inspect `e.issue` via `SchemaIssue.makeFormatterStandardSchemaV1()(e.issue).issues`. |
 | `import { Effect } from "@effect/io"`        | `import { Effect } from "effect"`          |
 | `import { Layer } from "@effect/io"`         | `import { Layer } from "effect"`           |
 | `import { Stream } from "@effect/stream"`    | `import { Stream } from "effect"`          |
 | `import { HttpClient } from "@effect/platform"` | `import { HttpClient } from "@effect/platform"` (v3) or `"effect/unstable/http"` (v4) |
+| `import { HttpApi, HttpApiEndpoint, HttpApiGroup } from "@effect/platform"` (v4) | `import { HttpApi, HttpApiEndpoint, HttpApiGroup, HttpApiBuilder, HttpApiScalar } from "effect/unstable/httpapi"` |
+| `import { Otlp } from "effect/unstable/observability"` + single `Otlp.layer(...)` | `import { OtlpLogger, OtlpSerialization, OtlpTracer } from "effect/unstable/observability"` + `import { FetchHttpClient } from "effect/unstable/http"` |
 
 ## Wrong Patterns
 
@@ -133,7 +140,7 @@ const good = Effect.map(myEffect, (x) => JSON.parse(x))
 | "cancel a fiber"         | "interrupt a fiber"                        |
 | "thread-local storage"   | "fiber-local storage" (FiberRef / Reference) |
 | "worker pool"            | `concurrency` option on `Effect.all/forEach` |
-| "dependency container"   | "Layer" / "ServiceMap" (v4) / "Context" (v3) |
+| "dependency container"   | "Layer"; `Context.Tag` (v3) or `Context.Service` (v4) — both live in the `Context` module |
 | "middleware" (for layers)| "Layer" (layers compose, not chain)          |
 | "async effect"           | Effects are lazy by default, both sync/async |
 | "Observable" / "RxJS"    | Effect is single-shot (like lazy Promise), not multi-shot |

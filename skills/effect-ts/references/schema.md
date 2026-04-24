@@ -67,6 +67,38 @@ const json = Schema.encodeSync(User)(user)
 // v4: yield* Schema.encodeEffect(User)(user)
 ```
 
+## Construction (v4)
+
+Every v4 schema exposes three constructor methods. v3's `Schema.makeUnsafe` no longer exists.
+
+```typescript
+// Throws SchemaError on invalid input
+const user = User.make({ id: "1", name: "Alice", age: 30 })
+
+// Returns Option<Type>
+const maybeUser = User.makeOption({ id: "1", name: "Alice", age: 30 })
+
+// Returns Effect<Type, SchemaError>
+const userEffect = User.makeEffect({ id: "1", name: "Alice", age: 30 })
+```
+
+## Error Shape (v4)
+
+Decode/encode/construct failures are `SchemaError` instances carrying a `SchemaIssue.Issue` on the `.issue` field. Narrow thrown errors with `Schema.isSchemaError` and format issues via the `SchemaIssue` module. v3's `ParseResult` module is gone.
+
+```typescript
+import { Schema, SchemaIssue } from "effect"
+
+try {
+  Schema.decodeUnknownSync(User)(badInput)
+} catch (e) {
+  if (Schema.isSchemaError(e) && SchemaIssue.isIssue(e.issue)) {
+    const issues = SchemaIssue.makeFormatterStandardSchemaV1()(e.issue).issues
+    console.error(issues)
+  }
+}
+```
+
 ## Filters and Validation
 
 ### v3

@@ -14,19 +14,21 @@ class Database extends Context.Tag("Database")<Database, {
 }>() {}
 ```
 
-### v4: ServiceMap.Service
+### v4: Context.Service
 
 ```typescript
-import { Effect, Layer, ServiceMap } from "effect"
+import { Context, Effect, Layer } from "effect"
 
-class Database extends ServiceMap.Service<Database, {
+class Database extends Context.Service<Database, {
   readonly query: (sql: string) => Effect.Effect<unknown[]>
 }>()(
   "myapp/Database" // include package path for uniqueness
 ) {}
 ```
 
-Note the argument order difference: v3 passes `id` first, v4 passes type params first, then `id` to the returned constructor.
+Note the argument order difference: v3's `Context.Tag` takes `id` first and types second; v4's `Context.Service` takes types first and `id` on the returned constructor. The module name is the same (`Context`); only the exported factory differs.
+
+> v4 briefly exported this under a `ServiceMap` module; it was renamed back to `Context` on 2026-04-07 (PR #1961). Older beta docs or code may still say `ServiceMap.Service` / `ServiceMap.Reference` — treat as `Context.Service` / `Context.Reference`.
 
 ## Building Layers
 
@@ -63,10 +65,12 @@ const DatabaseLive = Layer.scoped(
 )
 ```
 
-## v4: ServiceMap.Service with make
+## v4: Context.Service with make
 
 ```typescript
-class Database extends ServiceMap.Service<Database, {
+import { Context, Effect, Layer } from "effect"
+
+class Database extends Context.Service<Database, {
   readonly query: (sql: string) => Effect.Effect<unknown[]>
 }>()(
   "myapp/Database",
@@ -164,7 +168,7 @@ class LogLevel extends Context.Reference<LogLevel>()("LogLevel", {
 }) {}
 
 // v4
-const LogLevel = ServiceMap.Reference<"info" | "warn" | "error">("LogLevel", {
+const LogLevel = Context.Reference<"info" | "warn" | "error">("LogLevel", {
   defaultValue: () => "info" as const
 })
 ```

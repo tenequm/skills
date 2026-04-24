@@ -26,15 +26,17 @@ New `effect/unstable/*` paths may break in minor releases: `ai`, `cli`, `cluster
 ### Bundle Size
 ~70KB (v3) -> ~20KB (v4) for Effect + Stream + Schema. Minimal: ~6.3KB gzipped.
 
-## Services: Context.Tag -> ServiceMap.Service
+## Services: Context.Tag -> Context.Service
 
-| v3                                    | v4                                         |
-|---------------------------------------|--------------------------------------------|
-| `Context.GenericTag<T>(id)`           | `ServiceMap.Service<T>(id)`                |
-| `Context.Tag(id)<Self, Shape>()`      | `ServiceMap.Service<Self, Shape>()(id)`    |
-| `Effect.Tag(id)<Self, Shape>()`       | `ServiceMap.Service<Self, Shape>()(id)`    |
-| `Effect.Service<Self>()(id, opts)`    | `ServiceMap.Service<Self>()(id, { make })` |
-| `Context.Reference<Self>()(id, opts)` | `ServiceMap.Reference<T>(id, opts)`        |
+v4 briefly introduced a `ServiceMap` module for service definitions. On 2026-04-07 (PR #1961) it was renamed back to `Context`. Any doc or older beta code that says `ServiceMap.Service` / `ServiceMap.Reference` should be read as the current `Context.Service` / `Context.Reference`.
+
+| v3                                    | v4                                        |
+|---------------------------------------|-------------------------------------------|
+| `Context.GenericTag<T>(id)`           | `Context.Service<T>(id)`                  |
+| `Context.Tag(id)<Self, Shape>()`      | `Context.Service<Self, Shape>()(id)`      |
+| `Effect.Tag(id)<Self, Shape>()`       | `Context.Service<Self, Shape>()(id)`      |
+| `Effect.Service<Self>()(id, opts)`    | `Context.Service<Self>()(id, { make })`   |
+| `Context.Reference<Self>()(id, opts)` | `Context.Reference<T>(id, opts)`          |
 
 ```typescript
 // v3
@@ -43,7 +45,7 @@ class Database extends Context.Tag("Database")<Database, {
 }>() {}
 
 // v4
-class Database extends ServiceMap.Service<Database, {
+class Database extends Context.Service<Database, {
   readonly query: (sql: string) => Effect.Effect<unknown[]>
 }>()(
   "myapp/Database"
@@ -90,9 +92,9 @@ class Database extends ServiceMap.Service<Database, {
 
 Fork options: `{ startImmediately?: boolean, uninterruptible?: boolean | "inherit" }`
 
-## FiberRef -> ServiceMap.Reference
+## FiberRef -> Context.Reference
 
-`FiberRef`, `FiberRefs`, `FiberRefsPatch`, `Differ` are removed.
+`FiberRef`, `FiberRefs`, `FiberRefsPatch`, `Differ` are removed. Fiber-local state is now handled by `Context.Reference` — the same mechanism used for services with default values. Built-in fiber-local values are exported from the `References` namespace.
 
 | v3                              | v4                                 |
 |---------------------------------|------------------------------------|
@@ -187,11 +189,13 @@ FromSchema.pipe(
 
 ### optionalWith changes
 
-| v3 options                    | v4                                              |
-|-------------------------------|-------------------------------------------------|
-| `{ exact: true }`            | `Schema.optionalKey(schema)`                    |
-| `{ default }`                | `schema.pipe(Schema.withDecodingDefault(...))`   |
-| `{ exact: true, default }`   | `schema.pipe(Schema.withDecodingDefaultKey(...))` |
+| v3 options                    | v4                                                        |
+|-------------------------------|-----------------------------------------------------------|
+| `{ exact: true }`            | `Schema.optionalKey(schema)`                              |
+| `{ default }`                | `schema.pipe(Schema.withDecodingDefaultType(...))`        |
+| `{ exact: true, default }`   | `schema.pipe(Schema.withDecodingDefaultTypeKey(...))`     |
+
+> The non-`Type` variants (`withDecodingDefault`, `withDecodingDefaultKey`) also exist in v4 but apply the default to the **Encoded** side. v3's `optionalWith({ default })` applied the default on the Type (decoded) side, so the `*Type*` variants are the correct migration target.
 
 ### Equality
 
@@ -199,13 +203,26 @@ FromSchema.pipe(
 
 ## Quick Checklist for v3 -> v4
 
-1. Replace `Context.Tag` / `Effect.Tag` / `Effect.Service` with `ServiceMap.Service`
+1. Replace `Context.Tag` / `Effect.Tag` / `Effect.Service` with `Context.Service`
 2. Replace `Effect.catchAll` with `Effect.catch` (and similar renames)
 3. Replace `Effect.fork` with `Effect.forkChild`, `Effect.forkDaemon` with `Effect.forkDetach`
-4. Replace `FiberRef.*` with `ServiceMap.Reference` / `References.*`
+4. Replace `FiberRef.*` with `Context.Reference` / `References.*`
 5. Replace `yield* ref` with `yield* Ref.get(ref)`, same for Fiber/Deferred
 6. Replace `Data.TaggedError` with `Schema.TaggedErrorClass`
 7. Update Schema API calls (variadic to array, filter renames, transform syntax)
 8. Replace `Effect.either` with `Effect.result`
 9. Update layer naming (`.Default` -> `.layer`)
 10. Use `Effect.fn("name")` for new functions
+
+## v4 beta additions since 2026-03
+
+These landed in later betas and are worth knowing if you are currently on an older beta:
+
+- `Effect.abortSignal` for bridging AbortController-based APIs (beta.57, PR #2085)
+- `@effect/sql-pglite` package wrapping `@electric-sql/pglite` (beta.57, PR #2073)
+- `Effectable` module for lifting existing types into Effect (beta.55-ish)
+- `Socket.make` constructor (beta.57, PR #2078)
+- `RpcGroup.omit` for deriving subsets of RPC groups
+- `AtomRpc.query` requires an explicit serialization option for serializable atoms (PR #2040)
+- **HttpApi schema errors now default to defects** unless transformed (PR #2057, 2026-04-20). See `references/http.md` for how to surface them as typed errors via `HttpApiSchema` transforms.
+- `Schema.withDecodingDefaultType` / `...TypeKey` added alongside the Encoded-side variants (PR #2013, 2026-04-10)

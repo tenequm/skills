@@ -138,6 +138,6 @@ const CounterLive = Layer.effect(Counter,
 
 1. **Effects are lazy**: nothing runs until `run*` is called. Don't mix `await` and `yield*`
 2. **Errors are typed**: convert thrown exceptions to typed errors at boundaries with `Effect.tryPromise`
-3. **Dependencies are explicit**: extract shared state/clients into services with Context.Tag / ServiceMap.Service
+3. **Dependencies are explicit**: extract shared state/clients into services with `Context.Tag` (v3) / `Context.Service` (v4)
 4. **run* at edges only**: libraries return `Effect` values. Only call `runPromise` / `runMain` at the program boundary
 5. **Incremental adoption**: you can wrap individual functions with `Effect.tryPromise` and gradually expand
