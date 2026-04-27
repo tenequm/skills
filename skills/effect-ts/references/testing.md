@@ -67,11 +67,12 @@ import { TestClock, TestContext } from "effect"
 
 it.effect("retries 3 times with backoff", () =>
   Effect.gen(function*() {
-    // Fork the effect under test
+    // Fork the effect under test (v4: Effect.forkChild instead of Effect.fork)
     const fiber = yield* Effect.fork(
-      Effect.retry(failingOp, Schedule.exponential("1 second").pipe(
-        Schedule.compose(Schedule.recurs(3))
-      ))
+      Effect.retry(failingOp, {
+        schedule: Schedule.exponential("1 second"),
+        times: 3
+      })
     )
 
     // Advance time to trigger retries

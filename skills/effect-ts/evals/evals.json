@@ -9,7 +9,7 @@
       "expectations": [
         "Imports from 'effect' package (not invented packages)",
         "Defines at least 2 distinct typed error classes (e.g., NetworkError and AuthError)",
-        "Uses Context.Tag (v3) or ServiceMap.Service (v4) for the service interface",
+        "Uses Context.Tag (v3) or Context.Service (v4) for the service interface",
         "Uses Schedule.exponential for exponential backoff",
         "Limits retries to 3 (Schedule.recurs(3) or equivalent)",
         "Only retries network errors, not auth errors (conditional retry logic)",
@@ -36,13 +36,13 @@
     {
       "id": 3,
       "prompt": "Migrate this v3 Effect code to v4:\n```typescript\nimport { Context, Data, Effect, Layer } from 'effect'\nclass AppError extends Data.TaggedError('AppError')<{ message: string }> {}\nclass Config extends Context.Tag('Config')<Config, { readonly apiKey: string }>() {}\nconst ConfigLive = Layer.succeed(Config, { apiKey: 'secret' })\nconst program = Effect.gen(function*() {\n  const config = yield* Config\n  return yield* Effect.tryPromise({ try: () => fetch(config.apiKey), catch: () => new AppError({ message: 'failed' }) })\n}).pipe(Effect.catchAll((e) => Effect.log(e.message)))\nEffect.runPromise(program.pipe(Effect.provide(ConfigLive)))\n```",
-      "expected_output": "Migrated code using ServiceMap.Service instead of Context.Tag, Schema.TaggedErrorClass instead of Data.TaggedError, Effect.catch instead of Effect.catchAll, and correct v4 import patterns. Should note all changes made.",
+      "expected_output": "Migrated code using Context.Service (the v4 API) instead of Context.Tag (v3), Schema.TaggedErrorClass instead of Data.TaggedError, Effect.catch instead of Effect.catchAll, and correct v4 import patterns. Should note all changes made.",
       "files": [],
       "expectations": [
-        "Replaces Context.Tag with ServiceMap.Service (the v4 API)",
+        "Replaces Context.Tag (v3) with Context.Service (v4)",
         "Replaces Data.TaggedError with Schema.TaggedErrorClass (the v4 API)",
         "Replaces Effect.catchAll with Effect.catch (the v4 rename)",
-        "Imports ServiceMap from 'effect'",
+        "Imports Context from 'effect'",
         "Includes a changelog or migration notes explaining what changed",
         "No v3-only APIs remain in code (Context.Tag, Data.TaggedError, Effect.catchAll)",
         "Code is logically complete and would compile with effect v4"

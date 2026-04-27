@@ -130,10 +130,17 @@ const windowed = Stream.groupedWithin(myStream, 100, "5 seconds")
 ## Error Handling in Streams
 
 ```typescript
+// v3 — Schedule.compose
 const resilient = myStream.pipe(
   Stream.retry(Schedule.exponential("1 second").pipe(
     Schedule.compose(Schedule.recurs(3))
   )),
+  Stream.catchAll((error) => Stream.fromIterable(fallbackData))
+)
+
+// v4 — Schedule.compose is removed. Use Schedule.take(n).
+const resilientV4 = myStream.pipe(
+  Stream.retry(Schedule.exponential("1 second").pipe(Schedule.take(3))),
   Stream.catchAll((error) => Stream.fromIterable(fallbackData))
 )
 ```

@@ -77,8 +77,11 @@ final class Document {
     // Preserve value on deletion
     @Attribute(.preserveValueOnDeletion) var archiveID: UUID
 
-    // Encrypted (on-disk encryption)
-    @Attribute(.encrypt) var sensitiveData: Data?
+    // Per-field encryption at rest in CloudKit (NOT local-store encryption).
+    // Apple DTS confirms: `.allowsCloudEncryption` only has effect on CloudKit-
+    // synced stores. Use platform Data Protection (`FileProtectionType`) for
+    // local at-rest encryption.
+    @Attribute(.allowsCloudEncryption) var sensitiveData: Data?
 
     var content: String
 

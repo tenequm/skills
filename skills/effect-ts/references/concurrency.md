@@ -140,12 +140,23 @@ const items = yield* Queue.takeAll(queue)
 ## Semaphore
 
 ```typescript
+// v3
 import { Effect } from "effect"
 
 const semaphore = yield* Effect.makeSemaphore(3)
 
-// Limit concurrency
+// Limit concurrency (method-style on the returned semaphore)
 const limited = semaphore.withPermits(1)(expensiveOp)
+```
+
+```typescript
+// v4 — Effect.makeSemaphore is removed. Use the Semaphore module.
+import { Semaphore } from "effect"
+
+const semaphore = yield* Semaphore.make(3)
+
+// withPermits is data-first in v4: pass the semaphore as the first arg.
+const limited = Semaphore.withPermits(semaphore, 1)(expensiveOp)
 ```
 
 ## Deferred (one-shot signal)

@@ -84,7 +84,7 @@ const results = yield* Effect.all(
 )
 ```
 
-## Callback APIs -> Effect.async
+## Callback APIs
 
 ```typescript
 // BEFORE
@@ -97,9 +97,20 @@ function readFile(path: string): Promise<string> {
   })
 }
 
-// AFTER
+// AFTER (v3) — Effect.async
 const readFile = (path: string): Effect.Effect<string, FileError> =>
   Effect.async((resume) => {
+    fs.readFile(path, "utf-8", (err, data) => {
+      if (err) resume(Effect.fail(new FileError({ cause: err })))
+      else resume(Effect.succeed(data))
+    })
+  })
+
+// AFTER (v4) — Effect.async is renamed to Effect.callback. The register
+// receives a second positional `signal: AbortSignal` argument for cancellation
+// (ignore it when not needed).
+const readFile = (path: string): Effect.Effect<string, FileError> =>
+  Effect.callback((resume, signal) => {
     fs.readFile(path, "utf-8", (err, data) => {
       if (err) resume(Effect.fail(new FileError({ cause: err })))
       else resume(Effect.succeed(data))
@@ -138,6 +149,6 @@ const CounterLive = Layer.effect(Counter,
 
 1. **Effects are lazy**: nothing runs until `run*` is called. Don't mix `await` and `yield*`
 2. **Errors are typed**: convert thrown exceptions to typed errors at boundaries with `Effect.tryPromise`
-3. **Dependencies are explicit**: extract shared state/clients into services with Context.Tag / ServiceMap.Service
+3. **Dependencies are explicit**: extract shared state/clients into services with `Context.Tag` (v3) / `Context.Service` (v4)
 4. **run* at edges only**: libraries return `Effect` values. Only call `runPromise` / `runMain` at the program boundary
 5. **Incremental adoption**: you can wrap individual functions with `Effect.tryPromise` and gradually expand

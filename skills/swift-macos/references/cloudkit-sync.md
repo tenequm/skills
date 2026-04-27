@@ -101,22 +101,9 @@ final class SyncableProject {
 
 ## Conflict Resolution
 
-CloudKit uses last-writer-wins by default. When conflicts occur:
+CloudKit uses last-writer-wins by default, and SwiftData handles most merge work transparently. There is **no public SwiftData API** that surfaces conflicts as `NSMergeConflict` objects on `ModelContext.didSave` — that's a Core Data pattern that does not apply here. If you need programmatic conflict inspection and resolution policies today, you must drop down to `NSPersistentCloudKitContainer` + Core Data.
 
-```swift
-// SwiftData handles most conflicts automatically
-// For custom logic, observe notification:
-NotificationCenter.default.addObserver(
-    forName: ModelContext.didSave,
-    object: nil,
-    queue: .main
-) { notification in
-    // Check for merge conflicts
-    if let conflicts = notification.userInfo?["conflicts"] as? [NSMergeConflict] {
-        // Handle conflicts
-    }
-}
-```
+For SwiftData + CloudKit apps, design models to minimize conflicts (see Best Practices below) rather than relying on post-hoc conflict handlers.
 
 ### Best practices
 - Use server timestamps for ordering (`createdAt`, `updatedAt`)

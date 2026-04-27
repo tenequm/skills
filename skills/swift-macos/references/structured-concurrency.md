@@ -59,16 +59,40 @@ func loadDashboard() async throws -> Dashboard {
 }
 ```
 
-Child tasks are automatically cancelled if the parent scope exits early:
-```swift
-func loadWithTimeout() async throws -> Data {
-    async let data = fetchLargeDataset()
-    async let _ = Task.sleep(for: .seconds(10)) // timeout
+Child tasks are automatically cancelled if the parent scope exits early. But that cancellation alone does **not** implement a timeout — to enforce one you must *race* the work against a sleep using a task group. `async let _ = Task.sleep(...)` is a common trap: the sleep runs concurrently but nothing awaits or races it, so `try await data` still waits forever if the fetch hangs.
 
-    return try await data
-    // If function exits, pending child tasks are cancelled
+```swift
+struct TimeoutError: Error {}
+
+/// Race `operation` against a sleep; first to finish wins, the loser is cancelled.
+/// Stdlib equivalent `withDeadline` is proposed in SE-0526 (in review April 2026).
+func withTimeout<T: Sendable>(
+    seconds: Double,
+    operation: sending @escaping () async throws -> T
+) async throws -> T {
+    try await withThrowingTaskGroup(of: T.self) { group in
+        group.addTask { try await operation() }
+        group.addTask {
+            try await Task.sleep(for: .seconds(seconds))
+            throw TimeoutError()
+        }
+        let result = try await group.next()!
+        group.cancelAll()                 // cancels the loser
+        return result
+    }
+}
+
+// Usage
+func loadWithTimeout() async throws -> Data {
+    try await withTimeout(seconds: 10) {
+        try await fetchLargeDataset()
+    }
 }
 ```
+
+`withThrowingTaskGroup` + sleep is the canonical pattern pending SE-0526 (`withDeadline`): https://github.com/swiftlang/swift-evolution/blob/main/proposals/0526-deadline.md. Do not reach for `swift-async-algorithms` — the timeout feature was explicitly pulled from that package in favor of the stdlib path.
+
+**Caveat: the helper is cooperative.** Swift's concurrency runtime cannot forcibly stop a task that isn't observing cancellation. `group.cancelAll()` only flips the cancellation flag; if `operation` is a tight synchronous loop, a blocking C bridge, or any path without `try Task.checkCancellation()` / cancellation-aware suspension points, the TaskGroup scope still waits for it and the call hangs past `seconds`. Use this pattern for cancellation-cooperative work (`URLSession`, `Task.sleep`, most modern async APIs). For CPU-bound or C-bridged work, sprinkle `try Task.checkCancellation()` into the work at suspension-friendly granularity, or dispatch the work to a queue/thread that you can kill independently.
 
 ## TaskGroup
 
