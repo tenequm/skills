@@ -34,6 +34,37 @@ Justfile                       # Task runner (just check, just readme, etc.)
 2. Add optional `references/` for detailed docs
 3. Commit with conventional commits (`feat`, `fix`, `chore`, etc.)
 
+## Per-skill upstream tracking (optional)
+
+For skills that wrap a specific tool, package, or library, two conventions track freshness:
+
+### `metadata.upstream` flat string
+
+```yaml
+metadata:
+  version: "0.3.0"
+  upstream: "effect@4.0.0-beta.58, @effect/platform@0.70.0"
+```
+
+- Optional. Skills with no upstream tool (e.g., `polish`, `impactful-writing`) omit it.
+- Comma-separated `<name>@<version>` entries. npm scopes (`@scope/pkg`) work because the leading `@` is part of the name.
+- Concrete release tags or commit SHAs only. Floating tags (`@latest`, `@next`, `@beta`, `@canary`) are rejected.
+- Anthropic's `metadata: dict[str, str]` contract is respected (flat string, not nested object).
+
+### Per-skill `CHANGELOG.md`
+
+Path: `skills/<name>/CHANGELOG.md`. Format: [Keep a Changelog v1.1.0](https://keepachangelog.com/en/1.1.0/).
+
+- Standard sections only (Added / Changed / Deprecated / Removed / Fixed / Security); omit empty ones.
+- Version heading: `## [x.y.z] - YYYY-MM-DD`.
+- `[Unreleased]` header kept between releases.
+- `Verified against:` trailer added only when at least one tracked package version changed in that release.
+- The topmost CHANGELOG entry date is the canonical "last verified" signal - no separate frontmatter date field.
+
+### `/update-skill` command
+
+Use `/update-skill <skill-name>` (at `.claude/skills/update-skill/`) to maintain both fields. It runs research, gates approvals, applies edits, bumps version, updates CHANGELOG, runs `just check`, and commits + pushes on confirmation.
+
 ## Rules
 
 - Use progressive disclosure (SKILL.md + references/)
