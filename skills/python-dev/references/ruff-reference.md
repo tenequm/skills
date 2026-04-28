@@ -2,7 +2,9 @@
 
 Extremely fast Python linter and formatter, written in Rust. Replaces flake8, black, isort, pyupgrade.
 
-**Docs**: https://docs.astral.sh/ruff/ | **GitHub**: https://github.com/astral-sh/ruff
+**Docs**: https://docs.astral.sh/ruff/ | **GitHub**: https://github.com/astral-sh/ruff | **Tracked line**: ruff 0.15.x
+
+> **Heads up**: ruff 0.14 changed the default and latest target Python to 3.14. ruff 0.15 ships the 2026 formatter style guide and adds block-level suppression comments (`# ruff: disable[rule]` / `# ruff: enable[rule]`); a number of rules also stabilised out of preview. Pinning `target-version` in `pyproject.toml` keeps formatter output reproducible across upgrades.
 
 ## Usage
 
@@ -148,7 +150,7 @@ docstring-code-format = true  # Format code in docstrings
 # .pre-commit-config.yaml
 repos:
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.8.4
+    rev: v0.15.12
     hooks:
       - id: ruff
         args: [--fix]

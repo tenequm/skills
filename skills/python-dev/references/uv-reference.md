@@ -1,6 +1,8 @@
-# uv Reference (0.10.x)
+# uv Reference (0.11.x)
 
 Complete guide to uv - the Python package manager, version manager, and project runner.
+
+> **Heads up (0.10 -> 0.11)**: `uv venv` now requires explicit `--clear` to remove an existing environment (was implicit). `--native-tls` is deprecated in favor of `--system-certs`. `uv python upgrade`, `--upgrade-group`, and workspace commands `uv workspace dir` / `uv workspace list` are now stable. Always run a recent uv (>= 0.11.6) to pick up the wheel-uninstall path-traversal fix (GHSA-pjjw-68hj-v9mw).
 
 **Docs**: https://docs.astral.sh/uv/ | **GitHub**: https://github.com/astral-sh/uv
 
@@ -123,6 +125,7 @@ uv lock                           # Create/update uv.lock
 uv lock --check                   # Check if up-to-date (no changes)
 uv lock --upgrade                 # Upgrade all to latest allowed
 uv lock --upgrade-package httpx   # Upgrade specific package
+uv lock --upgrade-group lint      # Upgrade everything in a dependency-group (uv 0.11.4+)
 ```
 
 ### Syncing Environment
@@ -137,6 +140,24 @@ uv sync --all-extras          # Include all extras
 uv sync --locked              # Error if lockfile outdated
 uv sync --frozen              # Don't check lockfile
 uv sync --no-install-project  # Skip installing the project itself
+```
+
+#### What `uv sync` installs
+
+uv ships with `dev` in `default-groups`, so a bare `uv sync` already pulls dev deps. Other named groups only install when requested.
+
+| Command | Installs |
+|---|---|
+| `uv sync` | main deps + `dev` |
+| `uv sync --no-dev` | main deps only |
+| `uv sync --group lint` | main deps + `dev` + `lint` |
+| `uv sync --all-groups` | everything in `[dependency-groups]` |
+
+To change the default set, declare it explicitly:
+
+```toml
+[tool.uv]
+default-groups = ["dev", "test"]   # uv sync now includes both
 ```
 
 ### Exporting
@@ -287,15 +308,50 @@ default = true     # Replaces PyPI
 ```toml
 [dependency-groups]
 dev = [
-    "ruff>=0.7.0",
-    "ty>=0.0.1a32",
-    "pytest>=8.0.0",
+    "ruff>=0.15.0",
+    "ty>=0.0.30",
+    "pytest>=9.0.0",
     {include-group = "lint"},
 ]
 lint = ["ruff"]
 test = ["pytest", "coverage"]
 docs = ["sphinx", "furo"]
 ```
+
+`[dependency-groups]` is PEP 735 and supported by uv (and modern pip 25+). For libraries published to PyPI that need broader tooling support, `[project.optional-dependencies]` (extras) remains the portable choice.
+
+## CLI Entry Points (`[project.scripts]`)
+
+Declare console scripts in `pyproject.toml`:
+
+```toml
+[project.scripts]
+my-project = "my_project:main"
+my-project-admin = "my_project.cli:admin"
+```
+
+Format is `<script-name> = "<module>:<callable>"`. Two requirements:
+
+1. **A build system.** Editable installs (which `uv sync` performs for the current project) need `[build-system]`. Without it, `uv sync` errors with "project requires a build system to install".
+
+   ```toml
+   [build-system]
+   requires = ["hatchling"]
+   build-backend = "hatchling.build"
+
+   [tool.hatch.build.targets.wheel]
+   packages = ["src/my_project"]
+   ```
+
+2. **A matching callable.** `my_project:main` resolves to the `main` attribute of `src/my_project/__init__.py`. `my_project.cli:admin` resolves to `admin` in `src/my_project/cli.py`.
+
+   ```python
+   # src/my_project/__init__.py
+   def main() -> None:
+       print("hello from my-project")
+   ```
+
+After `uv sync`, run with `uv run my-project`. uv installs the project editable, so edits under `src/` take effect on the next invocation - no reinstall.
 
 ## Workspaces (Monorepos)
 
@@ -350,7 +406,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v5
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
       - run: uv sync --all-groups
       - run: uv run ty check
       - run: uv run ruff check

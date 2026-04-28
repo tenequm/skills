@@ -243,3 +243,5 @@ These landed in later betas and are worth knowing if you are currently on an old
 - `AtomRpc.query` requires an explicit serialization option for serializable atoms (PR #2040)
 - **HttpApi schema errors now default to defects** unless transformed (PR #2057, 2026-04-20). See `references/http.md` for how to surface them as typed errors via `HttpApiSchema` transforms.
 - `Schema.withDecodingDefaultType` / `...TypeKey` added alongside the Encoded-side variants (PR #2013, 2026-04-10)
+- `AsyncResult.builder` (`effect/unstable/reactivity`) gained `.onInterrupt(...)` and an `.exhaustive()` finalizer; `.onDefect` / `.onFailure` typing refined so `.exhaustive()` is only callable when every case (success, error, initial, defect, interrupt) is handled (beta.58, PR #2097, 2026-04-28). Use `.exhaustive(): Out` instead of `.render(): Out | null` when you want a non-nullable result.
+- Stream -> `Uint8Array` conversion and HTTP body consumption now use fewer buffer copies - internal perf only, no public API change (beta.58, PR #2098, 2026-04-27).

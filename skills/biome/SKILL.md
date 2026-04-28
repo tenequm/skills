@@ -2,7 +2,8 @@
 name: biome
 description: Lint and format frontend code with Biome 2.4. Covers type-aware linting, GritQL custom rules, domains, import organizer, and migration from ESLint/Prettier. Use when configuring linting rules, formatting code, writing custom lint rules, or setting up CI checks. Triggers on biome, biome config, biome lint, biome format, biome check, biome ci, gritql, migrate from eslint, migrate from prettier, import sorting, code formatting, lint rules, type-aware linting, noFloatingPromises.
 metadata:
-  version: "0.2.0"
+  version: "0.3.0"
+  upstream: "@biomejs/biome@2.4.13"
 ---
 
 # Biome
@@ -15,7 +16,7 @@ Fast, unified linting, formatting, and import organization for JavaScript, TypeS
 
 Biome 2.x only supports `files.includes` (with an `s`). There is NO `files.ignore`, NO `files.include` (without `s`), NO `files.exclude`. Using any of these will throw `Found an unknown key` errors.
 
-The only valid keys under `files` are: `includes`, `maxSize`, `ignoreUnknown`, `experimentalScannerIgnores`.
+The only valid keys under `files` are: `includes`, `maxSize`, `ignoreUnknown`. (`experimentalScannerIgnores` exists but is now marked **deprecated** in upstream docs and may be removed.)
 
 To exclude files (generated code, vendored files, etc.), use negation patterns in `files.includes`:
 
@@ -23,6 +24,16 @@ To exclude files (generated code, vendored files, etc.), use negation patterns i
 {
   "files": {
     "includes": ["**", "!**/routeTree.gen.ts", "!**/generated/**"]
+  }
+}
+```
+
+For paths the scanner must skip even when other tools or assists would otherwise touch them, use the `!!` force-ignore syntax inside `files.includes` (replaces `experimentalScannerIgnores`):
+
+```json
+{
+  "files": {
+    "includes": ["**", "!!**/legacy-vendor/**"]
   }
 }
 ```
@@ -37,12 +48,16 @@ Do NOT use `overrides` with `linter/formatter/assists: { enabled: false }` to sk
 
 Every project needs one `biome.json` at the root. Monorepo packages use nested configs with `"extends": "//"` to inherit from root. Never use relative paths like `"extends": ["../../biome.json"]`.
 
-### Use `--write` to apply fixes, not `--fix`
+### Use `--write` to apply fixes
 
 ```bash
-biome check --write .            # Apply safe fixes
-biome check --write --unsafe .   # Apply all fixes (review changes)
+biome check --write .            # Apply safe fixes only
+biome check --write --unsafe .   # Apply all fixes including unsafe (review changes)
 ```
+
+`--fix` exists as an alias for `--write` on `biome lint` and `biome format`, but `biome check` is the canonical entry point and `--write` is the documented flag. Stick with `--write`.
+
+**Safe vs unsafe fixes.** Removing unused imports, parameters, and variables is classified as **unsafe** (an external caller could still reference the symbol). Plain `--write` will leave them in place and report the diagnostic. Use `--write --unsafe` (and review the diff) or delete them by hand.
 
 ### Pin exact versions and migrate after upgrades
 
@@ -50,6 +65,8 @@ biome check --write --unsafe .   # Apply all fixes (review changes)
 pnpm add --save-dev --save-exact @biomejs/biome@latest
 pnpm biome migrate --write
 ```
+
+The `$schema` URL in `biome.json` is version-pinned (e.g. `"$schema": "https://biomejs.dev/schemas/2.4.13/schema.json"`). After bumping `@biomejs/biome`, the CLI errors with `The configuration schema version does not match the CLI version` until you run `biome migrate --write`. Run it as part of the upgrade, not later.
 
 ## Quick Start
 
@@ -67,12 +84,15 @@ pnpm biome init    # Creates default biome.json with recommended rules
   "editor.defaultFormatter": "biomejs.biome",
   "editor.formatOnSave": true,
   "editor.codeActionsOnSave": {
+    "source.fixAll.biome": "explicit",
     "source.organizeImports.biome": "explicit"
   }
 }
 ```
 
-**Zed** - Biome extension available natively. The `inline_config` feature (v2.4) lets editors override rules without affecting `biome.json`:
+`source.fixAll.biome` applies safe lint fixes on save; `source.organizeImports.biome` runs the assist. Both are needed for parity with the CLI's `biome check --write`.
+
+**Zed** - Biome extension available natively. The inline-config feature (v2.4) lets editors override rules without affecting `biome.json`. Note the spelling: **Zed uses `inline_config` (snake_case); the VS Code extension uses `inlineConfig` (camelCase)**.
 
 ```json
 {
@@ -169,7 +189,7 @@ Rules use severity levels `"error"`, `"warn"`, `"info"`, or `"off"`. Some accept
 
 ### Import organizer
 
-The import organizer (Biome Assist) merges duplicates, sorts by distance, and supports custom grouping:
+The import organizer (Biome Assist) merges duplicates, sorts by distance, and supports custom grouping. As of v2.4.13 it also sorts imports inside TypeScript modules (`module "x" { ... }`) and `.d.ts` declaration files.
 
 ```json
 {
@@ -257,7 +277,20 @@ Override specific rules per package by adding a `linter.rules` section alongside
 
 ### Configuration file discovery (v2.4)
 
-Search order: `biome.json` -> `biome.jsonc` -> `.biome.json` -> `.biome.jsonc` -> platform config home (`~/.config/biome` on Linux, `~/Library/Application Support/biome` on macOS).
+Search order: `biome.json` -> `biome.jsonc` -> `.biome.json` -> `.biome.jsonc` -> platform config home.
+
+Platform config home paths:
+
+| Platform | Path |
+|----------|------|
+| Linux | `$XDG_CONFIG_HOME/biome` (or `~/.config/biome`) |
+| macOS | `~/Library/Application Support/biome` |
+| Windows | `%APPDATA%\biome\config` (i.e. `C:\Users\<user>\AppData\Roaming\biome\config`) |
+
+## Other v2.4 highlights
+
+- **Embedded snippets**: Biome 2.4 formats and lints CSS and GraphQL embedded inside JavaScript (e.g. `styled-components`, Emotion, `gql` template literals). Works automatically; no extra config.
+- **Vue/Svelte parser improvements**: substantially fewer false positives in `noUnusedVariables`, `useConst`, `useImportType`, and `noUnusedImports` inside `.vue` and `.svelte` files.
 
 ## Domains
 
@@ -278,11 +311,16 @@ Domains group lint rules by technology. Enable only what your stack needs:
 
 | Domain | Purpose | Auto-detected |
 |--------|---------|---------------|
-| `react` | React hooks, JSX patterns | `react` dependency |
+| `react` | React hooks, JSX patterns | `react >= 16.0.0` |
+| `reactNative` | React Native rules (`noReactNativeRawText`, `noReactNativeLiteralColors`, `noReactNativeDeepImports`, `useReactNativePlatformComponents`) | `react-native` |
 | `next` | Next.js-specific rules | `next >= 14.0.0` |
 | `solid` | Solid.js rules | `solid-js` dependency |
-| `test` | Testing best practices (any framework) | - |
+| `qwik` | Qwik-specific rules | `@builder.io/qwik` |
+| `vue` | Vue-specific rules | `vue` |
+| `test` | Testing best practices (any framework) | `jest`, `mocha`, `ava`, or `vitest` |
 | `playwright` | Playwright test rules | `@playwright/test` |
+| `drizzle` | Drizzle ORM safety rules | `drizzle-orm` |
+| `turborepo` | Turborepo monorepo rules | `turbo` |
 | `project` | Cross-file analysis (noImportCycles, noUnresolvedImports) | - |
 | `types` | Type inference rules (noFloatingPromises, noMisusedPromises) | - |
 
@@ -297,6 +335,8 @@ Biome 2.0 introduced type-aware linting without the TypeScript compiler. Biome h
 ### How it works
 
 Enable the `types` domain to activate file scanning and type inference. Performance impact is minimal compared to typescript-eslint because inference runs natively.
+
+**v2.4.12 improvements:** type-aware rules now resolve members through the `Pick<T, K>`, `Omit<T, K>`, `Partial<T>`, `Required<T>`, and `Readonly<T>` utility types (preserving `optional`, `readonly`, and nullable flags), so rules see the same shape your code does.
 
 ### Key rules
 
@@ -331,7 +371,25 @@ async function loadData() {
 }
 ```
 
-Detects ~75% of cases compared to typescript-eslint, improving each release.
+Detects ~75% of cases compared to typescript-eslint, improving each release. v2.4.12 added detection through cross-module generic wrapper functions (e.g. a generic `wrap(fn)` re-exported from another file).
+
+### React Compiler interaction with `useExhaustiveDependencies`
+
+If you use the React Compiler, `useExhaustiveDependencies` cannot tell that the compiler is handling memoization for you. Many React Compiler users (including Biome contributors) disable the rule entirely:
+
+```json
+{
+  "linter": {
+    "rules": {
+      "correctness": {
+        "useExhaustiveDependencies": "off"
+      }
+    }
+  }
+}
+```
+
+If you keep the rule on, expect to suppress effects that intentionally depend on a value but don't read it in the body (e.g. `location.pathname` to re-trigger on navigation).
 
 ### Limitations vs typescript-eslint
 
@@ -383,7 +441,7 @@ language css;
 - `message` (required) - diagnostic message
 - `span` (required) - syntax node to highlight
 
-Supported target languages: JavaScript (default), CSS, JSON (v2.4). Profile with `biome lint --profile-rules .`.
+Supported target languages: JavaScript (default) and CSS, plus JSON since v2.4 (the v2.4 release blog adds JSON; the `linter/plugins/` reference page may still mention only JS/CSS - the blog is authoritative). Profile rule and plugin execution with `biome lint --profile-rules .`.
 
 ## Suppression Patterns
 
@@ -474,7 +532,11 @@ biome lint --only=suspicious/noDebugger .    # Single rule
 biome lint --skip=project .                  # Skip domain
 biome lint --only=types .                    # Only type-aware rules
 biome lint --error-on-warnings .             # Warnings become errors
+biome lint --enforce-assist .                # Fail when assist actions remain unapplied
+biome lint --suppress --reason "tracked in #123" .  # Insert biome-ignore suppressions instead of fixes
 ```
+
+`--enforce-assist` is useful in CI: import organization and other assist actions aren't lint diagnostics by default, so plain `biome ci` may pass even when imports are unsorted. Pair `--suppress` with `--reason` to bulk-add `biome-ignore` comments (Biome requires explanation text after the colon).
 
 ### Other commands
 
@@ -512,7 +574,20 @@ These are real mistakes that have caused broken configs, dirty working trees, an
 
 5. **`biome check --write` runs formatter + linter + assists in one pass.** Any of these three can modify files. If a generated file keeps getting dirtied after `check --write`, check which subsystem is touching it - it's often the import organizer (assist), not the formatter or linter.
 
-6. **`--fix` does not exist.** The flag is `--write`. `--fix` will silently do nothing or error.
+6. **Prefer `--write` over `--fix`.** `--fix` is a documented alias for `--write` on `biome lint` and `biome format`, but `biome check` is the canonical entry point and `--write` is the documented flag everywhere. Pick `--write` and be consistent.
+
+7. **`package.json` infinite reformatting loop.** Biome's default JSON formatter uses tabs; `pnpm` (and several other tools) write `package.json` with 2-space indent. Each install rewrites it, then `biome check --write` rewrites it again, dirtying every commit. Fix by either excluding `package.json` (`"!**/package.json"` in `files.includes`) or overriding JSON to use spaces:
+
+   ```json
+   {
+     "overrides": [
+       {
+         "includes": ["**/package.json"],
+         "json": { "formatter": { "indentStyle": "space", "indentWidth": 2 } }
+       }
+     ]
+   }
+   ```
 
 ## Resources
 

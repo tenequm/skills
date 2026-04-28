@@ -2,7 +2,9 @@
 
 Modern Python testing with pytest and key plugins.
 
-**Docs**: https://docs.pytest.org/en/stable/ | **GitHub**: https://github.com/pytest-dev/pytest
+**Docs**: https://docs.pytest.org/en/stable/ | **GitHub**: https://github.com/pytest-dev/pytest | **Tracked line**: pytest 9.x
+
+> **Heads up (8 -> 9)**: pytest 9.0 adds native `[tool.pytest]` TOML configuration (alongside the still-supported `[tool.pytest.ini_options]`), built-in subtests, and stricter mode. It drops Python 3.9 and turns previously-deprecated behaviours into errors. pytest 8.4 already failed (instead of warn-skipping) async tests without an asyncio plugin and made `yield` in tests an error. pytest 9.0.3 fixes CVE-2025-71176 in temp-directory creation - upgrade if you are on 9.0.0/9.0.1/9.0.2.
 
 ## Installation
 
@@ -96,7 +98,7 @@ def event_loop_policy():
     return uvloop.EventLoopPolicy()
 ```
 
-Breaking changes in 1.0: the `event_loop` fixture was removed. Use `asyncio.get_running_loop()` instead.
+Breaking changes in 1.0: the `event_loop` fixture was removed. Use `asyncio.get_running_loop()` inside tests, or override `event_loop_policy` for a custom policy. 1.3 dropped Python 3.9 and added pytest 9 compatibility.
 
 ### pytest-cov
 

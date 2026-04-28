@@ -2,7 +2,9 @@
 
 Astral's Python type checker - extremely fast, written in Rust.
 
-**GitHub**: https://github.com/astral-sh/ty | **Status**: Beta (0.0.x, since December 2025)
+**GitHub**: https://github.com/astral-sh/ty | **Status**: Beta (0.0.x; current line 0.0.33)
+
+> **Heads up**: ty is still pre-1.0 and each minor bump can change inference. Notable: 0.0.30 stopped unioning `Unknown` into most inferred attribute types; 0.0.31 introduced `--fix`; 0.0.33 prefers declared annotation over inferred RHS when assignable, removing many `cast(...)` workarounds. Pin a concrete version in `[dependency-groups]` rather than tracking `@latest`.
 
 ## Installation
 
@@ -167,6 +169,7 @@ ty check [OPTIONS] [PATH]...
 
 # Special
 --watch, -W                 # Watch mode
+--fix                       # Apply auto-fixes for diagnostics that support them (ty 0.0.31+)
 --add-ignore                # Auto-add ty: ignore comments for all diagnostics
 ```
 
