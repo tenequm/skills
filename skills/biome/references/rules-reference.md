@@ -570,6 +570,50 @@ const x: string = "hello";
 if (x) {} // string literal is always truthy
 ```
 
+### noMisleadingReturnType (v2.4.11)
+
+Detects when a function's annotated return type is wider than what the implementation actually returns. As of v2.4.12 also checks class methods, object methods, and getters.
+
+```ts
+// ERROR - declared as Promise<string>, only returns "ok"
+function load(): Promise<string> | "ok" {
+  return "ok";
+}
+```
+
+### useStringStartsEndsWith (v2.4.12)
+
+Type-aware. Prefers `String.prototype.startsWith()` / `endsWith()` over verbose prefix/suffix checks:
+
+```ts
+// ERROR
+if (s.indexOf("foo") === 0) {}
+if (s.slice(-3) === "bar") {}
+
+// VALID
+if (s.startsWith("foo")) {}
+if (s.endsWith("bar")) {}
+```
+
+### useExplicitReturnType (v2.4.11 nursery)
+
+Reports TypeScript functions and methods that omit an explicit return type. As of v2.4.11 it is relaxed for trivially inferrable expressions (binary, comparison, logical, `new`, array literals, ternaries, function calls, parameter defaults).
+
+## Disposable Resources
+
+### useDisposables (v2.4.11)
+
+Detects disposable objects assigned to variables without `using` or `await using`. Helps adopt the explicit resource management proposal.
+
+```ts
+// ERROR - disposable not bound to `using`
+const handle = openHandle();
+
+// VALID
+using handle = openHandle();
+await using stream = openStream();
+```
+
 ## React Domain Rules
 
 Enabled via `"react": "recommended"` in domains.
@@ -615,6 +659,24 @@ test("unconditional", async () => {
   await expect(page).toHaveTitle("Title");
 });
 ```
+
+### noIdenticalTestTitle (v2.4.12 nursery)
+
+Disallows reusing the same title for two `describe` blocks or two test cases at the same nesting level.
+
+```ts
+// ERROR - identical titles
+test("loads user", () => {});
+test("loads user", () => {});
+
+// VALID
+test("loads user from API", () => {});
+test("loads user from cache", () => {});
+```
+
+### useConsistentTestIt (v2.4.11 nursery)
+
+Enforces a consistent choice between `it` and `test` across a test file (option: which one to prefer).
 
 ## Assist Actions
 
