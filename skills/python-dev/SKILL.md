@@ -2,7 +2,8 @@
 name: python-dev
 description: Opinionated Python development setup with uv + ty + ruff + pytest + just. Use when creating new Python projects, setting up pyproject.toml, configuring linting, type checking, testing, or build tooling. Triggers on "python project", "uv init", "pyproject.toml", "ruff config", "ty check", "pytest setup", "justfile", "python linting", "python formatting", "type checking python".
 metadata:
-  version: "0.1.2"
+  version: "0.2.0"
+  upstream: "uv@0.11.8, ty@0.0.33, ruff@0.15.12, ruff-pre-commit@0.15.12, pytest@9.0.3, pytest-asyncio@1.3.0, pre-commit@4.6.0, pre-commit-hooks@6.0.0"
 ---
 
 # Python Development Setup
@@ -21,11 +22,13 @@ Opinionated, production-ready Python development stack. No choices to make - jus
 
 | Tool | Role | Replaces |
 |------|------|----------|
-| [uv](https://docs.astral.sh/uv/) 0.10+ | Package manager, Python versions, runner | pip, poetry, pyenv, virtualenv |
-| [ty](https://docs.astral.sh/ty/) | Type checker (Astral, Rust) | mypy, pyright |
+| [uv](https://docs.astral.sh/uv/) 0.11+ | Package manager, Python versions, runner | pip, poetry, pyenv, virtualenv |
+| [ty](https://docs.astral.sh/ty/) (beta) | Type checker (Astral, Rust) | mypy, pyright |
 | [ruff](https://docs.astral.sh/ruff/) | Linter + formatter | flake8, black, isort, pyupgrade |
 | [pytest](https://docs.pytest.org/) | Testing | unittest |
 | [just](https://just.systems/) | Command runner | make |
+
+> **Note on ty**: ty is in beta (0.0.x). It's fast and improving rapidly, but still missing features and may produce false positives on heavy-typing libraries (Pydantic, Django, SQLAlchemy). For projects that need rock-solid type checking today, swap `ty` for `pyright` and keep the rest of the stack unchanged.
 
 ## Quick Start: New Project
 
@@ -61,15 +64,15 @@ license = {text = "MIT"}
 dependencies = []
 
 [project.scripts]
-my-project = "my_project:main"
+my-project = "my_project:main"   # CLI: `uv run my-project` -> main() in src/my_project/__init__.py
 
 [dependency-groups]
 dev = [
-    "ruff>=0.7.0",
-    "ty>=0.0.1a32",
-    "pytest>=8.0.0",
-    "pytest-asyncio>=1.0.0",
-    "pre-commit>=3.0.0",
+    "ruff>=0.15.0",
+    "ty>=0.0.30",
+    "pytest>=9.0.0",
+    "pytest-asyncio>=1.3.0",
+    "pre-commit>=4.0.0",
 ]
 
 [build-system]
@@ -173,7 +176,7 @@ Create `.pre-commit-config.yaml`:
 ```yaml
 repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks
-    rev: v5.0.0
+    rev: v6.0.0
     hooks:
       - id: check-added-large-files
         args: ['--maxkb=1000']
@@ -188,7 +191,7 @@ repos:
         args: ['--fix=lf']
 
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.8.4
+    rev: v0.15.12
     hooks:
       - id: ruff
         args: [--fix]
@@ -238,8 +241,35 @@ just test -x        # Stop on first failure
 just fix            # Auto-fix lint issues
 uv add httpx        # Add a dependency
 uv add --dev hypothesis  # Add dev dependency
+uv sync             # main deps + dev (dev is in default-groups)
+uv sync --all-groups  # everything in [dependency-groups]
 uv run python -m my_project  # Run the project
 ```
+
+## CI (GitHub Actions)
+
+Mirror `just check` + `just test` in CI. Drop this in `.github/workflows/ci.yml`:
+
+```yaml
+name: CI
+on: [push, pull_request]
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+      - run: uv sync --all-groups
+      - run: uv run ty check
+      - run: uv run ruff check --output-format github
+      - run: uv run ruff format --check
+      - run: uv run pytest
+```
+
+`astral-sh/setup-uv` installs uv, manages the Python install requested by `.python-version`, and caches the resolver. No separate `setup-python` step needed.
 
 ## Existing Project Migration
 
