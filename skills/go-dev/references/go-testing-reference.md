@@ -137,17 +137,19 @@ func TestWithContext(t *testing.T) {
 }
 ```
 
-### t.OutputDir() - Go 1.26
+### t.ArtifactDir() - Go 1.26
 
-Directory for test artifacts that persists after the test:
+Directory for test artifacts that persists after the test. Set the location with `-outputdir`; emit a manifest with `-artifacts`:
 
 ```go
 func TestRender(t *testing.T) {
-    dir := t.OutputDir()
+    dir := t.ArtifactDir()
     path := filepath.Join(dir, "output.html")
     os.WriteFile(path, rendered, 0o644)
 }
 ```
+
+Available as `T.ArtifactDir`, `B.ArtifactDir`, and `F.ArtifactDir`.
 
 ## Testify
 
@@ -568,11 +570,13 @@ func TestPostgres(t *testing.T) {
 
 ## synctest (Go 1.25+)
 
-Deterministic testing of concurrent code:
+Deterministic testing of concurrent code. The stable API in Go 1.25+ is `synctest.Test(t, fn)`; the experimental `synctest.Run(fn)` from Go 1.24 (under `GOEXPERIMENT=synctest`) was renamed and now takes a `*testing.T`:
 
 ```go
+import "testing/synctest"
+
 func TestConcurrent(t *testing.T) {
-    synctest.Run(func() {
+    synctest.Test(t, func(t *testing.T) {
         ch := make(chan int)
         go func() { ch <- 42 }()
 

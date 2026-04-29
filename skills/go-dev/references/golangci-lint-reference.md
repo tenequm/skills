@@ -61,7 +61,7 @@ linters:
     govet:
       enable: [shadow]
     revive:
-      enable-default-rules: true
+      enable-all-rules: true
   exclusions:
     generated: strict      # strict | lax | disable
     warn-unused: true
@@ -175,7 +175,7 @@ Enabled when `default: standard` (the default):
 | nolintlint | Ill-formed nolint directives | Yes |
 | nonamedreturns | Named returns | |
 | predeclared | Shadowing predeclared identifiers | |
-| revive | Fast, configurable meta-linter | Yes |
+| revive | Fast, configurable meta-linter | |
 | sloglint | log/slog code style | Yes |
 | thelper | Missing t.Helper() in test helpers | |
 | unconvert | Unnecessary type conversions | |

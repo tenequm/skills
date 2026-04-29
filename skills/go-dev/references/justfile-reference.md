@@ -18,8 +18,8 @@ cargo install just
 ## Core Syntax
 
 ```just
-set shell := ["bash", "-cu"]   # Strict bash: fail on errors, undefined vars
-set dotenv-load := true         # Load .env file
+set shell := ["bash", "-euo", "pipefail", "-c"]   # Strict bash: errexit, undefined vars, pipefail
+set dotenv-load := true                            # Load .env file
 
 # Recipe with doc comment
 recipe-name:
@@ -113,8 +113,8 @@ test:
 ## Settings
 
 ```just
-set shell := ["bash", "-cu"]     # Shell and flags
-set dotenv-load := true           # Auto-load .env
+set shell := ["bash", "-euo", "pipefail", "-c"]   # Shell and flags
+set dotenv-load := true                            # Auto-load .env
 set export := true                # Export all variables as env vars
 set quiet := true                 # Suppress command echo by default
 set positional-arguments := true  # Pass args as $1, $2, etc.
@@ -180,7 +180,7 @@ deploy env:
 ## Complete Go Project Justfile
 
 ```just
-set shell := ["bash", "-cu"]
+set shell := ["bash", "-euo", "pipefail", "-c"]
 set dotenv-load := true
 
 export PATH := home_directory() + "/go/bin:" + env('PATH')
@@ -379,7 +379,7 @@ just -f path/Justfile  # Use specific Justfile
 
 ## Tips
 
-- Use `set shell := ["bash", "-cu"]` to catch undefined variables and command failures
+- Use `set shell := ["bash", "-euo", "pipefail", "-c"]` to catch command failures, undefined variables, and broken pipelines
 - Group related recipes with `[group('name')]` for organized `--list` output
 - Use `[private]` for helper recipes that shouldn't appear in `--list`
 - `set dotenv-load := true` loads `.env` automatically - no separate tooling needed

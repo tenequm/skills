@@ -1,13 +1,8 @@
 ---
 name: go-dev
-description: >-
-  Opinionated Go development setup with golangci-lint v2 + gofumpt + gotestsum + golang-migrate + just.
-  Use when creating new Go projects, setting up linting/formatting/testing, configuring CI/CD pipelines,
-  writing Justfiles, or migrating from Makefile-only workflows.
-  Trigger: "go project", "go mod init", "golangci-lint", "gofumpt", "gotestsum", "go test setup",
-  "justfile go", "go migration", "go ci pipeline", "go lint setup", "go fmt", "go coverage"
+description: Opinionated Go development setup with golangci-lint v2 + gofumpt + gotestsum + golang-migrate + just. Use when creating new Go projects, setting up linting/formatting/testing, configuring CI/CD pipelines, writing Justfiles, or migrating from Makefile-only workflows. Triggers on "go project", "go mod init", "golangci-lint", "gofumpt", "gotestsum", "go test setup", "justfile go", "go migration", "go ci pipeline", "go lint setup", "go fmt", "go coverage".
 metadata:
-  version: "0.1.0"
+  version: "0.2.0"
 ---
 
 # Go Development Stack
@@ -114,7 +109,7 @@ linters:
       enabled-checks:
         - nestingReduce
     revive:
-      enable-default-rules: true
+      enable-all-rules: true
     errcheck:
       check-type-assertions: true
   exclusions:
@@ -159,7 +154,7 @@ output:
 ## Justfile
 
 ```just
-set shell := ["bash", "-cu"]
+set shell := ["bash", "-euo", "pipefail", "-c"]
 set dotenv-load := true
 
 binary := "myapp"
@@ -178,7 +173,7 @@ fmt:
 # Check formatting without modifying (CI-safe)
 [group('quality')]
 fmt-check:
-    @DIFF=$(gofumpt -l .); if [ -n "$$DIFF" ]; then echo "Needs formatting:"; echo "$$DIFF"; exit 1; fi
+    gofumpt -d . 2>&1 | (! grep -q '^') || (gofumpt -l . && exit 1)
 
 # Run linter
 [group('quality')]
@@ -296,7 +291,7 @@ lefthook install
 ```yaml
 # lefthook.yml
 pre-commit:
-  parallel: true
+  piped: true   # run sequentially: fmt -> lint -> mod-tidy (each may modify staged files)
   commands:
     fmt:
       glob: "*.go"
