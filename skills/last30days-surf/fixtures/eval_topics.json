@@ -1,0 +1,42 @@
+[
+  {
+    "topic": "OpenClaw vs NanoClaw vs ZeroClaw",
+    "query_type": "comparison",
+    "rationale": "Multi-entity extraction, 3-way split across AI agent frameworks."
+  },
+  {
+    "topic": "how to set up a GLP-1 supplement routine",
+    "query_type": "how_to",
+    "rationale": "Trending health topic. Tests non-tech how_to."
+  },
+  {
+    "topic": "2026 March Madness",
+    "query_type": "breaking_news",
+    "rationale": "Live sporting event. Tests broad breaking news recall."
+  },
+  {
+    "topic": "best budget noise cancelling headphones 2026",
+    "query_type": "product",
+    "rationale": "Evergreen consumer query. Tests product review aggregation."
+  },
+  {
+    "topic": "thoughts on OpenAI Codex pricing",
+    "query_type": "opinion",
+    "rationale": "Active developer debate. Tests opinion mining."
+  },
+  {
+    "topic": "odds of US recession 2026",
+    "query_type": "prediction",
+    "rationale": "Major macro topic. Tests prediction market + news synthesis."
+  },
+  {
+    "topic": "what is retrieval augmented generation",
+    "query_type": "concept",
+    "rationale": "Widely discussed AI concept. Tests explanation quality."
+  },
+  {
+    "topic": "Google Wiz acquisition price and timeline",
+    "query_type": "factual",
+    "rationale": "Completed event ($32B). Tests factual precision."
+  }
+]
