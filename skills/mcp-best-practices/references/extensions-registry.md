@@ -29,11 +29,11 @@ Format: `{vendor-prefix}/{extension-name}`
 
 ### Official Extensions
 
-| Extension | Identifier | Repo |
-|-----------|-----------|------|
-| MCP Apps | `io.modelcontextprotocol/ui` | [ext-apps](https://github.com/modelcontextprotocol/ext-apps) |
-| OAuth Client Credentials | `io.modelcontextprotocol/oauth-client-credentials` | [ext-auth](https://github.com/modelcontextprotocol/ext-auth) |
-| Enterprise-Managed Auth | `io.modelcontextprotocol/enterprise-managed-authorization` | [ext-auth](https://github.com/modelcontextprotocol/ext-auth) |
+| Extension | Identifier | Status | Repo |
+|-----------|-----------|--------|------|
+| MCP Apps | `io.modelcontextprotocol/ui` | Stable (SEP-1865, 2026-01-26) | [ext-apps](https://github.com/modelcontextprotocol/ext-apps) |
+| OAuth Client Credentials | `io.modelcontextprotocol/oauth-client-credentials` | Draft | [ext-auth](https://github.com/modelcontextprotocol/ext-auth) |
+| Enterprise-Managed Auth | `io.modelcontextprotocol/enterprise-managed-authorization` | Draft | [ext-auth](https://github.com/modelcontextprotocol/ext-auth) |
 
 ### Negotiation
 
@@ -145,7 +145,7 @@ Both use standard extension negotiation. Specified in [ext-auth/specification/dr
 
 ## MCP Registry
 
-The official centralized metadata repository for publicly accessible MCP servers. Currently in **preview** (breaking changes possible). Backed by Anthropic, GitHub, PulseMCP, and Microsoft.
+The official centralized metadata repository for publicly accessible MCP servers. Currently in **preview**, but the API entered a **v0.1 freeze on 2025-10-24** with a stability commitment for integrators (no breaking changes during the freeze window). Backed by Anthropic, GitHub, PulseMCP, and Microsoft.
 
 ### What It Provides
 

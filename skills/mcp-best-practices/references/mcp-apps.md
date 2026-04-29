@@ -1,6 +1,6 @@
 # MCP Apps
 
-Interactive HTML interfaces rendered inside MCP hosts. GA since January 2026 as the first official MCP extension (`io.modelcontextprotocol/ui`).
+Interactive HTML interfaces rendered inside MCP hosts. The MCP Apps spec (SEP-1865) reached **Stable** status on 2026-01-26 as the first official MCP extension (`io.modelcontextprotocol/ui`).
 
 ## Table of Contents
 - [Architecture](#architecture)
@@ -71,7 +71,8 @@ registerAppTool(server, "my-tool", {
 });
 
 // Register resource serving bundled HTML
-registerAppResource(server, resourceUri, resourceUri, {
+// Signature: registerAppResource(server, name, uri, config, readCallback)
+registerAppResource(server, "my-app-ui", resourceUri, {
   mimeType: RESOURCE_MIME_TYPE,
 }, async () => {
   const html = await fs.readFile(
@@ -83,7 +84,7 @@ registerAppResource(server, resourceUri, resourceUri, {
 
 **Key points**:
 - `registerAppTool` sets `_meta.ui.resourceUri` on the tool definition
-- `registerAppResource` serves the HTML when the host requests the UI resource
+- `registerAppResource(server, name, uri, config, readCallback)` - the `name` is a human-readable label, distinct from the `ui://` URI
 - `RESOURCE_MIME_TYPE` = `text/html;profile=mcp-app`
 - The `ui://` path structure is arbitrary - organize however makes sense
 
@@ -152,16 +153,24 @@ document.getElementById("refresh")!.addEventListener("click", async () => {
 });
 ```
 
-### App Class API
+### App Class API (ext-apps v1.7+)
+
+Verified against [`src/app.ts`](https://github.com/modelcontextprotocol/ext-apps/blob/main/src/app.ts).
 
 | Method | Purpose |
 |--------|---------|
 | `app.connect()` | Establish postMessage communication with host (call once on init) |
 | `app.ontoolresult` | Callback when host pushes a tool result to the app |
-| `app.callServerTool({ name, arguments })` | Call any tool on the MCP server (round-trip, handle latency) |
-| `app.log(level, message)` | Send log messages to host |
-| `app.openUrl(url)` | Request host to open a URL |
-| `app.updateContext(data)` | Update model context with structured data from the app |
+| `app.callServerTool({ name, arguments })` | Call any tool on the MCP server |
+| `app.readServerResource({ uri })` / `listServerResources()` | Resource access from the view |
+| `app.sendLog(params)` | Emit a `LoggingMessageNotification` to the host |
+| `app.openLink(params)` | Request the host to open a URL |
+| `app.updateModelContext(...)` | Update model context with structured data from the view |
+| `app.createSamplingMessage(...)` | Sampling support via stock SDK types (added v1.7.0) |
+| `app.registerTool(...)` / `app.sendToolListChanged()` | Views can expose tools for the host to call (WebMCP-style, added v1.7.0) |
+| `app.requestDisplayMode(...)` / `requestTeardown(...)` / `sendSizeChanged(...)` / `downloadFile(...)` | Host-coordination helpers |
+
+`AppOptions.allowUnsafeEval` (default `false`, added v1.7.0) sets `z.config({ jitless: true })` so views run under strict CSP without `unsafe-eval`.
 
 The `App` class is a convenience wrapper, not a requirement. You can implement the [postMessage protocol](https://github.com/modelcontextprotocol/ext-apps/blob/main/specification/2026-01-26/apps.mdx) directly.
 

@@ -145,6 +145,22 @@ Two vectors:
 - SHOULD bind session IDs to user identity (key format: `<user_id>:<session_id>`)
 - Rotate/expire session IDs regularly
 
+### SDK CVEs (2026)
+
+| CVE | Severity | Fixed in | Notes |
+|-----|----------|----------|-------|
+| [CVE-2026-25536](https://nvd.nist.gov/vuln/detail/cve-2026-25536) (GHSA-345p-7cg4-v4c7) | CVSS 7.1 | `@modelcontextprotocol/sdk` v1.26.0 | Cross-client response data leak when a single `McpServer`/`Server` and transport instance is reused across client connections (v1.10.0-v1.25.3 affected). **Production SDKs MUST be ≥ v1.26.0**. The canonical mitigation is per-request server+transport (the Stateless Pattern in SKILL.md). |
+| [CVE-2026-0621](https://github.com/modelcontextprotocol/typescript-sdk/pull/1365) | Medium | v1.25.2 / v2.0.0-alpha.1 | ReDoS in UriTemplate regex patterns. |
+
+### Stdio Config Command Injection
+
+OX Security disclosed (2026-04-15) a systemic command-injection design issue in MCP SDK stdio transports across all language SDKs: user-controlled input flows into `StdioServerParameters` (or its equivalents) without sanitization, enabling shell injection at server-spawn time. Anthropic classifies the behavior as "by design" - the SDK does not sanitize, by spec. Defensive responsibility lies with **clients and orchestrators**:
+
+- Treat any string fed to `command`, `args`, or `env` as adversarial input.
+- Refuse user-edited stdio configs without a confirmation dialog showing the exact command and args (untruncated).
+- Prefer first-party / vetted MCP servers; warn explicitly that "running an MCP server" is equivalent to running an arbitrary process with the user's privileges.
+- Sandbox stdio servers (containers, OS-level isolation) where feasible.
+
 ### Local MCP Server Compromise
 
 **Attack**: Malicious startup commands in client configuration, malicious server binaries, DNS rebinding to access localhost servers.
@@ -214,6 +230,30 @@ MCP servers MUST implement RFC 9728 to advertise their authorization servers:
 ```
 
 Discovery via `WWW-Authenticate` header (preferred) or `.well-known/oauth-protected-resource` fallback.
+
+### Path-Aware `WWW-Authenticate.resource_metadata` (frequent gotcha)
+
+If your MCP server lives at a path (e.g. `https://example.com/mcp-v2`), the `resource_metadata` URL advertised in the 401 `WWW-Authenticate` header **must** point to a path-specific metadata document whose `resource` field exactly matches the URL the client connected to. Hardcoding `/.well-known/oauth-protected-resource` (the root) returns metadata claiming `"resource": "https://example.com"`, which the MCP SDK compares against `https://example.com/mcp-v2`, sees mismatch, and falls into a discovery loop.
+
+```typescript
+// BROKEN: root-only metadata, mismatched resource
+res.set("WWW-Authenticate",
+  `Bearer realm="mcp", resource_metadata="https://example.com/.well-known/oauth-protected-resource"`);
+
+// FIX: path-aware metadata that matches the connect URL
+res.set("WWW-Authenticate",
+  `Bearer realm="mcp", resource_metadata="https://example.com/.well-known/oauth-protected-resource/mcp-v2"`);
+// served document MUST have: { "resource": "https://example.com/mcp-v2", ... }
+```
+
+The companion RFC 8414 path-insertion convention applies to the authorization-server metadata too: clients probe `/.well-known/oauth-authorization-server/<path>` before falling back to root, so register a wildcard route or 404 won't cascade back to the root document.
+
+### Token Audience Pitfalls
+
+Two failure modes seen in the wild when wiring up OAuth providers (Better-Auth, Auth0, Keycloak, etc.) for MCP:
+
+1. **Collapsed audience**: serving REST + MCP from the same audience defeats RFC 8707's resource-bound model. Use distinct `resource` URIs per protected surface.
+2. **Opaque vs JWT compatibility**: some providers (Better-Auth, in particular) issue **opaque** access tokens when the `resource` parameter is absent from the token request. Many MCP middlewares assume JWTs and fail validation (e.g. `verifyAccessToken(jwksUrl)` throws → 401). Either require the `resource` parameter at the AS, or accept the introspection path.
 
 ## Scope Management
 

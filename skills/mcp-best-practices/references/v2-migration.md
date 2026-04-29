@@ -1,6 +1,6 @@
 # V2 Migration Guide
 
-Comprehensive guide for migrating from `@modelcontextprotocol/sdk` v1 to v2. v2 is currently pre-alpha on the `main` branch. v1.x remains recommended for production. Stable v2 expected Q1 2026.
+Comprehensive guide for migrating from `@modelcontextprotocol/sdk` v1 to v2. v2 is **alpha-published on npm** (`2.0.0-alpha.2` as of April 2026). Expect breaking changes between alphas; v1.x remains recommended for production. Stable v2 currently targeted for Q3 2026.
 
 ## Table of Contents
 - [Package Split](#package-split)
@@ -25,6 +25,7 @@ v1 ships as a single package. v2 splits into focused packages:
 | - | `@modelcontextprotocol/node` | Node.js HTTP transport middleware |
 | - | `@modelcontextprotocol/express` | Express middleware + DNS rebinding protection |
 | - | `@modelcontextprotocol/hono` | Hono middleware |
+| - | `@modelcontextprotocol/fastify` | Fastify middleware (added 2.0.0-alpha.1, [PR #1536](https://github.com/modelcontextprotocol/typescript-sdk/pull/1536)) |
 
 ## Import Changes
 
@@ -60,7 +61,7 @@ import { Client } from "@modelcontextprotocol/client";
 |-------------|----|----|
 | Module system | CJS + ESM | **ESM only** |
 | Node.js | 16+ | **20+** |
-| Zod | v3 | **v4** (or any Standard Schema library) |
+| Schema library | Zod v3 or v4 (since v1.23) | Any [Standard Schema](https://standardschema.dev) library (Zod v4, Valibot, ArkType) - `zod` is no longer a peer dependency ([PR #1824](https://github.com/modelcontextprotocol/typescript-sdk/pull/1824)). For raw JSON Schema, use the `fromJsonSchema` adapter. |
 
 ### ESM Migration
 
@@ -241,6 +242,19 @@ throw new SdkError(SdkErrorCode.NOT_CONNECTED, "Not connected to transport");
 throw new SdkError(SdkErrorCode.REQUEST_TIMEOUT, "Request timed out");
 ```
 
+### Unknown / Disabled Tool Error Semantics Changed
+
+In v2 alpha.1, unknown or disabled tool calls return JSON-RPC `-32602` (`InvalidParams`) instead of `CallToolResult` with `isError: true`. Resource-not-found uses the new `-32002` (`ResourceNotFound`) code. This is a breaking change for clients that read `isError` to detect missing tools - they must now handle JSON-RPC error responses.
+
+### V1 Method Signatures Removed
+
+The deprecated `.tool()`, `.prompt()`, `.resource()` method signatures are fully removed in v2 alpha.1 ([PR #1419](https://github.com/modelcontextprotocol/typescript-sdk/pull/1419)) - they error at compile time. Use `registerTool()`, `registerPrompt()`, `registerResource()` exclusively.
+
+### V2 Client OAuth Helpers
+
+- **`discoverOAuthServerInfo(serverUrl)`** ([PR #1527](https://github.com/modelcontextprotocol/typescript-sdk/pull/1527)) - performs RFC 9728 protected-resource-metadata discovery followed by RFC 8414 authorization-server-metadata discovery in a single call, returning a unified `OAuthDiscoveryState` cache.
+- **`AuthProvider` interface** ([PR #1710](https://github.com/modelcontextprotocol/typescript-sdk/pull/1710)) - one-line bearer-token providers: `{ token(): Promise<string | undefined>; onUnauthorized?(ctx): Promise<void> }`. Transports call `token()` before each request and `onUnauthorized()` on 401.
+
 ## Transport Changes
 
 ### SSE Server Transport Removed
@@ -253,6 +267,10 @@ import { SSEServerTransport } from "@modelcontextprotocol/sdk/server/sse.js";
 
 // v2 - REMOVED. Use WebStandardStreamableHTTPServerTransport instead
 ```
+
+### WebSocket Client Transport Removed
+
+`WebSocketClientTransport` was non-spec and is removed in v2 alpha.1 ([PR #1783](https://github.com/modelcontextprotocol/typescript-sdk/pull/1783)). Use stdio or Streamable HTTP.
 
 ### DNS Rebinding Protection
 

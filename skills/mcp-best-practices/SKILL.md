@@ -1,8 +1,9 @@
 ---
 name: mcp-best-practices
-description: Build production MCP servers with the TypeScript SDK. Covers spec 2025-11-25, SDK v1.28+/v2, transport selection, tool design, error handling, security, performance, known bugs with workarounds, MCP extensions, MCP Apps (interactive UIs), authorization extensions, and the MCP Registry. Use this skill whenever building MCP servers, designing MCP tools, choosing MCP transports, handling MCP errors, migrating to MCP v2, reviewing MCP security, optimizing MCP token usage, building MCP Apps, using MCP extensions, publishing to the MCP Registry, or working with registerTool, McpServer, streamable HTTP, outputSchema, structuredContent, tool annotations, ext-apps, or ext-auth.
+description: Build production MCP servers with the TypeScript SDK. Covers spec 2025-11-25, SDK v1.29+/v2 alpha, transport selection, tool design, error handling, security, performance, known bugs with workarounds, MCP extensions, MCP Apps (interactive UIs), authorization extensions, and the MCP Registry. Use this skill whenever building MCP servers, designing MCP tools, choosing MCP transports, handling MCP errors, migrating to MCP v2, reviewing MCP security, optimizing MCP token usage, building MCP Apps, using MCP extensions, publishing to the MCP Registry, or working with registerTool, McpServer, streamable HTTP, outputSchema, structuredContent, tool annotations, ext-apps, or ext-auth.
 metadata:
-  version: "0.2.1"
+  version: "0.3.0"
+  upstream: "@modelcontextprotocol/sdk@1.29.0, @modelcontextprotocol/server@2.0.0-alpha.2, @modelcontextprotocol/ext-apps@1.7.1"
 ---
 
 # MCP Best Practices
@@ -14,12 +15,12 @@ Decision reference for building production MCP servers with the TypeScript SDK. 
 | Component | Current | Next |
 |-----------|---------|------|
 | Spec | **2025-11-25** ([spec.modelcontextprotocol.io](https://spec.modelcontextprotocol.io)) | - |
-| TS SDK (stable) | **v1.28.0** (`@modelcontextprotocol/sdk`) | v2 pre-alpha on `main` |
-| TS SDK (v2) | Pre-alpha (`@modelcontextprotocol/server`, `/client`, `/core`) | Q1 2026 stable |
+| TS SDK (stable) | **v1.29.0** (`@modelcontextprotocol/sdk`) | v2 alpha published |
+| TS SDK (v2) | **Alpha** (`2.0.0-alpha.2` on npm, Apr 2026): `/server`, `/client`, `/core`, `/hono`, `/express`, `/node`, `/fastify` | Q3 2026 stable target |
 | JSON Schema | **2020-12** default (explicit `$schema` supported) | - |
-| Transport | **Streamable HTTP** (remote), **stdio** (local) | SSE removed in v2 |
-| Extensions | **MCP Apps** (GA), **Auth Extensions** (official) | Domain-specific WGs |
-| Registry | **Preview** ([registry](https://modelcontextprotocol.io/registry/about)) | GA pending |
+| Transport | **Streamable HTTP** (remote), **stdio** (local) | SSE + WebSocket removed in v2 |
+| Extensions | **MCP Apps** (Stable, SEP-1865), **Auth Extensions** (official) | Domain-specific WGs |
+| Registry | **Preview** with v0.1 API freeze since 2025-10-24 ([registry](https://modelcontextprotocol.io/registry/about)) | GA pending |
 
 **v1 imports** (production today):
 ```typescript
@@ -149,9 +150,10 @@ Service-prefix your tools (`github_*`, `jira_*`) when multiple servers are activ
 > For complete Zod-to-JSON-Schema conversion rules, what breaks silently, outputSchema/structuredContent patterns: see `references/tool-schema-guide.md`
 
 **Critical bugs**:
-- `z.union()` / `z.discriminatedUnion()` silently produce empty schemas ([#1643](https://github.com/modelcontextprotocol/typescript-sdk/issues/1643)). Use flat `z.object()` with `z.enum()` discriminator field instead.
+- `z.union()` / `z.discriminatedUnion()` silently produce empty schemas on v1.x ([#1643](https://github.com/modelcontextprotocol/typescript-sdk/issues/1643), fixed on `main` 2026-03-30). Use flat `z.object()` with `z.enum()` discriminator field instead until v1 ships the fix.
 - Plain JSON Schema objects silently dropped before v1.28.0. Fixed in v1.28 - now throws at registration ([#1596](https://github.com/modelcontextprotocol/typescript-sdk/issues/1596)).
 - `z.transform()` stripped during conversion - JSON Schema can't represent transforms ([#702](https://github.com/modelcontextprotocol/typescript-sdk/issues/702)).
+- **Client-side AJV strict-mode rejection**: Zod v4 `z.object()` produces JSON Schema with `additionalProperties: false`. The SDK's client validates `structuredContent` against `outputSchema` with AJV strict mode and rejects extra fields. Server-side `.parse()` strips extras silently, but the original `structuredContent` is sent to the client unchanged - so the server thinks it's fine and the client errors. Fix: explicitly `.parse()` upstream data before assigning to `structuredContent`, or use `.passthrough()` on schemas that intentionally pass through extra fields.
 
 ### Annotations
 
@@ -204,7 +206,7 @@ return {
 throw new McpError(ErrorCode.InvalidParams, "Invalid date");
 ```
 
-**Known bug**: The SDK loses `error.data` when converting `McpError` to tool results ([PR #1075](https://github.com/modelcontextprotocol/typescript-sdk/pull/1075)). If you embed structured data in McpError's data field, it may not reach the client. Use `isError: true` tool results with structured content instead.
+**Known SDK behavior**: When the SDK converts an `McpError` thrown from a tool handler into a `CallToolResult`, the `error.data` field is dropped. If you embed structured data in McpError's `data` field, it may not reach the client. The x402/MPP MCP ecosystem standardized on `isError: true` tool results with `structuredContent` for this reason. (One exception: code `-32042` "Payment Required" survives McpServer end-to-end with `error.data` intact - see `references/error-handling.md`.)
 
 > For full error taxonomy, code examples, and payment error patterns: see `references/error-handling.md`
 
@@ -280,19 +282,22 @@ inputSchema: { type: "object" as const, additionalProperties: false }
 
 ## Security
 
-### Top Threats (real-world incidents, 2025)
+### Top Threats (real-world incidents, 2025-2026)
 
 | Attack | Example | Mitigation |
 |--------|---------|------------|
 | **Tool poisoning** | Hidden instructions in descriptions (WhatsApp MCP, Apr 2025) | Review tool descriptions; clients should display them |
 | **Supply chain** | Malicious npm packages (Smithery breach, Oct 2025) | Pin versions, audit dependencies |
 | **Command injection** | `child_process.exec` with unsanitized input (CVE-2025-53967) | Never interpolate user input into shell commands |
+| **Stdio config injection** | User-controlled input reaches `StdioServerParameters` without sanitization (OX Security disclosure, 2026-04-15) | Sanitize stdio config inputs in client code; prefer first-party servers; treat by Anthropic as "by design" - not patched in SDK |
 | **Cross-server shadowing** | Malicious server overrides legitimate tool names | Service-prefix tool names; validate tool sources |
 | **Token theft** | Over-privileged PATs with broad scopes | Minimal scopes; OAuth 2.1 Resource Indicators (RFC 8707) |
 | **Token passthrough** | Server accepts/forwards tokens not issued for it | Validate audience claim; never transit client tokens to upstream APIs |
 | **SSRF** | Malicious OAuth metadata URLs targeting internal services | HTTPS enforcement, block private IPs, validate redirect targets |
 | **Confused deputy** | Proxy server consent cookies exploited via DCR | Per-client consent before forwarding to third-party auth |
 | **Session hijacking** | Stolen/guessed session IDs for impersonation | Cryptographically random IDs, bind to user identity, never use for auth |
+| **Cross-client response leak** | Shared `McpServer`/transport reused across clients ([CVE-2026-25536](https://nvd.nist.gov/vuln/detail/cve-2026-25536), affects v1.10.0-1.25.3) | **Require SDK ≥ v1.26.0**; per-request server+transport |
+| **UriTemplate ReDoS** | Malicious URI patterns ([CVE-2026-0621](https://github.com/modelcontextprotocol/typescript-sdk/pull/1365)) | Upgrade to v1.25.2+ / v2.0.0-alpha.1+ |
 
 ### Server-Side Requirements (spec normative)
 
@@ -323,12 +328,14 @@ MCP servers are OAuth 2.1 Resource Servers. Clients MUST include Resource Indica
 
 | Issue | Severity | Status | Workaround |
 |-------|----------|--------|------------|
-| [#1643](https://github.com/modelcontextprotocol/typescript-sdk/issues/1643) - `z.union()`/`z.discriminatedUnion()` silently dropped | High | Open | Use flat `z.object()` + `z.enum()` |
-| [#1699](https://github.com/modelcontextprotocol/typescript-sdk/issues/1699) - Transport closure stack overflow (15-25+ concurrent) | High | Open | `uncaughtException` handler + process restart |
-| [#1619](https://github.com/modelcontextprotocol/typescript-sdk/issues/1619) - HTTP/2 + SSE Content-Length error | Medium | Open | Use `enableJsonResponse: true` or avoid HTTP/2 upstream |
+| [#1643](https://github.com/modelcontextprotocol/typescript-sdk/issues/1643) - `z.union()`/`z.discriminatedUnion()` silently dropped | High | Fixed on `main` (closed 2026-03-30); pending v1 release | Use flat `z.object()` + `z.enum()` until v1 ships the fix |
+| [#1699](https://github.com/modelcontextprotocol/typescript-sdk/issues/1699) - Transport closure stack overflow (15-25+ concurrent) | High | Fixed in PR #1788 (closed 2026-04-02) | Upgrade to ≥ v1.29.0 / v2 alpha |
+| [#1619](https://github.com/modelcontextprotocol/typescript-sdk/issues/1619) - HTTP/2 + SSE Content-Length error | Medium | Closed (reclassified to upstream `@hono/node-server#266`) | Use `enableJsonResponse: true` or avoid HTTP/2 upstream |
 | [#893](https://github.com/modelcontextprotocol/typescript-sdk/issues/893) - Dynamic registration after connect blocked | Medium | Open | Register all tools/resources before `connect()` |
 | [#1596](https://github.com/modelcontextprotocol/typescript-sdk/issues/1596) - Plain JSON Schema silently dropped | Fixed | v1.28.0 | Upgrade to v1.28+ |
-| GHSA-345p-7cg4-v4c7 - Shared instances leak cross-client data | Critical | v1.26.0 | Per-request server+transport (the canonical pattern) |
+| Client AJV strict rejects unstripped `structuredContent` extras | High | Behavior, not bug | Server `.parse()` upstream data before returning, or use `.passthrough()` |
+| GHSA-345p-7cg4-v4c7 / [CVE-2026-25536](https://nvd.nist.gov/vuln/detail/cve-2026-25536) - Shared instances leak cross-client data | Critical | Fixed v1.26.0 | **Require ≥ v1.26.0** (or v2.0.0-alpha.1+); per-request server+transport |
+| [CVE-2026-0621](https://github.com/modelcontextprotocol/typescript-sdk/pull/1365) - UriTemplate ReDoS | Medium | Fixed v1.25.2 / v2.0.0-alpha.1 | Upgrade |
 
 ## V2 Migration
 

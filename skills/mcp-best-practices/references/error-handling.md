@@ -118,9 +118,9 @@ import { McpError, ErrorCode } from "@modelcontextprotocol/sdk/types.js";
 throw new McpError(ErrorCode.InternalError, "Database connection lost");
 ```
 
-## The error.data Loss Bug
+## The error.data Loss Behavior
 
-**Critical**: The SDK loses `error.data` when converting `McpError` to tool results ([PR #1075](https://github.com/modelcontextprotocol/typescript-sdk/pull/1075)). If you embed structured data in McpError's data field (e.g., payment challenges, retry metadata), it may not reach the client.
+**Critical**: The SDK strips `error.data` when converting an `McpError` thrown from a tool handler into a `CallToolResult`. If you embed structured data in McpError's `data` field (e.g., payment challenges, retry metadata), it does not reach the client. This is observed across the x402/MPP MCP ecosystem - see Client Compatibility table below. (Code `-32042` is a documented exception, see [`-32042` Payment Required](#payment-required---32042-ietf-pattern) below.)
 
 ```typescript
 // BROKEN: error.data is lost in transit
@@ -179,9 +179,13 @@ return toolError("Invalid date format. Use ISO (YYYY-MM-DD).");
 
 For MCP servers gated by payment protocols (x402, MPP), errors need to carry payment metadata that clients can act on programmatically.
 
+### Payment Required `-32042` (IETF pattern)
+
+`-32042` is the JSON-RPC error code reserved for "Payment Required" in the IETF draft [`draft-payment-transport-mcp-00`](https://datatracker.ietf.org/doc/draft-payment-transport-mcp/). Unlike most McpError codes, the McpServer wire path preserves `-32042`'s `error.data` end-to-end, so it can carry payment challenges. Some payment libraries (e.g. `mppx`) deliberately use `-32042` for this reason. If you need standards alignment with the IETF draft and your client supports it, prefer `-32042`. The broader ecosystem still relies on the `isError: true` pattern below for cross-client compatibility today.
+
 ### x402 Payment Required (isError pattern)
 
-The entire x402 MCP ecosystem uses `isError: true` tool results (not McpError) because of the error.data loss bug. Breaking this format breaks all existing x402 MCP clients.
+The bulk of the x402 MCP ecosystem uses `isError: true` tool results (not McpError) because of the `error.data` loss behavior described above. Breaking this format breaks existing x402 MCP clients.
 
 ```typescript
 // Payment challenge - returned when no credential present

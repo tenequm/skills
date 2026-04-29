@@ -154,11 +154,11 @@ z.object({ query: z.string() }).strict()
 z.object({ query: z.string() })
 ```
 
-### Zod v4 Incompatibility with SDK v1 ([#925](https://github.com/modelcontextprotocol/typescript-sdk/issues/925))
+### Zod v4 Compatibility ([#925](https://github.com/modelcontextprotocol/typescript-sdk/issues/925) - resolved)
 
-MCP SDK v1 uses Zod v3 internals. Zod v4 breaks with `w._parse is not a function`. SDK v2 requires Zod v4 (or any Standard Schema library).
+Earlier v1 releases (≤ v1.22.x) required Zod v3 internally and broke with Zod v4 (`w._parse is not a function`). Backwards-compatible Zod v4 support shipped in **v1.23.0-beta.0** and is now in stable v1; issue #925 closed 2025-11-21.
 
-**Rule**: SDK v1 = Zod v3. SDK v2 = Zod v4.
+**Rule today**: SDK v1.23+ accepts Zod v3 or v4. SDK v2 alpha works with any [Standard Schema](https://standardschema.dev) library (Zod v4, Valibot, ArkType) and ships a `fromJsonSchema` adapter for raw JSON Schema (e.g. TypeBox).
 
 ## outputSchema and structuredContent
 
@@ -207,6 +207,35 @@ server.registerTool("get_weather", {
 - Clients know output shape ahead of time - better context window management
 - Programmatic clients process structured data without LLM parsing
 - Enables client-side field projection (only show relevant fields to LLM)
+
+### AJV Strict-Mode Rejects Unstripped Extras (high-impact gotcha)
+
+**Symptom**: Tool returns `structuredContent` built from upstream API data; the server logs nothing wrong; the SDK client throws "data must NOT have additional properties" or "has an output schema but did not return structured content."
+
+**Root cause**: Zod v4 `z.object()` produces JSON Schema with `additionalProperties: false`. The SDK's client (and some inspector tools) validate `structuredContent` against `outputSchema` using AJV in strict mode and reject any extra fields. Server-side, calling `outputSchema.parse(data)` strips extras silently and returns a clean object - but if you assign the original raw upstream data to `structuredContent` without parsing it through the schema, the server happily sends the unstripped object across the wire and the client rejects it.
+
+```typescript
+// BROKEN: server.parse() result is computed but discarded
+const outputSchema = z.object({ id: z.string(), name: z.string() });
+const upstream = await fetchUser();  // returns { id, name, email, role, createdAt }
+outputSchema.parse(upstream);         // strips extras, but result is thrown away
+return {
+  structuredContent: upstream,        // contains email/role/createdAt - client AJV rejects
+  content: [{ type: "text", text: JSON.stringify(upstream) }],
+};
+
+// FIX 1: Use the parsed value
+const cleaned = outputSchema.parse(upstream);
+return {
+  structuredContent: cleaned,
+  content: [{ type: "text", text: JSON.stringify(cleaned) }],
+};
+
+// FIX 2: Mark the schema as passthrough if extras are intentional
+const outputSchema = z.object({ id: z.string(), name: z.string() }).passthrough();
+```
+
+**Operational note**: Clients cache `outputSchema` from the `tools/list` response. If you change a tool's schema (or remove `outputSchema` entirely), already-connected sessions keep validating against the cached schema. Reconnecting the client clears the cache.
 
 ## Tool Design Patterns
 
