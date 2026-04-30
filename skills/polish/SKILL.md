@@ -2,7 +2,7 @@
 name: polish
 description: Pre-release code review - runs lint/type checks, then launches 3 parallel review agents (cleanliness, design, efficiency) to analyze the diff, synthesizes a unified report, and fixes with approval. Use before committing, pushing, or releasing changes. Triggers on "review code", "check before commit", "cleanup before release", "review changes", "is this ready to ship", "polish before release", "simplify".
 metadata:
-  version: "2.2.0"
+  version: "2.2.1"
 disable-model-invocation: true
 ---
 
