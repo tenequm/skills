@@ -15,16 +15,18 @@ jobs:
   release:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
         with:
           fetch-depth: 0
 
-      - uses: taiki-e/install-action@just
-      - uses: actions/setup-python@v5
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: just
+      - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
 
-      - uses: astral-sh/setup-uv@v4
+      - uses: astral-sh/setup-uv@v8
 
       - name: Validate repository
         run: just check
@@ -40,10 +42,10 @@ jobs:
         if: steps.prepare.outputs.changed != 'true'
         run: echo "No skill changes detected."
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v6
         if: steps.prepare.outputs.publishable == 'true'
         with:
-          node-version: "20"
+          node-version: "22"
 
       - name: Install ClawHub CLI
         if: steps.prepare.outputs.publishable == 'true'
@@ -65,7 +67,7 @@ jobs:
 
       - name: Create GitHub release with bundles
         if: steps.prepare.outputs.publishable == 'true'
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           tag_name: ${{ steps.prepare.outputs.tag }}
           name: ${{ steps.prepare.outputs.title }}
@@ -77,7 +79,7 @@ jobs:
 
       - name: Create GitHub release without bundles
         if: steps.prepare.outputs.changed == 'true' && steps.prepare.outputs.publishable != 'true'
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           tag_name: ${{ steps.prepare.outputs.tag }}
           name: ${{ steps.prepare.outputs.title }}
