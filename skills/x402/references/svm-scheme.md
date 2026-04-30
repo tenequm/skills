@@ -2,6 +2,19 @@
 
 The `exact` scheme on Solana uses `TransferChecked` for SPL tokens. The client creates a partially-signed versioned transaction; the facilitator adds its fee-payer signature and broadcasts.
 
+## Canonical addresses
+
+Well-known Solana base58 mint and program addresses referenced by placeholder elsewhere in this file. All values are public, on-chain identifiers (not secrets).
+
+| Placeholder | Value |
+|-------------|-------|
+| `<USDC_SOL_MINT>` | `EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v` (USDC mint, Solana Mainnet) |
+| `<USDC_SOL_DEVNET_MINT>` | `4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU` (USDC mint, Solana Devnet/Testnet) |
+| `<SPL_TOKEN_PROGRAM>` | `TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA` (SPL Token program) |
+| `<SPL_TOKEN_2022_PROGRAM>` | `TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb` (Token-2022 program) |
+| `<LIGHTHOUSE_PROGRAM>` | `L2TExMFKdjpN9kozasaurPirfHy9P8sbXoAN1qA3S95` (Lighthouse instruction-guard program, injected by Phantom/Solflare) |
+| `<MEMO_PROGRAM>` | `MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr` (SPL Memo program) |
+
 ## Protocol Flow
 
 1. Server responds with `PaymentRequired` containing `extra.feePayer` (facilitator's public key)
@@ -19,11 +32,11 @@ The `exact` scheme on Solana uses `TransferChecked` for SPL tokens. The client c
   "scheme": "exact",
   "network": "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp",
   "amount": "1000",
-  "asset": "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
-  "payTo": "2wKupLR9q6wXYppw8Gr2NvWxKBUqm4PPJKkQfoxHDBg4",
+  "asset": "<USDC_SOL_MINT>",
+  "payTo": "<EXAMPLE_RECIPIENT>",
   "maxTimeoutSeconds": 60,
   "extra": {
-    "feePayer": "EwWqGE4ZFKLofuestmU4LDdK7XM1N4ALgdZccwYugwGd"
+    "feePayer": "<EXAMPLE_FEE_PAYER>"
   }
 }
 ```
@@ -58,7 +71,7 @@ The decompiled transaction MUST contain 3 to 6 instructions in this order:
 5. (Optional) Lighthouse or Memo program instruction
 6. (Optional) Memo program instruction
 
-- Allowed optional programs: Lighthouse (`L2TExMFKdjpN9kozasaurPirfHy9P8sbXoAN1qA3S95`) and Memo (`MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr`)
+- Allowed optional programs: Lighthouse (`<LIGHTHOUSE_PROGRAM>`) and Memo (`<MEMO_PROGRAM>`)
 - Phantom injects 1 Lighthouse instruction; Solflare injects 2
 - Memo instructions enable transaction uniqueness
 
@@ -75,7 +88,7 @@ The decompiled transaction MUST contain 3 to 6 instructions in this order:
 
 ### 4. Transfer Destination
 
-- TransferChecked program MUST be either `spl-token` (`TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA`) or `token-2022` (`TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb`)
+- TransferChecked program MUST be either `spl-token` (`<SPL_TOKEN_PROGRAM>`) or `token-2022` (`<SPL_TOKEN_2022_PROGRAM>`)
 - Destination MUST equal the Associated Token Account PDA for `(owner=payTo, mint=asset)` under the selected token program
 
 ### 5. Amount Exactness
@@ -137,8 +150,8 @@ The SVM facilitator supports multiple fee payer addresses. `getExtra()` randomly
 
 | Token | Network | Mint Address |
 |-------|---------|-------------|
-| USDC | Mainnet | `EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v` |
-| USDC | Devnet/Testnet | `4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU` |
+| USDC | Mainnet | `<USDC_SOL_MINT>` |
+| USDC | Devnet/Testnet | `<USDC_SOL_DEVNET_MINT>` |
 
 ## Network Identifiers
 

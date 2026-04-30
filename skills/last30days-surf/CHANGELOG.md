@@ -6,11 +6,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.2.1] - 2026-04-30
+
+### Changed
+
+- Replaced inline 40-char upstream SHA `5b87cca886c98d47b0dcbf00a7363320d935c82e` with short SHA `5b87cca` (linked to GitHub commit) in `SKILL.md` `metadata.upstream` and CHANGELOG references. ClawHub static analyzer was flagging the bare 40-char hex as `suspicious.exposed_secret_literal`.
+
 ## [0.1.0] - 2026-04-30
 
 ### Added
 
-- Initial release. Port of [`mvanhorn/last30days-skill`](https://github.com/mvanhorn/last30days-skill) (MIT) at SHA `5b87cca886c98d47b0dcbf00a7363320d935c82e`.
+- Initial release. Port of [`mvanhorn/last30days-skill`](https://github.com/mvanhorn/last30days-skill) (MIT) at SHA [`5b87cca`](https://github.com/mvanhorn/last30days-skill/commit/5b87cca).
 - Hybrid source routing: free baseline (Reddit / Hacker News / Polymarket / GitHub) via direct HTTP, all other sources (X / YouTube / Bluesky / TikTok / Instagram / Threads / Pinterest / Web search / LLM judges) via surf v2 HTTP API. Surf is the resilience fallback for the four free-baseline sources when direct HTTP fails (rate-limit, anti-bot, IP block).
 - Single auth path: `SURF_API_KEY` (env var or `~/.config/last30days-surf/.env` / `.claude/last30days-surf.env`). Replaces upstream's seven separate keys (xAI, ScrapeCreators, Brave, OpenRouter, Apify, X browser cookies, yt-dlp install).
 - LLM planner + relevance judge + fun judge route through surf inference (`/api/v2/inference/v1/chat/completions`, OpenAI-compatible). Defaults: `google/gemini-3.1-flash-lite-preview` (planner + default-depth rerank), `google/gemini-3.1-pro-preview` (deep-depth rerank). Override via `LAST30DAYS_PLANNER_MODEL` / `LAST30DAYS_RERANK_MODEL`.
@@ -46,6 +52,6 @@ Features upstream has that v0.1.0 doesn't:
 
 ### Verified against
 
-- Upstream `mvanhorn/last30days-skill@5b87cca886c98d47b0dcbf00a7363320d935c82e` (2026-04-26)
+- Upstream [`mvanhorn/last30days-skill@5b87cca`](https://github.com/mvanhorn/last30days-skill/commit/5b87cca) (2026-04-26)
 - Surf API v2 (data tools + inference), verified live 2026-04-30. All 17 endpoints on `https://surf.cascade.fyi/api/v2/*` return 200 with valid payloads. End-to-end live run on `--depth quick` for "claude code" returned 124 items across 10 active sources with LLM-judged relevance + fun scoring intact.
 - Surf inference models confirmed available: `google/gemini-3.1-flash-lite-preview`, `google/gemini-3.1-pro-preview`

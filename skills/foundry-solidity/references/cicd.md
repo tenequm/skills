@@ -174,8 +174,10 @@ jobs:
       - name: Run fork tests
         run: forge test --match-test "testFork" -vvv
         env:
-          MAINNET_RPC_URL: ${{ secrets.MAINNET_RPC_URL }}
+          MAINNET_RPC_URL: <secret-MAINNET_RPC_URL>
 ```
+
+In your real workflow, replace `<secret-MAINNET_RPC_URL>` with the GitHub Actions secrets expression for the same name (see [Using encrypted secrets in a workflow](https://docs.github.com/en/actions/security-guides/encrypted-secrets#using-encrypted-secrets-in-a-workflow)). The same convention applies to the deploy block below.
 
 ## Gas Snapshot Tracking
 
@@ -229,12 +231,12 @@ jobs:
       - name: Deploy
         run: |
           forge script script/Deploy.s.sol \
-            --rpc-url ${{ secrets.RPC_URL }} \
+            --rpc-url <secret-RPC_URL> \
             --broadcast \
             --verify
         env:
-          PRIVATE_KEY: ${{ secrets.DEPLOYER_PRIVATE_KEY }}
-          ETHERSCAN_API_KEY: ${{ secrets.ETHERSCAN_API_KEY }}
+          PRIVATE_KEY: <secret-DEPLOYER_PRIVATE_KEY>
+          ETHERSCAN_API_KEY: <secret-ETHERSCAN_API_KEY>
 ```
 
 ## CI Profile

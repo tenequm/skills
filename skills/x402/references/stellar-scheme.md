@@ -4,6 +4,15 @@ The `exact` scheme on Stellar uses Soroban smart contracts with the SEP-41 token
 
 **TypeScript only** - `@x402/stellar` package. Python and Go not yet implemented.
 
+## Canonical addresses
+
+Well-known Stellar Soroban contract addresses referenced by placeholder elsewhere in this file. All values are public, on-chain identifiers (not secrets).
+
+| Placeholder | Value |
+|-------------|-------|
+| `<STELLAR_USDC_MAINNET>` | `CCW67TSZV3SSS2HXMBQ5JFGCKJNXKZM7UQUWUZPUTHXSTZLEO7SJMI75` (USDC SEP-41 token contract, Stellar Mainnet) |
+| `<STELLAR_USDC_TESTNET>` | `CBIELTK6YBZJU5UP2WWQEUCYKLPU6AUNZ2BQ4WWFEIE3USCIHMXQDAMA` (USDC SEP-41 token contract, Stellar Testnet) |
+
 ## Protocol Flow
 
 1. Server responds with `PaymentRequired` containing `extra.areFeesSponsored` (always true)
@@ -27,8 +36,8 @@ Default facilitator (`https://x402.org/facilitator`) supports Stellar Testnet.
 
 | Network | Contract Address | Decimals |
 |---------|-----------------|----------|
-| Mainnet | `CCW67TSZV3SSS2HXMBQ5JFGCKJNXKZM7UQUWUZPUTHXSTZLEO7SJMI75` | 7 |
-| Testnet | `CBIELTK6YBZJU5UP2WWQEUCYKLPU6AUNZ2BQ4WWFEIE3USCIHMXQDAMA` | 7 |
+| Mainnet | `<STELLAR_USDC_MAINNET>` | 7 |
+| Testnet | `<STELLAR_USDC_TESTNET>` | 7 |
 
 ## RPC Configuration
 
@@ -59,7 +68,7 @@ Default facilitator (`https://x402.org/facilitator`) supports Stellar Testnet.
   "scheme": "exact",
   "network": "stellar:testnet",
   "amount": "1000000",
-  "asset": "CBIELTK6YBZJU5UP2WWQEUCYKLPU6AUNZ2BQ4WWFEIE3USCIHMXQDAMA",
+  "asset": "<STELLAR_USDC_TESTNET>",
   "payTo": "GA3D5...STELLAR_ADDRESS",
   "maxTimeoutSeconds": 60,
   "extra": {

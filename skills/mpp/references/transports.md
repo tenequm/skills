@@ -43,11 +43,11 @@ Host: api.example.com
 
 # Step 2: Server responds with 402 + challenge
 HTTP/1.1 402 Payment Required
-WWW-Authenticate: Payment id="dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk",
+WWW-Authenticate: Payment id="<EXAMPLE_CHALLENGE_ID>",
   realm="api.example.com",
   method="tempo",
   intent="charge",
-  request="eyJhbW91bnQiOiIwLjAxIiwiY3VycmVuY3kiOiIweC4uLiJ9",
+  request="<JWT_REQUEST_PAYLOAD>",
   expires="1711929600",
   description="API access: $0.01"
 Cache-Control: no-store
@@ -89,11 +89,11 @@ Payment challenges are returned as JSON-RPC errors with code `-32042`:
     "data": {
       "challenges": [
         {
-          "id": "dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk",
+          "id": "<EXAMPLE_CHALLENGE_ID>",
           "realm": "my-mcp-server",
           "method": "tempo",
           "intent": "charge",
-          "request": "eyJhbW91bnQiOiIwLjAxIn0",
+          "request": "<JWT_REQUEST_PAYLOAD>",
           "expires": "1711929600",
           "description": "Tool call: premium_analysis"
         }
@@ -120,11 +120,11 @@ Payment credentials are embedded in the tool call's `_meta` field:
     "_meta": {
       "org.paymentauth/credential": {
         "challenge": {
-          "id": "dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk",
+          "id": "<EXAMPLE_CHALLENGE_ID>",
           "realm": "my-mcp-server",
           "method": "tempo",
           "intent": "charge",
-          "request": "eyJhbW91bnQiOiIwLjAxIn0",
+          "request": "<JWT_REQUEST_PAYLOAD>",
           "expires": "1711929600"
         },
         "payload": { "type": "hash", "hash": "0xabc123..." },
@@ -151,7 +151,7 @@ Payment receipts are embedded in the result's `_meta` field:
     ],
     "_meta": {
       "org.paymentauth/receipt": {
-        "challengeId": "dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk",
+        "challengeId": "<EXAMPLE_CHALLENGE_ID>",
         "method": "tempo",
         "reference": "0xdef456...",
         "settlement": { "amount": "0.01", "currency": "USD" },
@@ -182,7 +182,7 @@ Payment receipts are embedded in the result's `_meta` field:
     "data": {
       "challenges": [{
         "id": "abc", "method": "tempo", "intent": "charge",
-        "request": "eyJhbW91bnQiOiIwLjAxIn0", "expires": "1711929600"
+        "request": "<JWT_REQUEST_PAYLOAD>", "expires": "1711929600"
       }]
     }
   }
@@ -197,7 +197,7 @@ Payment receipts are embedded in the result's `_meta` field:
     "arguments": {},
     "_meta": {
       "org.paymentauth/credential": {
-        "challenge": { "id": "abc", "method": "tempo", "intent": "charge", "request": "eyJhbW91bnQiOiIwLjAxIn0", "expires": "1711929600" },
+        "challenge": { "id": "abc", "method": "tempo", "intent": "charge", "request": "<JWT_REQUEST_PAYLOAD>", "expires": "1711929600" },
         "payload": { "type": "hash", "hash": "0x..." }
       }
     }

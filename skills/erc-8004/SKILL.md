@@ -2,7 +2,7 @@
 name: erc-8004
 description: Build with ERC-8004 Trustless Agents - on-chain agent identity, reputation, validation, and discovery on EVM chains. Use when registering AI agents on-chain, building agent reputation systems, searching/discovering agents, working with the Agent0 SDK (agent0-sdk), or implementing the ERC-8004 standard. Triggers on ERC-8004, Agent0, agent identity, agent registry, agent reputation, trustless agents, agent discovery.
 metadata:
-  version: "0.2.0"
+  version: "0.2.1"
   openclaw:
     homepage: https://github.com/tenequm/skills/tree/main/skills/erc-8004
     emoji: "🤝"
@@ -63,6 +63,8 @@ npm install agent0-sdk
 
 ### Register an Agent
 
+`RPC_URL`, `PRIVATE_KEY`, and `PINATA_JWT` are declared in this skill's `metadata.openclaw.envVars`. Use throwaway/testnet keys for development; reach for a hardware wallet or scoped signer for any mainnet activity.
+
 ```typescript
 import { SDK } from 'agent0-sdk';
 
@@ -92,7 +94,8 @@ agent.setTrust(true, false, false);  // reputation only
 agent.addSkill('natural_language_processing/natural_language_generation/summarization', true);
 agent.addDomain('finance_and_business/investment_services', true);
 
-// Register on-chain (mints NFT + uploads to IPFS)
+// Register on-chain (mints NFT + uploads to IPFS).
+// Sends a real transaction signed with PRIVATE_KEY - confirm chainId, signer, and balance before running.
 const tx = await agent.registerIPFS();
 const { result } = await tx.waitConfirmed();
 console.log(`Registered: ${result.agentId}`);  // e.g. "84532:42"
@@ -133,7 +136,7 @@ const feedbackFile = await sdk.prepareFeedbackFile({
   proofOfPayment: { txHash: '0x...', chainId: '8453', fromAddress: '0x...', toAddress: '0x...' },
 });
 
-// Submit feedback (value=85 out of 100)
+// Submit feedback (value=85 out of 100). On-chain tx; same caveats as `registerIPFS()` above.
 const tx = await sdk.giveFeedback('84532:42', 85, 'starred', '', '', feedbackFile);
 await tx.waitConfirmed();
 

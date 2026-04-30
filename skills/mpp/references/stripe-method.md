@@ -231,7 +231,7 @@ Example credential payload:
 
 ```json
 {
-  "spt": "spt_1abc2def3ghi4jkl5mno6pqr",
+  "spt": "<STRIPE_SPT_TOKEN>",
   "externalId": "order-456"
 }
 ```

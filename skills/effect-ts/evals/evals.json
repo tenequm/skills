@@ -35,7 +35,7 @@
     },
     {
       "id": 3,
-      "prompt": "Migrate this v3 Effect code to v4:\n```typescript\nimport { Context, Data, Effect, Layer } from 'effect'\nclass AppError extends Data.TaggedError('AppError')<{ message: string }> {}\nclass Config extends Context.Tag('Config')<Config, { readonly apiKey: string }>() {}\nconst ConfigLive = Layer.succeed(Config, { apiKey: 'secret' })\nconst program = Effect.gen(function*() {\n  const config = yield* Config\n  return yield* Effect.tryPromise({ try: () => fetch(config.apiKey), catch: () => new AppError({ message: 'failed' }) })\n}).pipe(Effect.catchAll((e) => Effect.log(e.message)))\nEffect.runPromise(program.pipe(Effect.provide(ConfigLive)))\n```",
+      "prompt": "Migrate this v3 Effect code to v4:\n```typescript\nimport { Context, Data, Effect, Layer } from 'effect'\nclass AppError extends Data.TaggedError('AppError')<{ message: string }> {}\nclass Config extends Context.Tag('Config')<Config, { readonly endpoint: string }>() {}\nconst ConfigLive = Layer.succeed(Config, { endpoint: 'https://api.example.com' })\nconst program = Effect.gen(function*() {\n  const config = yield* Config\n  return yield* Effect.tryPromise({ try: () => fetch(config.endpoint), catch: () => new AppError({ message: 'failed' }) })\n}).pipe(Effect.catchAll((e) => Effect.log(e.message)))\nEffect.runPromise(program.pipe(Effect.provide(ConfigLive)))\n```",
       "expected_output": "Migrated code using Context.Service (the v4 API) instead of Context.Tag (v3), Schema.TaggedErrorClass instead of Data.TaggedError, Effect.catch instead of Effect.catchAll, and correct v4 import patterns. Should note all changes made.",
       "files": [],
       "expectations": [

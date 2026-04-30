@@ -780,13 +780,13 @@ Account-level centralized secrets shared across Workers (April 2025).
 
 ```toml
 [[secrets_store_secrets]]
-binding = "API_KEY"
-store_id = "abc123"
-secret_name = "open_ai_key"  # pragma: allowlist secret
+binding = "MY_PROVIDER_KEY"
+store_id = "<your-store-id>"
+secret_name = "<your-secret-name>"
 ```
 
 ```typescript
-const key = await env.API_KEY.get();
+const key = await env.MY_PROVIDER_KEY.get();
 ```
 
 Unlike per-Worker secrets, Secrets Store entries are managed centrally and reusable across all Workers in your account.

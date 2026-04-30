@@ -66,7 +66,7 @@ WWW-Authenticate: Payment id="qB3wErTyU7iOpAsD9fGhJk",
   realm="mpp.dev",
   method="tempo",
   intent="charge",
-  request="eyJhbW91bnQiOiIxMDAwIiwiY3VycmVuY3kiOiIweDIwYzAuLi4ifQ",
+  request="<JWT_REQUEST_PAYLOAD>",
   expires="2025-04-01T12:05:00Z",
   description="Premium API access"
 Cache-Control: no-store

@@ -2,7 +2,7 @@
 name: cloudflare-workers
 description: Rapid development with Cloudflare Workers - build and deploy serverless applications on Cloudflare's global network. Use when building APIs, full-stack web apps, edge functions, background jobs, or real-time applications. Triggers on phrases like "cloudflare workers", "wrangler", "edge computing", "serverless cloudflare", "workers bindings", or files like wrangler.toml, worker.ts, worker.js.
 metadata:
-  version: "3.1.0"
+  version: "3.1.1"
   openclaw:
     homepage: https://github.com/tenequm/skills/tree/main/skills/cloudflare-workers
     emoji: "☁️"
@@ -244,16 +244,17 @@ const object = await env.MY_BUCKET.get("file.txt");
 const text = await object?.text();
 ```
 
-**Environment Variables:**
+**Environment Variables (non-secret only):**
 ```toml
 [vars]
-API_KEY = "development-key"  # pragma: allowlist secret
+GREETING = "hello"
+ENVIRONMENT = "development"
 ```
 
-**Secrets** (sensitive data):
+**Secrets** (sensitive data — never put in wrangler.toml):
 ```bash
-# Set via CLI (not in wrangler.toml)
-wrangler secret put API_KEY
+# Set via CLI; the value is encrypted server-side and never written to disk locally
+wrangler secret put MY_API_KEY
 ```
 
 ### Context (ctx)
