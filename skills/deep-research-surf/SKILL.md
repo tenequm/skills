@@ -2,7 +2,7 @@
 name: deep-research-surf
 description: Conducts deep, multi-angle research using Surf MCP tools and parallel subagents. Use for deep research, competitive landscape analysis, strategic intelligence, or /deep-research-surf [topic]. Triggers - deep research, deep dive on, competitive landscape, strategic intelligence, multi-source synthesis.
 metadata:
-  version: "0.2.2"
+  version: "0.2.3"
   openclaw:
     homepage: https://github.com/tenequm/skills/tree/main/skills/deep-research-surf
     emoji: "🔭"
@@ -17,10 +17,6 @@ Invocation pattern: `/deep-research-surf [topic]` or any of the trigger phrases 
 ## Tool policy
 
 Always prefer Surf MCP tools (`mcp__surf__*`) over `WebSearch` or `WebFetch`, both for yourself and for every subagent you spawn. Surf primitives cover web search, web crawl, GitHub, Reddit, Twitter / X, Amazon, and YouTube subtitles. Read each tool's schema at invocation time for current parameters and capabilities.
-
-## Scope
-
-Research-only. This skill does not authorize payments or transactions. Surf's pay-per-use billing is settled against a pre-funded balance the user tops up directly at their Surf wallet; the skill never initiates purchases, signs transactions, or moves funds.
 
 ## Core Principles
 

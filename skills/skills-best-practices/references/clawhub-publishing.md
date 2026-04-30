@@ -123,14 +123,37 @@ To inspect: `curl -H "Authorization: Bearer <token>" https://clawhub.ai/api/v1/s
 
 **Hard-block** (auto-hides skill, places uploader in manual moderation): install instructions that tell users to paste obfuscated shell payloads (e.g., base64-decoded `curl | bash`). Never include these.
 
-## Capability flags
+## Capability tags (auto-derived)
+
+ClawHub computes 7 capability tags at publish time by running deterministic regex matchers over the lowercased concatenation of slug + display name + summary + frontmatter (JSON-stringified) + README + every text file in the bundle. Source of truth: [`convex/lib/skillCapabilityTags.ts`](https://github.com/openclaw/clawhub/blob/main/convex/lib/skillCapabilityTags.ts).
+
+These tags are **not author-declared**. The only way to drop a tag is to remove every word in the bundle that triggers its regex.
+
+| Tag | Trigger word families |
+|---|---|
+| `crypto` | `crypto`, `blockchain`, `defi`, `on-chain`, `wallet`, `private key`, `erc20`, `usdc`, `eth/ethereum`, `base network`, `arbitrum`, `optimism`, `polygon`, `avalanche`, `solana`, `aave`, `token balance`, `bridge`, `liquidity`, `ens`, `x402`, contextual `defi/token/coin/nft swap` patterns |
+| `requires-wallet` | `private key`, `wallet`, `mnemonic`, `seed phrase`, `configured wallet`, `signer`, `eip-712` |
+| `can-make-purchases` | `payment(s)`, `paid automatically`, `pay per call`, `micropayments`, `payment required`, `costs $N`, `charged`, `purchase`, `buy {credits/tokens/coins/nft/subscription/plan}`, `payment checkout`, `one-click checkout` |
+| `can-sign-transactions` | `sign(ing) (and submit/send/broadcast) transaction(s)`, `sendTransaction`, `approval_required`, `on-chain tx/transaction`, `execute transaction`, `broadcast transaction`, `walletClient.sendTransaction` |
+| `requires-oauth-token` | `oauth`, `oauth 2.0`, `access token`, `refresh token`, `bearer token`, `tweet.write` |
+| `requires-sensitive-credentials` | `api key`/`api_key`/`api-key`, `access/refresh/bearer token`, `session/auth cookie(s)`, `private key`, `mnemonic`, `seed phrase`, `signer` |
+| `posts-externally` | `post (a/this) tweet`, `reply to tweet`, `quote tweet`, `post to x/twitter`, `twitter-post`, `publish post` |
+
+**Auto-implications** (set after the regex pass):
+- `can-sign-transactions` OR `can-make-purchases` → adds `crypto`
+- `can-sign-transactions` → adds `requires-wallet`
+- `requires-wallet` OR `can-sign-transactions` OR `requires-oauth-token` → adds `requires-sensitive-credentials`
+
+**Why this matters**: ClawScan (the LLM scanner) reads the capability tags and flags `suspicious` when a tag is set but the skill's stated purpose doesn't justify it (e.g. a fact-check skill with `can-make-purchases`). The fix is **always** content-side: find the trigger word, remove or rephrase it. Defensive scoping language (e.g., "this skill does NOT make payments") usually backfires - it adds the very trigger words it tries to disclaim.
+
+**False-positive appeal**: when a tag is genuinely incorrect (e.g. `display=swap` matching the `\bswap\b` crypto regex) and the trigger word can't be rephrased, file an issue at [openclaw/clawhub](https://github.com/openclaw/clawhub/issues) - maintainers tighten regex patterns over time (see PR #1857 for an example fix).
+
+## Author-declarable flags
 
 `disable-model-invocation: true` (top-level frontmatter, not under `metadata`):
 - Stops Claude from auto-invoking the skill based on prompt content. Skill only fires on explicit slash command.
 - Use for explicit-invocation skills (e.g., `/review`, `/polish`).
 - **Don't combine** with internal `Agent(model: "opus")` overrides in the skill body - that contradiction triggers high-confidence suspicious. Subagents inherit the parent's model anyway.
-
-`can-make-purchases`: only declare if the skill genuinely needs payment authority. ClawScan flags it as out-of-scope for research/utility skills.
 
 `always: true` (under `metadata.openclaw`): skill loads at every session. Combine with `homepage` and explicit credential declarations or it'll flag.
 
