@@ -2,7 +2,7 @@
 name: mpp
 description: "Build with MPP (Machine Payments Protocol) - the open protocol for machine-to-machine payments over HTTP 402. Use when developing paid APIs, payment-gated content, AI agent payment flows, MCP tool payments, pay-per-token streaming, or any service using HTTP 402 Payment Required. Covers the mppx TypeScript SDK with Hono/Express/Next.js/Elysia middleware, pympp Python SDK, and mpp Rust SDK. Supports Tempo stablecoins, Stripe cards, Lightning Bitcoin, and custom payment methods. Includes charge (one-time) and session (streaming pay-as-you-go) intents. Make sure to use this skill whenever the user mentions mpp, mppx, machine payments, HTTP 402 payments, Tempo payments, payment channels, pay-per-token, paid API endpoints, or payment-gated services."
 metadata:
-  version: "0.6.1"
+  version: "0.6.2"
   openclaw:
     homepage: https://github.com/tenequm/skills/tree/main/skills/mpp
     emoji: "💸"
@@ -30,12 +30,12 @@ The core protocol spec is submitted to the IETF as the [Payment HTTP Authenticat
 
 ## Tempo token addresses
 
-Public Tempo token addresses referenced throughout this skill. Inline code samples use the placeholder names below; the literal address appears here and in at most one representative example per file.
+Public Tempo token addresses referenced throughout this skill. Use the placeholder names in code; full addresses are in the [Tempo documentation](https://docs.tempo.finance).
 
-| Token              | Network  | Address                                       |
-|--------------------|----------|-----------------------------------------------|
-| USDC.e (mainnet)   | mainnet  | `<USDC_TEMPO_MAINNET>` (`0x20C000000000000000000000b9537d11c60E8b50`) |
-| pathUSD (testnet)  | testnet  | `<PATHUSD_TESTNET>` (`0x20c0000000000000000000000000000000000000`) |
+| Token              | Network  | Placeholder          |
+|--------------------|----------|----------------------|
+| USDC.e (mainnet)   | mainnet  | `<USDC_TEMPO_MAINNET>` |
+| pathUSD (testnet)  | testnet  | `<PATHUSD_TESTNET>`  |
 
 ## When to Use
 

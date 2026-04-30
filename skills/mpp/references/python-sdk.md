@@ -35,7 +35,7 @@ app = FastAPI()
 # Auto-generates secret_key to .env if not present
 mpp = Mpp.create(
     method=tempo(
-        currency="0x20c0000000000000000000000000000000000000",
+        currency="<PATHUSD_TESTNET>",
         recipient="0xYourAddress",
         intents={"charge": ChargeIntent()},
     ),

@@ -52,9 +52,9 @@ The `request` parameter is **base64url-encoded JSON** (RFC 4648 section 5, no pa
 ```json
 {
   "amount": "1000",
-  "currency": "0x20c0000000000000000000000000000000000000",
+  "currency": "<PATHUSD_TESTNET>",
   "decimals": 6,
-  "recipient": "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266"
+  "recipient": "<RECIPIENT_ADDRESS>"
 }
 ```
 
@@ -142,7 +142,7 @@ Decoded credential payload:
     "type": "transaction",
     "signature": "0x1b2c3d4e5f6a7b8c9d0e..."
   },
-  "source": "0x1234567890abcdef1234567890abcdef12345678"
+  "source": "<SOURCE_ADDRESS>"
 }
 ```
 

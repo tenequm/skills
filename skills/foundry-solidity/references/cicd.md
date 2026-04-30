@@ -61,9 +61,9 @@ jobs:
             lib
             cache
             out
-          key: ${{ runner.os }}-foundry-${{ hashFiles('**/foundry.toml') }}
+          key: <runner.os>-foundry-<hashFiles('**/foundry.toml')>
           restore-keys: |
-            ${{ runner.os }}-foundry-
+            <runner.os>-foundry-
 
       - name: Build
         run: forge build
@@ -284,8 +284,8 @@ jobs:
       - name: Install Foundry
         uses: foundry-rs/foundry-toolchain@v1
 
-      - name: Test with Solc ${{ matrix.solc }}
+      - name: Test with Solc <matrix.solc>
         run: forge test
         env:
-          FOUNDRY_SOLC_VERSION: ${{ matrix.solc }}
+          FOUNDRY_SOLC_VERSION: <matrix.solc>
 ```

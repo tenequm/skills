@@ -208,8 +208,8 @@ The `TempoStreamChannel` on-chain escrow manages deposits, settlements, and refu
 
 ### Deployed Addresses
 
-- **Mainnet** (chain 4217): `0x33b901018174DDabE4841042ab76ba85D4e24f25`
-- **Testnet Moderato** (chain 42431): `0xe1c4d3dce17bc111181ddf716f75bae49e61a336`
+- **Mainnet** (chain 4217): `<ESCROW_MAINNET>`
+- **Testnet Moderato** (chain 42431): `<ESCROW_TESTNET>`
 
 ### Contract Operations
 
@@ -233,8 +233,8 @@ import { createClient, encodeFunctionData, http, parseAbi, type Hex } from 'viem
 import { prepareTransactionRequest, readContract, sendRawTransaction, signTransaction } from 'viem/actions'
 import { tempo } from 'viem/chains'
 
-const ESCROW = '0x33b901018174DDabE4841042ab76ba85D4e24f25' as Hex
-const USDC = '0x20C000000000000000000000b9537d11c60E8b50' as Hex
+const ESCROW = '<ESCROW_MAINNET>' as Hex
+const USDC = '<USDC_TEMPO_MAINNET>' as Hex
 
 const abi = parseAbi([
   'function requestClose(bytes32 channelId)',

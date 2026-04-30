@@ -52,7 +52,7 @@ import { tempo } from "@anthropic-ai/mpp/tempo";
 import { Expires } from "@anthropic-ai/mpp";
 
 const tempoCharge = tempo.charge({
-  currency: "0x20c0000000000000000000000000000000000000", // pathUSD testnet
+  currency: "<PATHUSD_TESTNET>",
   recipient: "0xYourAddress",
   decimals: 6,
   description: "API access",
@@ -207,7 +207,7 @@ const tempoSession = tempo.session({
   currency: "<PATHUSD_TESTNET>",
   recipient: "0xYourAddress",
   store: Store.memory(),
-  escrowContract: "0xe1c4d3dce17bc111181ddf716f75bae49e61a336", // testnet
+  escrowContract: "<ESCROW_TESTNET>",
   sse: true,
 });
 ```
@@ -283,15 +283,15 @@ for await (const event of stream) {
 
 | Network | Token | Address |
 |---|---|---|
-| Testnet | pathUSD | `0x20c0000000000000000000000000000000000000` |
-| Mainnet | USDC.e (Bridged USDC) | `0x20c000000000000000000000b9537d11c60e8b50` |
+| Testnet | pathUSD | `<PATHUSD_TESTNET>` |
+| Mainnet | USDC.e (Bridged USDC) | `<USDC_TEMPO_MAINNET>` |
 
 ### Escrow Contracts
 
 | Network | Chain ID | Address |
 |---|---|---|
-| Mainnet | 4217 | `0x33b901018174DDabE4841042ab76ba85D4e24f25` |
-| Testnet | 42431 | `0xe1c4d3dce17bc111181ddf716f75bae49e61a336` |
+| Mainnet | 4217 | `<ESCROW_MAINNET>` |
+| Testnet | 42431 | `<ESCROW_TESTNET>` |
 
 ### Configuration
 

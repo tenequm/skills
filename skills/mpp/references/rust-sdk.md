@@ -35,7 +35,7 @@ use mpp::{parse_authorization, format_www_authenticate};
 // Create server instance
 let mpp = Mpp::create(tempo(TempoConfig {
     recipient: "0xYourAddress",
-    currency: "0x20c0000000000000000000000000000000000000",
+    currency: "<PATHUSD_TESTNET>",
     testnet: true,
     ..Default::default()
 }))?;
