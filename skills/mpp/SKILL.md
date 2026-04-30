@@ -2,7 +2,24 @@
 name: mpp
 description: "Build with MPP (Machine Payments Protocol) - the open protocol for machine-to-machine payments over HTTP 402. Use when developing paid APIs, payment-gated content, AI agent payment flows, MCP tool payments, pay-per-token streaming, or any service using HTTP 402 Payment Required. Covers the mppx TypeScript SDK with Hono/Express/Next.js/Elysia middleware, pympp Python SDK, and mpp Rust SDK. Supports Tempo stablecoins, Stripe cards, Lightning Bitcoin, and custom payment methods. Includes charge (one-time) and session (streaming pay-as-you-go) intents. Make sure to use this skill whenever the user mentions mpp, mppx, machine payments, HTTP 402 payments, Tempo payments, payment channels, pay-per-token, paid API endpoints, or payment-gated services."
 metadata:
-  version: "0.5.7"
+  version: "0.6.0"
+  openclaw:
+    homepage: https://github.com/tenequm/skills/tree/main/skills/mpp
+    emoji: "💸"
+    primaryEnv: MPP_SECRET_KEY
+    envVars:
+      - name: MNEMONIC
+        required: false
+        description: BIP-39 mnemonic for client wallet (testnet/regtest only).
+      - name: MPP_SECRET_KEY
+        required: false
+        description: Server-side MPP signing secret.
+      - name: server_secret
+        required: false
+        description: Alias for MPP_SECRET_KEY in some examples.
+      - name: TEMPO_RPC_URL
+        required: false
+        description: Tempo chain RPC endpoint override.
 ---
 
 # MPP - Machine Payments Protocol
@@ -10,6 +27,15 @@ metadata:
 MPP is an open protocol (co-authored by Tempo and Stripe) that standardizes HTTP `402 Payment Required` for machine-to-machine payments. Clients pay in the same HTTP request - no accounts, API keys, or checkout flows needed.
 
 The core protocol spec is submitted to the IETF as the [Payment HTTP Authentication Scheme](https://datatracker.ietf.org/doc/draft-ryan-httpauth-payment/).
+
+## Tempo token addresses
+
+Public Tempo token addresses referenced throughout this skill. Inline code samples use the placeholder names below; the literal address appears here and in at most one representative example per file.
+
+| Token              | Network  | Address                                       |
+|--------------------|----------|-----------------------------------------------|
+| USDC.e (mainnet)   | mainnet  | `<USDC_TEMPO_MAINNET>` (`0x20C000000000000000000000b9537d11c60E8b50`) |
+| pathUSD (testnet)  | testnet  | `<PATHUSD_TESTNET>` (`0x20c0000000000000000000000000000000000000`) |
 
 ## When to Use
 
@@ -71,7 +97,7 @@ import { Mppx, tempo } from 'mppx/server'
 
 const mppx = Mppx.create({
   methods: [tempo({
-    currency: '0x20c0000000000000000000000000000000000000', // pathUSD
+    currency: '<PATHUSD_TESTNET>', // pathUSD testnet
     recipient: '0xYourAddress',
   })],
 })
@@ -109,7 +135,7 @@ from mpp.methods.tempo import tempo, ChargeIntent
 
 app = FastAPI()
 mpp = Mpp.create(method=tempo(
-    currency="0x20c0000000000000000000000000000000000000",
+    currency="<PATHUSD_TESTNET>",
     recipient="0xYourAddress", intents={"charge": ChargeIntent()},
 ))
 
@@ -359,7 +385,7 @@ Always import `Mppx` and `tempo` from the appropriate subpath for your context (
 const prepared = await prepareTransactionRequest(client, {
   account,
   calls: [{ to, data }],
-  feeToken: '0x20C000000000000000000000b9537d11c60E8b50', // USDC mainnet
+  feeToken: '<USDC_TEMPO_MAINNET>', // USDC mainnet (see Tempo token addresses table)
 } as never)
 ```
 
@@ -367,23 +393,19 @@ const prepared = await prepareTransactionRequest(client, {
 ```typescript
 import { setUserToken } from 'viem/tempo'
 await client.fee.setUserTokenSync({
-  token: '0x20C000000000000000000000b9537d11c60E8b50', // USDC mainnet
+  token: '<USDC_TEMPO_MAINNET>', // USDC mainnet
 })
 ```
 
 **Without either, transactions fail silently with `gas_limit: 0`.** The mppx SDK handles this internally for payment transactions, but any direct on-chain calls (settle, close, custom contract interactions) must set `feeToken` explicitly or ensure `setUserToken` was called for the account.
 
-**Fee token addresses:**
-| Network | Token | Address |
-|---------|-------|---------|
-| Mainnet | USDC.e (Bridged USDC) | `0x20C000000000000000000000b9537d11c60E8b50` |
-| Testnet | pathUSD | `0x20c0000000000000000000000000000000000000` |
+**Fee token addresses:** see the [Tempo token addresses](#tempo-token-addresses) table above (`<USDC_TEMPO_MAINNET>`, `<PATHUSD_TESTNET>`).
 
 ### Setup
 
 **Self-payment trap**: The payer and recipient cannot be the same wallet address. When testing with `npx mppx`, create a separate client account (`npx mppx account create -a client`) and fund it separately.
 
-**Recipient wallet initialization**: TIP-20 token accounts on Tempo must be initialized before they can receive tokens (similar to Solana ATAs). Send a tiny amount (e.g. 0.01 USDC) to the recipient address first: `tempo wallet transfer 0.01 0x20C000000000000000000000b9537d11c60E8b50 <recipient>`.
+**Recipient wallet initialization**: TIP-20 token accounts on Tempo must be initialized before they can receive tokens (similar to Solana ATAs). Send a tiny amount (e.g. 0.01 USDC) to the recipient address first: `tempo wallet transfer 0.01 <USDC_TEMPO_MAINNET> <recipient>`.
 
 ### Server
 

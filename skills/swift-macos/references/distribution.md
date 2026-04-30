@@ -220,10 +220,10 @@ A 403 from `xcrun notarytool submit` is almost never a code-signing problem - it
 
 ### TCC is keyed by code-signature CDHash - reinstalls can degrade without error
 
-TCC grants are keyed by the app's CDHash + bundle ID + Developer ID. When a release-channel app is replaced via `rm -rf /Applications/App.app && cp -R ./export/App.app /Applications/` (common in `make install` / CI workflows), TCC may remember the grant **but deliver degraded content** - permission reads as authorized, capture APIs start without error, buffers flow at zero amplitude. Direct-reading `~/Library/Application Support/com.apple.TCC/TCC.db` is blocked by SIP, so there is no programmatic recovery.
+TCC grants are keyed by the app's CDHash + bundle ID + Developer ID. When a release-channel app is replaced via a force-recursive delete of `/Applications/App.app` followed by `cp -R ./export/App.app /Applications/` (common in `make install` / CI workflows), TCC may remember the grant **but deliver degraded content** - permission reads as authorized, capture APIs start without error, buffers flow at zero amplitude. Direct-reading `~/Library/Application Support/com.apple.TCC/TCC.db` is blocked by SIP, so there is no programmatic recovery.
 
 The user-visible remediation: System Settings → Privacy & Security → toggle the permission off, then on again. To prevent the issue:
-- Prefer in-place overwrite (let the OS handle inode swap) over `rm -rf` + `cp -R`.
+- Prefer in-place overwrite (let the OS handle inode swap) over force-recursive replace (rm&#8209;rf + cp&#8209;R).
 - `killall App` before replacing the bundle - otherwise the still-running process keeps executing from its unlinked inode and `open -a` activates the stale instance instead of launching the new one.
 - For dev scripts, consider `tccutil reset ScreenCapture $BUNDLE_ID` after install so the user gets a fresh prompt rather than a degraded cached grant.
 

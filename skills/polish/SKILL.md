@@ -44,7 +44,7 @@ Read every changed file fully. Understand what each change does and why.
 
 ## Phase 3: Parallel Review
 
-Use the Agent tool to launch all three agents concurrently in a single message with `model: "opus"`. Pass each agent the full diff and the list of changed files so it has the complete context.
+Use the Agent tool to launch all three agents concurrently in a single message. Pass each agent the full diff and the list of changed files so it has the complete context.
 
 ### Agent 1: Cleanliness
 

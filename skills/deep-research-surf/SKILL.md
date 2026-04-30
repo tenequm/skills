@@ -2,7 +2,15 @@
 name: deep-research-surf
 description: Conducts deep, multi-angle research using Surf MCP tools and parallel subagents. Use for deep research, competitive landscape analysis, strategic intelligence, or /deep-research-surf [topic]. Triggers - deep research, deep dive on, competitive landscape, strategic intelligence, multi-source synthesis.
 metadata:
-  version: "0.1.0"
+  version: "0.2.0"
+  openclaw:
+    homepage: https://github.com/tenequm/skills/tree/main/skills/deep-research-surf
+    emoji: "🔭"
+    primaryEnv: SURF_API_KEY
+    envVars:
+      - name: SURF_API_KEY
+        required: false
+        description: Surf MCP API key. Without it, surf tools fall back to a free-tier baseline.
 ---
 
 # Deep Research (Surf)

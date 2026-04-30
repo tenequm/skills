@@ -2,7 +2,36 @@
 name: cloudflare-workers
 description: Rapid development with Cloudflare Workers - build and deploy serverless applications on Cloudflare's global network. Use when building APIs, full-stack web apps, edge functions, background jobs, or real-time applications. Triggers on phrases like "cloudflare workers", "wrangler", "edge computing", "serverless cloudflare", "workers bindings", or files like wrangler.toml, worker.ts, worker.js.
 metadata:
-  version: "3.0.0"
+  version: "3.1.0"
+  openclaw:
+    homepage: https://github.com/tenequm/skills/tree/main/skills/cloudflare-workers
+    emoji: "☁️"
+    primaryEnv: CLOUDFLARE_API_TOKEN
+    requires:
+      bins:
+        - wrangler
+    envVars:
+      - name: CLOUDFLARE_API_TOKEN
+        required: false
+        description: Cloudflare API token (scoped). Required for wrangler deploy/upload.
+      - name: ACCOUNT_ID
+        required: false
+        description: Cloudflare account ID.
+      - name: API_TOKEN
+        required: false
+        description: Generic API token used in some examples.
+      - name: PLATFORM_SECRET
+        required: false
+        description: Platform-level secret for dispatched workers.
+      - name: LOG_TOKEN
+        required: false
+        description: Token for log sinks.
+      - name: DATADOG_API_KEY
+        required: false
+        description: Datadog observability key.
+      - name: HONEYCOMB_API_KEY
+        required: false
+        description: Honeycomb observability key.
 ---
 
 # Cloudflare Workers

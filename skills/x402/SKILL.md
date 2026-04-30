@@ -2,7 +2,24 @@
 name: x402
 description: "Build internet-native payments with the x402 open protocol (x402 Foundation, Apache-2.0). Use when developing paid APIs, paywalled content, AI agent payment flows, or any service using HTTP 402 Payment Required for on-chain micropayments. Covers TypeScript (2.9.0), Python (2.6.0), and Go (2.7.0) SDKs across EVM (Base, MegaETH, Monad, Polygon, Stable, Arbitrum), Solana, Stellar, and Aptos networks with HTTP, MCP, and A2A transports. Supports exact and upto (usage-based) payment schemes, self-facilitation, and extensions (bazaar, gas sponsoring, sign-in-with-x)."
 metadata:
-  version: "0.5.0"
+  version: "0.6.0"
+  openclaw:
+    homepage: https://github.com/tenequm/skills/tree/main/skills/x402
+    emoji: "💰"
+    primaryEnv: EVM_PRIVATE_KEY
+    envVars:
+      - name: EVM_PRIVATE_KEY
+        required: false
+        description: EVM signer key for x402 client/server.
+      - name: APTOS_PRIVATE_KEY
+        required: false
+        description: Aptos signer for x402 on Aptos.
+      - name: FACILITATOR_KEY
+        required: false
+        description: Self-hosted facilitator signing key.
+      - name: FACILITATOR_URL
+        required: false
+        description: Facilitator endpoint URL override.
 ---
 
 # x402 Protocol Development

@@ -105,11 +105,6 @@ def parse_frontmatter(text: str) -> dict[str, str]:
     return values
 
 
-def parse_heading(text: str) -> str | None:
-    match = re.search(r"(?m)^#\s+(.+?)\s*$", text)
-    return match.group(1).strip() if match else None
-
-
 def read_text(path: Path) -> str:
     return path.read_text(encoding="utf-8")
 
@@ -284,7 +279,7 @@ def build_release(
 
         current_version = current_meta.get("version")
         previous_version = previous_meta.get("version")
-        display_name = parse_heading(current_skill_text or "") or current_meta.get("name") or slug
+        display_name = clawhub_slug(slug)
 
         release = SkillRelease(
             slug=clawhub_slug(slug),

@@ -183,7 +183,7 @@ Decoded receipt:
   "reference": "0xtx789abc...",
   "settlement": {
     "amount": "1000",
-    "currency": "0x20c0000000000000000000000000000000000000"
+    "currency": "<PATHUSD_TESTNET>"
   },
   "status": "success",
   "timestamp": "2025-04-01T12:00:00Z"

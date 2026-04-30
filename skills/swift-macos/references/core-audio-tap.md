@@ -186,4 +186,4 @@ func audioCapturePermissionGranted() -> Bool {
 }
 ```
 
-For the "granted but silent" failure mode after `rm -rf` + `cp -R` reinstall with the same Developer ID, see `distribution.md` - TCC is keyed by CDHash; a same-CDHash reinstall can leave the entry in a degraded state where it reads authorized but delivers no audio. Fix: toggle off/on in System Settings.
+For the "granted but silent" failure mode after a force-recursive replace (rm&#8209;rf + cp&#8209;R) reinstall with the same Developer ID, see `distribution.md` - TCC is keyed by CDHash; a same-CDHash reinstall can leave the entry in a degraded state where it reads authorized but delivers no audio. Fix: toggle off/on in System Settings.

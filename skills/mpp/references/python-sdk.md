@@ -84,7 +84,7 @@ from mpp.methods.tempo import tempo, ChargeIntent
 app = FastAPI()
 mpp = Mpp.create(
     method=tempo(
-        currency="0x20c0000000000000000000000000000000000000",
+        currency="<PATHUSD_TESTNET>",
         recipient="0xYourAddress",
         intents={"charge": ChargeIntent()},
     ),
@@ -186,7 +186,7 @@ from mpp.methods.tempo import StreamMethod
 
 method = StreamMethod(
     account=account,
-    currency="0x20c0000000000000000000000000000000000000",
+    currency="<PATHUSD_TESTNET>",
     deposit="1.00",  # max tokens locked in escrow
 )
 ```
@@ -219,7 +219,7 @@ account = Account.from_key("0xYourPrivateKey")
 
 method = StreamMethod(
     account=account,
-    currency="0x20c0000000000000000000000000000000000000",
+    currency="<PATHUSD_TESTNET>",
     deposit="1.00",
 )
 

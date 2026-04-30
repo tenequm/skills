@@ -2,7 +2,27 @@
 name: privy-integration
 description: Integrates Privy authentication, embedded wallets, and agent payment protocols into web and agentic apps. Covers React SDK (PrivyProvider, hooks, wagmi), Node.js SDK, smart wallets (ERC-4337), x402 and MPP machine payments, Tempo chain, and agentic wallets with policies. Use when setting up Privy auth, creating embedded or agentic wallets, adding x402 or MPP payments, integrating with Tempo, configuring wallet policies, or connecting Privy to MCP/Agent Auth flows.
 metadata:
-  version: "0.2.0"
+  version: "0.3.0"
+  openclaw:
+    homepage: https://github.com/tenequm/skills/tree/main/skills/privy-integration
+    emoji: "🔐"
+    primaryEnv: PRIVY_APP_SECRET
+    envVars:
+      - name: PRIVY_APP_ID
+        required: false
+        description: Privy App ID (server-side).
+      - name: PRIVY_APP_SECRET
+        required: false
+        description: Privy App Secret for server SDK auth.
+      - name: PRIVY_WEBHOOK_SIGNING_SECRET
+        required: false
+        description: Secret for verifying inbound Privy webhooks.
+      - name: MPP_RECIPIENT
+        required: false
+        description: MPP payment recipient address (Tempo).
+      - name: NEXT_PUBLIC_PRIVY_APP_ID
+        required: false
+        description: Public Privy App ID for client SDK.
 ---
 
 # Privy Integration

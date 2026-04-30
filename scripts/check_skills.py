@@ -34,6 +34,10 @@ OPENCLAW_EXTENSION_FIELDS = {
     "homepage",
     "user-invocable",
 }
+# ClawHub allows these `metadata.*` keys to be nested mappings (per
+# docs/skill-format.md). Other metadata values must remain strings to satisfy
+# Anthropic's `metadata: dict[str, str]` contract.
+CLAWHUB_NESTED_METADATA_KEYS = {"openclaw", "clawdbot", "clawdis"}
 
 
 @dataclass
@@ -160,7 +164,10 @@ def lint_skill(skill_md: Path) -> LintResult:
             if not isinstance(key, str):
                 issues.append(LintIssue(skill_md, "`metadata` keys must be strings."))
                 break
-            if not isinstance(value, str):
+            if key in CLAWHUB_NESTED_METADATA_KEYS:
+                if not isinstance(value, dict):
+                    issues.append(LintIssue(skill_md, f"`metadata.{key}` must be a mapping."))
+            elif not isinstance(value, str):
                 issues.append(LintIssue(skill_md, f"`metadata.{key}` must be a string."))
         version = metadata.get("version")
         if version is None:

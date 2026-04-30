@@ -1089,16 +1089,16 @@ Call the preflight on every recording start and on `didBecomeActive` rather than
 
 Call `CGRequestScreenCaptureAccess()` at the onboarding *step* (the "Grant Screen Recording" screen), not at "Complete Setup". Users who click "Open System Settings" before hitting "Complete Setup" otherwise never trigger the in-app request path, and your onboarding behaves asymmetrically with mic / notifications (which fire per step).
 
-### Reinstalling via `rm -rf` + `cp -R` can leave TCC in a degraded state
+### Reinstalling via force-recursive replace (rm&#8209;rf + cp&#8209;R) can leave TCC in a degraded state
 
-TCC is keyed by code-signature CDHash. When you replace `/Applications/Blackbox.app` via `rm -rf /Applications/App.app && cp -R ./export/App.app /Applications/`, TCC *remembers* the grant (same Developer ID, same CDHash) but content delivery can be broken - permission reads as authorized, `SCStream` starts without error, buffers flow at zero amplitude (RMS stays at `-inf`).
+TCC is keyed by code-signature CDHash. When you replace `/Applications/Blackbox.app` via a force-recursive delete of `/Applications/App.app` followed by `cp -R ./export/App.app /Applications/`, TCC *remembers* the grant (same Developer ID, same CDHash) but content delivery can be broken - permission reads as authorized, `SCStream` starts without error, buffers flow at zero amplitude (RMS stays at `-inf`).
 
 There is no programmatic recovery. Direct-reading `~/Library/Application Support/com.apple.TCC/TCC.db` is blocked by SIP. The remediation the user must take:
 
 1. System Settings → Privacy & Security → Screen & System Audio Recording
 2. Toggle the app **off**, then **on** again
 
-Design your installer / update path accordingly - prefer an in-place overwrite (let the OS handle the inode swap) or run a `tccutil reset ScreenCapture $BUNDLE_ID` from a signed installer, rather than `rm -rf` + `cp`. For `make install` dev scripts, always `killall App` before replacing the bundle, otherwise the still-running process keeps executing from its unlinked inode and `open -a` brings the stale instance to front instead of launching the new one.
+Design your installer / update path accordingly - prefer an in-place overwrite (let the OS handle the inode swap) or run a `tccutil reset ScreenCapture $BUNDLE_ID` from a signed installer, rather than a force-recursive replace (rm&#8209;rf + cp). For `make install` dev scripts, always `killall App` before replacing the bundle, otherwise the still-running process keeps executing from its unlinked inode and `open -a` brings the stale instance to front instead of launching the new one.
 
 ### Ad-hoc signing resets TCC on every rebuild
 

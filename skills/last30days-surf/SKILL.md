@@ -2,8 +2,52 @@
 name: last30days-surf
 description: "Research what people actually said about any topic over the last 30 days across Reddit, X/Twitter, YouTube, GitHub, Hacker News, Polymarket, Bluesky, TikTok, Instagram, Threads, and the open web. One surf API key replaces the seven keys upstream needed (xAI, ScrapeCreators, Brave, OpenRouter, Apify, X cookies, yt-dlp install). Use when the user runs /last30days-surf <topic>, /l30, asks 'what's new with X', 'what are people saying about Y', 'last 30 days of Z', wants 'X vs Y' comparison, asks for competitors of a brand, prepares for a meeting/launch/trip, asks 'is X any good lately', or wants engagement-ranked discussion (upvotes, likes, dollar-backed odds) instead of SEO-ranked editorial content. Triggers: /last30days-surf, /l30, last 30 days, past month, past 30 days, recent discussion, what's new with, what are people saying about, vs mode, competitor comparison, before a meeting, before a launch, before a trip."
 metadata:
-  version: "0.1.0"
+  version: "0.2.0"
   upstream: "last30days-skill@5b87cca886c98d47b0dcbf00a7363320d935c82e"
+  openclaw:
+    homepage: https://github.com/tenequm/skills/tree/main/skills/last30days-surf
+    emoji: "📅"
+    primaryEnv: SURF_API_KEY
+    requires:
+      env:
+        - SURF_API_KEY
+      config:
+        - "~/.config/last30days-surf/.env"
+        - ".claude/last30days-surf.env"
+    envVars:
+      - name: SURF_API_KEY
+        required: true
+        description: Surf MCP API key. Required for full multi-platform research; partial baseline works without it.
+      - name: XAI_API_KEY
+        required: false
+        description: Optional xAI key for direct LLM judging (otherwise routed via surf).
+      - name: OPENAI_API_KEY
+        required: false
+        description: Optional OpenAI key for LLM judging.
+      - name: GOOGLE_API_KEY
+        required: false
+        description: Optional Google Generative AI key.
+      - name: GEMINI_API_KEY
+        required: false
+        description: Optional Gemini API key (alias of GOOGLE_API_KEY).
+      - name: SCRAPECREATORS_API_KEY
+        required: false
+        description: Optional ScrapeCreators key for direct social scraping.
+      - name: GITHUB_TOKEN
+        required: false
+        description: Optional GitHub token to raise API rate limits.
+      - name: CT0
+        required: false
+        description: Optional X/Twitter cookie for authenticated reads.
+      - name: AUTH_TOKEN
+        required: false
+        description: Optional X/Twitter auth token for authenticated reads.
+      - name: BSKY_HANDLE
+        required: false
+        description: Optional Bluesky handle for authenticated reads.
+      - name: BSKY_PASSWORD
+        required: false
+        description: Optional Bluesky app password for authenticated reads.
 ---
 
 # last30days-surf

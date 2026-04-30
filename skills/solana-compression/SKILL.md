@@ -2,7 +2,18 @@
 name: solana-compression
 description: Build with ZK Compression on Solana using Light Protocol. Use when creating compressed tokens, compressed PDAs, or integrating ZK compression into Solana programs. Covers compressed account model, state trees, validity proofs, and client integration with Helius/Photon RPC.
 metadata:
-  version: "0.6.0"
+  version: "0.6.1"
+  openclaw:
+    homepage: https://github.com/tenequm/skills/tree/main/skills/solana-compression
+    emoji: "🗜️"
+    primaryEnv: HELIUS_API_KEY
+    envVars:
+      - name: HELIUS_API_KEY
+        required: false
+        description: Helius RPC API key for Photon compressed-account indexer.
+      - name: LIGHT_RPC_URL
+        required: false
+        description: Light Protocol RPC endpoint override.
 ---
 
 # ZK Compression on Solana

@@ -111,12 +111,14 @@ Sent by client with payment authorization:
       "value": "10000",
       "validAfter": "1740672089",
       "validBefore": "1740672154",
-      "nonce": "0xf3746613c2d920b5fdabc0856f2aeb2d4f88ee6037b8cc5d04a71a4462f13480"
+      "nonce": "<EXAMPLE_NONCE>"
     }
   },
   "extensions": {}
 }
 ```
+
+> The `nonce` is an opaque 32-byte value (64 hex chars). Examples use `<EXAMPLE_NONCE>` as a placeholder; real implementations generate it randomly per authorization.
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|

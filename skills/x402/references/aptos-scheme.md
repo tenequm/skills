@@ -19,14 +19,18 @@ Install: `npm install @x402/aptos`
 | Aptos Mainnet | `aptos:1` | 1 |
 | Aptos Testnet | `aptos:2` | 2 |
 
+## Canonical addresses
+
+Public Aptos USDC fungible asset contract addresses. Inline examples elsewhere in this file use the placeholder names below; the literal addresses appear only here.
+
+| Placeholder                  | Network  | Address |
+|------------------------------|----------|---------|
+| `<APTOS_USDC_MAINNET>`       | Mainnet  | `0xbae207659db88bea0cbead6da0ed00aac12edcdda169e591cd41c94180b46f3b` |
+| `<APTOS_USDC_TESTNET>`       | Testnet  | `0x69091fbab5f7d635ee7ac5098cf0c1efbe31d68fec0f2cd565e8d168daf52832` |
+
 ## Supported Tokens
 
-Any Aptos fungible asset. Default: USDC (6 decimals).
-
-| Network | USDC Address |
-|---------|-------------|
-| Mainnet | `0xbae207659db88bea0cbead6da0ed00aac12edcdda169e591cd41c94180b46f3b` |
-| Testnet | `0x69091fbab5f7d635ee7ac5098cf0c1efbe31d68fec0f2cd565e8d168daf52832` |
+Any Aptos fungible asset. Default: USDC (6 decimals). See the [Canonical addresses](#canonical-addresses) table above for `<APTOS_USDC_MAINNET>` and `<APTOS_USDC_TESTNET>`.
 
 Address format: 64 hex characters with `0x` prefix (regex: `/^0x[a-fA-F0-9]{64}$/`).
 
@@ -50,11 +54,11 @@ Address format: 64 hex characters with `0x` prefix (regex: `/^0x[a-fA-F0-9]{64}$
   "scheme": "exact",
   "network": "aptos:1",
   "amount": "1000000",
-  "asset": "0xbae207659db88bea0cbead6da0ed00aac12edcdda169e591cd41c94180b46f3b",
-  "payTo": "0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef",
+  "asset": "<APTOS_USDC_MAINNET>",
+  "payTo": "<APTOS_RECIPIENT_ADDRESS>",
   "maxTimeoutSeconds": 60,
   "extra": {
-    "feePayer": "0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890"
+    "feePayer": "<APTOS_FEE_PAYER_ADDRESS>"
   }
 }
 ```

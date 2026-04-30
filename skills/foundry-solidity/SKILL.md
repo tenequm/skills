@@ -2,7 +2,53 @@
 name: foundry-solidity
 description: Build and test Solidity smart contracts with Foundry toolkit. Use when developing Ethereum contracts, writing Forge tests, deploying with scripts, or debugging with Cast/Anvil. Triggers on Foundry commands (forge, cast, anvil), Solidity testing, smart contract development, or files like foundry.toml, *.t.sol, *.s.sol.
 metadata:
-  version: "0.1.0"
+  version: "0.2.0"
+  openclaw:
+    homepage: https://github.com/tenequm/skills/tree/main/skills/foundry-solidity
+    emoji: "⚒️"
+    primaryEnv: PRIVATE_KEY
+    requires:
+      bins:
+        - forge
+        - cast
+        - anvil
+    envVars:
+      - name: PRIVATE_KEY
+        required: false
+        description: Deployer signing key. Use throwaway/testnet keys.
+      - name: ETHERSCAN_API_KEY
+        required: false
+        description: Etherscan verification API key.
+      - name: MAINNET_RPC_URL
+        required: false
+        description: Ethereum mainnet RPC endpoint.
+      - name: SEPOLIA_RPC_URL
+        required: false
+        description: Sepolia testnet RPC endpoint.
+      - name: ARBITRUM_RPC_URL
+        required: false
+        description: Arbitrum RPC endpoint.
+      - name: OPTIMISM_RPC_URL
+        required: false
+        description: Optimism RPC endpoint.
+      - name: ARBISCAN_API_KEY
+        required: false
+        description: Arbiscan verification key.
+      - name: OPTIMISTIC_ETHERSCAN_API_KEY
+        required: false
+        description: Optimistic Etherscan verification key.
+      - name: POLYGONSCAN_API_KEY
+        required: false
+        description: Polygonscan verification key.
+      - name: BASESCAN_API_KEY
+        required: false
+        description: Basescan verification key.
+      - name: DEPLOYER_PRIVATE_KEY
+        required: false
+        description: Alternative deployer key alias.
+      - name: TEST_ADMIN
+        required: false
+        description: Test admin address used in fork tests.
 ---
 
 # Foundry Solidity Development

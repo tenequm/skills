@@ -20,7 +20,7 @@ Tempo has **no native gas token**. Transaction fees are denominated in USD and p
 const prepared = await prepareTransactionRequest(client, {
   account,
   calls: [{ to, data }],
-  feeToken: '0x20C000000000000000000000b9537d11c60E8b50', // USDC
+  feeToken: '<USDC_TEMPO_MAINNET>', // USDC mainnet (see Token Addresses table below)
 } as never)
 const serialized = await signTransaction(client, { ...prepared, account } as never)
 await sendRawTransaction(client, { serializedTransaction: serialized })
@@ -30,7 +30,7 @@ await sendRawTransaction(client, { serializedTransaction: serialized })
 ```typescript
 import { setUserToken } from 'viem/tempo'
 await client.fee.setUserTokenSync({
-  token: '0x20C000000000000000000000b9537d11c60E8b50',
+  token: '<USDC_TEMPO_MAINNET>',
 })
 ```
 After this, all transactions from the account use USDC for gas unless overridden at the transaction level.
@@ -81,7 +81,7 @@ const tempoCharge = tempo.charge({
 ```ts
 const handler = mppx.charge({
   amount: "1.00",
-  currency: "0x20c000000000000000000000b9537d11c60e8b50", // override token
+  currency: "<USDC_TEMPO_MAINNET>", // override token (USDC.e mainnet)
   recipient: "0xDifferentRecipient",
   feePayer: "https://sponsor.example.com",
   expires: Expires.minutes(10),
@@ -165,7 +165,7 @@ Available in pull mode only. The server co-signs the transaction with the fee pa
 ```ts
 // Option 1: Direct account
 const charge = tempo.charge({
-  currency: "0x20c0000000000000000000000000000000000000",
+  currency: "<PATHUSD_TESTNET>",
   recipient: "0xRecipient",
   feePayer: privateKeyToAccount("0xSponsorPrivateKey"),
   testnet: true,
@@ -173,7 +173,7 @@ const charge = tempo.charge({
 
 // Option 2: External sponsor service
 const charge = tempo.charge({
-  currency: "0x20c0000000000000000000000000000000000000",
+  currency: "<PATHUSD_TESTNET>",
   recipient: "0xRecipient",
   feePayer: "https://sponsor.example.com",
   testnet: true,
@@ -188,7 +188,7 @@ Skip waiting for on-chain confirmation. Returns immediately after simulation suc
 
 ```ts
 const charge = tempo.charge({
-  currency: "0x20c0000000000000000000000000000000000000",
+  currency: "<PATHUSD_TESTNET>",
   recipient: "0xRecipient",
   waitForConfirmation: false,
   testnet: true,
@@ -204,7 +204,7 @@ import { tempo } from "@anthropic-ai/mpp/tempo";
 import { Store } from "@anthropic-ai/mpp";
 
 const tempoSession = tempo.session({
-  currency: "0x20c0000000000000000000000000000000000000",
+  currency: "<PATHUSD_TESTNET>",
   recipient: "0xYourAddress",
   store: Store.memory(),
   escrowContract: "0xe1c4d3dce17bc111181ddf716f75bae49e61a336", // testnet
@@ -298,14 +298,14 @@ for await (const event of stream) {
 ```ts
 // Testnet
 const charge = tempo.charge({
-  currency: "0x20c0000000000000000000000000000000000000",
+  currency: "<PATHUSD_TESTNET>",
   recipient: "0xRecipient",
   testnet: true,
 });
 
 // Mainnet - use USDC.e (Bridged USDC), remove testnet flag
 const charge = tempo.charge({
-  currency: "0x20c000000000000000000000b9537d11c60e8b50",
+  currency: "<USDC_TEMPO_MAINNET>",
   recipient: "0xRecipient",
 });
 ```
@@ -317,7 +317,7 @@ Distribute a single charge across multiple recipients in one transaction (0.4.12
 ```ts
 // Server - configure split recipients
 const charge = tempo.charge({
-  currency: "0x20c0000000000000000000000000000000000000",
+  currency: "<PATHUSD_TESTNET>",
   recipients: [
     { address: "0xPlatform", share: 0.9 },  // 90% to platform
     { address: "0xCreator", share: 0.1 },    // 10% to creator

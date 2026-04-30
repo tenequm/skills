@@ -69,7 +69,7 @@ Clients must approve the Permit2 contract. Three options:
       },
       "from": "0x857b06519E91e3A54538791bDbb0E22373e36b66",
       "spender": "0x402039b3d6E6BEC5A02c2C9fd937ac17A6940002",
-      "nonce": "0xf3746613c2d920b5fdabc0856f2aeb2d4f88ee6037b8cc5d04a71a4462f13480",
+      "nonce": "<EXAMPLE_NONCE>",
       "deadline": "1740672154",
       "witness": {
         "to": "0x209693Bc6afc0C5328bA36FaF03C514EF312287C",
@@ -82,6 +82,8 @@ Clients must approve the Permit2 contract. Three options:
 ```
 
 The `spender` is the `x402UptoPermit2Proxy` contract at `0x402039b3d6E6BEC5A02c2C9fd937ac17A6940002` (same address across all EVM chains via CREATE2).
+
+> The `nonce` field is an opaque 32-byte value (64 hex chars). Examples use `<EXAMPLE_NONCE>` as a placeholder; real implementations generate it randomly per authorization.
 
 ### Verification Steps
 
