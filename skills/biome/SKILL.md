@@ -2,7 +2,7 @@
 name: biome
 description: Lint and format frontend code with Biome 2.4. Covers type-aware linting, GritQL custom rules, domains, import organizer, and migration from ESLint/Prettier. Use when configuring linting rules, formatting code, writing custom lint rules, or setting up CI checks. Triggers on biome, biome config, biome lint, biome format, biome check, biome ci, gritql, migrate from eslint, migrate from prettier, import sorting, code formatting, lint rules, type-aware linting, noFloatingPromises.
 metadata:
-  version: "0.3.0"
+  version: "0.3.1"
   upstream: "@biomejs/biome@2.4.13"
 ---
 

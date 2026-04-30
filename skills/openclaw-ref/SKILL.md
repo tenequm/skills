@@ -2,7 +2,7 @@
 name: openclaw-ref
 description: OpenClaw platform reference - plugin system, extensions, configuration, boot/provisioning, channels, models, CLI. Use when working on openclaw codebase, building openclaw plugins/extensions, configuring openclaw instances, provisioning openclaw gateways, designing agent provisioning flows (e.g. agentbox), or debugging openclaw config/plugin/channel issues. Triggers on openclaw, openclaw config, openclaw plugin, openclaw extension, openclaw channel, openclaw gateway, openclaw provisioning, openclaw onboarding, openclaw boot, openclaw skills, BOOT.md, openclaw.plugin.json, openclaw-x402, agentbox provisioning.
 metadata:
-  version: "2026.4.7"
+  version: "2026.4.8"
   last_refresh_sha: cfe71e2e44c0c57329985dc20986138a4b605892
 ---
 

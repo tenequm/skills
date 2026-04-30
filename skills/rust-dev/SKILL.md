@@ -2,7 +2,7 @@
 name: rust-dev
 description: Practical day-1 guide to building applications in Rust well. Covers the mental model (ownership, errors as values, traits-not-interfaces), day-1 decisions (String vs &str, Box vs Rc vs Arc, dyn vs impl Trait, anyhow vs thiserror), idioms to internalize early, anti-patterns to avoid, and a tight crate shortlist (tokio, serde, anyhow, clap, reqwest, tracing, axum, sqlx). Use when starting a new Rust project, learning Rust coming from Python/JS/Go/Java/C++, deciding on types and lifetimes, choosing crates, structuring modules, configuring Cargo.toml/clippy/rustfmt, or whenever the user mentions Rust, cargo, ownership, borrow checker, lifetimes, traits, async Rust, or "writing this in Rust".
 metadata:
-  version: "0.1.0"
+  version: "0.1.1"
   upstream: "rust@1.95.0"
 ---
 

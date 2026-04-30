@@ -8,7 +8,7 @@ description: >
   README", "write docs for this repo", "check my README", or anything about README
   quality or structure.
 metadata:
-  version: "0.1.0"
+  version: "0.1.1"
 ---
 
 # Standard Readme

@@ -2,7 +2,7 @@
 name: impactful-writing
 description: Write clear, emotionally resonant, and well-structured content that readers remember and act upon. Use when writing or editing any text—Twitter posts, articles, documentation, emails, comments, updates—for maximum clarity, engagement, and impact.
 metadata:
-  version: "0.1.0"
+  version: "0.1.1"
 ---
 
 # Impactful Writing

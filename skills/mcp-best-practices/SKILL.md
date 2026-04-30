@@ -2,7 +2,7 @@
 name: mcp-best-practices
 description: Build production MCP servers with the TypeScript SDK. Covers spec 2025-11-25, SDK v1.29+/v2 alpha, transport selection, tool design, error handling, security, performance, known bugs with workarounds, MCP extensions, MCP Apps (interactive UIs), authorization extensions, and the MCP Registry. Use this skill whenever building MCP servers, designing MCP tools, choosing MCP transports, handling MCP errors, migrating to MCP v2, reviewing MCP security, optimizing MCP token usage, building MCP Apps, using MCP extensions, publishing to the MCP Registry, or working with registerTool, McpServer, streamable HTTP, outputSchema, structuredContent, tool annotations, ext-apps, or ext-auth.
 metadata:
-  version: "0.3.0"
+  version: "0.3.1"
   upstream: "@modelcontextprotocol/sdk@1.29.0, @modelcontextprotocol/server@2.0.0-alpha.2, @modelcontextprotocol/ext-apps@1.7.1"
 ---
 

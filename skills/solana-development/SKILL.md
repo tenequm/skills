@@ -2,7 +2,7 @@
 name: solana-development
 description: Build Solana programs with Anchor framework or native Rust. Use when developing Solana smart contracts, implementing token operations, testing programs, deploying to networks, or working with Solana development. Covers both high-level Anchor framework (recommended) and low-level native Rust for advanced use cases.
 metadata:
-  version: "0.6.0"
+  version: "0.6.1"
 ---
 
 # Solana Development

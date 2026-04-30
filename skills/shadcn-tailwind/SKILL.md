@@ -2,7 +2,7 @@
 name: shadcn-tailwind
 description: Build UIs with Tailwind CSS v4 and shadcn/ui. Covers CSS variables with OKLCH colors, component variants with CVA, responsive design, dark mode, and Tailwind v4.2 features. Supports Radix UI and Base UI primitives, CLI 3.0, and visual styles. Use when building interfaces with Tailwind, styling shadcn/ui components, implementing themes, or working with utility-first CSS. Triggers on tailwind, shadcn, utility classes, CSS variables, OKLCH, component styling, theming, dark mode, radix ui.
 metadata:
-  version: "0.1.0"
+  version: "0.1.1"
 ---
 
 # Styling with Tailwind CSS

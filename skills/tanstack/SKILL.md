@@ -2,7 +2,7 @@
 name: tanstack
 description: Build type-safe React apps with TanStack Query (data fetching, caching, mutations), Router (file-based routing, search params, loaders), and Start (SSR, server functions, middleware). Use when working with react-query, data fetching, server state, routing, search params, loaders, SSR, server functions, or full-stack React. Triggers on tanstack, react query, query client, useQuery, useMutation, invalidateQueries, tanstack router, file-based routing, search params, route loader, tanstack start, createServerFn, server functions, SSR.
 metadata:
-  version: "0.1.0"
+  version: "0.1.1"
 ---
 
 # TanStack (Query + Router + Start)
