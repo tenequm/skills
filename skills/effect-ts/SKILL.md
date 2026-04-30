@@ -2,7 +2,7 @@
 name: effect-ts
 description: "Effect-TS (Effect) comprehensive development guide for TypeScript. Use when building, debugging, reviewing, or generating Effect code. Covers typed error modeling (expected errors vs defects), structured concurrency (fibers), dependency injection (Context + Layers), resource management (Scope), retry/scheduling (Schedule), streams, Schema validation, observability (OpenTelemetry), HTTP client/server, Effect AI (LLM integration), and MCP servers. Critical for AI code generation: includes exhaustive wrong-vs-correct API tables preventing hallucinated Effect code. Supports both Effect v3 (stable) and v4 (beta). Use this skill whenever code imports from 'effect', '@effect/platform', '@effect/ai', or the user mentions Effect-TS, typed errors with Effect, functional TypeScript with Effect, Context, ServiceMap, Layer, or Schema from Effect. Also trigger when generating new TypeScript projects that could benefit from Effect patterns, even if the user doesn't explicitly name the library."
 metadata:
-  version: "0.3.0"
+  version: "0.3.1"
   effectVersionTracked: "4.0.0-beta.58"
   openclaw:
     homepage: https://github.com/tenequm/skills/tree/main/skills/effect-ts
