@@ -156,7 +156,7 @@ enum Cmd {
 HTTP client. Async by default; the `blocking` feature gives a sync API.
 
 ```toml
-reqwest = { version = "0.12", features = ["json"] }
+reqwest = { version = "0.13", features = ["json"] }
 ```
 
 ```rust
@@ -226,7 +226,7 @@ Run with `RUST_LOG=info cargo run`. Use `error!`, `warn!`, `info!`, `debug!`, `t
 Web framework. Built on `tokio` + `hyper` + `tower`. The 2026 default.
 
 ```toml
-axum = "0.7"
+axum = "0.8"
 tokio = { version = "1", features = ["full"] }
 ```
 
@@ -249,7 +249,8 @@ async fn health() -> Json<Health> {
 async fn main() -> anyhow::Result<()> {
     let app = Router::new()
         .route("/", get(root))
-        .route("/health", get(health));
+        .route("/health", get(health))
+        .route("/users/{id}", get(|axum::extract::Path(id): axum::extract::Path<u64>| async move { format!("user {id}") }));
 
     let listener = tokio::net::TcpListener::bind("0.0.0.0:3000").await?;
     axum::serve(listener, app).await?;
@@ -258,6 +259,8 @@ async fn main() -> anyhow::Result<()> {
 ```
 
 Path params, query params, JSON body, state, middleware all extract via the `FromRequest`/`FromRequestParts` traits. The axum docs are excellent.
+
+**0.8 breaking changes** (if you find a 0.7 tutorial): path captures use `/{id}` and `/{*rest}` instead of `/:id` and `/*rest`; `Option<T>` extractors require the new `OptionalFromRequestParts` trait; `Host` extractor moved to `axum-extra`; WebSocket `Message` uses `Bytes`/`Utf8Bytes` instead of `Vec<u8>`/`String`. MSRV is 1.78.
 
 ## `sqlx`
 
@@ -287,24 +290,41 @@ async fn find_user(pool: &PgPool, id: i64) -> sqlx::Result<Option<User>> {
 }
 ```
 
-The `query_as!` macro connects to your dev database at compile time to verify the SQL and types. To work offline (CI without a DB), run `cargo sqlx prepare` and commit the generated `sqlx-data.json`.
+The `query_as!` macro connects to your dev database at compile time to verify the SQL and types. To work offline (CI without a DB), run `cargo sqlx prepare` and commit the generated `.sqlx/` directory. (sqlx 0.6+ replaced the single `sqlx-data.json` file with this directory; older guides may still reference the old path.)
+
+For multi-crate workspaces, run `cargo sqlx prepare --workspace` to produce a single `.sqlx/` at the workspace root. In CI, `cargo sqlx prepare --check` exits non-zero when stored metadata is stale. To force offline mode without the CLI, set `SQLX_OFFLINE=true`.
 
 Migrations: `sqlx migrate add init`, write SQL, `sqlx migrate run`.
 
-## `chrono`
+## `chrono` (and `jiff`)
 
-Dates and times. Production-safe in 2026. Watch `jiff` (BurntSushi) for a 1.0 release; it has a better design but is not yet integrated with `sqlx`, `serde_json` ecosystem, etc.
+Dates and times. As of Jan 2026 the chrono maintainer announced soft-deprecation and recommends `jiff` (BurntSushi) for new code. Reality in May 2026:
+
+- `chrono` 0.4 is still production-safe and integrates cleanly with `serde`, `sqlx`, `serde_json`, and the rest of the ecosystem.
+- `jiff` is the recommended successor, but still pre-1.0 (latest 0.2.x). Major projects are migrating (kube-rs done, arrow-rs proposed, jj-vcs, k8s-openapi).
+
+Pick `chrono` if you need ecosystem integration today. Pick `jiff` for new code that can tolerate pre-1.0 churn and where you want correct timezone-aware arithmetic out of the box.
 
 ```toml
 chrono = { version = "0.4", features = ["serde"] }
+# or
+jiff   = { version = "0.2", features = ["serde"] }
 ```
 
 ```rust
+// chrono
 use chrono::{DateTime, Utc};
 
 let now: DateTime<Utc> = Utc::now();
 let parsed: DateTime<Utc> = "2026-04-29T12:00:00Z".parse()?;
 let in_an_hour = now + chrono::Duration::hours(1);
+
+// jiff (equivalent)
+use jiff::Timestamp;
+
+let now: Timestamp = Timestamp::now();
+let parsed: Timestamp = "2026-04-29T12:00:00Z".parse()?;
+let in_an_hour = now + 1.hour();
 ```
 
 ## Honorable Mentions
