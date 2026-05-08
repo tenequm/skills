@@ -4,10 +4,18 @@ All notable changes to this skill are documented here. Format follows [Keep a Ch
 
 ## [Unreleased]
 
+## [0.1.3] - 2026-05-08
+
+### Fixed
+- Hotfix for the v0.1.2 headless approach. The `--headed false` CLI flag corrupts the session context in agent-browser 0.26.0 (the eval/pdf commands see an empty document even though `open` reports success), producing blank PDFs. Reproduced and confirmed via direct CLI test. Switched to the supported route: setting the `AGENT_BROWSER_HEADED=false` environment variable before running. Verified: returns the correct page title and image count.
+
 ## [0.1.2] - 2026-05-08
 
 ### Changed
 - Recipe now passes `--headed false` to `agent-browser open` so the skill runs headless regardless of the host's `~/.agent-browser/config.json` default. Prevents a real Chrome window from popping up on the user's desktop during background automation. Drop the flag for visual debugging.
+
+### Known issue (fixed in 0.1.3)
+- The `--headed false` flag is parsed by agent-browser 0.26.0 but corrupts the session context. Use 0.1.3 or later.
 
 ## [0.1.1] - 2026-05-08
 
