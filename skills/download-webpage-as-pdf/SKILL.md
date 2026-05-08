@@ -2,7 +2,8 @@
 name: download-webpage-as-pdf
 description: Save a live webpage as a high-fidelity PDF that preserves the original layout AND every image (including lazy-loaded ones) using the agent-browser CLI. Use this whenever the user asks to "download this page as PDF", "save this article", "archive this URL", "fetch this page for reference", or otherwise wants a local PDF of a web page that looks like the browser version. Especially important on modern JS-heavy sites (engineering blogs, Next.js sites, anything with IntersectionObserver lazy loading) where naive `chrome --headless --print-to-pdf` or a bare `agent-browser pdf` produces blank rectangles or broken-image placeholders. Trigger this skill even when the user does not name the tool - any request to capture a webpage's full visual content as a PDF on disk should pull this in. For reader-mode/article-only output (no nav, no footer, no manual trimming) prefer percollate instead - see "When NOT to use this".
 metadata:
-  version: "0.1.0"
+  version: "0.1.1"
+  upstream: "agent-browser@0.26.0"
 ---
 
 # Download a webpage as a PDF (agent-browser recipe)
@@ -16,6 +17,8 @@ The naive approaches fail on modern sites:
 The fix is one async script that strips lazy-load attributes, scrolls the page to trigger any IntersectionObserver-based loaders, and `await`s every `<img>` to decode. agent-browser's `eval` waits for the returned promise to resolve before exiting, so the subsequent `pdf` command sees a fully-loaded DOM.
 
 ## The recipe
+
+If multiple test/agent runs may share the host's agent-browser, isolate each invocation with `agent-browser --session <unique-name> ...` on every command in the pipeline. Single-user one-off captures can omit the flag and use the default session.
 
 ```bash
 agent-browser open <URL>
@@ -47,9 +50,12 @@ agent-browser eval "(async () => {
 
 agent-browser pdf /tmp/page.pdf
 agent-browser close
+
+# Verify the result
+pdfinfo /tmp/page.pdf | grep -E "Pages|File size"
 ```
 
-The `eval` returns the count of images that still failed to load. Expect `0`. If non-zero, the recipe didn't fully capture the page - investigate before trusting the PDF.
+The `eval` returns the count of images that still failed to load. Expect `0`. If non-zero, the recipe didn't fully capture the page - investigate before trusting the PDF. The `pdfinfo` line is your standard end-of-recipe report (page count + bytes) so the agent has concrete numbers to relay back.
 
 ## Why each step matters
 
@@ -69,7 +75,8 @@ pdfinfo /tmp/page.pdf | grep Pages
 
 # Use the Read tool on the PDF to see the last few pages and decide where the article ends.
 
-# 2. Trim footer pages (replace 1-9 with the article's actual range)
+# 2. Trim footer pages. The "1-9" below is illustrative ONLY - replace with the
+#    article's actual range from pdfinfo + visual inspection. Do not copy this verbatim.
 qpdf /tmp/page.pdf --pages . 1-9 -- /tmp/page-trimmed.pdf
 
 # 3. Compress (typically 60-70% reduction with images intact)
