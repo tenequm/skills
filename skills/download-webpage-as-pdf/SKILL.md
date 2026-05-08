@@ -2,7 +2,7 @@
 name: download-webpage-as-pdf
 description: Save a live webpage as a high-fidelity PDF that preserves the original layout AND every image (including lazy-loaded ones) using the agent-browser CLI. Use this whenever the user asks to "download this page as PDF", "save this article", "archive this URL", "fetch this page for reference", or otherwise wants a local PDF of a web page that looks like the browser version. Especially important on modern JS-heavy sites (engineering blogs, Next.js sites, anything with IntersectionObserver lazy loading) where naive `chrome --headless --print-to-pdf` or a bare `agent-browser pdf` produces blank rectangles or broken-image placeholders. Trigger this skill even when the user does not name the tool - any request to capture a webpage's full visual content as a PDF on disk should pull this in. For reader-mode/article-only output (no nav, no footer, no manual trimming) prefer percollate instead - see "When NOT to use this".
 metadata:
-  version: "0.1.1"
+  version: "0.1.2"
   upstream: "agent-browser@0.26.0"
 ---
 
@@ -20,8 +20,10 @@ The fix is one async script that strips lazy-load attributes, scrolls the page t
 
 If multiple test/agent runs may share the host's agent-browser, isolate each invocation with `agent-browser --session <unique-name> ...` on every command in the pipeline. Single-user one-off captures can omit the flag and use the default session.
 
+`--headed false` is passed on the `open` command to force headless launch even if the host's `~/.agent-browser/config.json` defaults to `"headed": true`. This avoids popping a real Chrome window on the user's desktop while an agent is working in the background. Drop the flag (or pass `--headed`) only when you specifically want to watch the run for debugging.
+
 ```bash
-agent-browser open <URL>
+agent-browser --headed false open <URL>
 agent-browser wait --load networkidle
 
 agent-browser eval "(async () => {

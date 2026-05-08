@@ -4,6 +4,11 @@ All notable changes to this skill are documented here. Format follows [Keep a Ch
 
 ## [Unreleased]
 
+## [0.1.2] - 2026-05-08
+
+### Changed
+- Recipe now passes `--headed false` to `agent-browser open` so the skill runs headless regardless of the host's `~/.agent-browser/config.json` default. Prevents a real Chrome window from popping up on the user's desktop during background automation. Drop the flag for visual debugging.
+
 ## [0.1.1] - 2026-05-08
 
 ### Added
