@@ -1,0 +1,92 @@
+---
+name: download-webpage-as-pdf
+description: Save a live webpage as a high-fidelity PDF that preserves the original layout AND every image (including lazy-loaded ones) using the agent-browser CLI. Use this whenever the user asks to "download this page as PDF", "save this article", "archive this URL", "fetch this page for reference", or otherwise wants a local PDF of a web page that looks like the browser version. Especially important on modern JS-heavy sites (engineering blogs, Next.js sites, anything with IntersectionObserver lazy loading) where naive `chrome --headless --print-to-pdf` or a bare `agent-browser pdf` produces blank rectangles or broken-image placeholders. Trigger this skill even when the user does not name the tool - any request to capture a webpage's full visual content as a PDF on disk should pull this in. For reader-mode/article-only output (no nav, no footer, no manual trimming) prefer percollate instead - see "When NOT to use this".
+metadata:
+  version: "0.1.0"
+---
+
+# Download a webpage as a PDF (agent-browser recipe)
+
+The naive approaches fail on modern sites:
+
+- `chrome --headless --print-to-pdf` captures only the initial viewport's images. Anything below the fold renders as a blank rectangle.
+- `agent-browser pdf` immediately after `open` has the same problem - lazy-loaded images haven't decoded yet.
+- Scrolling via JS and then waiting a fixed time is also unreliable - you don't know when each image actually finished.
+
+The fix is one async script that strips lazy-load attributes, scrolls the page to trigger any IntersectionObserver-based loaders, and `await`s every `<img>` to decode. agent-browser's `eval` waits for the returned promise to resolve before exiting, so the subsequent `pdf` command sees a fully-loaded DOM.
+
+## The recipe
+
+```bash
+agent-browser open <URL>
+agent-browser wait --load networkidle
+
+agent-browser eval "(async () => {
+  const sleep = ms => new Promise(r => setTimeout(r, ms));
+  ['#onetrust-banner-sdk','#onetrust-consent-sdk','.ot-sdk-container','#ot-sdk-btn-floating','[id*=cookie]','[id*=consent]','[id*=onetrust]'].forEach(s => document.querySelectorAll(s).forEach(e => e.remove()));
+  document.querySelectorAll('img').forEach(img => {
+    img.removeAttribute('loading');
+    img.removeAttribute('decoding');
+    if (img.dataset.src) img.src = img.dataset.src;
+    if (img.dataset.srcset) img.srcset = img.dataset.srcset;
+  });
+  for (let y = 0; y < document.documentElement.scrollHeight + 2000; y += 400) {
+    window.scrollTo(0, y);
+    await sleep(200);
+  }
+  window.scrollTo(0, document.documentElement.scrollHeight);
+  await sleep(2000);
+  await Promise.all(Array.from(document.images).map(i =>
+    i.complete && i.naturalWidth ? null
+    : new Promise(r => { i.addEventListener('load', r, {once:true}); i.addEventListener('error', r, {once:true}); setTimeout(r, 5000); })
+  ));
+  window.scrollTo(0, 0);
+  await sleep(500);
+  return Array.from(document.images).filter(i => !i.naturalWidth).length;
+})()"
+
+agent-browser pdf /tmp/page.pdf
+agent-browser close
+```
+
+The `eval` returns the count of images that still failed to load. Expect `0`. If non-zero, the recipe didn't fully capture the page - investigate before trusting the PDF.
+
+## Why each step matters
+
+- **`wait --load networkidle`** before the eval gives the page a chance to attach its IntersectionObservers and other JS hooks. Scrolling before observers attach defeats the trigger.
+- **Removing the `loading` attribute** is the structural fix. This is the same trick percollate uses internally - the most reliable way to make Chromium eagerly fetch every image.
+- **Scrolling the full height in 400px steps** triggers any observer-based loaders that watch for elements crossing the viewport. Some sites use observers even after `loading=lazy` is removed.
+- **`await Promise.all` on every `<img>`** guarantees decoded pixels are in memory before the eval returns. agent-browser's `eval` is promise-aware - the next command (`pdf`) will not run until this resolves.
+- **Returning the broken-image count** is your verification. If it is not 0, the recipe did not fully capture the page - do not trust the PDF.
+
+## Cleanup pipeline (optional but recommended)
+
+agent-browser saves at letter size with the page's full footer (nav, newsletter signup, link sitemap). For a clean archive:
+
+```bash
+# 1. Inspect total page count and visually identify which trailing pages are footer
+pdfinfo /tmp/page.pdf | grep Pages
+
+# Use the Read tool on the PDF to see the last few pages and decide where the article ends.
+
+# 2. Trim footer pages (replace 1-9 with the article's actual range)
+qpdf /tmp/page.pdf --pages . 1-9 -- /tmp/page-trimmed.pdf
+
+# 3. Compress (typically 60-70% reduction with images intact)
+gs -sDEVICE=pdfwrite -dCompatibilityLevel=1.4 -dPDFSETTINGS=/ebook \
+   -dNOPAUSE -dQUIET -dBATCH \
+   -sOutputFile=/path/to/final.pdf /tmp/page-trimmed.pdf
+```
+
+`-dPDFSETTINGS=/ebook` keeps images legible at roughly half the raw size. `/screen` is smaller but blurrier; use only when size matters more than legibility.
+
+## When NOT to use this
+
+- **Reader-mode / article-only output** (no nav, no footer, no manual trimming, just the article body and its images): use `npx percollate pdf <URL> -o out.pdf` instead. percollate runs Mozilla Readability + Puppeteer and auto-strips chrome. It also handles lazy-load via DOM preprocessing rather than scroll hacks. Slower (~10s) but zero trimming work and very robust on unknown URLs. Pair with `--no-hyphenate --css "@page { size: A4; margin: 18mm; } a[href]::after { content: none !important; }"` to suppress the inlined-URL-after-link default.
+- **Single-page screenshot (not paginated)**: use `agent-browser screenshot --full-page` instead.
+- **HTML archive with all assets bundled**: use `monolith` or `single-file CLI`. PDFs lose interactivity.
+- **Server-rendered HTML you control** (no JS): WeasyPrint is faster and simpler.
+
+## Picking between agent-browser and percollate
+
+When the user does not specify, default to **percollate** for "save this for archival reference" - it's idiot-proof and handles unknown URLs without manual trimming. Use **agent-browser** (this skill) when the user explicitly wants the page to look like the browser version, or when the page is not article-shaped (a tool, dashboard, marketing page, portfolio) where Mozilla Readability would strip out content the user actually wants.
