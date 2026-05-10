@@ -114,3 +114,7 @@ just check
 ## License
 
 [MIT](LICENSE)
+
+## Download History
+
+[![Download History](https://skill-history.com/chart/tenequm/agentbox-openrouter.svg)](https://skill-history.com/tenequm/agentbox-openrouter)
