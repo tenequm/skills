@@ -17,6 +17,7 @@ A strong description has three parts:
 - No XML angle brackets (`<` or `>`)
 - Include **WHAT** + **WHEN**
 - Be slightly "pushy" - Claude tends to undertrigger
+- Write natural prose, not keyword dumps - Claude matches on semantic meaning, so a long "Triggers on X, Y, Z..." list adds little over a clear sentence
 
 ## Examples: Good Descriptions
 
@@ -135,6 +136,10 @@ description: Advanced data analysis for CSV files. Use for statistical
 description: PayFlow payment processing for e-commerce. Use specifically
   for online payment workflows, not for general financial queries.
 ```
+
+## Descriptions for Manually-Invoked Skills
+
+A skill with `disable-model-invocation: true` is never auto-triggered - Claude only runs it when the user types `/name`. Its description shows in the `/` menu only, so trigger phrases and negative triggers do nothing for it. Write a plain one-line summary of what the command does and skip the trigger-tuning.
 
 ## Description for MCP-Enhanced Skills
 

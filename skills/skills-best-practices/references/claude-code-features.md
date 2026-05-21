@@ -10,7 +10,9 @@ Features specific to skills running in Claude Code, beyond the base Agent Skills
 - Argument substitution
 - Skill discovery and locations
 - Bundled skills
+- Skill content lifecycle
 - Permission control
+- Settings overrides
 - Context budget
 
 ## Invocation Control
@@ -102,6 +104,21 @@ Summarize this pull request...
 
 Each `` !`command` `` executes immediately, output replaces the placeholder. Claude only sees the final rendered content. This is preprocessing, not something Claude runs.
 
+The inline form is recognized only when `!` is at the start of a line or immediately after whitespace. If `!` follows another character (e.g. `` KEY=!`cmd` ``), the placeholder is left as literal text and the command does not run.
+
+For multi-line commands, use a fenced code block opened with ` ```! ` instead of the inline form:
+
+````markdown
+## Environment
+```!
+node --version
+npm --version
+git status --short
+```
+````
+
+To disable shell execution for skills and custom commands from user, project, plugin, or additional-directory sources, set `"disableSkillShellExecution": true` in settings. Each command is replaced with `[shell command execution disabled by policy]`. Bundled and managed skills are unaffected.
+
 ## Argument Substitution
 
 Skills support these substitution variables:
@@ -111,7 +128,9 @@ Skills support these substitution variables:
 | `$ARGUMENTS` | All arguments passed when invoking |
 | `$ARGUMENTS[N]` | Specific argument by 0-based index |
 | `$N` | Shorthand for `$ARGUMENTS[N]` |
+| `$name` | Named argument declared in the `arguments` frontmatter list (bound by position) |
 | `${CLAUDE_SESSION_ID}` | Current session ID |
+| `${CLAUDE_EFFORT}` | Current effort level: `low`, `medium`, `high`, `xhigh`, or `max` |
 | `${CLAUDE_SKILL_DIR}` | Directory containing the skill's SKILL.md |
 
 Example:
@@ -148,6 +167,22 @@ Preserve all existing behavior and tests.
 
 `/migrate-component SearchBar React Vue` replaces `$0`=SearchBar, `$1`=React, `$2`=Vue.
 
+### Named Arguments
+
+Declare an `arguments` frontmatter field to give positions readable names:
+
+```yaml
+---
+name: fix-issue
+description: Fix a GitHub issue on a branch
+arguments: [issue, branch]
+---
+
+Fix issue $issue on branch $branch.
+```
+
+`/fix-issue 123 hotfix` maps `$issue`=123, `$branch`=hotfix - names bind to positions in order.
+
 ## Skill Discovery and Locations
 
 Priority order (higher wins on name conflicts):
@@ -158,6 +193,10 @@ Priority order (higher wins on name conflicts):
 | Personal | `~/.claude/skills/<name>/SKILL.md` | All your projects |
 | Project | `.claude/skills/<name>/SKILL.md` | This project |
 | Plugin | `<plugin>/skills/<name>/SKILL.md` | Where plugin enabled |
+
+Enterprise overrides personal, and personal overrides project. Plugin skills use a `plugin-name:skill-name` namespace, so they never conflict with the other levels.
+
+**Custom commands are skills.** A file at `.claude/commands/deploy.md` and a skill at `.claude/skills/deploy/SKILL.md` both create `/deploy`. Existing `.claude/commands/` files keep working; if a skill and a command share a name, the skill takes precedence.
 
 ### Automatic Discovery
 
@@ -177,17 +216,35 @@ Ships with Claude Code, available in every session:
 | `/loop [interval] <prompt>` | Run a prompt repeatedly on an interval |
 | `/simplify [focus]` | Review changed files for reuse, quality, efficiency |
 
+Three more bundled skills launch and verify your app (require Claude Code v2.1.145+):
+
+| Skill | Purpose |
+|-------|---------|
+| `/run` | Launch and drive your app to see a change working |
+| `/verify` | Build and run your app to confirm a change, without falling back to tests |
+| `/run-skill-generator` | Record a per-project recipe so `/run` and `/verify` know how to build and launch |
+
+## Skill Content Lifecycle
+
+When a skill is invoked, the rendered `SKILL.md` content enters the conversation as a single message and stays there for the rest of the session. Claude Code does not re-read the file on later turns - write standing instructions, not one-time steps.
+
+Auto-compaction carries invoked skills forward within a token budget: after a summary, Claude Code re-attaches the most recent invocation of each skill, keeping the first 5,000 tokens of each. Re-attached skills share a combined budget of 25,000 tokens, filled from the most recently invoked skill - so older skills can be dropped after compaction. Re-invoke a skill after compaction to restore its full content.
+
 ## Permission Control
 
-### Restrict tool access per skill
+### Pre-approve tools per skill
+
+`allowed-tools` grants permission for the listed tools while the skill is active, so Claude uses them without a prompt. It does **not** restrict which tools are available - every tool stays callable, and your permission settings still govern the rest. Accepts a space-separated string or a YAML list:
 
 ```yaml
 ---
 name: safe-reader
 description: Read files without making changes
-allowed-tools: Read, Grep, Glob
+allowed-tools: Read Grep Glob
 ---
 ```
+
+To block a skill from a tool, add a deny rule in permission settings instead.
 
 ### Restrict Claude's skill access
 
@@ -195,6 +252,8 @@ In `/permissions` deny rules:
 - `Skill` - disable all skills
 - `Skill(deploy *)` - deny specific skill
 - `Skill(commit)` - deny exact match
+
+A few built-in commands are also reachable through the Skill tool: `/init`, `/review`, `/security-review`. Others such as `/compact` are not.
 
 ### Path-based activation
 
@@ -208,13 +267,26 @@ paths: "src/components/**/*.tsx, src/pages/**/*.tsx"
 
 Skill only activates when working with files matching the patterns.
 
+## Settings Overrides
+
+`skillOverrides` controls skill visibility from settings instead of the skill's own frontmatter - useful for skills you don't want to edit (shared repo, MCP-provided). Each key is a skill name; each value is one of four states:
+
+| Value | Listed to Claude | In `/` menu |
+|-------|-----------------|-------------|
+| `"on"` | Name and description | Yes |
+| `"name-only"` | Name only | Yes |
+| `"user-invocable-only"` | Hidden | Yes |
+| `"off"` | Hidden | Hidden |
+
+A skill absent from `skillOverrides` is treated as `"on"`. The `/skills` menu writes it to `.claude/settings.local.json` for you. Plugin skills are unaffected.
+
 ## Context Budget
 
-Skill descriptions are loaded into context at startup. Budget: **2% of context window** (fallback: 16,000 characters).
+Skill descriptions are loaded into context at startup. The budget scales at **1% of the model's context window**. When it overflows, the descriptions of least-used skills are dropped first; names are always kept.
 
-If you have many skills and some are excluded, check with `/context`.
+Run `/doctor` to see whether the budget is overflowing and which skills are affected.
 
-Override with env var: `SLASH_COMMAND_TOOL_CHAR_BUDGET=32000`
+Raise the budget with the `skillListingBudgetFraction` setting (e.g. `0.02` = 2%) or the `SLASH_COMMAND_TOOL_CHAR_BUDGET` env var (fixed character count). Independently, each entry's combined `description` + `when_to_use` text is capped at **1,536 characters** in the listing (configurable via `maxSkillDescriptionChars`). Set low-priority skills to `"name-only"` in `skillOverrides` to free budget.
 
 ## Extended Thinking
 

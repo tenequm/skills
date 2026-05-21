@@ -16,6 +16,7 @@ Advanced patterns for structuring skills, drawn from Anthropic's official exampl
 - Progressive disclosure patterns
 - Skills + MCP integration
 - Skills + Subagents integration
+- Developing skills with Claude (Claude A / Claude B)
 
 ## Choosing Your Approach
 
@@ -349,3 +350,21 @@ Research $ARGUMENTS thoroughly:
 2. Read and analyze the code
 3. Summarize findings with file references
 ```
+
+## Developing Skills with Claude (Claude A / Claude B)
+
+The most effective way to build a skill is with Claude itself, in two roles:
+
+- **Claude A** - helps you design and refine the skill (it understands the skill format and what agents need)
+- **Claude B** - a fresh instance with the skill loaded, used to test it on real tasks
+
+Workflow:
+
+1. Complete a task with Claude A using normal prompting; notice what context you repeatedly supply.
+2. Ask Claude A to capture that as a skill.
+3. Review for conciseness and information architecture.
+4. Test with Claude B on related tasks - observe where it struggles or misses references.
+5. Bring specific observations back to Claude A ("Claude B forgot to filter test accounts") and refine.
+6. Repeat the observe-refine-test loop with real usage, not invented scenarios.
+
+Iterate on observed behavior, not assumptions.

@@ -2,6 +2,8 @@
 
 Validate your skill before upload or sharing. Based on Anthropic's official checklist from "The Complete Guide to Building Skills for Claude."
 
+> **Calibrate to scope.** This checklist targets skills headed for broad distribution (ClawHub, unknown users, multiple models). For a project-local, single-user, or `disable-model-invocation` skill, skip items that don't apply - triggering-accuracy tuning, multi-model testing, and distribution hygiene matter far less when one person invokes the skill in their own repo.
+
 ## Before You Start
 
 - [ ] Identified 2-3 concrete use cases the skill enables
@@ -85,6 +87,7 @@ Validate your skill before upload or sharing. Based on Anthropic's official chec
 - [ ] No time-sensitive information (or in "old patterns" section)
 - [ ] No Windows-style paths (all forward slashes)
 - [ ] No deprecated APIs referenced
+- [ ] Frontmatter validated with `skills-ref validate ./<skill>` (Agent Skills reference validator)
 
 ## After Upload
 

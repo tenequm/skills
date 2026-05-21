@@ -2,7 +2,7 @@
 
 ClawHub ([clawhub.ai](https://clawhub.ai)) is a public registry for Agent Skills. It extends Anthropic's base skill spec with runtime metadata (`metadata.openclaw`), automatic moderation (3 scanners), and a CLI/API for publishing. This is the field guide for getting skills past moderation on the first try.
 
-Sources of truth: [openclaw/clawhub/docs/skill-format.md](https://github.com/openclaw/clawhub/blob/main/docs/skill-format.md), [security.md](https://github.com/openclaw/clawhub/blob/main/docs/security.md), [cli.md](https://github.com/openclaw/clawhub/blob/main/docs/cli.md), [spec.md](https://github.com/openclaw/clawhub/blob/main/docs/spec.md).
+Sources of truth: [skill-format.md](https://github.com/openclaw/clawhub/blob/main/docs/skill-format.md), [security-audits.md](https://github.com/openclaw/clawhub/blob/main/docs/security-audits.md), [moderation.md](https://github.com/openclaw/clawhub/blob/main/docs/moderation.md), [cli.md](https://github.com/openclaw/clawhub/blob/main/docs/cli.md).
 
 ## What ClawHub adds to the Anthropic spec
 
@@ -88,13 +88,9 @@ install:
   - kind: uv
     package: ruff==0.15.12
     bins: [ruff]
-  - kind: download
-    url: https://example.com/binary.tar.gz
-    archive: tar.gz
-    bins: [binary]
 ```
 
-Validation: no shell metacharacters in package names; HTTPS-only URLs; no `..` in paths.
+Supported kinds: `brew`, `node`, `go`, `uv`. Validation: no shell metacharacters in package names.
 
 ## Moderation pipeline
 
@@ -103,10 +99,10 @@ Every publish triggers three scans. Each contributes a verdict; the worst wins.
 | Scanner | Reason code prefix | What it catches |
 |---|---|---|
 | **VirusTotal** | `vt_*` | URL/file content reputation (known malware signatures, bad domains). |
-| **ClawScan** (LLM) | `llm_suspicious` | Context-aware semantic review (gpt-5-mini). Flags metadata-vs-runtime mismatch, capability overreach, undeclared credentials, internal contradictions. |
+| **ClawScan** (LLM) | `llm_suspicious` | Context-aware semantic review. Flags metadata-vs-runtime mismatch, capability overreach, undeclared credentials, internal contradictions. |
 | **Static analysis** | specific codes (see below) | Pattern matching for risky literals. |
 
-ClawScan's review dimensions: `Purpose & Capability`, `Instruction Scope`, `Install Mechanism`, `Credentials`, `Persistence & Privilege`. Each can be `ok` / `note` / `concern`.
+ClawScan's review dimensions: `Purpose & Capability`, `Instruction Scope`, `Install Mechanism`, `Credentials`, `Persistence & Privilege`. Each can be `ok` / `note` / `concern`. Its risk analysis uses the [OWASP Agentic Skills Top 10](https://owasp.org/www-project-agentic-skills-top-10/) as a lens (prompt injection, tool misuse, credential exposure, unsafe execution, context poisoning, excessive agency).
 
 To inspect: `curl -H "Authorization: Bearer <token>" https://clawhub.ai/api/v1/skills/<slug>` returns the `moderation` block with `verdict` (`clean` / `suspicious` / `malicious`), `reasonCodes[]`, `summary`, `engineVersion`.
 
@@ -125,24 +121,28 @@ To inspect: `curl -H "Authorization: Bearer <token>" https://clawhub.ai/api/v1/s
 
 ## Capability tags (auto-derived)
 
-ClawHub computes 7 capability tags at publish time by running deterministic regex matchers over the lowercased concatenation of slug + display name + summary + frontmatter (JSON-stringified) + README + every text file in the bundle. Source of truth: [`convex/lib/skillCapabilityTags.ts`](https://github.com/openclaw/clawhub/blob/main/convex/lib/skillCapabilityTags.ts).
+ClawHub computes 9 capability tags at publish time by running deterministic regex matchers over the lowercased concatenation of slug + display name + summary + frontmatter (JSON-stringified) + README + every text file in the bundle. Source of truth: [`convex/lib/skillCapabilityTags.ts`](https://github.com/openclaw/clawhub/blob/main/convex/lib/skillCapabilityTags.ts).
 
 These tags are **not author-declared**. The only way to drop a tag is to remove every word in the bundle that triggers its regex.
 
 | Tag | Trigger word families |
 |---|---|
-| `crypto` | `crypto`, `blockchain`, `defi`, `on-chain`, `wallet`, `private key`, `erc20`, `usdc`, `eth/ethereum`, `base network`, `arbitrum`, `optimism`, `polygon`, `avalanche`, `solana`, `aave`, `token balance`, `bridge`, `liquidity`, `ens`, `x402`, contextual `defi/token/coin/nft swap` patterns |
-| `requires-wallet` | `private key`, `wallet`, `mnemonic`, `seed phrase`, `configured wallet`, `signer`, `eip-712` |
-| `can-make-purchases` | `payment(s)`, `paid automatically`, `pay per call`, `micropayments`, `payment required`, `costs $N`, `charged`, `purchase`, `buy {credits/tokens/coins/nft/subscription/plan}`, `payment checkout`, `one-click checkout` |
-| `can-sign-transactions` | `sign(ing) (and submit/send/broadcast) transaction(s)`, `sendTransaction`, `approval_required`, `on-chain tx/transaction`, `execute transaction`, `broadcast transaction`, `walletClient.sendTransaction` |
+| `crypto` | `crypto`, `blockchain`, `defi`, `on-chain`, `wallet`, `private key`, `erc-20`, `usdc`, `eth/ethereum`, `bitcoin/btc`, `base network`, `arbitrum`, `optimism`, `polygon`, `avalanche`, `solana`, `aave`, `token balance`, `bridge`, `liquidity`, `ens`, `x402`, contextual `defi/token/coin/nft swap` patterns |
+| `financial-authority` | No regex of its own - **derived** when `can-make-purchases` or `can-sign-transactions` is set (see Auto-implications) |
+| `requires-wallet` | `private key`, `wallet`, `walletClient`, `sendTransaction`, `mnemonic`, `seed phrase`, `configured wallet`, `signer`, `eip-712` |
+| `can-make-purchases` | `paid automatically`, `micropayments`, `process/accept/collect payments`, `make/send/authorize payments`, `pay invoices/bills/vendors`, `payment processing`, `charge cards/customers`, `buy {credits/tokens/coins/nft/subscription/plan}`, `buy/order products after user approval`, `payment checkout`, `one-click checkout` |
+| `can-sign-transactions` | `sign (and submit/send/broadcast/authorize/approve) transaction(s)`, `sendTransaction`, `approval_required`, `on-chain tx/transaction`, `execute transaction`, `broadcast transaction`, `walletClient.sendTransaction` (database/SQL/internal/workflow transactions are excluded) |
+| `requires-paid-service` | `payment required`, `paid subscription/plan/api required`, `requires a pro/premium/billing subscription`, `pay per call`, `costs $N`, `charged per call/request`, `account top-up/recharge`, `402 payment required` + `insufficient balance`. Negations (`no payments required`, `never requires a subscription`) are stripped before matching |
 | `requires-oauth-token` | `oauth`, `oauth 2.0`, `access token`, `refresh token`, `bearer token`, `tweet.write` |
 | `requires-sensitive-credentials` | `api key`/`api_key`/`api-key`, `access/refresh/bearer token`, `session/auth cookie(s)`, `private key`, `mnemonic`, `seed phrase`, `signer` |
 | `posts-externally` | `post (a/this) tweet`, `reply to tweet`, `quote tweet`, `post to x/twitter`, `twitter-post`, `publish post` |
 
 **Auto-implications** (set after the regex pass):
-- `can-sign-transactions` OR `can-make-purchases` → adds `crypto`
-- `can-sign-transactions` → adds `requires-wallet`
+- `can-make-purchases` OR `can-sign-transactions` → adds `financial-authority`
+- `can-sign-transactions` AND `crypto` → adds `requires-wallet`
 - `requires-wallet` OR `can-sign-transactions` OR `requires-oauth-token` → adds `requires-sensitive-credentials`
+
+Purchase or transaction-signing authority on its own no longer derives `crypto` or `requires-wallet`; non-crypto financial skills get `financial-authority` instead.
 
 **Why this matters**: ClawScan (the LLM scanner) reads the capability tags and flags `suspicious` when a tag is set but the skill's stated purpose doesn't justify it (e.g. a fact-check skill with `can-make-purchases`). The fix is **always** content-side: find the trigger word, remove or rephrase it. Defensive scoping language (e.g., "this skill does NOT make payments") usually backfires - it adds the very trigger words it tries to disclaim.
 
@@ -176,6 +176,7 @@ clawhub publish ./skills/my-skill \
   --name my-skill \
   --version 0.1.0 \
   --changelog "Initial release." \
+  --clawscan-note "Network access is limited to the user-configured API." \
   --tags latest
 
 # Inspect (owner-visible moderation diagnostics when logged in)
@@ -191,6 +192,8 @@ clawhub skill rename my-skill my-new-skill
 # Sync all changed local skills
 clawhub sync --bump patch --tags latest
 ```
+
+Use `--clawscan-note "<text>"` on publish to pre-explain behavior that may look unusual (network access, native host access, provider credentials). It gives ClawScan context and is stored on the published version.
 
 Direct moderation API (most useful for debugging suspicious flags):
 

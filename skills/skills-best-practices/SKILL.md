@@ -2,7 +2,7 @@
 name: skills-best-practices
 description: Build high-quality Agent Skills for Claude following official Anthropic best practices. Covers SKILL.md structure, frontmatter, description writing, progressive disclosure, testing, patterns, troubleshooting, and distribution across all surfaces (Claude.ai, Claude Code, API, Agent SDK). Use when creating new skills, reviewing skill quality, debugging skill triggering, structuring skill directories, writing skill descriptions, or improving existing skills. Triggers on "build a skill", "create a skill", "skill structure", "SKILL.md", "skill best practices", "skill not triggering", "skill quality".
 metadata:
-  version: "0.3.0"
+  version: "0.4.0"
   openclaw:
     homepage: https://github.com/tenequm/skills/tree/main/skills/skills-best-practices
     emoji: "📐"
@@ -48,7 +48,7 @@ Skills load information in three levels to minimize token usage:
 | Level | When Loaded | Token Cost | Content |
 |-------|------------|------------|---------|
 | **1: Metadata** | Always (startup) | ~100 tokens | `name` + `description` from frontmatter |
-| **2: Instructions** | When skill triggers | <5k tokens | SKILL.md body |
+| **2: Instructions** | When skill triggers | <5k tokens (recommended) | SKILL.md body |
 | **3: Resources** | As needed | Effectively unlimited | Bundled files, scripts |
 
 Keep SKILL.md under **500 lines**. Move detailed docs to separate files and reference them:
@@ -107,21 +107,28 @@ More examples in [references/description-guide.md](references/description-guide.
 | `name` | Kebab-case, max 64 chars, lowercase + numbers + hyphens only. No "claude" or "anthropic" |
 | `description` | Non-empty, max 1024 chars, no XML tags. WHAT + WHEN |
 
+The agentskills.io standard and the Claude API require both fields. Claude Code is more lenient: `name` falls back to the directory name, and `description` falls back to the first markdown paragraph. Write both anyway for portability.
+
 ### Optional Fields (Claude Code)
 
 | Field | Purpose |
 |-------|---------|
 | `argument-hint` | Autocomplete hint, e.g. `[issue-number]` |
+| `when_to_use` | Extra trigger context, appended to `description` in the skill listing |
+| `arguments` | Named positional arguments for `$name` substitution (space-separated string or list) |
 | `disable-model-invocation` | `true` = only user can invoke (for deploy, commit) |
 | `user-invocable` | `false` = hidden from `/` menu (background knowledge) |
-| `allowed-tools` | Tools allowed without permission, e.g. `Read, Grep, Glob` |
-| `model` | Override model for this skill |
-| `effort` | Override effort level: `low`, `medium`, `high`, `max` |
+| `allowed-tools` | Pre-approves tools (no permission prompt); space-separated, e.g. `Read Grep Glob` |
+| `model` | Override model for this skill; accepts `inherit`. Lasts the current turn only |
+| `effort` | Override effort level: `low`, `medium`, `high`, `xhigh`, `max` |
 | `context` | `fork` = run in isolated subagent |
 | `agent` | Subagent type when `context: fork` (e.g. `Explore`, `Plan`) |
+| `hooks` | Hooks scoped to this skill's lifecycle |
 | `paths` | Glob patterns limiting when skill activates |
 
 ### Naming Conventions
+
+The `name` (and its folder) must: be 1-64 chars; use only lowercase letters, numbers, and hyphens; not start or end with a hyphen; not contain consecutive hyphens (`--`); and match the parent directory name. Anthropic surfaces also reject the reserved words `claude` and `anthropic`.
 
 Prefer **gerund form** for clarity:
 
@@ -149,6 +156,16 @@ with pdfplumber.open("file.pdf") as pdf:
 ## Extract PDF text
 PDF files are a common file format containing text and images.
 To extract text, you need a library. There are many available...
+```
+
+### Avoid Too Many Options
+
+Don't present multiple approaches unless necessary. Give one default with an escape hatch:
+
+```markdown
+# BAD: "Use pypdf, or pdfplumber, or PyMuPDF, or pdf2image..."
+# GOOD: "Use pdfplumber for text extraction. For scanned PDFs needing
+#        OCR, use pdf2image with pytesseract instead."
 ```
 
 ### Set Degrees of Freedom
@@ -180,7 +197,7 @@ To extract text, you need a library. There are many available...
 
 ### Reference Files
 
-Keep references **one level deep** from SKILL.md. Avoid nested chains:
+Keep references **one level deep** from SKILL.md. "Depth" means the reference *chain* (a file linking to a file linking to a file), not filesystem nesting - a `references/` subdirectory is fine. In a chain, Claude may preview files with partial reads (`head`) and miss content.
 
 ```markdown
 # BAD: Too deep
@@ -191,7 +208,7 @@ SKILL.md -> advanced.md (contains the info directly)
 SKILL.md -> reference.md (contains the info directly)
 ```
 
-For reference files >100 lines, include a **table of contents** at the top.
+For reference files >100 lines, include a **table of contents** at the top. Watch file *size* too: a single reference of many hundreds of lines defeats progressive disclosure even at one level deep, because Claude loads the whole file for any subtopic. Split large references by subtopic so each task pulls only what it needs.
 
 ## Patterns
 
@@ -252,6 +269,10 @@ When your skill includes executable code:
 
 ## Testing
 
+### Build Evaluations First
+
+Create evaluations **before** writing extensive instructions - this proves the skill solves a real problem. Run Claude on representative tasks *without* the skill and document the failures; build ~3 scenarios that test those gaps; measure a baseline; then write the minimum instructions needed to pass. Iterate against the baseline.
+
 ### Triggering Tests
 
 ```
@@ -291,10 +312,14 @@ Ask Claude: "When would you use the [skill-name] skill?" - it quotes the descrip
 | Claude Code (personal) | `~/.claude/skills/<name>/SKILL.md` |
 | Claude Code (project) | `.claude/skills/<name>/SKILL.md` |
 | Claude Code (plugin) | `<plugin>/skills/<name>/SKILL.md` |
-| API | POST `/v1/skills` with beta headers |
+| API | Upload via the Skill Management API, use via the Messages API |
 | Enterprise | Managed settings (org-wide) |
 
 Skills don't sync across surfaces - deploy separately to each.
+
+### Using Skills with the API
+
+Custom skills are uploaded through the Skill Management API; `anthropic`-type skills are pre-built by Anthropic. Both are used identically - pass them in the Messages API `container` parameter, each as `{type, skill_id, version}` where `type` is `anthropic` or `custom`. Up to 8 Skills per request. Requires the code execution tool and the beta headers `code-execution-2025-08-25` and `skills-2025-10-02` (plus `files-api-2025-04-14` for file upload/download). The API code execution environment has **no network access and no runtime package installation** - bundle dependencies or use pre-installed packages.
 
 ## Security
 
