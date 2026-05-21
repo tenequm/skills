@@ -2,8 +2,8 @@
 name: mcp-best-practices
 description: Build production MCP servers with the TypeScript SDK. Covers spec 2025-11-25, SDK v1.29+/v2 alpha, transport selection, tool design, error handling, security, performance, known bugs with workarounds, MCP extensions, MCP Apps (interactive UIs), authorization extensions, and the MCP Registry. Use this skill whenever building MCP servers, designing MCP tools, choosing MCP transports, handling MCP errors, migrating to MCP v2, reviewing MCP security, optimizing MCP token usage, building MCP Apps, using MCP extensions, publishing to the MCP Registry, or working with registerTool, McpServer, streamable HTTP, outputSchema, structuredContent, tool annotations, ext-apps, or ext-auth.
 metadata:
-  version: "0.3.1"
-  upstream: "@modelcontextprotocol/sdk@1.29.0, @modelcontextprotocol/server@2.0.0-alpha.2, @modelcontextprotocol/ext-apps@1.7.1"
+  version: "0.4.0"
+  upstream: "@modelcontextprotocol/sdk@1.29.0, @modelcontextprotocol/server@2.0.0-alpha.2, @modelcontextprotocol/ext-apps@1.7.2"
 ---
 
 # MCP Best Practices
@@ -16,7 +16,7 @@ Decision reference for building production MCP servers with the TypeScript SDK. 
 |-----------|---------|------|
 | Spec | **2025-11-25** ([spec.modelcontextprotocol.io](https://spec.modelcontextprotocol.io)) | - |
 | TS SDK (stable) | **v1.29.0** (`@modelcontextprotocol/sdk`) | v2 alpha published |
-| TS SDK (v2) | **Alpha** (`2.0.0-alpha.2` on npm, Apr 2026): `/server`, `/client`, `/core`, `/hono`, `/express`, `/node`, `/fastify` | Q3 2026 stable target |
+| TS SDK (v2) | **Alpha** (`2.0.0-alpha.2` on npm, Apr 2026): `/server`, `/client`, `/core`, `/hono`, `/express`, `/node`, `/fastify` | Stable pending; only alpha published |
 | JSON Schema | **2020-12** default (explicit `$schema` supported) | - |
 | Transport | **Streamable HTTP** (remote), **stdio** (local) | SSE + WebSocket removed in v2 |
 | Extensions | **MCP Apps** (Stable, SEP-1865), **Auth Extensions** (official) | Domain-specific WGs |
@@ -150,7 +150,7 @@ Service-prefix your tools (`github_*`, `jira_*`) when multiple servers are activ
 > For complete Zod-to-JSON-Schema conversion rules, what breaks silently, outputSchema/structuredContent patterns: see `references/tool-schema-guide.md`
 
 **Critical bugs**:
-- `z.union()` / `z.discriminatedUnion()` silently produce empty schemas on v1.x ([#1643](https://github.com/modelcontextprotocol/typescript-sdk/issues/1643), fixed on `main` 2026-03-30). Use flat `z.object()` with `z.enum()` discriminator field instead until v1 ships the fix.
+- `z.union()` / `z.discriminatedUnion()` silently produce empty schemas on v1.x ([#1643](https://github.com/modelcontextprotocol/typescript-sdk/issues/1643)). The fix landed in the v2 line ([PR #1796](https://github.com/modelcontextprotocol/typescript-sdk/pull/1796)); the v1.x backport ([PR #2017](https://github.com/modelcontextprotocol/typescript-sdk/pull/2017)) is still open, so the bug is present on every released v1 version. Use flat `z.object()` with `z.enum()` discriminator field instead.
 - Plain JSON Schema objects silently dropped before v1.28.0. Fixed in v1.28 - now throws at registration ([#1596](https://github.com/modelcontextprotocol/typescript-sdk/issues/1596)).
 - `z.transform()` stripped during conversion - JSON Schema can't represent transforms ([#702](https://github.com/modelcontextprotocol/typescript-sdk/issues/702)).
 - **Client-side AJV strict-mode rejection**: Zod v4 `z.object()` produces JSON Schema with `additionalProperties: false`. The SDK's client validates `structuredContent` against `outputSchema` with AJV strict mode and rejects extra fields. Server-side `.parse()` strips extras silently, but the original `structuredContent` is sent to the client unchanged - so the server thinks it's fine and the client errors. Fix: explicitly `.parse()` upstream data before assigning to `structuredContent`, or use `.passthrough()` on schemas that intentionally pass through extra fields.
@@ -328,7 +328,7 @@ MCP servers are OAuth 2.1 Resource Servers. Clients MUST include Resource Indica
 
 | Issue | Severity | Status | Workaround |
 |-------|----------|--------|------------|
-| [#1643](https://github.com/modelcontextprotocol/typescript-sdk/issues/1643) - `z.union()`/`z.discriminatedUnion()` silently dropped | High | Fixed on `main` (closed 2026-03-30); pending v1 release | Use flat `z.object()` + `z.enum()` until v1 ships the fix |
+| [#1643](https://github.com/modelcontextprotocol/typescript-sdk/issues/1643) - `z.union()`/`z.discriminatedUnion()` silently dropped | High | Fixed in v2 line ([PR #1796](https://github.com/modelcontextprotocol/typescript-sdk/pull/1796)); v1.x backport [PR #2017](https://github.com/modelcontextprotocol/typescript-sdk/pull/2017) still open | Use flat `z.object()` + `z.enum()` - bug present on all released v1 |
 | [#1699](https://github.com/modelcontextprotocol/typescript-sdk/issues/1699) - Transport closure stack overflow (15-25+ concurrent) | High | Fixed in PR #1788 (closed 2026-04-02) | Upgrade to ≥ v1.29.0 / v2 alpha |
 | [#1619](https://github.com/modelcontextprotocol/typescript-sdk/issues/1619) - HTTP/2 + SSE Content-Length error | Medium | Closed (reclassified to upstream `@hono/node-server#266`) | Use `enableJsonResponse: true` or avoid HTTP/2 upstream |
 | [#893](https://github.com/modelcontextprotocol/typescript-sdk/issues/893) - Dynamic registration after connect blocked | Medium | Open | Register all tools/resources before `connect()` |
@@ -379,5 +379,7 @@ MCP extensions are optional, strictly additive capabilities on top of the core p
 |-----------|---------|--------|
 | **Elicitation** | Request structured user input mid-tool | `ctx.mcpReq.elicitInput()` |
 | **Sampling** | Request LLM completion from client | `ctx.mcpReq.requestSampling()` |
-| **Tasks** (SEP-1686) | Long-running ops with lifecycle management | Pending |
+| **Tasks** | Long-running ops with lifecycle management | Official extension (SEP-2663) |
 | **Progress** | Incremental progress on requests | `ctx.mcpReq.sendProgress()` |
+
+**Deprecation / status notice**: [SEP-2577](https://github.com/modelcontextprotocol/modelcontextprotocol/pull/2577) (final, 2026-05-15) advisory-deprecates **Roots, Sampling, and Logging** - no wire changes, features stay functional for 1+ year, but design new servers without them. **Tasks** moved out of the core `2025-11-25` spec (the experimental `tasks` feature there is removed) into an official extension ([SEP-2663](https://github.com/modelcontextprotocol/modelcontextprotocol/pull/2663), final, 2026-05-15): a server may answer `tools/call` with an async task handle the client polls via `tasks/get`, `tasks/update`, `tasks/cancel`.

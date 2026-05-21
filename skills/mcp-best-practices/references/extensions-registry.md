@@ -186,7 +186,7 @@ Servers are versioned within the registry. See [versioning guide](https://modelc
 
 ## Server Capabilities Beyond Tools
 
-The spec includes server-to-client request capabilities. These aren't extensions - they're core protocol features that extend what tools can do.
+The spec includes server-to-client request capabilities. Elicitation and Progress are core protocol features; Sampling is advisory-deprecated (SEP-2577) and Tasks has moved to an official extension (SEP-2663).
 
 ### Elicitation
 
@@ -207,6 +207,8 @@ Related SEPs: [#1034](https://github.com/modelcontextprotocol/modelcontextprotoc
 
 ### Sampling
 
+> **Advisory-deprecated.** [SEP-2577](https://github.com/modelcontextprotocol/modelcontextprotocol/pull/2577) (final, 2026-05-15) deprecates Sampling along with Roots and Logging. No wire-level changes - the feature stays functional for 1+ year - but adoption is low and it is complex to implement (human-in-the-loop, model selection, security). Do not build new servers that depend on it.
+
 Request an LLM completion from the client. Enables agentic patterns where tools delegate reasoning to the model.
 
 ```typescript
@@ -219,9 +221,9 @@ const response = await ctx.mcpReq.requestSampling({
 
 Related SEP: [#1577](https://github.com/modelcontextprotocol/modelcontextprotocol/issues/1577) (Sampling With Tools - allow sampling requests to include tool definitions).
 
-### Tasks (SEP-1686)
+### Tasks (SEP-2663)
 
-Long-running operations with lifecycle management. Enables progress tracking, cancellation, and status updates for operations spanning multiple requests.
+Long-running operations with lifecycle management - progress tracking, cancellation, and status updates for operations spanning multiple requests. [SEP-2663](https://github.com/modelcontextprotocol/modelcontextprotocol/pull/2663) (final, 2026-05-15) supersedes the earlier SEP-1686 proposal: Tasks moved out of the core `2025-11-25` spec (the experimental `tasks` feature there is removed) into an official extension. A server may answer a `tools/call` with an async task handle instead of a final result; the client polls via `tasks/get`, `tasks/update`, and `tasks/cancel`, keyed off a `resultType: "task"` discriminator.
 
 ### Progress
 

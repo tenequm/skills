@@ -95,6 +95,8 @@ z.object({
 
 **Severity**: High. The schema silently becomes `{ type: "object", properties: {} }` - the tool accepts any input.
 
+**Fix status**: Resolved in the v2 line ([PR #1796](https://github.com/modelcontextprotocol/typescript-sdk/pull/1796), merged 2026-03-30). The v1.x backport ([PR #2017](https://github.com/modelcontextprotocol/typescript-sdk/pull/2017)) is still open, so the bug is present on every released v1 version - the flat-object workaround below remains required on v1.
+
 ```typescript
 // BROKEN: Produces empty schema in v1
 z.discriminatedUnion("type", [
@@ -236,6 +238,8 @@ const outputSchema = z.object({ id: z.string(), name: z.string() }).passthrough(
 ```
 
 **Operational note**: Clients cache `outputSchema` from the `tools/list` response. If you change a tool's schema (or remove `outputSchema` entirely), already-connected sessions keep validating against the cached schema. Reconnecting the client clears the cache.
+
+**Default rule for upstream pass-through**: When an `outputSchema` (or a nested response object) forwards data straight from an upstream API, default it to `.passthrough()`. Upstream payloads routinely carry fields you didn't model, and a strict outer schema turns every one into a client-side AJV rejection. Reserve the `.parse()`-strip path (FIX 1) for response schemas where you deliberately want to drop upstream fields before they reach the client. `inputSchema` is the opposite - keep it strict so the LLM can't pass unmodeled arguments.
 
 ## Tool Design Patterns
 

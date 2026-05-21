@@ -1,6 +1,6 @@
 # V2 Migration Guide
 
-Comprehensive guide for migrating from `@modelcontextprotocol/sdk` v1 to v2. v2 is **alpha-published on npm** (`2.0.0-alpha.2` as of April 2026). Expect breaking changes between alphas; v1.x remains recommended for production. Stable v2 currently targeted for Q3 2026.
+Comprehensive guide for migrating from `@modelcontextprotocol/sdk` v1 to v2. v2 is **alpha-published on npm** (`2.0.0-alpha.2` as of April 2026). Expect breaking changes between alphas; v1.x remains recommended for production. No firm v2 stable date is published - only alpha releases exist so far.
 
 ## Table of Contents
 - [Package Split](#package-split)
@@ -244,7 +244,7 @@ throw new SdkError(SdkErrorCode.REQUEST_TIMEOUT, "Request timed out");
 
 ### Unknown / Disabled Tool Error Semantics Changed
 
-In v2 alpha.1, unknown or disabled tool calls return JSON-RPC `-32602` (`InvalidParams`) instead of `CallToolResult` with `isError: true`. Resource-not-found uses the new `-32002` (`ResourceNotFound`) code. This is a breaking change for clients that read `isError` to detect missing tools - they must now handle JSON-RPC error responses.
+In v2 alpha.1, unknown or disabled tool calls return JSON-RPC `-32602` (`InvalidParams`) instead of `CallToolResult` with `isError: true`. Resource-not-found is also `-32602`: [SEP-2164](https://github.com/modelcontextprotocol/modelcontextprotocol/pull/2164) (final, 2026-05-18) standardized resource-not-found on `-32602` (`InvalidParams`); `-32002` is the **legacy** code earlier protocol versions used, which clients SHOULD still accept for backwards compatibility. This is a breaking change for clients that read `isError` to detect missing tools - they must now handle JSON-RPC error responses.
 
 ### V1 Method Signatures Removed
 
@@ -347,4 +347,4 @@ app.use("/mcp", mcpApp);
 
 ### Timeline
 
-v1.x gets 6 months of support after v2 stable ships. Given v2 stable is expected Q1 2026, v1 support likely extends through Q3 2026. No rush to migrate, but write new code with v2 patterns in mind.
+v1.x gets 6 months of support after v2 stable ships. No firm v2 stable date has been published - only alpha releases exist so far - so v1 remains the production choice. No rush to migrate, but write new code with v2 patterns in mind.

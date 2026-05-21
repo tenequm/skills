@@ -7,6 +7,26 @@ and this skill adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.h
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-05-21
+
+### Added
+- Advisory-deprecation note for Roots, Sampling, and Logging (SEP-2577, final 2026-05-15) - no wire changes, features stay functional for 1+ year.
+- Schema rule: `outputSchema` / nested response objects that forward upstream API data should default to `.passthrough()`; keep `inputSchema` strict.
+
+### Changed
+- ext-apps pin 1.7.1 -> 1.7.2 (example/dependency maintenance; no App-class API changes).
+- #1643 (`z.union()`/`z.discriminatedUnion()` empty schema): clarified the fix landed in the v2 line (PR #1796); the v1.x backport (PR #2017) is still open, so the bug is present on every released v1 version.
+- Resource-not-found error code: spec standardized on `-32602` (SEP-2164, final 2026-05-18); `-32002` is the legacy code clients should still accept. Corrects the earlier "new -32002" wording.
+- v2 stable timeline: removed the unreliable "Q3 2026" / contradictory "Q1 2026" dates; only `2.0.0-alpha.2` is published.
+- Tasks: SEP-1686 superseded by SEP-2663 (final, 2026-05-15) - Tasks moved out of the core `2025-11-25` spec into an official extension (`tasks/get` / `tasks/update` / `tasks/cancel`).
+
+Verified against: @modelcontextprotocol/sdk@1.29.0, @modelcontextprotocol/server@2.0.0-alpha.2, @modelcontextprotocol/ext-apps@1.7.2
+
+## [0.3.1] - 2026-04-30
+
+### Changed
+- Display-name alignment (Wave 2 repo-wide pass); no content changes.
+
 ## [0.3.0] - 2026-04-29
 
 ### Added
