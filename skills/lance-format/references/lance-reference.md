@@ -1,11 +1,11 @@
 # Lance v7 reference
 
 Capability reference for **Lance** - the open columnar lakehouse format for multimodal AI -
-regrounded against the `lance-format/lance` repository at git tag **`v7.0.0-beta.16`**
-(commit `98e2b8a`).
+regrounded against the `lance-format/lance` repository at git tag **`v7.1.0-beta.1`**
+(commit `cffa8cb5`).
 
 Citations are `path:line` relative to the repo root. Build a permalink as
-`https://github.com/lance-format/lance/blob/v7.0.0-beta.16/<path>`. Line numbers drift
+`https://github.com/lance-format/lance/blob/v7.1.0-beta.1/<path>`. Line numbers drift
 between tags; treat them as approximate. The authoritative in-repo sources are the format
 spec under `docs/src/format/`, the user guide under `docs/src/guide/`, the protobuf schemas
 under `protos/`, and the Rust workspace under `rust/`.
@@ -60,8 +60,8 @@ code. The format itself is the product - there is no server.
 
 ## 2. The crate workspace
 
-23 crate directories under `rust/`. `[workspace.package]` (`Cargo.toml:30-52`): `version =
-"7.0.0-beta.16"`, `edition = "2024"`, `rust-version = "1.91.0"`, `license = "Apache-2.0"`,
+23 crate directories under `rust/`. `[workspace.package]` (`Cargo.toml:32-53`): `version =
+"7.1.0-beta.1"`, `edition = "2024"`, `rust-version = "1.91.0"`, `license = "Apache-2.0"`,
 `resolver = "3"`. `exclude = ["python", "java/lance-jni"]`.
 
 | Crate dir | Published name | Purpose |
@@ -96,7 +96,7 @@ the workspace as path dependencies rather than explicit members.
 
 **Bindings.** Python: package `pylance` (`python/pyproject.toml`), built with maturin, imported
 as `lance`; the Rust extension crate is `pylance` (`[lib] name = "lance"`); supports Python
-3.9-3.14; runtime deps `pyarrow>=14`, `numpy>=1.22`, `lance-namespace>=0.7.5,<0.8`. Java: an
+3.9-3.14; runtime deps `pyarrow>=14`, `numpy>=1.22`, `lance-namespace>=0.7.7,<0.8`. Java: an
 SDK under `java/` (Maven `org.lance`), bridged to Rust by the `lance-jni` crate
 (`java/lance-jni/`, excluded from the Rust workspace).
 
@@ -648,6 +648,15 @@ On-disk layout (format V3): each vector index is two Lance files - an **index fi
 20, `ef_construction` 150. The PQ codebook and the RaBitQ rotation matrix are stored as
 tensors in the auxiliary file's global buffer.
 
+**Typed index details.** A vector index records a typed `VectorIndexDetails` message in the
+manifest's `index_details` field (`protos/index.proto:188-241`; moved out of `table.proto`
+in `v7.1.0-beta.1`): `metric_type`, `target_partition_size` (0 = unset), an optional
+`HnswParameters` (`max_connections` = M, `construction_ef`, `max_level`), a `compression`
+oneof (`ProductQuantization` / `ScalarQuantization` / `RabitQuantization` with a `FAST` or
+`MATRIX` rotation / `FlatCompression`), and a free-form `runtime_hints` string map. Hint
+keys use reverse-DNS namespacing (e.g. `lance.ivf.max_iters`) and unrecognized keys must be
+silently ignored by all runtimes.
+
 ### 11.2 Scalar indexes
 
 `docs/src/format/index/scalar/`. Results are **exact** (BTREE, BITMAP, LABEL_LIST) or
@@ -781,8 +790,9 @@ Disable globally with `LANCE_USE_VERSION_HINT=0`.
 
 ## 14. What changed in v7
 
-The v7 tag line is `v7.0.0-beta.1` through `v7.0.0-beta.16` (no rc/final yet). The crates pin
-`7.0.0-beta.16`. Source: the `v7.0.0-beta.1..v7.0.0-beta.16` commit range plus the v6->v7
+The v7 tag line ran `v7.0.0-beta.1` through `v7.0.0-beta.17`, then `v7.0.0-rc.1`, then the
+v7.1 line opened at `v7.1.0-beta.1` - no `v7.0.0` final git tag was cut. The crates pin
+`7.1.0-beta.1`. Source: the `v7.0.0-beta.1..v7.1.0-beta.1` commit range plus the v6->v7
 boundary commits.
 
 **The v6 -> v7 breaking change.** `feat!: make dataset object store access base-aware`
@@ -814,6 +824,30 @@ delete transactions exposed (#6781); the `Clone` transaction (shallow / deep).
 **Spec restructuring** - the lakehouse spec was formally split into separate catalog /
 namespace / table / index specifications (PR #6750x), reflected in `docs/src/format/`.
 
+### The v7.1.0-beta.1 delta
+
+The 19 commits in `v7.0.0-beta.16..v7.1.0-beta.1` are mostly bug fixes and internal
+performance work (serializable BTree/Bitmap/LabelList index caches, deterministic HNSW
+graph builds, roaring range-iterator speedups). The user-facing additions:
+
+- **Materialized-view namespace API** (PR #6891) - `create_materialized_view` and
+  `refresh_materialized_view` on the `LanceNamespace` trait. A materialized view is a
+  query / UDTF / chunker backed by a stored spec, with an optional initial refresh. The
+  `RestNamespace` implements both (`POST /v1/materialized_view/{id}/create` and
+  `/refresh`); `DirectoryNamespace` and the default trait return `not_supported`.
+- **Typed vector index details** (PR #6099) - the `VectorIndexDetails` and
+  `HnswParameters` messages moved into `protos/index.proto` (section 11.1).
+- **Multi-base `write_fragments`** (PR #6855) - multi-base storage config is now reachable
+  from the Python and Java `write_fragments` API, not just Rust.
+- **Granular tracing targets** (PR #6853) - `pylance` emits trace events under a
+  `lance::events::` prefix so they filter separately from log records; new
+  `lance::dataset_events` and `lance::object_store::throttle` targets. Example:
+  `LANCE_LOG="warn,lance::events::object_store::throttle=info"`
+  (`docs/src/guide/performance.md`).
+- **MemWAL** - a sharding evaluator (PR #6854), L0 flushed-generation dataset caching
+  (PR #6816), and exact primary-key dedup fixes for LSM point lookup and vector search
+  (PR #6881).
+
 Note: there is **no Tantivy-FTS-removal commit in the v7 range**. Lance FTS at this tag is
 already its own native inverted-index implementation; the tokenizer vendoring (#6512)
 predates `v7.0.0-beta.1`. Do not attribute a Tantivy removal to v7.
@@ -822,7 +856,7 @@ predates `v7.0.0-beta.1`. Do not attribute a Tantivy removal to v7.
 
 ## 15. Capability matrix
 
-What Lance can and cannot do at `v7.0.0-beta.16`.
+What Lance can and cannot do at `v7.1.0-beta.1`.
 
 **Storage and format**
 
@@ -882,7 +916,7 @@ dashboard.
 
 ## 16. Source map
 
-Where to look in `lance-format/lance` at `v7.0.0-beta.16`.
+Where to look in `lance-format/lance` at `v7.1.0-beta.1`.
 
 | Topic | Path |
 |-------|------|
