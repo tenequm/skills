@@ -7,6 +7,17 @@ and this skill adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.h
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-05-21
+
+### Added
+- Section 11.1: IVF_PQ build prerequisites - no empty-table build; 256-row floor for
+  default 8-bit PQ; IVF k-means needs >= num_partitions rows.
+- Section 11 / 11.5: no-index queries flat-scan transparently (vector and FTS); the
+  `optimize_indices(&OptimizeOptions)` API (`append` / `merge(N)` / `retrain`).
+- Section 13: `shared-memory://` is an opt-in, authority-keyed, never-evicted
+  process-global pool intended for tests and harnesses.
+- Section 2: protoc build requirement and the `lance-datafusion` feature-cascade gap.
+
 ## [0.2.0] - 2026-05-21
 
 ### Changed

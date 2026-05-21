@@ -100,6 +100,12 @@ as `lance`; the Rust extension crate is `pylance` (`[lib] name = "lance"`); supp
 SDK under `java/` (Maven `org.lance`), bridged to Rust by the `lance-jni` crate
 (`java/lance-jni/`, excluded from the Rust workspace).
 
+**Building.** Five workspace crates carry a protobuf build script - `lance-encoding`,
+`lance-file`, `lance-index`, `lance-table`, `lance-datafusion` - so a `protoc` compiler must
+be reachable to build them. The `lance` crate's `protoc` feature vendors one (`protobuf-src`)
+and cascades it to the first four, but **not** to `lance-datafusion`, which still needs a
+system `protoc` (`Cargo.toml:140-146`, `rust/lance-datafusion/Cargo.toml`).
+
 ---
 
 ## 3. File format
@@ -608,7 +614,9 @@ Index design: loaded on demand (a dataset opens without loading any index), load
 progressively, immutable once written. An index is composed of **segments**, each with a
 UUID, each covering a disjoint subset of fragments recorded in a `fragment_bitmap`. **Segments
 need not cover all fragments** - an index can lag; engines split queries into indexed and
-unindexed subplans and merge results. Index content lives at `_indices/{UUID}`.
+unindexed subplans and merge results. When a column has **no index at all**, both vector
+search and full-text search transparently fall back to a flat scan rather than erroring
+(`rust/lance/src/dataset/scanner.rs:3419,3697`). Index content lives at `_indices/{UUID}`.
 `IndexMetadata` carries `uuid`, `name`, `fields`, `fragment_bitmap`, `index_details` (a typed
 `Any`), `version`.
 
@@ -656,6 +664,14 @@ oneof (`ProductQuantization` / `ScalarQuantization` / `RabitQuantization` with a
 `MATRIX` rotation / `FlatCompression`), and a free-form `runtime_hints` string map. Hint
 keys use reverse-DNS namespacing (e.g. `lance.ivf.max_iters`) and unrecognized keys must be
 silently ignored by all runtimes.
+
+**Build prerequisites.** A vector index cannot be built on an empty table -
+`build_empty_vector_index` returns `not_supported` ("Creating empty vector indices with
+train=False is not yet implemented", `rust/lance/src/index/vector.rs:1437`). PQ training
+needs at least `2^num_bits` rows for its codebook centroids, so a default 8-bit PQ index
+hard-errors below **256 rows** ("Not enough rows to train PQ. Requires {n} rows but only {m}
+available", `rust/lance-index/src/vector/pq/builder.rs:177`); IVF k-means separately needs at
+least `num_partitions` rows. Build vector indexes lazily, once the table holds data.
 
 ### 11.2 Scalar indexes
 
@@ -721,6 +737,13 @@ strategies handle changed row addresses: do nothing (segment stops covering thos
 rewrite segments with remapped addresses, or use a **fragment reuse index** (remap in memory
 at read time). Stable row IDs avoid remapping entirely at the cost of a lookup.
 
+The caller-facing API for folding new data in is `optimize_indices(&OptimizeOptions)`
+(`rust/lance/src/index/api.rs:297`). `OptimizeOptions` (`rust/lance-index/src/optimize.rs:65`)
+has three constructors: `append()` adds a new delta segment over the new fragments;
+`merge(N)` folds the delta updates plus the latest N segments into one; `retrain()` rebuilds
+the whole index from current data (v3 vector indices only). This is incremental maintenance -
+distinct from dropping and recreating an index from scratch.
+
 ---
 
 ## 12. Distributed write and indexing
@@ -757,6 +780,14 @@ The object store is chosen by URI scheme (`docs/src/guide/object_store.md`): `s3
 `cos://` (Tencent), `file://`, `memory://`, `shared-memory://` (in-memory, cross-component).
 Config comes from environment variables or the `storage_options` map passed to
 `lance.dataset` / `lance.write_dataset`.
+
+`shared-memory://` is opt-in and distinct from `memory://`: `memory://` mints a fresh
+in-memory store per call, while `shared-memory://<authority>` resolves - across object-store
+registries, threads, and unrelated components in the same process - to one process-global
+`InMemory` backend keyed by the URL authority. The pool is never evicted and grows for the
+process lifetime; it is meant for tests and harnesses that coordinate a writer and an
+independent reader. Pick distinct authorities for isolation
+(`rust/lance-io/src/object_store/providers/shared_memory.rs:16`).
 
 General options: `allow_http` (default false), `connect_timeout` (5s), `request_timeout`
 (30s), `client_max_retries` (3), `download_retry_count` (3), `proxy_url`, `user_agent`.
