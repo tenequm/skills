@@ -99,6 +99,10 @@ The decompiled transaction MUST contain 3 to 6 instructions in this order:
 
 - Facilitator signs the transaction with the fee payer's signer, then simulates to verify it would succeed
 
+## Footgun: Destination ATA Must Exist On-Chain
+
+x402 Solana transactions contain only `[ComputeBudget x2, TransferChecked, optional Lighthouse/Memo]` - there is no `createAssociatedTokenAccount` instruction. If the recipient's Associated Token Account for the payment mint does not already exist on-chain, `TransferChecked` fails simulation with `InvalidAccountData`, the facilitator rejects the payment, and the buyer's wallet never prompts. Before going live, create the destination token account (the ATA for `(owner=payTo, mint=asset)`) on the target network. `payTo` is the wallet **owner** address - the facilitator derives the ATA from it.
+
 ## Duplicate Settlement Mitigation (RECOMMENDED)
 
 Solana's transaction deduplication ensures only one transfer executes on-chain, but the RPC returns "success" for each submission of the same transaction. A malicious client can exploit this by submitting the same payment to `/settle` multiple times before the first confirms.

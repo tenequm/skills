@@ -1,6 +1,6 @@
 # TypeScript SDK Reference
 
-## Packages (v2.9.0)
+## Packages (v2.12.0)
 
 | Package | Purpose |
 |---------|---------|
@@ -9,8 +9,9 @@
 | `@x402/svm` | Solana scheme (SPL TransferChecked) |
 | `@x402/stellar` | Stellar scheme (SEP-41 Soroban token transfers) |
 | `@x402/aptos` | Aptos scheme (Fungible Asset transfers) |
+| `@x402/avm` | Algorand (AVM) scheme |
 | `@x402/express` | Express.js middleware |
-| `@x402/fastify` | Fastify middleware (not yet published on npm) |
+| `@x402/fastify` | Fastify middleware |
 | `@x402/hono` | Hono edge middleware |
 | `@x402/next` | Next.js middleware (`paymentProxy`, `withX402`) |
 | `@x402/axios` | Axios interceptor |
@@ -21,13 +22,13 @@
 
 ## Recent Changes
 
-**v2.9.0** - Upto scheme (usage-based billing) with full client/server/facilitator via `@x402/evm/upto/*`. Fastify adapter. New default assets: Stable (988/2201), Polygon (137), Arbitrum One/Sepolia, Mezo testnet. Exported hook types. Settlement overrides fix for upto. Repo moved to `x402-foundation/x402`.
+**v2.12.0** - Bazaar service-metadata fields (`serviceName`, `tags`, `iconUrl`) on `ResourceInfo`, with `@x402/extensions/bazaar` validation helpers. Scheme-extensibility surface: optional `schemeHooks`, verify/route/settle skip primitives, `VerifyResponse`/`SettleResponse` `extra`, `onPaymentResponse` client hook, `processPaymentResult` utility. `EXTENSION-RESPONSES` header decoded and logged by `HTTPFacilitatorClient`. `viem` floor raised to `^2.48.11`.
 
-**v2.8.0** - `HTTPFacilitatorClient` follows 308 redirects. Randomized facilitator signer selection. MCP `structuredContent` preserved in payment wrapper. Discovery method auto-populated from adapter.
+**v2.11.0** - `ResourceServerExtension` can register resource-server verify/settle hooks. Extension mutation policy enforced (`enrichPaymentRequiredResponse` may only fill vacant `payTo`/`amount`/`asset`). Paid MCP tools can declare Bazaar discovery metadata via `PaymentWrapperConfig.extensions`. Fixed USD prices with 7+ decimal places.
 
-**v2.7.0** - Bazaar dynamic routing. SIWx nonce/issuedAt auto-generation for auth-only routes. `extra: null` compatibility fix between Python facilitator and TS Zod schemas.
+**v2.10.0** - SIWE dependency migrated from `siwe` to `@signinwithethereum/siwe` (same `SiweMessage` API).
 
-**v2.6.0** - Stellar scheme (`@x402/stellar`). Offer-receipt extension (draft). Permit2 on-chain simulation. Express `:param` dynamic route parameters. Custom `settlementFailedResponseBody`. Solana in-flight settlement cache.
+**v2.9.0** - Upto scheme (usage-based billing) with full client/server/facilitator via `@x402/evm/upto/*`. Fastify adapter. New default assets: Stable (988/2201), Polygon (137), Arbitrum One/Sepolia, Mezo testnet. Repo moved to `x402-foundation/x402`.
 
 ## Core Subpath Exports
 

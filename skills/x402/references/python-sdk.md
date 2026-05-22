@@ -1,6 +1,14 @@
 # Python SDK Reference
 
-Version: 2.6.0
+Version: 2.10.0
+
+## Recent Additions (v2.7-v2.10)
+
+- **`upto` scheme** - usage-based EVM billing (client/server/facilitator) via `x402.mechanisms.evm.upto`, added in v2.8.0.
+- **`batch-settlement` scheme** - commit-now / settle-asynchronously EVM mechanism via `x402.mechanisms.evm.batch_settlement`.
+- **TVM (TON) exact mechanism** - `x402.mechanisms.tvm` for TON testnet/mainnet jetton transfers (Python SDK only), added in v2.10.0.
+- **Radius and Arbitrum networks** - added to EVM default-asset resolution.
+- **`EXTENSION-RESPONSES` header** - decoded and logged by the HTTP facilitator client.
 
 ## Installation
 

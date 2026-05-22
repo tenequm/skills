@@ -1,6 +1,6 @@
 # Upto Scheme Reference
 
-> **Status: Implemented in TypeScript and Go SDKs.** Full client/server/facilitator implementations are available via `@x402/evm/upto/*` subpaths (TypeScript) and `go/mechanisms/evm/upto/*` (Go). The `x402UptoPermit2Proxy` contract is deployed. Python SDK does not yet support upto.
+> **Status: Implemented in TypeScript, Go, and Python SDKs.** Full client/server/facilitator implementations are available via `@x402/evm/upto/*` subpaths (TypeScript), `go/mechanisms/evm/upto/*` (Go), and `x402.mechanisms.evm.upto` (Python). The `x402UptoPermit2Proxy` contract is deployed.
 
 The `upto` scheme enables usage-based payments where the client authorizes a **maximum amount** and the server settles for the **actual amount consumed**. Ideal for LLM token generation, bandwidth metering, time-based API access, and dynamic compute pricing.
 
@@ -68,7 +68,7 @@ Clients must approve the Permit2 contract. Three options:
         "amount": "5000000"
       },
       "from": "0x857b06519E91e3A54538791bDbb0E22373e36b66",
-      "spender": "0x402039b3d6E6BEC5A02c2C9fd937ac17A6940002",
+      "spender": "0x4020A4f3b7b90ccA423B9fabCc0CE57C6C240002",
       "nonce": "<EXAMPLE_NONCE>",
       "deadline": "1740672154",
       "witness": {
@@ -81,7 +81,7 @@ Clients must approve the Permit2 contract. Three options:
 }
 ```
 
-The `spender` is the `x402UptoPermit2Proxy` contract at `0x402039b3d6E6BEC5A02c2C9fd937ac17A6940002` (same address across all EVM chains via CREATE2).
+The `spender` is the `x402UptoPermit2Proxy` contract at `0x4020A4f3b7b90ccA423B9fabCc0CE57C6C240002` (same address across all EVM chains via CREATE2).
 
 > The `nonce` field is an opaque 32-byte value (64 hex chars). Examples use `<EXAMPLE_NONCE>` as a placeholder; real implementations generate it randomly per authorization.
 
@@ -207,8 +207,8 @@ Witness type string for the contract:
 
 | SDK | Upto Scheme Support |
 |-----|:---:|
-| TypeScript (`@x402/evm/upto/*`) | Full client/server/facilitator (v2.9.0) |
-| Go (`go/mechanisms/evm/upto/*`) | Full client/server/facilitator (v2.7.0) |
-| Python | Not yet implemented |
+| TypeScript (`@x402/evm/upto/*`) | Full client/server/facilitator |
+| Go (`go/mechanisms/evm/upto/*`) | Full client/server/facilitator |
+| Python (`x402.mechanisms.evm.upto`) | Full client/server/facilitator (since v2.8.0) |
 
-The `x402UptoPermit2Proxy` contract is deployed at `0x402039b3d6E6BEC5A02c2C9fd937ac17A6940002` (same address across all EVM chains via CREATE2). See `references/typescript-sdk.md` and `references/go-sdk.md` for SDK usage examples.
+The `x402UptoPermit2Proxy` contract is deployed at `0x4020A4f3b7b90ccA423B9fabCc0CE57C6C240002` (same address across all EVM chains via CREATE2). See `references/typescript-sdk.md` and `references/go-sdk.md` for SDK usage examples.

@@ -81,6 +81,9 @@ Sent by server when payment is needed:
 | `url` | string | Yes | URL of the protected resource |
 | `description` | string | No | Human-readable description |
 | `mimeType` | string | No | MIME type of response |
+| `serviceName` | string | No | Service name for discovery. Printable ASCII, max 32 chars |
+| `tags` | string[] | No | Topical tags for discovery filtering. Max 5, each printable ASCII max 32 chars |
+| `iconUrl` | string | No | Absolute http/https URL to a service icon. Max 2048 chars |
 
 ### PaymentPayload
 
@@ -165,6 +168,7 @@ Returned after successful settlement:
 | `isValid` | boolean | Yes | Whether authorization is valid |
 | `invalidReason` | string | No | Reason if invalid |
 | `payer` | string | No | Payer's wallet address |
+| `extra` | object | No | Scheme-specific additional data |
 
 ## TypeScript Type Definitions
 
@@ -336,6 +340,20 @@ Uses `0x1::primary_fungible_store::transfer` for fungible assets. Key details:
 - Verification: deserialize BCS transaction, verify signature, check transfer params, simulate via Aptos REST API
 - Signature schemes: Ed25519, MultiEd25519, SingleKey, MultiKey
 
+## Batch-Settlement Scheme
+
+`batch-settlement` is a payment scheme where the client provides a cryptographic payment commitment at request time, but value transfer is **not** executed synchronously during that request. The commitment is accepted, access is granted immediately, and financial settlement happens later through a process defined by the network binding (payment channels, fiat billing, stablecoin invoices, batched on-chain settlement).
+
+Use it when per-request on-chain settlement is impractical: gas fees exceed per-request value, block confirmation is too slow for HTTP latency, or settlement runs asynchronously from HTTP. It supports **dynamic pricing** - the client commits up to `PaymentRequirements.amount` (the maximum), and the server may charge a lower actual price, communicated via `PAYMENT-RESPONSE`.
+
+SDK support: Go (`go/mechanisms/evm/batch-settlement`) and Python (`x402.mechanisms.evm.batch_settlement`); EVM and Cloudflare network bindings. See `specs/schemes/batch-settlement/`.
+
+## Auth-Capture Scheme
+
+`auth-capture` is a payment scheme where funds can be held and settled later. The client authorizes a maximum amount; the facilitator either locks funds in escrow for later capture (two-phase) or sends them directly with refund capability (single-shot). Unlike `exact`, it supports returning funds via **void, refund, and reclaim** - useful for escrow, pre-authorization, and refundable purchases.
+
+The **captureAuthorizer** is the entity allowed to authorize, capture, void, refund, or charge a payment. Spec-defined; no SDK implementation yet. See `specs/schemes/auth-capture/`.
+
 ## Network Identifiers (CAIP-2)
 
 Format: `{namespace}:{reference}`
@@ -361,6 +379,13 @@ Format: `{namespace}:{reference}`
 | Sei Testnet | `eip155:713715` |
 | SKALE Mainnet | `eip155:1187947933` |
 | SKALE Testnet | `eip155:324705682` |
+| Radius Mainnet | `eip155:723487` |
+| Radius Testnet | `eip155:72344` |
+| TON Mainnet | `tvm:-239` |
+| TON Testnet | `tvm:-3` |
+| Hedera Mainnet | `hedera:mainnet` |
+| Hedera Testnet | `hedera:testnet` |
+| Algorand Mainnet | `algorand:wGHE2Pwdvd7S12BL5FaOP20EGYesN73ktiC1qzkkit8=` |
 
 ## Discovery API (Bazaar)
 
@@ -371,8 +396,16 @@ List discoverable x402 resources.
 | Parameter | Type | Required | Default | Description |
 |-----------|------|----------|---------|-------------|
 | `type` | string | No | - | Filter by resource type ("http" or "mcp") |
+| `payTo` | string | No | - | Filter by payment recipient address |
+| `scheme` | string | No | - | Filter by payment scheme (e.g., "exact") |
+| `network` | string | No | - | Filter by CAIP-2 network |
+| `extensions` | string | No | - | Filter by extension key present on the resource |
 | `limit` | number | No | 20 | Max results (1-100) |
 | `offset` | number | No | 0 | Pagination offset |
+
+### GET /discovery/search
+
+Semantic search over discoverable resources, with cursor-based pagination (`query`, `type`, `limit`, `cursor`). The response shape is defined in the Bazaar extension specification.
 
 ## Error Codes
 
@@ -385,6 +418,7 @@ List discoverable x402 resources.
 | `invalid_exact_evm_payload_authorization_value_mismatch` | Amount does not exactly match required |
 | `invalid_exact_svm_payload_amount_mismatch` | Solana amount does not exactly match required |
 | `permit2_amount_mismatch` | Permit2 amount does not exactly match required |
+| `PERMIT2_ALLOWANCE_REQUIRED` | Client has not approved the Permit2 contract (HTTP 412 Precondition Failed) |
 | `invalid_exact_evm_payload_recipient_mismatch` | Recipient mismatch |
 | `invalid_network` | Network not supported |
 | `invalid_payload` | Malformed payload |
@@ -421,10 +455,13 @@ Clients must echo the extension from `PaymentRequired` into their `PaymentPayloa
 |-----------|-------------|-------------|
 | `bazaar` | Discovery layer for x402 endpoints and MCP tools | TS, Go, Python |
 | `offer-receipt` | Signed offers (402 responses) and receipts (200 responses) for proof-of-interaction | TS |
-| `payment-identifier` | Idempotency via unique payment IDs | TS, Go |
+| `payment-identifier` | Idempotency via unique payment IDs | TS, Go, Python |
 | `sign-in-with-x` | CAIP-122 wallet authentication for re-access without repaying | TS |
-| `eip2612GasSponsoring` | Facilitator sponsors gas for EIP-2612 permit approvals | TS, Go |
-| `erc20ApprovalGasSponsoring` | Facilitator sponsors gas for ERC-20 approvals | TS, Go |
+| `eip2612GasSponsoring` | Facilitator sponsors gas for EIP-2612 permit approvals | TS, Go, Python |
+| `erc20ApprovalGasSponsoring` | Facilitator sponsors gas for ERC-20 approvals | TS, Go, Python |
+| `builder-code` | On-chain attribution via ERC-8021 builder codes in settlement calldata | Spec only |
+| `http-message-signatures` | RFC 9421 cryptographic identity for the paying agent | Spec only |
+| `auth-hints` | Signals which `accepts[]` entries require authentication | Spec only |
 
 ## Security Considerations
 

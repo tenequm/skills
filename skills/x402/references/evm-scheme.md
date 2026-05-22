@@ -26,7 +26,7 @@ Both schemes use deterministic CREATE2-deployed proxy contracts:
 | Contract | Address | Purpose |
 |----------|---------|---------|
 | `x402ExactPermit2Proxy` | `0x402085c248EeA27D92E8b30b2C58ed07f9E20001` | Exact-amount Permit2 settlement |
-| `x402UptoPermit2Proxy` | `0x402039b3d6E6BEC5A02c2C9fd937ac17A6940002` | Variable-amount Permit2 settlement |
+| `x402UptoPermit2Proxy` | `0x4020A4f3b7b90ccA423B9fabCc0CE57C6C240002` | Variable-amount Permit2 settlement |
 | Permit2 (canonical) | `0x000000000022D473030F116dDEE9F6B43aC78BA3` | Uniswap Permit2 |
 | Multicall3 | `0xcA11bde05977b3631167028862bE2a173976CA11` | Batched reads |
 

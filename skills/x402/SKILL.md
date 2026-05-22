@@ -1,8 +1,9 @@
 ---
 name: x402
-description: "Build internet-native payments with the x402 open protocol (x402 Foundation, Apache-2.0). Use when developing paid APIs, paywalled content, AI agent payment flows, or any service using HTTP 402 Payment Required for on-chain micropayments. Covers TypeScript (2.9.0), Python (2.6.0), and Go (2.7.0) SDKs across EVM (Base, MegaETH, Monad, Polygon, Stable, Arbitrum), Solana, Stellar, and Aptos networks with HTTP, MCP, and A2A transports. Supports exact and upto (usage-based) payment schemes, self-facilitation, and extensions (bazaar, gas sponsoring, sign-in-with-x)."
+description: "Build internet-native payments with the x402 open protocol - HTTP 402 Payment Required for on-chain micropayments with no accounts or API keys. Use when developing paid APIs, paywalled content, AI agent payment flows, or MCP tools that charge per call. Covers the TypeScript, Python, and Go SDKs across EVM, Solana, Stellar, and Aptos."
 metadata:
-  version: "0.7.2"
+  version: "0.8.0"
+  upstream: "@x402/core@2.12.0, x402@2.10.0, github.com/x402-foundation/x402/go@v2.11.0"
   openclaw:
     homepage: https://github.com/tenequm/skills/tree/main/skills/x402
     emoji: "💰"
@@ -208,7 +209,7 @@ registerExactSvmScheme(client, { signer: svmSigner });
 |---------|-----------|--------|
 | Base Mainnet | `eip155:8453` | Mainnet |
 | Base Sepolia | `eip155:84532` | Testnet |
-| MegaETH Mainnet | `eip155:4326` | Mainnet (USDM default, 18 decimals) |
+| MegaETH Mainnet | `eip155:4326` | Mainnet (MegaUSD default, 18 decimals) |
 | Solana Mainnet | `solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp` | Mainnet |
 | Solana Devnet | `solana:EtWTRABZaYq6iMfeYKouRu166VU2xqa1` | Testnet |
 | Stellar Mainnet | `stellar:pubnet` | Mainnet (TypeScript SDK only) |
@@ -224,12 +225,19 @@ registerExactSvmScheme(client, { signer: svmSigner });
 | Arbitrum Sepolia | `eip155:421614` | Testnet |
 | Mezo Testnet | `eip155:31611` | Testnet (mUSD, Permit2 + EIP-2612) |
 | Avalanche | `eip155:43114` | Via community facilitators |
+| Radius Mainnet | `eip155:723487` | Mainnet (SBC default) |
+| Radius Testnet | `eip155:72344` | Testnet (SBC default) |
+| TON Mainnet | `tvm:-239` | Mainnet (jetton transfers; Python SDK) |
+| TON Testnet | `tvm:-3` | Testnet |
+| Hedera Mainnet | `hedera:mainnet` | Mainnet (HBAR + HTS tokens) |
+| Hedera Testnet | `hedera:testnet` | Testnet |
+| Algorand Mainnet | `algorand:wGHE2Pwdvd7S12BL5FaOP20EGYesN73ktiC1qzkkit8=` | Mainnet (USDC ASA) |
 
-Default facilitator (`https://x402.org/facilitator`) supports Base Sepolia, Solana Devnet, and Stellar Testnet.
+Default facilitator (`https://x402.org/facilitator`) supports Base Sepolia, Solana Devnet, Stellar Testnet, and Aptos Testnet.
 
 ## SDK Packages
 
-### TypeScript v2.9.0 ([npm](https://www.npmjs.com/org/x402), [GitHub](https://github.com/x402-foundation/x402/tree/main/typescript))
+### TypeScript v2.12.0 ([npm](https://www.npmjs.com/org/x402), [GitHub](https://github.com/x402-foundation/x402/tree/main/typescript))
 | Package | Purpose |
 |---------|---------|
 | `@x402/core` | Core types, client, server, facilitator |
@@ -237,8 +245,9 @@ Default facilitator (`https://x402.org/facilitator`) supports Base Sepolia, Sola
 | `@x402/svm` | Solana scheme (SPL TransferChecked) |
 | `@x402/stellar` | Stellar scheme (SEP-41 Soroban token transfers) |
 | `@x402/aptos` | Aptos scheme (Fungible Asset transfers) |
+| `@x402/avm` | Algorand (AVM) scheme |
 | `@x402/express` | Express middleware |
-| `@x402/fastify` | Fastify middleware (not yet published on npm) |
+| `@x402/fastify` | Fastify middleware |
 | `@x402/hono` | Hono edge middleware |
 | `@x402/next` | Next.js middleware |
 | `@x402/axios` | Axios interceptor |
@@ -247,7 +256,7 @@ Default facilitator (`https://x402.org/facilitator`) supports Base Sepolia, Sola
 | `@x402/mcp` | MCP client + server |
 | `@x402/extensions` | Bazaar, offer-receipt, payment-identifier, sign-in-with-x, gas sponsoring |
 
-### Python v2.6.0 ([PyPI](https://pypi.org/project/x402/), [GitHub](https://github.com/x402-foundation/x402/tree/main/python))
+### Python v2.10.0 ([PyPI](https://pypi.org/project/x402/), [GitHub](https://github.com/x402-foundation/x402/tree/main/python))
 ```bash
 pip install "x402[httpx]"      # Async HTTP client
 pip install "x402[requests]"   # Sync HTTP client
@@ -259,7 +268,7 @@ pip install "x402[extensions]" # Extensions (bazaar, gas sponsoring, etc.)
 pip install "x402[all]"        # Everything
 ```
 
-### Go v2.7.0 ([GitHub](https://github.com/x402-foundation/x402/tree/main/go))
+### Go v2.11.0 ([GitHub](https://github.com/x402-foundation/x402/tree/main/go))
 ```bash
 go get github.com/x402-foundation/x402/go
 ```
@@ -269,10 +278,10 @@ go get github.com/x402-foundation/x402/go
 - **Client/Server/Facilitator**: The three roles in every payment. Client signs, server enforces, facilitator settles on-chain. See `references/core-concepts.md`
 - **Wallet**: Both payment mechanism and identity for buyers/sellers. See `references/core-concepts.md`
 - **Networks & Tokens**: CAIP-2 identifiers, EIP-3009 tokens on EVM, SPL on Solana, custom token config. See `references/core-concepts.md`
-- **Scheme**: Payment method. `exact` = transfer exact amount; `upto` = authorize max, settle actual usage (TS + Go, EVM Permit2 only). See `references/evm-scheme.md`, `references/svm-scheme.md`, `references/stellar-scheme.md`, `references/upto-scheme.md`, `references/aptos-scheme.md`
+- **Scheme**: Payment method. `exact` = transfer exact amount; `upto` = authorize max, settle actual usage (EVM Permit2 only); `batch-settlement` = commit at request time, settle asynchronously; `auth-capture` = escrow / authorize-then-capture with void, refund, reclaim. See `references/evm-scheme.md`, `references/svm-scheme.md`, `references/stellar-scheme.md`, `references/upto-scheme.md`, `references/aptos-scheme.md`, `references/protocol-spec.md`
 - **Self-facilitation**: Run an in-process facilitator instead of calling an external URL. See `references/typescript-sdk.md`, `references/go-sdk.md`
 - **Transport**: How payment data is transmitted (HTTP headers, MCP `_meta`, A2A metadata). See `references/transports.md`
-- **Extensions**: Optional features (bazaar discovery, offer-receipt attestations, payment-identifier idempotency, sign-in-with-x auth, gas sponsoring). See `references/extensions.md`
+- **Extensions**: Optional features (bazaar discovery, offer-receipt attestations, payment-identifier idempotency, sign-in-with-x auth, gas sponsoring, builder-code attribution, http-message-signatures, auth-hints). See `references/extensions.md`
 - **Hooks**: Lifecycle callbacks on client/server/facilitator (TS, Python, Go). See `references/lifecycle-hooks.md`
 - **Protocol types**: `PaymentRequired`, `PaymentPayload`, `SettlementResponse`. See `references/protocol-spec.md`
 - **Custom tokens**: Use `registerMoneyParser` for non-USDC tokens, Permit2 for non-EIP-3009 tokens. See `references/evm-scheme.md`

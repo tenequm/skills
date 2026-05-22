@@ -95,7 +95,7 @@ Multiple production facilitators are available. The ecosystem is permissionless 
 
 | Facilitator | Networks | Use Case |
 |-------------|----------|----------|
-| x402.org (default) | Base Sepolia, Solana Devnet, Stellar Testnet | Testing/development, no setup needed |
+| x402.org (default) | Base Sepolia, Solana Devnet, Stellar Testnet, Aptos Testnet | Testing/development, no setup needed |
 | [Production facilitators](https://www.x402.org/ecosystem?filter=facilitators) | Base, Solana, Polygon, Avalanche, etc. | Production use |
 | Self-hosted | Any EVM chain | Full control |
 
@@ -133,6 +133,9 @@ Format: `{namespace}:{reference}`
 - **Solana**: `solana:<genesisHash>` (e.g., `solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp` for mainnet)
 - **Aptos**: `aptos:<chainId>` (e.g., `aptos:1` for mainnet)
 - **Stellar**: `stellar:<network>` (e.g., `stellar:pubnet` for mainnet)
+- **TON**: `tvm:<workchain>` (e.g., `tvm:-239` for mainnet)
+- **Hedera**: `hedera:<network>` (e.g., `hedera:mainnet`)
+- **Algorand**: `algorand:<genesisHash>` (e.g., `algorand:wGHE2Pwdvd7S12BL5FaOP20EGYesN73ktiC1qzkkit8=` for mainnet)
 
 ### Token Support
 
@@ -247,7 +250,7 @@ facilitator.register("eip155:43114", new ExactEvmScheme({
 |---------|-----------|---------------|-------------------|
 | Base Mainnet | `eip155:8453` | Any EIP-3009 | Production facilitators |
 | Base Sepolia | `eip155:84532` | Any EIP-3009 | x402.org (testnet) |
-| MegaETH Mainnet | `eip155:4326` | USDM (18 decimals) | Community |
+| MegaETH Mainnet | `eip155:4326` | MegaUSD (18 decimals) | Community |
 | Monad Mainnet | `eip155:143` | USDC | Community |
 | Solana Mainnet | `solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp` | Any SPL/Token-2022 | Production facilitators |
 | Solana Devnet | `solana:EtWTRABZaYq6iMfeYKouRu166VU2xqa1` | Any SPL/Token-2022 | x402.org (testnet) |
@@ -262,6 +265,11 @@ facilitator.register("eip155:43114", new ExactEvmScheme({
 | Arbitrum One | `eip155:42161` | USDC | Production facilitators |
 | Arbitrum Sepolia | `eip155:421614` | USDC | Community |
 | Mezo Testnet | `eip155:31611` | mUSD (Permit2 + EIP-2612) | Community |
+| Radius Mainnet | `eip155:723487` | SBC (Permit2 + EIP-2612) | Community |
+| Radius Testnet | `eip155:72344` | SBC (Permit2 + EIP-2612) | Community |
+| TON Mainnet | `tvm:-239` | Jettons (USDT default) | Community |
+| Hedera Mainnet | `hedera:mainnet` | HBAR + HTS tokens | Community |
+| Algorand Mainnet | `algorand:wGHE2Pwdvd7S12BL5FaOP20EGYesN73ktiC1qzkkit8=` | USDC ASA | Community |
 | Any EVM | `eip155:<chainId>` | Any EIP-3009 | Self-hosted or community |
 
 ### Why EIP-3009?

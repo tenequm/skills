@@ -1,6 +1,13 @@
 # Go SDK Reference
 
-Version: 2.7.0 | Module: `github.com/x402-foundation/x402/go` | Go 1.24+
+Version: 2.11.0 | Module: `github.com/x402-foundation/x402/go` | Go 1.24+
+
+## Recent Additions (v2.8-v2.11)
+
+- **`batch-settlement` scheme** - commit-now / settle-asynchronously EVM mechanism via `go/mechanisms/evm/batch-settlement`.
+- **Radius network** - `eip155:723487` (mainnet) and `eip155:72344` (testnet) added to EVM default-asset resolution (SBC stablecoin).
+- **`EXTENSION-RESPONSES` header** - decoded and logged by the HTTP facilitator client.
+- Echo and `net/http` middleware adapters (documented below) landed in v2.8.0.
 
 ## Installation
 

@@ -279,6 +279,20 @@ Go: `erc20approvalgassponsor.DeclareExtension()`
 
 ---
 
+## Builder Code (On-Chain Attribution)
+
+The `builder-code` extension enables on-chain attribution tracking for x402 payments. Attribution is encoded as an ERC-8021 Schema 2 CBOR "builder code" appended to the settlement transaction calldata, so integrators and tooling can be credited for the payments they originate. Spec-defined; no SDK helper yet. See `specs/extensions/builder_code.md`.
+
+## HTTP Message Signatures (Agent Identity)
+
+The `http-message-signatures` extension establishes the identity of the paying agent through cryptographic request signatures (RFC 9421). Cloudflare's `cloudflare:402` network binding uses it to bind a payment to a verifiable agent identity. Spec-defined; no SDK helper yet. See `specs/extensions/http-message-signatures.md`.
+
+## Auth Hints (Authentication Discovery)
+
+The `auth-hints` extension provides authentication hints for specific payment requirements. When a `402` response includes multiple `accepts[]` entries and only some require authentication, `auth-hints` lets the client discover which entries need auth - and how to obtain credentials - before committing to a payment method, avoiding an extra round trip. It is a Server-to-Client extension; the facilitator is not involved. Spec-defined; no SDK helper yet. See `specs/extensions/extension-auth-hints.md`.
+
+---
+
 ## SDK Support Matrix
 
 | Extension | TypeScript | Go | Python |
@@ -289,3 +303,5 @@ Go: `erc20approvalgassponsor.DeclareExtension()`
 | payment-identifier | Yes | Yes | Yes |
 | eip2612GasSponsoring | Yes | Yes | Yes |
 | erc20ApprovalGasSponsoring | Yes | Yes | Yes |
+
+The `builder-code`, `http-message-signatures`, and `auth-hints` extensions are defined in the protocol spec but do not yet have SDK helpers in any language.
