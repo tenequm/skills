@@ -87,3 +87,9 @@ jobs:
           files: |
             dist/releases/manifest.json
             dist/releases/release-notes.md
+
+      - name: Refresh skills-latest rolling bundles
+        if: steps.prepare.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: just release-latest-bundles

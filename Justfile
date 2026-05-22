@@ -54,3 +54,6 @@ release-prepare before after github_output='':
 
 release-publish manifest='dist/releases/manifest.json':
     uv run python scripts/publish_release.py clawhub --manifest "{{manifest}}"
+
+release-latest-bundles:
+    uv run python scripts/publish_release.py latest-bundles
