@@ -1,8 +1,8 @@
 ---
 name: polish
-description: Pre-release code review - runs lint/type checks, then launches 3 parallel review agents (cleanliness, design, efficiency) to analyze the diff, synthesizes a unified report, and fixes with approval. Use before committing, pushing, or releasing changes. Triggers on "review code", "check before commit", "cleanup before release", "review changes", "is this ready to ship", "polish before release", "simplify".
+description: Pre-release code review - runs lint/type checks, then launches 4 parallel review agents (cleanliness, design, efficiency, side-effect gating) to analyze the diff, synthesizes a unified report, and fixes with approval. Use before committing, pushing, or releasing changes. Triggers on "review code", "check before commit", "cleanup before release", "review changes", "is this ready to ship", "polish before release", "simplify".
 metadata:
-  version: "2.2.1"
+  version: "2.3.0"
 disable-model-invocation: true
 ---
 
@@ -42,9 +42,11 @@ Determine what changed:
 
 Read every changed file fully. Understand what each change does and why.
 
+When a change relocates or rewrites an existing code path (a moved file, a handler split into middleware, a renamed/replaced function), open the prior version - the file it moved from, or `git show <ref>:<path>` for a deleted/renamed file - and compare behavior, not just lines. Note any dropped validation, reordered side-effects, or removed guards; pass those to the agents.
+
 ## Phase 3: Parallel Review
 
-Use the Agent tool to launch all three agents concurrently in a single message. Pass each agent the full diff and the list of changed files so it has the complete context.
+Use the Agent tool to launch all four agents concurrently in a single message. Pass each agent the full diff and the list of changed files so it has the complete context.
 
 ### Agent 1: Cleanliness
 
@@ -68,6 +70,7 @@ Requires codebase exploration beyond the diff. Looks for structural and design i
 - **Leaky abstractions**: exposing internal details that should be encapsulated, or breaking existing abstraction boundaries
 - **Stringly-typed code**: using raw strings where constants, enums, or branded types already exist in the codebase
 - **Structural issues**: functions that grew too long during changes (>50 lines, consider splitting); inconsistent naming with existing codebase conventions
+- **Behavior drift in relocated code**: when the diff moves or rewrites an existing path, compare it against the code it replaced (see Phase 2). Flag dropped input validation, removed guards or early-returns, and changed error semantics (status codes, return shapes). A refactor that changes *behavior* is a regression even when every line looks clean.
 
 ### Agent 3: Efficiency
 
@@ -82,6 +85,18 @@ Looks for runtime performance and resource issues.
 - **Overly broad operations**: reading entire files when only a portion is needed, loading all items when filtering for one
 - **Unchecked system boundaries**: fetch/HTTP calls without response status checks (`r.ok`), unhandled promise rejections on external calls, missing error handling at I/O boundaries
 
+### Agent 4: Side-Effect Gating
+
+Closed-scope correctness check. Finds costly or irreversible side-effects that run before the checks meant to gate them. Does NOT judge whether business logic is correct - that is `/review`'s job.
+
+- **Inventory the side-effects**: list every costly or irreversible side-effect introduced or relocated in the diff - charges/payments, DB writes/deletes, mutating external calls, file writes, notifications/emails, irreversible state changes
+- **Inventory the gates**: for each side-effect, list the checks that must precede it - input validation (shape/type/range), authentication, authorization, precondition/existence checks, idempotency/dedup
+- **Cross-check ordering**: flag any side-effect reachable on a control-flow path where a gate runs after it, or not at all. Trace ACROSS the middleware/handler boundary - middleware that fires a side-effect before calling `next()` is the prime suspect; the validation that should gate it often lives in the downstream handler
+- **Missing rollback**: flag a committed side-effect with no compensation when a later step on the same request can still fail (e.g. charged, then the request errors)
+- **Out of scope** - route to `/review`: whether the business logic is correct, pricing math, algorithmic correctness, anything without a crisp invariant
+
+Every finding must cite the side-effect line, the gate it precedes (or "ungated"), and the control-flow path. No finding without two line references.
+
 ## Phase 4: Validate Findings
 
 Before presenting anything, verify every finding from the agents against actual code. Drop any finding that fails validation.
@@ -92,6 +107,7 @@ For each finding:
 - **Reuse suggestions** - confirm the suggested utility/function actually exists at the claimed path. If it doesn't exist, drop the finding
 - **Debug leftovers** - confirm the flagged line is actually a debug artifact, not structured logging (`logger.*`, `c.var.logger.*`)
 - **Efficiency / design claims** - read the surrounding context to confirm the pattern matches. Drop speculative findings that don't hold up with full context
+- **Side-effect gating / behavior-drift claims** - confirm by reading the actual control flow: the side-effect line, the gate line, and the path between (including downstream handlers and middleware order). Validate a relocation regression against *the code it replaced*, not against sibling paths that may share the same flaw. Never drop one as "a behavior decision" or "out of scope" - if it holds up it is the highest-severity finding
 
 Only findings that survive validation proceed to the report.
 
@@ -101,6 +117,10 @@ Synthesize validated findings into a single deduplicated report. If multiple age
 
 ```
 ## Review Findings
+
+### Correctness (N issues)
+1. `path/to/file.ts:55` - chargeUser() runs before body validation (handler validates at :78, after next()); a malformed request is charged then 400s
+2. ...
 
 ### Cleanliness (N issues)
 1. `path/to/file.ts:42` - console.log("debug response")
@@ -118,6 +138,8 @@ Synthesize validated findings into a single deduplicated report. If multiple age
 
 **Awaiting approval before proceeding with fixes.**
 ```
+
+List **Correctness** first, and always - including at `(0 issues)`, since a zero there is a real signal that side-effect ordering was checked. It must never be batch-approved alongside cosmetic items.
 
 If zero issues found, report "Clean - no issues found" and stop.
 
