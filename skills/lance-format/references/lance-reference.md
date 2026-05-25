@@ -1,11 +1,11 @@
 # Lance v7 reference
 
 Capability reference for **Lance** - the open columnar lakehouse format for multimodal AI -
-regrounded against the `lance-format/lance` repository at git tag **`v7.1.0-beta.1`**
-(commit `cffa8cb5`).
+regrounded against the `lance-format/lance` repository at git tag **`v7.1.0-beta.2`**
+(commit `24b8afec`).
 
 Citations are `path:line` relative to the repo root. Build a permalink as
-`https://github.com/lance-format/lance/blob/v7.1.0-beta.1/<path>`. Line numbers drift
+`https://github.com/lance-format/lance/blob/v7.1.0-beta.2/<path>`. Line numbers drift
 between tags; treat them as approximate. The authoritative in-repo sources are the format
 spec under `docs/src/format/`, the user guide under `docs/src/guide/`, the protobuf schemas
 under `protos/`, and the Rust workspace under `rust/`.
@@ -60,8 +60,8 @@ code. The format itself is the product - there is no server.
 
 ## 2. The crate workspace
 
-23 crate directories under `rust/`. `[workspace.package]` (`Cargo.toml:32-53`): `version =
-"7.1.0-beta.1"`, `edition = "2024"`, `rust-version = "1.91.0"`, `license = "Apache-2.0"`,
+24 crate directories under `rust/`. `[workspace.package]` (`Cargo.toml:32-53`): `version =
+"7.1.0-beta.2"`, `edition = "2024"`, `rust-version = "1.91.0"`, `license = "Apache-2.0"`,
 `resolver = "3"`. `exclude = ["python", "java/lance-jni"]`.
 
 | Crate dir | Published name | Purpose |
@@ -76,11 +76,12 @@ code. The format itself is the product - there is no server.
 | `lance-datafusion` | `lance-datafusion` | DataFusion glue: `exec`, `expr`, `planner`, `projection`, UDFs |
 | `lance-linalg` | `lance-linalg` | SIMD L2 / dot / cosine / hamming kernels |
 | `lance-arrow` | `lance-arrow` | Arrow extensions (`RecordBatchExt`, `SchemaExt`). Considered never-stable |
+| `lance-select` | `lance-select` | Row-selection primitives: `RowAddrMask`/`NullableRowAddrMask`, `RowIdMask`, `IndexExprResult`. Extracted from `lance-core`/`lance-index` in v7.1.0-beta.2 (PR #6879) so benchmarks and filter consumers can depend on masks without pulling in either larger crate |
 | `lance-tokenizer` | `lance-tokenizer` | FTS tokenizer stack: `TextAnalyzer`, jieba/lindera/ngram, filters |
 | `lance-geo` | `lance-geo` | Geospatial UDFs. Feature-gated `geo` |
 | `lance-namespace` | `lance-namespace` | `LanceNamespace` trait + data models |
 | `lance-namespace-impls` | `lance-namespace-impls` | `DirectoryNamespace`, `RestNamespace`, REST adapter, credential vendors |
-| `lance-namespace-datafusion` | `lance-namespace-datafusion` | DataFusion catalog/schema provider bridge. Pinned `7.0.0-beta.9` |
+| `lance-namespace-datafusion` | `lance-namespace-datafusion` | DataFusion catalog/schema provider bridge |
 | `lance-tools` | `lance-tools` | `cli` / `meta` / `util`; ships a `lance-tools` binary |
 | `lance-datagen` | `lance-datagen` | Random Arrow array/batch generation for tests/benchmarks |
 | `lance-test-macros` | `lance-test-macros` | Test-only proc macros |
@@ -91,8 +92,8 @@ code. The format itself is the product - there is no server.
 | `arrow-stats` | `lance-arrow-stats` | Statistics accumulator (min, max, null_count, nan_count) |
 
 `rust/examples` (`lance-examples`) holds non-published example binaries. The workspace
-`members` array lists 22 paths; `rust/lance-datafusion` and `rust/arrow-stats` are part of
-the workspace as path dependencies rather than explicit members.
+`members` array lists 24 paths; `rust/lance-datafusion` is part of the workspace as a
+path dependency rather than an explicit member.
 
 **Bindings.** Python: package `pylance` (`python/pyproject.toml`), built with maturin, imported
 as `lance`; the Rust extension crate is `pylance` (`[lib] name = "lance"`); supports Python
@@ -822,9 +823,9 @@ Disable globally with `LANCE_USE_VERSION_HINT=0`.
 ## 14. What changed in v7
 
 The v7 tag line ran `v7.0.0-beta.1` through `v7.0.0-beta.17`, then `v7.0.0-rc.1`, then the
-v7.1 line opened at `v7.1.0-beta.1` - no `v7.0.0` final git tag was cut. The crates pin
-`7.1.0-beta.1`. Source: the `v7.0.0-beta.1..v7.1.0-beta.1` commit range plus the v6->v7
-boundary commits.
+v7.1 line opened at `v7.1.0-beta.1` and continued at `v7.1.0-beta.2` - no `v7.0.0` final
+git tag was cut. The crates pin `7.1.0-beta.2`. Source: the `v7.0.0-beta.1..v7.1.0-beta.2`
+commit range plus the v6->v7 boundary commits.
 
 **The v6 -> v7 breaking change.** `feat!: make dataset object store access base-aware`
 (PR #6647, commit `456198cd`), immediately followed by the automated bump to `7.0.0-beta.1`.
@@ -878,6 +879,38 @@ graph builds, roaring range-iterator speedups). The user-facing additions:
 - **MemWAL** - a sharding evaluator (PR #6854), L0 flushed-generation dataset caching
   (PR #6816), and exact primary-key dedup fixes for LSM point lookup and vector search
   (PR #6881).
+
+### The v7.1.0-beta.2 delta
+
+Seven commits in `v7.1.0-beta.1..v7.1.0-beta.2`, mostly MemWAL correctness work plus one
+workspace refactor:
+
+- **New `lance-select` crate** (PR #6879, commit `52c6ac34`) - mask code (`RowAddrMask`,
+  `NullableRowAddrMask`, `RowIdMask`, set types, `bitmap_to_ranges`/`ranges_to_bitmap`) and
+  scalar-index expression-result types (`IndexExprResult`, `NullableIndexExprResult` with
+  their `Not`/`BitAnd`/`BitOr` boolean algebra) were extracted from `lance-core` and
+  `lance-index` into `rust/lance-select/`. Downstream filtering code and the new
+  `index_expr_result` / `row_addr_mask` benches can now depend on masks without pulling in
+  either larger crate.
+- **MemWAL: build secondary indexes when flushing the active memtable** (PR #6901, commit
+  `cee7d32f`) - `MemTableFlushHandler` previously called `flush`, persisting the data file
+  and bloom filter but **building no secondary indexes**, and never received the shard's
+  `index_configs` in the first place. Over flushed generations this made flushed vector rows
+  invisible to `fast_search()` (a correctness bug for KNN, not just perf), and point lookups
+  fell back to a full scan instead of routing through a scalar index. The fix threads
+  `index_configs` into the handler and calls `flush_with_indexes` when any index is
+  configured, while keeping plain `flush` when none are so empty-index shards avoid an extra
+  pass.
+- **MemWAL: per-source PK-hash block-list post-filter** (PR #6899, commit `77db998a`)
+  fixes a stale-read in LSM vector search. `LsmGlobalPkDedupExec` (introduced in #6881) is
+  exact only over candidates each source surfaces; if a primary key's fresh row is pushed
+  out of its source's top-k by closer rows, the dedup never sees it and a superseded copy
+  from an older generation can win. The fix makes staleness a per-source PK-hash post-filter
+  (`PkHashFilterExec`) applied to each source's KNN *before* the cross-source union, so a
+  stale row never reaches the merge. Each generation's membership is an
+  `Arc<HashSet<u64>>` of PK hashes (`compute_pk_hash`, the same hash the dedup nodes use).
+- **Docs** - new integrations landing page at `docs/src/integrations/index.md` (PR #6915);
+  Java doc URL updated from `com.lancedb` to `org.lance` (#6467).
 
 Note: there is **no Tantivy-FTS-removal commit in the v7 range**. Lance FTS at this tag is
 already its own native inverted-index implementation; the tokenizer vendoring (#6512)
@@ -947,7 +980,7 @@ dashboard.
 
 ## 16. Source map
 
-Where to look in `lance-format/lance` at `v7.1.0-beta.1`.
+Where to look in `lance-format/lance` at `v7.1.0-beta.2`.
 
 | Topic | Path |
 |-------|------|
@@ -956,13 +989,13 @@ Where to look in `lance-format/lance` at `v7.1.0-beta.1`.
 | Table format | `docs/src/format/table/{index,layout,schema,transaction,versioning,branch_tag,row_id_lineage,mem_wal}.md` |
 | Index spec | `docs/src/format/index/{index.md,vector/,scalar/,system/}` |
 | User guide | `docs/src/guide/{blob,data_evolution,data_types,json,object_store,read_and_write,performance,tags_and_branches,tokenizer,distributed_write,distributed_indexing,migration}.md` |
+| Integrations | `docs/src/integrations/{index,datafusion,pytorch,tensorflow}.md` |
 | Protobuf schemas | `protos/{file2,table,transaction,rowids,index,ann,filtered_read,table_identifier}.proto` |
 | Rust workspace | `rust/` (entry point `rust/lance/`) |
 | Commit / OCC | `rust/lance/src/io/commit.rs`, `rust/lance-table/src/io/commit.rs` |
 | MemWAL | `rust/lance/src/dataset/mem_wal/` |
 | Indexes | `rust/lance-index/src/` |
 | Object store | `rust/lance-io/src/object_store/` |
-| Integrations | `docs/src/integrations/{datafusion,pytorch,tensorflow}.md` |
 
 Auto-generated API docs and the language-agnostic namespace spec live in sibling repos under
 `github.com/lance-format`. To refresh this reference, see the maintenance note in

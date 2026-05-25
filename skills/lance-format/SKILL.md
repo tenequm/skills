@@ -2,8 +2,8 @@
 name: lance-format
 description: Reference for Lance v7 - the open columnar lakehouse format for multimodal AI - and its Rust crate workspace (`lance`, `lance-table`, `lance-file`, `lance-encoding`, `lance-index`, `lance-io`, `lance-namespace`, and more). Use when building directly on the Lance crates - creating or reading `.lance` datasets, manifests, fragments, deletion files, the 2.x file format and structural encodings, vector / scalar / full-text / geo indexes, MemWAL streaming writes, optimistic-concurrency commits and commit handlers, schema evolution, versioning, time-travel, tags, branches, stable row IDs, namespaces, or object-store config. Triggers on lance crate, .lance file, lance dataset, lance file format, structural encoding, IVF_PQ, IVF_HNSW, IVF_RQ, RaBitQ, lance FTS, zonemap, MemWAL, OCC retry, lance schema evolution, lance namespace, pylance. This is the Lance format and engine (the `lance-format/lance` repo), not LanceDB the database product - but also the right reference for what LanceDB builds on.
 metadata:
-  version: "0.3.0"
-  upstream: "lance-format/lance@v7.1.0-beta.1"
+  version: "0.4.0"
+  upstream: "lance-format/lance@v7.1.0-beta.2"
   openclaw:
     homepage: https://github.com/tenequm/skills/tree/main/skills/lance-format
     emoji: "🗄️"
@@ -17,7 +17,7 @@ specs: a **file format**, a **table format**, **index formats**, **catalog specs
 **namespace client spec**. The Rust workspace at `lance-format/lance` implements all of them
 plus Python (`pylance`) and Java bindings.
 
-This skill tracks **`v7.1.0-beta.1`** (the `lance-format/lance` git tag). Pin against tags,
+This skill tracks **`v7.1.0-beta.2`** (the `lance-format/lance` git tag). Pin against tags,
 not `main` - Lance ships beta tags every few days and `next`-format encodings can change.
 
 The deep reference is `references/lance-reference.md`. Load it for any concrete schema, parameter,
@@ -42,7 +42,7 @@ Lance, so this skill remains the authority for the format itself.
 
 ## The crate workspace
 
-23 crate directories under `rust/`. `lance` is the public entry point; the rest are layers
+24 crate directories under `rust/`. `lance` is the public entry point; the rest are layers
 beneath it. Full table with descriptions and citations in `references/lance-reference.md` section 2.
 
 | Crate | Role |
@@ -56,14 +56,15 @@ beneath it. Full table with descriptions and citations in `references/lance-refe
 | `lance-core` | Shared `Error`/`Result`, cache, datatypes |
 | `lance-datafusion` | DataFusion glue (exec, expr, planner, UDFs) |
 | `lance-linalg` | SIMD L2 / dot / cosine / hamming kernels |
+| `lance-select` | Row-selection primitives - `RowAddrMask`, `RowIdMask`, `IndexExprResult` (extracted from `lance-core`/`lance-index` in v7.1.0-beta.2) |
 | `lance-tokenizer` | FTS tokenizer stack (simple, ngram, jieba, lindera, stemmers) |
 | `lance-geo` | Geospatial UDFs (feature-gated `geo`) |
 | `lance-namespace` / `-impls` / `-datafusion` | Namespace trait, Directory/REST impls, DataFusion catalog bridge |
-| `lance-arrow`, `lance-core`, `lance-tools`, `fsst`, `lance-bitpacking`, ... | Arrow extensions, CLI, compression sub-crates |
+| `lance-arrow`, `lance-tools`, `fsst`, `lance-bitpacking`, ... | Arrow extensions, CLI, compression sub-crates |
 
-All share `version = "7.1.0-beta.1"` except `lance-arrow-scalar` (pinned `58.0.0`, tracks
-Arrow) and `lance-namespace-datafusion` (pinned `7.0.0-beta.9`). Workspace: edition 2024,
-`rust-version = 1.91.0`, `resolver = "3"`.
+All share `version = "7.1.0-beta.2"` except `lance-arrow-scalar`, which is pinned at
+`58.0.0` to track Arrow. Workspace: edition 2024, `rust-version = 1.91.0`,
+`resolver = "3"`.
 
 ## File format versions
 
@@ -95,11 +96,16 @@ distributed index builds** (FTS, bitmap, btree), newer **scalar indexes** (zonem
 filter, ngram), the **geo / RTree** index and `lance-geo` crate, **manifest version hints**
 for fast latest-version lookup, and a formal split of the catalog / namespace / table /
 index specifications. The `v7.1.0-beta.1` tag opens the v7.1 line and adds a
-**materialized-view namespace API**. Details in `references/lance-reference.md` section 14.
+**materialized-view namespace API**. `v7.1.0-beta.2` then extracts mask code into a new
+**`lance-select`** crate (#6879) and lands two MemWAL correctness fixes - flushed
+memtables now build their secondary indexes so vector rows are visible to `fast_search`
+(#6901), and a per-source PK-hash block-list post-filter suppresses stale LSM vector reads
+when the fresh row falls out of its source's top-k (#6899). Details in
+`references/lance-reference.md` section 14.
 
 ## Navigating the reference
 
-`references/lance-reference.md` is the full v7 reference, regrounded against the `v7.1.0-beta.1`
+`references/lance-reference.md` is the full v7 reference, regrounded against the `v7.1.0-beta.2`
 source. Load the section for your task:
 
 1. **What Lance is** - the lakehouse spec stack
@@ -127,9 +133,9 @@ source. Load the section for your task:
 ## Maintenance
 
 Citations in `references/lance-reference.md` are `path:line` relative to the `lance-format/lance` repo;
-build a permalink as `https://github.com/lance-format/lance/blob/v7.1.0-beta.1/<path>`.
+build a permalink as `https://github.com/lance-format/lance/blob/v7.1.0-beta.2/<path>`.
 
 To refresh: `git -C ~/pjv/lance-format/lance fetch --tags`, check out the newest `v7*` tag,
 re-read the format spec under `docs/src/format/` and the user guide under `docs/src/guide/`,
-re-verify the crate workspace, and bump `metadata.upstream` plus every `v7.1.0-beta.1`
+re-verify the crate workspace, and bump `metadata.upstream` plus every `v7.1.0-beta.2`
 reference. Line numbers in citations drift between tags - treat them as approximate.

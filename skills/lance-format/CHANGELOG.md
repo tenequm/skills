@@ -7,6 +7,28 @@ and this skill adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.h
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-05-25
+
+### Changed
+- Re-grounded against upstream tag `v7.1.0-beta.2` (commit `24b8afec`); bumped every
+  version pin, permalink base, and the workspace crate version to `7.1.0-beta.2`.
+- Removed stale claim that `lance-namespace-datafusion` is pinned at `7.0.0-beta.9` -
+  it has used `version.workspace = true` since v7.1.0-beta.1.
+- Fixed stale workspace-member count (22 -> 24) and dropped the wrong claim that
+  `rust/arrow-stats` is a path dependency rather than an explicit member.
+
+### Added
+- New `lance-select` crate (PR #6879): mask code (`RowAddrMask`, `RowIdMask`,
+  `IndexExprResult`) extracted from `lance-core` and `lance-index`. Crate workspace
+  count goes from 23 to 24.
+- v7.1.0-beta.2 delta section: MemWAL correctness fixes - flushed memtables now
+  build secondary indexes (PR #6901, fixes invisible vector rows in `fast_search`)
+  and a per-source PK-hash block-list post-filter suppresses stale LSM vector reads
+  when the fresh row falls out of its source's top-k (PR #6899).
+- Section 16: integrations `index.md` landing page (PR #6915).
+
+Verified against: lance-format/lance@v7.1.0-beta.2
+
 ## [0.3.0] - 2026-05-21
 
 ### Added
