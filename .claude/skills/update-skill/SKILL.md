@@ -4,7 +4,7 @@ description: "Thorough on-demand refresh of one skill in this repo. Researches p
 argument-hint: "[skill-name]"
 disable-model-invocation: true
 metadata:
-  version: "0.3.0"
+  version: "0.4.0"
 ---
 
 # Update Skill
@@ -46,7 +46,9 @@ Dispatch three research subagents in a single message, one per angle. **Adapt ea
 
 - **Usage** (pond): mine `mcp__pond__pond_search` with NO `project` filter for footguns, scenario-specific breakage, inefficiencies, gaps, and recurring misunderstandings the skill could absorb. Keep the query semantic (concepts, not project names); scope with filters. These are **advisory leads, not facts** - never verified, ground-checked in Phase 3.
 - **Upstream**: releases, commits, and merged PRs since the last-verified date. Read real source - clone to `~/pjv/<owner>/<repo>` (lowercase) or use the GitHub MCP pinned to a concrete tag/SHA.
-- **Docs**: the current canonical docs, read from source (raw `.md` or cloned repo), not model-summarized. Compare them against the skill's current `SKILL.md` and `references/`, flagging API changes, deprecated or removed symbols, and patterns the skill should adopt.
+- **Docs**: the current canonical docs, read from source (raw `.md` or cloned repo), not model-summarized. Two distinct jobs, **both required**:
+  - **(a) Drift check** - compare the docs against the skill's current `SKILL.md` and `references/`, flagging API changes, deprecated or removed symbols, and patterns the skill should adopt. This is anchored to what the skill already says.
+  - **(b) Coverage sweep** - enumerate upstream's *current* feature/concept surface from the docs nav / table of contents, the API index, and the "what's new" / changelog. List every major capability, primitive, or concept the skill has **zero mention of**. Do NOT anchor this to existing skill content - the whole point is to find net-new surface the skill is silent about (`ADD` findings). This is the step a "verify what's there" pass structurally misses.
 
 Every finding is one bulleted line: `[KIND]` (`ADD`/`CHANGE`/`DEPRECATE`/`REMOVE`/`FIX`/`SECURITY`), a one-line summary, an exact quote from the source (no paraphrase), and a citation. pond findings also carry `status: advisory`. Merge all returns into one list, deduped by `(KIND, citation)`.
 
@@ -59,6 +61,7 @@ No row ships unverified. Before a finding becomes a row, confirm it against prim
 - Verify the finding's claim **and the existing skill text it touches** - links, enumerated lists, pinned versions, version-coupled examples. Spot-check the skill's other upstream-coupled claims even where no finding landed; silent staleness is the common miss.
 - A row asserting upstream state (a bug, API shape, version, behavior) cites the primary source checked - cloned `repo@SHA file:line`, a release, or a docs URL; a pond citation alone is insufficient, so re-ground it or drop it. A row that is purely experiential enrichment (a recurring gap or confusion) may keep its pond citation, but verify the wording you write is technically correct.
 - Drop a pond-reported bug already fixed upstream; correct any finding whose pond framing the source contradicts.
+- **Coverage-gap rows** (net-new concepts from the Phase 2(b) sweep) are verified two ways: confirm the concept exists in today's source (cite it), **and** confirm the skill genuinely omits it - grep the skill for the concept and any synonyms before claiming it's absent, so a renamed-but-present feature isn't reported as missing.
 
 ### Report
 
@@ -68,11 +71,15 @@ Print a structured report, sections in order:
 2. **Proposed `metadata.upstream`** - the new flat string. No floating tags (`@latest`/`@next`/`@beta`/`@canary`); pin to a concrete tag or SHA.
 3. **Proposed CHANGELOG entry** - a Keep a Changelog block ready to commit.
 4. **Proposed edits** - one row per smallest atomic change, each with a stable ID (`A1`/`C1`/`D1`/`R1`/`F1`/`S1`...): `<ID> | target file | one-line summary | citation`. Batch trivially-related changes into one row; past ~20 rows, consider whether the skill needs a rewrite rather than a patch.
-5. **Bootstrap proposal** (only when `bootstrap_needed`): candidate upstream packages greppable from the skill's content, each as `<package> (mentioned <N>x, first cite: <file>:<line>)` for the user to confirm or prune; plus a seed `CHANGELOG.md`.
+5. **New-concept coverage** (**always present, never omitted**) - the result of the Phase 2(b) coverage sweep. Either a table of net-new upstream concepts the skill omits (each becoming an `ADD` row above), or the explicit statement that there are none. End this section with the verbatim attestation below. Coverage need not be complete to pass - but any gap in what you could enumerate (JS-gated docs, rate limits, unreachable pages) must be named here, not silently dropped:
+   ```
+   Coverage sweep: enumerated upstream's current surface from <sources>. Net-new concepts the skill omits: <list> / none since <last-verified date>. Not reachable this run: <areas, or "none">.
+   ```
+6. **Bootstrap proposal** (only when `bootstrap_needed`): candidate upstream packages greppable from the skill's content, each as `<package> (mentioned <N>x, first cite: <file>:<line>)` for the user to confirm or prune; plus a seed `CHANGELOG.md`.
 
 ### No-op short-circuit
 
-If sections 1-4 yield zero rows AND `bootstrap_needed` is false, print this verbatim and exit cleanly - no file changes, no commit:
+If sections 1-4 yield zero rows AND the Phase 2(b) coverage sweep found no omitted concepts (section 5 attestation says "none") AND `bootstrap_needed` is false, print this verbatim and exit cleanly - no file changes, no commit. Never short-circuit without the section 5 attestation present:
 
 ```
 All current as of <today>. Last verified per CHANGELOG.md on <date> against <metadata.upstream value>.
