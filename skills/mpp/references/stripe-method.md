@@ -2,15 +2,18 @@
 
 ## Overview
 
-Stripe integration uses **Shared Payment Tokens (SPT)** - a Stripe Business Network feature that lets one Stripe account (client) create a token that another Stripe account (server) can use to charge. Both parties must have Stripe accounts connected to the Stripe Business Network.
+Stripe MPP supports **two payment methods**:
 
-Flow:
+- **Fiat (SPT)** - **Shared Payment Tokens** let one Stripe account (client) create a token that another Stripe account (server) can use to charge cards, wallets, and other Stripe-supported methods. Requires a US legal entity. The server identifies itself via its Stripe **profile** (`profile_...`) ID as `networkId`.
+- **Crypto** - direct on-chain payment using Stripe-managed crypto deposit addresses on Tempo, captured automatically when funds settle. See "Crypto (On-Chain) Method" below.
+
+SPT flow:
 1. Server responds with 402 challenge containing Stripe payment requirements.
-2. Client creates an SPT via a proxy endpoint (SPT creation requires a secret key).
+2. Client creates an SPT (via the `@stripe/link-cli` spend-request flow, or a server-side proxy that holds the Stripe secret key).
 3. Client sends the SPT as the credential payload.
 4. Server creates a PaymentIntent using the SPT and confirms payment.
 
-SPTs are single-use, scoped to a specific amount and currency, and bound to the Business Network profile ID.
+SPTs are single-use, scoped to a specific amount and currency, and bound to the server's Stripe profile ID.
 
 ---
 
@@ -28,7 +31,7 @@ import { stripe } from 'mppx/server'
 ```ts
 const charge = stripe.charge({
   client: new Stripe(process.env.STRIPE_SECRET_KEY!),
-  networkId: 'acct_1234567890', // Stripe Business Network profile ID
+  networkId: process.env.STRIPE_PROFILE_ID!, // Stripe profile ID (profile_...)
   paymentMethodTypes: ['card'],
 })
 ```
@@ -38,7 +41,7 @@ const charge = stripe.charge({
 ```ts
 const charge = stripe.charge({
   secretKey: process.env.STRIPE_SECRET_KEY!,
-  networkId: 'acct_1234567890',
+  networkId: process.env.STRIPE_PROFILE_ID!, // profile_...
   paymentMethodTypes: ['card'],
 })
 ```
@@ -50,7 +53,7 @@ Attach metadata to the PaymentIntent for tracking, reconciliation, or plan gatin
 ```ts
 const charge = stripe.charge({
   client: new Stripe(process.env.STRIPE_SECRET_KEY!),
-  networkId: 'acct_1234567890',
+  networkId: process.env.STRIPE_PROFILE_ID!, // profile_...
   paymentMethodTypes: ['card'],
   metadata: { plan: 'pro', feature: 'api-access' },
 })
@@ -63,7 +66,7 @@ Accept cards, Link, and other Stripe-supported methods:
 ```ts
 const charge = stripe.charge({
   secretKey: process.env.STRIPE_SECRET_KEY!,
-  networkId: 'acct_1234567890',
+  networkId: process.env.STRIPE_PROFILE_ID!, // profile_...
   paymentMethodTypes: ['card', 'link'],
 })
 ```
@@ -74,7 +77,7 @@ const charge = stripe.charge({
 |---|---|---|---|
 | `client` | `Stripe` | One of `client` or `secretKey` | Stripe SDK instance |
 | `secretKey` | `string` | One of `client` or `secretKey` | Stripe secret key (creates SDK internally) |
-| `networkId` | `string` | Yes | Stripe Business Network profile ID |
+| `networkId` | `string` | Yes | Stripe profile (`profile_...`) ID from your Stripe Dashboard |
 | `paymentMethodTypes` | `string[]` | Yes | Accepted payment methods (e.g. `['card']`, `['card', 'link']`) |
 | `metadata` | `Record<string, string>` | No | Key-value pairs attached to the PaymentIntent |
 
@@ -150,38 +153,55 @@ const credential = await charge.createCredential({
 
 ---
 
-## SPT Creation Proxy
+## SPT Creation
 
-SPT creation requires a Stripe secret key, so it cannot happen client-side. You need a server endpoint that proxies the SPT creation request to Stripe's API.
+SPT creation requires a Stripe secret key, so it cannot happen in an untrusted client. The current canonical approach is the **`@stripe/link-cli`** spend-request flow:
+
+```bash
+# 1. Create a spend request (issues the SPT). Add --test in a sandbox.
+npx @stripe/link-cli spend-request create \
+  --payment-method-id csmrpd_xxx \
+  --amount 100 \
+  --credential-type shared_payment_token \
+  --network-id profile_... \
+  --request-approval
+
+# 2. Pay the MPP endpoint using the spend request
+npx @stripe/link-cli mpp pay https://your-endpoint.com/resource \
+  --spend-request-id lsrq_xxx \
+  --method POST \
+  --data '{ ... }'
+```
+
+For a programmatic client, the `createToken` callback on the client method (above) calls a server-side endpoint you control that holds the Stripe secret key and returns the SPT, which the client then includes in the credential payload. The legacy `stripe.rawRequest('POST', '/v1/shared_payment/granted_tokens', ...)` endpoint is no longer documented in Stripe's canonical MPP guide - prefer the `@stripe/link-cli` flow.
+
+## Crypto (On-Chain) Method
+
+Stripe MPP can also accept direct on-chain payments via Tempo crypto deposit addresses. Stripe generates a deposit address per PaymentIntent and captures automatically when funds settle on-chain. Crypto PaymentIntents require API version `2026-03-04.preview` or later.
 
 ```ts
 import Stripe from 'stripe'
 
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!)
+const stripeClient = new Stripe(process.env.STRIPE_SECRET_KEY!, {
+  apiVersion: '2026-03-04.preview',
+})
 
-// POST /api/create-spt
-export async function handler(req: Request) {
-  const { amount, currency, payment_method, network_id } = await req.json()
-
-  const response = await stripe.rawRequest(
-    'POST',
-    '/v1/shared_payment/granted_tokens',
-    {
-      amount: String(amount),
-      currency,
-      payment_method,
-      network_id,
-    }
-  )
-
-  return Response.json(response)
-}
+// Generate a Tempo deposit address backed by a Stripe PaymentIntent
+const paymentIntent = await stripeClient.paymentIntents.create({
+  amount: 1000,
+  currency: 'usd',
+  payment_method_types: ['crypto'],
+  payment_method_data: { type: 'crypto' },
+  payment_method_options: {
+    crypto: { mode: 'deposit', deposit_options: { networks: ['tempo'] } },
+  },
+  confirm: true,
+})
+// paymentIntent.next_action.crypto_display_details.deposit_addresses.tempo.address
+// -> use as the `recipient` in a tempo.charge() method
 ```
 
-The proxy endpoint:
-1. Receives SPT creation parameters from the client.
-2. Calls Stripe's `shared_payment/granted_tokens` API with the server's secret key.
-3. Returns the SPT to the client, which includes it in the credential payload.
+Present fiat (SPT) and crypto together on one endpoint with `Mppx.compose(...)`. See [docs.stripe.com/payments/machine/mpp](https://docs.stripe.com/payments/machine/mpp) for the full two-method handler.
 
 ---
 

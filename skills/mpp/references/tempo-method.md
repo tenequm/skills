@@ -48,8 +48,8 @@ Note: Tempo transactions use a custom serialization format (type 0x76). Always u
 ### Server Configuration
 
 ```ts
-import { tempo } from "@anthropic-ai/mpp/tempo";
-import { Expires } from "@anthropic-ai/mpp";
+import { tempo } from "mppx/server";
+import { Expires } from "mppx";
 
 const tempoCharge = tempo.charge({
   currency: "<PATHUSD_TESTNET>",
@@ -91,7 +91,7 @@ const handler = mppx.charge({
 ### Client Configuration
 
 ```ts
-import { tempo } from "@anthropic-ai/mpp/tempo";
+import { tempo } from "mppx/client";
 import { privateKeyToAccount } from "viem/accounts";
 
 const tempoClient = tempo.charge({
@@ -200,8 +200,7 @@ const charge = tempo.charge({
 ### Server Configuration
 
 ```ts
-import { tempo } from "@anthropic-ai/mpp/tempo";
-import { Store } from "@anthropic-ai/mpp";
+import { Store, tempo } from "mppx/server";
 
 const tempoSession = tempo.session({
   currency: "<PATHUSD_TESTNET>",
@@ -221,6 +220,7 @@ const tempoSession = tempo.session({
 | `store` | `Store` | Session state storage |
 | `escrowContract` | `string` | Escrow contract address |
 | `sse` | `boolean` | Enable SSE streaming |
+| `voucherSigner` | `Account` | Account authorized to sign vouchers (renamed from `authorizedSigner` in mppx 0.6.29; the on-chain `channels()` ABI field is still `authorizedSigner`) |
 
 **Store options:**
 

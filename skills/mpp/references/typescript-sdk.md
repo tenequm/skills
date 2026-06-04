@@ -6,14 +6,16 @@
 npm install mppx viem
 ```
 
-**Peer dependencies** (install as needed):
-- `viem` >= 2.46.2 (required)
+**Peer dependencies** (install as needed, per mppx 0.6.30):
+- `viem` >= 2.51.0 (required)
 - `@modelcontextprotocol/sdk` >= 1.25.0 (for MCP integration)
-- `hono` >= 4 (for Hono middleware)
+- `hono` >= 4.12.18 (for Hono middleware)
 - `express` >= 5 (for Express middleware)
 - `elysia` >= 1 (for Elysia middleware)
 
 ## Package Exports
+
+Authoritative `exports` keys from `mppx` 0.6.30:
 
 | Subpath | Purpose |
 |---|---|
@@ -21,16 +23,21 @@ npm install mppx viem
 | `mppx/client` | Client SDK (polyfill / manual fetch) |
 | `mppx/server` | Server SDK (charge, session, compose) |
 | `mppx/proxy` | Proxy server with service routing |
-| `mppx/stripe` | Stripe payment method |
-| `mppx/tempo` | Tempo payment method |
+| `mppx/stripe`, `mppx/stripe/client`, `mppx/stripe/server` | Stripe payment method |
+| `mppx/evm`, `mppx/evm/client`, `mppx/evm/server` | EVM (EIP-3009) payment method |
+| `mppx/x402` | x402 interop ("exact" flow compatibility) |
+| `mppx/tempo` | Tempo `Session` utilities (note: `tempo`/`Mppx` are NOT here - import those from `mppx/server` or `mppx/client`) |
 | `mppx/html` | Payment link UI customization (Config, Text, Theme types, init()) |
 | `mppx/discovery` | OpenAPI-first discovery tooling |
+| `mppx/cli`, `mppx/cli/plugins` | CLI config + plugin authoring |
 | `mppx/mcp-sdk/client` | MCP client wrapper |
 | `mppx/mcp-sdk/server` | MCP server wrapper |
 | `mppx/hono` | Hono framework middleware |
 | `mppx/express` | Express framework middleware |
 | `mppx/nextjs` | Next.js middleware |
 | `mppx/elysia` | Elysia framework middleware |
+
+Lightning, Stellar, Solana, Monad, RedotPay, and Card are **external packages** (`@buildonspark/lightning-mpp-sdk`, `@stellar/mpp`, `@solana/mpp`, `@monad-crypto/mpp`, `@redotpay/mpp`, `mpp-card`), not `mppx` subpaths.
 
 ## Server SDK (`mppx/server`)
 
@@ -65,9 +72,8 @@ const result = await mppx.charge({
   feePayer: 'sender',       // optional, 'sender' | 'receiver'
 })(request)
 
-// result.status - 'paid' | 'unpaid'
-// result.challenge - the challenge object (when unpaid)
-// result.withReceipt() - attach receipt to response (when paid)
+// result.status === 402 - payment required (result.challenge is the 402 response)
+// otherwise paid - result.withReceipt() attaches the receipt to your response
 ```
 
 Full handler example:
@@ -76,9 +82,7 @@ Full handler example:
 const handler = async (req: Request) => {
   const result = await mppx.charge({ amount: '0.01' })(req)
 
-  if (result.status === 'unpaid') {
-    return Response.requirePayment(result.challenge)
-  }
+  if (result.status === 402) return result.challenge
 
   const response = new Response(JSON.stringify({ data: 'paid content' }))
   return result.withReceipt(response)
@@ -178,6 +182,9 @@ const res = await mppx.fetch(url, {
 - `polyfill` - wrap `globalThis.fetch`, defaults to `true`
 - `transport` - protocol transport (optional)
 - `onChallenge` - callback when a 402 challenge is received (optional)
+- `acceptPaymentPolicy` - controls when the `Accept-Payment` header is injected on outgoing requests: `'always'`, `'same-origin'`, `'never'`, or `{ origins: string[] }` (supports `*.` wildcards)
+
+**Breaking change (mppx 0.6.0):** polyfilled `fetch` in browsers no longer sends `Accept-Payment` on every request - it now defaults to **same-origin** only. Non-browser environments are unaffected. Use `acceptPaymentPolicy` to opt cross-origin payment endpoints back in.
 
 ## Framework Middleware
 
@@ -285,9 +292,19 @@ const proxy = Proxy.create({
 
 ### Discovery Endpoints
 
-- `GET /discover` - service discovery metadata
-- `GET /discover/all` - all routes and pricing
-- `GET /llms.txt` - LLM-readable service description
+The proxy auto-serves these (all active - none are deprecated/410):
+
+- `GET /discover` - JSON service list (markdown for AI/terminal user agents)
+- `GET /discover/{id}` and `GET /discover/{id}.md` - single service detail
+- `GET /discover/all` and `GET /discover/all.md` - all services with full route details
+- `GET /llms.txt` - LLM-readable overview (`GET /discover.md` is an alias)
+
+### Discovery Documents (`mppx/discovery`)
+
+Beyond the proxy, any server can publish a standalone discovery document. `mppx/discovery` generates a `GET /openapi.json` endpoint with canonical `x-payment-info.offers[]` entries on each paid route (a Next.js helper and a CLI for static generation are included). Register the service on a **registry** so agents can find it:
+
+- [MPPScan](https://mppscan.com) - public registry with search/analytics (one-click register)
+- [MPP Services directory](https://mpp.dev/services) - curated list (submit a PR)
 
 ### Handlers
 

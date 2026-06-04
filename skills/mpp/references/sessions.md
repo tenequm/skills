@@ -48,6 +48,7 @@ export async function handler(request: Request) {
 ```
 
 - `mppx.session()` returns a handler that manages the full lifecycle automatically.
+- The account authorized to sign vouchers is configured via `voucherSigner` (renamed from `authorizedSigner` in mppx 0.6.29); the on-chain `channels()` ABI field is still named `authorizedSigner`.
 - `result.status === 402` means the client has not yet opened a channel or the voucher is missing/invalid.
 - `result.challenge` sends the 402 response with payment requirements.
 - `result.withReceipt` attaches the payment receipt header to the response.

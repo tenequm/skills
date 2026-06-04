@@ -1,5 +1,7 @@
 # pympp Python SDK
 
+Verified against pympp 0.8.2. Python currently supports the **charge** intent only - the session (payment-channel) intent is TypeScript/Rust-only per the official SDK capability matrix.
+
 ## Installation
 
 ```bash
@@ -14,7 +16,7 @@ pip install "pympp[tempo]"
 
 **Dependencies:**
 - Core: `httpx`
-- With `[tempo]`: `eth-account`, `web3`
+- With `[tempo]`: `pytempo`, `eth-account`, `rlp`
 
 ---
 
@@ -42,47 +44,39 @@ mpp = Mpp.create(
 )
 ```
 
-### Charge Endpoint
+### Charge Endpoint (decorator)
 
-`mpp.charge()` returns either a `Challenge` (payment needed) or a `(credential, receipt)` tuple (payment verified):
+The current pympp API gates a route with the `@server.pay(amount=...)` decorator. On payment the handler receives an injected `Credential` and `Receipt`; the decorator emits the 402 challenge and attaches the receipt automatically:
 
 ```python
+from mpp import Credential, Receipt
+from mpp.server import Mpp
+from mpp.methods.tempo import tempo, ChargeIntent
+
+server = Mpp.create(
+    method=tempo(
+        currency="<PATHUSD_TESTNET>",
+        recipient="0xYourAddress",
+        intents={"charge": ChargeIntent()},
+    ),
+)
+
 @app.get("/resource")
-async def get_resource(request: Request):
-    result = await mpp.charge(
-        authorization=request.headers.get("Authorization"),
-        amount="0.50",
-    )
-
-    if isinstance(result, Challenge):
-        return JSONResponse(
-            status_code=402,
-            content={"error": "Payment required"},
-            headers={
-                "WWW-Authenticate": result.to_www_authenticate(mpp.realm),
-            },
-        )
-
-    credential, receipt = result
-    return JSONResponse(
-        content={"data": "paid content"},
-        headers={
-            "Payment-Receipt": receipt.to_payment_receipt(),
-        },
-    )
+@server.pay(amount="0.50")
+async def get_resource(request, credential: Credential, receipt: Receipt):
+    return {"data": "paid content", "payer": credential.source}
 ```
 
 ### Full FastAPI Example
 
 ```python
-from fastapi import FastAPI, Request
-from fastapi.responses import JSONResponse
-from mpp import Challenge
+from fastapi import FastAPI
+from mpp import Credential, Receipt
 from mpp.server import Mpp
 from mpp.methods.tempo import tempo, ChargeIntent
 
 app = FastAPI()
-mpp = Mpp.create(
+server = Mpp.create(
     method=tempo(
         currency="<PATHUSD_TESTNET>",
         recipient="0xYourAddress",
@@ -91,22 +85,9 @@ mpp = Mpp.create(
 )
 
 @app.get("/api/data")
-async def get_data(request: Request):
-    result = await mpp.charge(
-        authorization=request.headers.get("Authorization"),
-        amount="0.10",
-    )
-    if isinstance(result, Challenge):
-        return JSONResponse(
-            status_code=402,
-            content={"error": "Payment required"},
-            headers={"WWW-Authenticate": result.to_www_authenticate(mpp.realm)},
-        )
-    credential, receipt = result
-    return JSONResponse(
-        content={"data": "premium content", "payer": credential.source},
-        headers={"Payment-Receipt": receipt.to_payment_receipt()},
-    )
+@server.pay(amount="0.10")
+async def get_data(request, credential: Credential, receipt: Receipt):
+    return {"data": "premium content", "payer": credential.source}
 
 @app.get("/api/free")
 async def get_free():
@@ -122,11 +103,10 @@ async def get_free():
 The client is an async context manager that wraps `httpx.AsyncClient` with automatic 402 handling:
 
 ```python
-from eth_account import Account
 from mpp.client import Client
-from mpp.methods.tempo import tempo, ChargeIntent
+from mpp.methods.tempo import tempo, TempoAccount, ChargeIntent
 
-account = Account.from_key("0xYourPrivateKey")
+account = TempoAccount.from_key("0xYourPrivateKey")
 
 async with Client(
     methods=[
@@ -175,71 +155,9 @@ print(response.json())
 
 ---
 
-## Payment Sessions (Streaming)
+## Sessions / Streaming (not supported in Python)
 
-### StreamMethod
-
-Use `StreamMethod` for session-based payment channels that support streaming:
-
-```python
-from mpp.methods.tempo import StreamMethod
-
-method = StreamMethod(
-    account=account,
-    currency="<PATHUSD_TESTNET>",
-    deposit="1.00",  # max tokens locked in escrow
-)
-```
-
-### PaymentTransport
-
-`PaymentTransport` wraps any `httpx.AsyncBaseTransport` to inject payment credentials:
-
-```python
-import httpx
-from mpp.transport import PaymentTransport
-
-transport = PaymentTransport(methods=[method])
-
-async with httpx.AsyncClient(transport=transport) as client:
-    async with client.stream("GET", "https://api.example.com/stream") as response:
-        async for line in response.aiter_lines():
-            print(line)
-```
-
-### Full Streaming Example
-
-```python
-import httpx
-from eth_account import Account
-from mpp.methods.tempo import StreamMethod
-from mpp.transport import PaymentTransport
-
-account = Account.from_key("0xYourPrivateKey")
-
-method = StreamMethod(
-    account=account,
-    currency="<PATHUSD_TESTNET>",
-    deposit="1.00",
-)
-
-transport = PaymentTransport(methods=[method])
-
-async with httpx.AsyncClient(transport=transport) as client:
-    # First request opens the payment channel on-chain
-    async with client.stream("GET", "https://api.example.com/stream") as response:
-        async for line in response.aiter_lines():
-            # Each line is charged against the session balance
-            print(line)
-
-    # Subsequent requests use off-chain vouchers
-    async with client.stream("GET", "https://api.example.com/stream") as response:
-        async for line in response.aiter_lines():
-            print(line)
-
-    # Close the channel when done
-    await method.close()
-```
+The session (payment-channel) intent - off-chain vouchers, SSE/WebSocket streaming, pay-as-you-go billing - is **not implemented in pympp**. The official SDK capability matrix lists the session intent for TypeScript and Rust only. For metered/streaming billing in Python today, fall back to per-request `charge` calls, or run the session-billing tier on the TypeScript (`mppx`) or Rust (`mpp`) server. Watch [mpp.dev/sdk/python](https://mpp.dev/sdk/python) for session support.
 
 ---
 
@@ -305,24 +223,6 @@ receipt.timestamp
 
 ---
 
-## Custom httpx Transport
+## Automatic 402 Handling
 
-`PaymentTransport` wraps any `httpx.AsyncBaseTransport`, intercepting 402 responses and automatically retrying with payment credentials:
-
-```python
-import httpx
-from mpp.transport import PaymentTransport
-from mpp.methods.tempo import tempo, ChargeIntent
-
-# Wrap the default transport
-transport = PaymentTransport(
-    methods=[tempo(account=account, intents={"charge": ChargeIntent()})],
-)
-
-# Use with any httpx.AsyncClient
-async with httpx.AsyncClient(transport=transport, base_url="https://api.example.com") as client:
-    res = await client.get("/data")
-    print(res.json())
-```
-
-This is useful when you need fine-grained control over the HTTP client (timeouts, connection pooling, proxies) while still getting automatic payment handling.
+The `Client` context manager and the one-off `get` helper already intercept 402 responses and retry with payment credentials automatically. Pass timeout, connection-pool, and proxy options through to the underlying `httpx.AsyncClient` when you need fine-grained control over the HTTP client.

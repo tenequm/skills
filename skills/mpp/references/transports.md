@@ -77,7 +77,7 @@ The MCP (Model Context Protocol) transport uses JSON-RPC encoding for payment fl
 
 ### Challenge Delivery
 
-Payment challenges are returned as JSON-RPC errors with code `-32042`:
+Payment challenges are returned as JSON-RPC errors with code `-32042` (servers may also issue `-32043`):
 
 ```json
 {
@@ -230,7 +230,7 @@ Payment receipts are embedded in the result's `_meta` field:
 | **Credential** | `Authorization: Payment <base64url>` header | `_meta.org.paymentauth/credential` in params | `authorization` message |
 | **Receipt** | `Payment-Receipt: <base64url>` header | `_meta.org.paymentauth/receipt` in result | `payment-receipt` message |
 | **Encoding** | Base64url without padding (RFC 4648) | Native JSON objects | Native JSON objects |
-| **Status code** | HTTP 402 | JSON-RPC error code -32042 | `payment-error` with status |
+| **Status code** | HTTP 402 | JSON-RPC error code -32042 (or -32043) | `payment-error` with status |
 | **Multiple methods** | Multiple `WWW-Authenticate` headers | Multiple entries in `challenges` array | N/A (single method per connection) |
 
 ---

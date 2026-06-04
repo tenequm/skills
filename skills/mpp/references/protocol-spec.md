@@ -4,7 +4,7 @@
 
 MPP (Machine Payments Protocol) defines a Payment HTTP Authentication Scheme built on **HTTP 402 Payment Required**. It follows the structure of RFC 9110 HTTP Authentication but uses the `402` status code instead of `401` to signal that access requires payment rather than identity credentials.
 
-MPP is submitted to the IETF as an Internet-Draft. It leverages existing HTTP semantics, making it compatible with standard web infrastructure - proxies, CDNs, and load balancers pass through the headers without modification.
+MPP is submitted to the IETF as an Internet-Draft with intended status **Standards Track** (originally Experimental). Two draft names are in circulation: `draft-ryan-httpauth-payment` on the IETF datatracker and `draft-httpauth-payment` on paymentauth.org. It leverages existing HTTP semantics, making it compatible with standard web infrastructure - proxies, CDNs, and load balancers pass through the headers without modification.
 
 The flow:
 1. Client requests a protected resource.
@@ -43,7 +43,7 @@ The server issues a challenge via the `WWW-Authenticate` header using the `Payme
 | `expires`     | No       | ISO 8601 timestamp after which the challenge is invalid  |
 | `description` | No       | Human-readable description of the payment                |
 | `digest`      | No       | Content-Digest of the request body (for body binding)    |
-| `opaque`      | No       | Server-specific opaque data echoed back by the client    |
+| `opaque`      | No       | Base64url-encoded JCS-serialized flat string-to-string map of server-defined correlation data; the client MUST echo it back unchanged in the credential and MUST NOT modify it |
 
 ### Request Parameter
 
@@ -220,7 +220,7 @@ All error types are under `https://paymentauth.org/problems/`:
 | `payment-insufficient`  | Payment amount too low                             |
 | `payment-expired`       | Challenge has expired                              |
 | `verification-failed`   | Payment proof could not be verified on-chain/off-chain |
-| `method-unsupported`    | Requested payment method not supported             |
+| `method-unsupported`    | Requested payment method not supported (returns HTTP **400**, not 402) |
 | `malformed-credential`  | Credential JSON is invalid or missing fields       |
 | `invalid-challenge`     | Challenge ID does not match (tampered or unknown)  |
 

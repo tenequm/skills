@@ -21,8 +21,13 @@ cargo add mpp --features tempo,client,server
 | `middleware` | `reqwest-middleware` integration for automatic 402 handling |
 | `server` | Verification, `ChargeMethod`, challenge generation |
 | `tempo` | Tempo blockchain support (includes `evm`), Tempo-specific types |
+| `tower` | `tower` service integration |
+| `axum` | Axum extractors/handlers (implies `server`) |
+| `ws` | WebSocket session transport (implies `server` + `client`) |
+| `stripe` | Stripe payment method |
+| `utils` | Shared helper utilities |
 
-Features are additive. `tempo` implies `evm`. `middleware` implies `client`.
+Features are additive. `tempo` implies `evm`. `middleware` implies `client`. `axum` implies `server`. `ws` implies `server` and `client`. Default features include a TLS backend (`reqwest-default-tls`).
 
 ---
 
@@ -144,28 +149,28 @@ let res = client.get("https://api.example.com/data").send().await?;
 
 ```toml
 [dependencies]
-mpp = { version = "0.1", features = ["client", "tempo"] }
+mpp = { version = "0.10", features = ["client", "tempo"] }
 ```
 
 ### Server Only
 
 ```toml
 [dependencies]
-mpp = { version = "0.1", features = ["server", "tempo"] }
+mpp = { version = "0.10", features = ["server", "tempo"] }
 ```
 
 ### Both Client and Server
 
 ```toml
 [dependencies]
-mpp = { version = "0.1", features = ["client", "server", "tempo"] }
+mpp = { version = "0.10", features = ["client", "server", "tempo"] }
 ```
 
 ### Client with reqwest-middleware
 
 ```toml
 [dependencies]
-mpp = { version = "0.1", features = ["middleware", "tempo"] }
+mpp = { version = "0.10", features = ["middleware", "tempo"] }
 reqwest = { version = "0.12", features = ["json"] }
 reqwest-middleware = "0.4"
 ```
