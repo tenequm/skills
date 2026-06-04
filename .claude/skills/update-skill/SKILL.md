@@ -1,10 +1,10 @@
 ---
 name: update-skill
-description: "Thorough on-demand refresh of one skill in this repo. Researches kb/upstream/docs in parallel, gates twice for approval, bumps version, updates CHANGELOG, runs just check, commits and watches CI. Use to update, refresh, or check the freshness of a specific skill."
+description: "Thorough on-demand refresh of one skill in this repo. Researches pond/upstream/docs in parallel, gates twice for approval, bumps version, updates CHANGELOG, runs just check, commits and watches CI. Use to update, refresh, or check the freshness of a specific skill."
 argument-hint: "[skill-name]"
 disable-model-invocation: true
 metadata:
-  version: "0.2.0"
+  version: "0.3.0"
 ---
 
 # Update Skill
@@ -44,11 +44,11 @@ Capture state for the rest of the run:
 
 Dispatch three research subagents in a single message, one per angle. **Adapt each angle to the skill**: a skill wrapping a package researches that package's releases and source; a skill tracking living docs or a spec researches those docs and their source repos; a skill with no upstream at all still gets the usage angle.
 
-- **Usage** (kb): mine `mcp__kb__kb_search` with NO `project` filter for footguns, scenario-specific breakage, inefficiencies, gaps, and recurring misunderstandings the skill could absorb. These are **advisory leads, not facts** - never verified, ground-checked in Phase 3.
+- **Usage** (pond): mine `mcp__pond__pond_search` with NO `project` filter for footguns, scenario-specific breakage, inefficiencies, gaps, and recurring misunderstandings the skill could absorb. Keep the query semantic (concepts, not project names); scope with filters. These are **advisory leads, not facts** - never verified, ground-checked in Phase 3.
 - **Upstream**: releases, commits, and merged PRs since the last-verified date. Read real source - clone to `~/pjv/<owner>/<repo>` (lowercase) or use the GitHub MCP pinned to a concrete tag/SHA.
 - **Docs**: the current canonical docs, read from source (raw `.md` or cloned repo), not model-summarized. Compare them against the skill's current `SKILL.md` and `references/`, flagging API changes, deprecated or removed symbols, and patterns the skill should adopt.
 
-Every finding is one bulleted line: `[KIND]` (`ADD`/`CHANGE`/`DEPRECATE`/`REMOVE`/`FIX`/`SECURITY`), a one-line summary, an exact quote from the source (no paraphrase), and a citation. kb findings also carry `status: advisory`. Merge all returns into one list, deduped by `(KIND, citation)`.
+Every finding is one bulleted line: `[KIND]` (`ADD`/`CHANGE`/`DEPRECATE`/`REMOVE`/`FIX`/`SECURITY`), a one-line summary, an exact quote from the source (no paraphrase), and a citation. pond findings also carry `status: advisory`. Merge all returns into one list, deduped by `(KIND, citation)`.
 
 ## Phase 3 - Verify, report, GATE 1
 
@@ -57,8 +57,8 @@ Every finding is one bulleted line: `[KIND]` (`ADD`/`CHANGE`/`DEPRECATE`/`REMOVE
 No row ships unverified. Before a finding becomes a row, confirm it against primary source read **today**:
 
 - Verify the finding's claim **and the existing skill text it touches** - links, enumerated lists, pinned versions, version-coupled examples. Spot-check the skill's other upstream-coupled claims even where no finding landed; silent staleness is the common miss.
-- A row asserting upstream state (a bug, API shape, version, behavior) cites the primary source checked - cloned `repo@SHA file:line`, a release, or a docs URL; a kb citation alone is insufficient, so re-ground it or drop it. A row that is purely experiential enrichment (a recurring gap or confusion) may keep its kb citation, but verify the wording you write is technically correct.
-- Drop a kb-reported bug already fixed upstream; correct any finding whose kb framing the source contradicts.
+- A row asserting upstream state (a bug, API shape, version, behavior) cites the primary source checked - cloned `repo@SHA file:line`, a release, or a docs URL; a pond citation alone is insufficient, so re-ground it or drop it. A row that is purely experiential enrichment (a recurring gap or confusion) may keep its pond citation, but verify the wording you write is technically correct.
+- Drop a pond-reported bug already fixed upstream; correct any finding whose pond framing the source contradicts.
 
 ### Report
 
@@ -130,9 +130,9 @@ Run `just check` from the repo root (it regenerates `README.md` - the most commo
 
 ### Privacy / leak scan (hard blocker)
 
-Every skill here publishes publicly, and kb research draws on private cross-project conversations - a leak can reach the diff. Before showing the diff, dispatch a dedicated agent (separate from the Phase 2 research agents) to scan the added/changed lines under `skills/<name>/` and `README.md`.
+Every skill here publishes publicly, and pond research draws on private cross-project conversations - a leak can reach the diff. Before showing the diff, dispatch a dedicated agent (separate from the Phase 2 research agents) to scan the added/changed lines under `skills/<name>/` and `README.md`.
 
-It flags anything unsafe for a public skill: secrets (keys, tokens, passwords, `.env` values, connection strings), personal data (real names, emails, handles), and the easy-to-miss ones - non-public project or repo names, internal hostnames or endpoints, ticket IDs, local machine paths, kb conversation IDs. Intentional public references are fine (the public repo owner, official upstream repos and docs, published package names, spec URLs). The agent returns `[LEAK] <file>:<line> - <what> - suggested redaction: <text>` per issue, or exactly `NO LEAKS FOUND`.
+It flags anything unsafe for a public skill: secrets (keys, tokens, passwords, `.env` values, connection strings), personal data (real names, emails, handles), and the easy-to-miss ones - non-public project or repo names, internal hostnames or endpoints, ticket IDs, local machine paths, pond session IDs. Intentional public references are fine (the public repo owner, official upstream repos and docs, published package names, spec URLs). The agent returns `[LEAK] <file>:<line> - <what> - suggested redaction: <text>` per issue, or exactly `NO LEAKS FOUND`.
 
 An unresolved `[LEAK]` is a hard blocker: redact each finding, re-run the scan, and repeat until clean before GATE 2. Hold the commit message to the same public-safe standard.
 
