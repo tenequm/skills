@@ -388,10 +388,13 @@ config={{
     showWalletLoginFirst: true,       // Show wallet option first
     walletChainType: 'ethereum-only', // Chain type filter
     landingHeader: 'Welcome',         // Modal header text
-    loginMessage: 'Log in or sign up' // Modal description
+    loginMessage: 'Log in or sign up',// Modal description
+    walletList: ['detected_solana_wallets'] // Scope the wallet list (see below)
   }
 }}
 ```
+
+**Footgun**: by default the login modal renders a long alphabetical list of wallets (1inch, AB Pay, etc.). Set `appearance.walletList` to scope it to what you support - e.g. `['detected_wallets']`, `['detected_solana_wallets']`, or an explicit ordered list like `['phantom', 'detected_solana_wallets']`. `detected_solana_wallets` also handles mobile deep-links.
 
 ## Whitelabel Patterns
 
@@ -536,16 +539,16 @@ const privyWallet = toPrivyWallet({
 
 Docs: https://docs.privy.io/wallets/global-wallets/overview
 
-## Package Versions (as of March 2026)
+## Package Versions (as of June 2026)
 
 | Package | Version |
 |---------|---------|
-| `@privy-io/react-auth` | 3.16.0 |
-| `@privy-io/node` | 0.10.1 |
-| `@privy-io/wagmi` | 4.0.2 |
-| `@privy-io/expo` | 0.63.8 |
-| `@privy-io/cross-app-connect` | 0.5.4 |
-| `@privy-io/js-sdk-core` | 0.60.4 |
+| `@privy-io/react-auth` | 3.29.1 |
+| `@privy-io/node` | 0.20.0 |
+| `@privy-io/wagmi` | 4.0.11 |
+| `@privy-io/expo` | 0.68.1 |
+| `@privy-io/cross-app-connect` | 0.5.12 |
+| `@privy-io/js-sdk-core` | 0.66.0 |
 
 ## Official Links
 
@@ -555,10 +558,10 @@ Docs: https://docs.privy.io/wallets/global-wallets/overview
 - Wagmi integration: https://docs.privy.io/wallets/connectors/ethereum/integrations/wagmi
 - Viem integration: https://docs.privy.io/wallets/connectors/ethereum/integrations/viem
 - Whitelabel auth: https://docs.privy.io/authentication/user-authentication/whitelabel
-- Appearance config: https://docs.privy.io/basics/react/appearance
-- EVM networks: https://docs.privy.io/basics/react/evm-networks
-- Solana networks: https://docs.privy.io/basics/react/solana-networks
-- Migration to v3: https://docs.privy.io/basics/react/migration-v3
+- Appearance config: https://docs.privy.io/basics/get-started/dashboard/configuring-appearance
+- EVM networks: https://docs.privy.io/basics/react/advanced/configuring-evm-networks
+- Solana networks: https://docs.privy.io/basics/react/advanced/configuring-solana-networks
+- Migration to v3: https://docs.privy.io/basics/react/advanced/migrating-to-3.0
 - Cross-app wallets: https://docs.privy.io/wallets/global-wallets/overview
 - EIP-7702 integration: https://docs.privy.io/recipes/react/eip-7702
 - Expo/React Native: https://docs.privy.io/basics/react-native/setup

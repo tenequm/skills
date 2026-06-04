@@ -23,7 +23,7 @@ Privy embedded wallets are self-custodial wallets built into your app. Users get
 **Supported chains:**
 - All EVM chains (Ethereum, Base, Arbitrum, Optimism, Polygon, BNB, etc.)
 - Solana
-- Bitcoin (via Spark)
+- Bitcoin via Spark - includes Lightning (create Lightning invoices, claim static deposits). Guide: https://docs.privy.io/recipes/spark-btc-guide
 - Tron, Sui, Stellar (Tier 2 support)
 
 **Custody options:**
@@ -178,13 +178,15 @@ const {signature} = await privy.wallets().ethereum().signTransaction(walletId, {
 
 Smart wallets are onchain smart contracts controlled by an embedded signer. They enable gas sponsorship, batched transactions, and programmable permissions.
 
+**EVM only.** Privy smart wallets (account abstraction) exist on EVM chains only. On Solana, Privy provides standard EOA embedded wallets - there is no Privy Solana smart wallet. Don't assume Solana account abstraction.
+
 ### Supported Providers
 
 | Provider | Package |
 |----------|---------|
 | Kernel (ZeroDev) | Built-in |
 | Safe | Built-in |
-| LightAccount (Alchemy) | Built-in |
+| Alchemy (LightAccount) | Built-in |
 | Biconomy | Built-in |
 | Thirdweb | Built-in |
 | Coinbase Smart Wallet | Built-in |
@@ -244,6 +246,44 @@ The smart wallet address differs from the embedded signer address. Store smart w
 
 For server-created wallets using smart accounts, use Pimlico's `permissionless` package with Privy wallets as signers. See: https://docs.privy.io/wallets/gas-and-asset-management/gas/ethereum
 
+## Wallet Actions
+
+Beyond raw `sendTransaction`/`signMessage`, the Node SDK ships higher-level, policy-gated **actions** on `privy.wallets()`. These orchestrate multi-step on-chain flows (quotes, approvals, routing) server-side, which is ideal for autonomous agents that need to earn, swap, or move funds without hand-rolling each transaction. All actions are async and report progress via webhooks; check status with `privy.wallets().actions...` / the `wallets/actions` status endpoint.
+
+### Earn (DeFi yield)
+
+Deposit into and withdraw from yield vaults, claim incentives, and read positions.
+
+```ts
+const earn = privy.wallets().earn();
+// earn().deposit(...) / withdraw(...) / claim(...) / getVaultDetails(...) / getVaultPosition(...)
+```
+
+Docs: https://docs.privy.io/wallets/actions/earn/overview (setup, policies, and `earn` webhooks under the same path).
+
+### Swap
+
+Quote and execute token swaps, including cross-asset / cross-chain (DADC) routes.
+
+```ts
+const swap = privy.wallets().swap;
+// swap.getQuote({...}) then swap.execute({...})
+```
+
+Docs: https://docs.privy.io/wallets/actions/swap/overview
+
+### Transfer (with bridging)
+
+`transfer()` moves assets and can bridge across chains in one call.
+
+```ts
+const result = await privy.wallets().transfer(walletId, {
+  // recipient, asset, amount, source/destination chains, optional bridging...
+});
+```
+
+Docs: https://docs.privy.io/wallets/actions/transfer/overview (and `transfer/bridging`). Actions overview: https://docs.privy.io/wallets/actions/overview
+
 ## External Wallets
 
 ### Connecting External Wallets
@@ -292,6 +332,8 @@ const {wallets} = useWallets();
 // wallet.walletClientType: 'privy' (embedded), 'metamask', 'phantom', etc.
 ```
 
+**Footgun - resolving the right address.** A user can have both EVM and Solana embedded wallets. When you need an EVM address from `user.linked_accounts` (especially server-side), filter by `chain_type === 'ethereum'` - grabbing the first wallet may return a Solana base58 address, which a viem/EVM call rejects with `"Address is invalid - must be hex value of 20 bytes"` (often surfacing as a generic 500). Guard with viem's `isAddress()` so a non-EVM address yields a clean error. Note this only fixes new logins; rows already persisted with the wrong address need a re-sync.
+
 ## Gas Sponsorship
 
 ### Native Gas Sponsorship (Recommended)
@@ -332,7 +374,7 @@ transaction.feePayer = new PublicKey(feePayerAddress);
 - Implement rate limiting per user/session
 - Set spending caps per wallet/time period
 - Monitor gas usage with webhooks
-- Use custom rate limits: https://docs.privy.io/recipes/gas-sponsorship/custom-rate-limits
+- Use custom rate limits: https://docs.privy.io/recipes/gas-sponsorship-rate-limits
 
 ## Wallet Policies and Controls
 
@@ -361,6 +403,8 @@ Add server-side signers to user wallets to enable:
 
 Docs: https://docs.privy.io/wallets/using-wallets/signers/overview
 
+**Footgun - signing a user-owned wallet from the server.** Embedded wallets created via the frontend SDK are *user-owned*; the server cannot sign for them out of the box. `signSecp256k1()` (and other signing calls) fail with `"No valid authorization keys or user signing keys available"` until you register an authorization key as a signer: (1) generate a P256 key (`openssl ecparam -name prime256v1 -genkey`); (2) add it as a key quorum (threshold 1) in Dashboard > Authorization Keys; (3) attach the quorum as a signer on each wallet (e.g. via `useSigners().addSigners()` after login); (4) include the key's P256 signature in the `privy-authorization-signature` header on wallet API calls. If you don't need user custody, app-owned **server wallets** (`privy.wallets().create({chain_type})`) sidestep all of this - no authorization context, no quorums.
+
 ## Funding Wallets
 
 Privy supports multiple funding methods:
@@ -374,7 +418,13 @@ Privy supports multiple funding methods:
 
 Configure in Dashboard under Wallets > Funding.
 
-Docs: https://docs.privy.io/wallets/gas-and-asset-management/funding/overview
+### Programmatic fiat on/offramp + KYC
+
+Beyond the dashboard funding UI, Privy exposes programmatic **fiat onramp/offramp** with KYC via an `Onramps` resource and fiat APIs (backed by Bridge, Stripe, and Kraken Embed). Use these to onboard fiat-to-crypto and cash out crypto-to-fiat inside your own flow, including collecting KYC and creating fiat accounts.
+
+Docs: https://docs.privy.io/wallets/funding/fiat-onramp (config: `/wallets/funding/configuration`; recipes: `/recipes/bridge-onramp`, `/recipes/stripe-headless-onramp`).
+
+Funding overview: https://docs.privy.io/wallets/gas-and-asset-management/funding/overview
 
 ## Wallet Export
 
@@ -405,7 +455,7 @@ const {createWallet} = useCreateWallet();
 const hdWallet = await createWallet({createAdditional: true});
 ```
 
-Recipe: https://docs.privy.io/recipes/wallets/hd-wallets
+Recipe: https://docs.privy.io/wallets/wallets/import-a-wallet/hd-wallets
 
 ## Architecture and Security
 
@@ -444,9 +494,9 @@ Recipe: https://docs.privy.io/recipes/wallets/hd-wallets
 
 - Architecture: https://docs.privy.io/security/wallet-infrastructure/architecture
 - Secure enclaves: https://docs.privy.io/security/wallet-infrastructure/secure-enclaves
-- Threat models: https://docs.privy.io/security/threat-models
+- Security FAQs / threat models: https://docs.privy.io/security/security-faqs
 - Security checklist: https://docs.privy.io/security/implementation-guide/security-checklist
-- CSP guidance: https://docs.privy.io/security/csp
+- CSP guidance: https://docs.privy.io/security/implementation-guide/content-security-policy
 - Open-source SSS library: https://github.com/privy-io/shamir-secret-sharing
 
 ## Agentic Wallets
@@ -458,7 +508,8 @@ For x402 and MPP payment integration with Privy wallets, see **[agent-payments.m
 ## Official Links
 
 - Wallets overview: https://docs.privy.io/wallets/overview
-- Create a wallet: https://docs.privy.io/wallets/embedded-wallets/create
+- Create a wallet: https://docs.privy.io/wallets/wallets/create/create-a-wallet
+- Wallet actions (earn/swap/transfer): https://docs.privy.io/wallets/actions/overview
 - Smart wallets: https://docs.privy.io/wallets/using-wallets/evm-smart-wallets/overview
 - Smart wallets SDK: https://docs.privy.io/wallets/using-wallets/evm-smart-wallets/setup/configuring-sdk
 - Smart wallets Dashboard: https://docs.privy.io/wallets/using-wallets/evm-smart-wallets/setup/configuring-dashboard
@@ -466,7 +517,7 @@ For x402 and MPP payment integration with Privy wallets, see **[agent-payments.m
 - Gas Ethereum: https://docs.privy.io/wallets/gas-and-asset-management/gas/ethereum
 - Gas Solana: https://docs.privy.io/wallets/gas-and-asset-management/gas/solana
 - External connectors: https://docs.privy.io/wallets/connectors/overview
-- Policies: https://docs.privy.io/wallets/policies/overview
+- Policies: https://docs.privy.io/controls/policies/overview
 - Signers: https://docs.privy.io/wallets/using-wallets/signers/overview
 - Funding: https://docs.privy.io/wallets/gas-and-asset-management/funding/overview
-- Transaction management: https://docs.privy.io/wallets/transaction-management/overview
+- Transaction management: https://docs.privy.io/transaction-management/overview

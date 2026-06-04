@@ -450,7 +450,11 @@ const {valid, error, key} = await auth.api.verifyApiKey({
 |-------|-----|
 | Agentic wallets (Privy) | https://docs.privy.io/recipes/agent-integrations/agentic-wallets |
 | OpenClaw integration | https://docs.privy.io/recipes/agent-integrations/openclaw-agentic-wallets |
-| Wallet policies | https://docs.privy.io/wallets/policies/overview |
+| Agent CLI + MCP | https://docs.privy.io/recipes/agent-integrations/agent-cli |
+| auto.exchange agent | https://docs.privy.io/recipes/agent-integrations/auto-exchange-privy-agent |
+| Bankr Twitter bot | https://docs.privy.io/recipes/agent-integrations/bankr-bot-guide |
+| Virtuals EconomyOS/ACP | https://docs.privy.io/recipes/agent-integrations/virtuals-economyos |
+| Wallet policies | https://docs.privy.io/controls/policies/overview |
 | Wallet signers | https://docs.privy.io/wallets/using-wallets/signers/overview |
 | Agent Auth Protocol | https://agentauthprotocol.com |
 | Agent Auth spec | https://agentauthprotocol.com/specification/v1.0-draft |

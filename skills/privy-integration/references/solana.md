@@ -72,6 +72,8 @@ npm i @privy-io/react-auth @solana/kit @solana-program/system
 npm i @privy-io/react-auth @solana/web3.js
 ```
 
+**Dependency footguns**: Privy's Solana support pulls in `@solana-program/*` packages that require `@solana/kit` 6.x - an older kit (e.g. 5.x) errors with `Missing "./program-client-core" specifier in "@solana/kit"`; upgrade to `@solana/kit@^6`. Transaction features that add a memo also need `@solana-program/memo` installed explicitly (otherwise `"getAddMemoInstruction" is not exported`). When bridging Privy's signer to `@solana/kit`'s `TransactionSigner`, branded-type mismatches are common - casting `as unknown as TransactionSigner` in your `modifyAndSignTransactions` impl is the pragmatic workaround.
+
 ## Solana Wallet Hooks
 
 All Solana-specific hooks are imported from `@privy-io/react-auth/solana`:
@@ -418,12 +420,12 @@ This is only needed when using Yarn as package manager with Next.js and webpack.
 ## Official Links
 
 - Solana getting started recipe: https://docs.privy.io/recipes/solana/getting-started-with-privy-and-solana
-- Solana SPL tokens: https://docs.privy.io/recipes/solana/sending-spl-tokens
-- Solana sending SOL: https://docs.privy.io/recipes/solana/sending-sol
+- Solana SPL tokens: https://docs.privy.io/recipes/solana/send-spl-tokens
+- Solana sending SOL: https://docs.privy.io/recipes/solana/send-sol
 - Solana standard wallets: https://docs.privy.io/recipes/solana/solana-standard-wallets
 - Solana mobile wallet adapter: https://docs.privy.io/recipes/solana/solana-mobile-wallet-adapter
-- @solana/kit integration: https://docs.privy.io/wallets/connectors/solana/solana-kit
-- @solana/web3.js integration: https://docs.privy.io/wallets/connectors/solana/solana-web3js
-- Solana networks config: https://docs.privy.io/basics/react/solana-networks
+- @solana/kit integration: https://docs.privy.io/wallets/connectors/solana/kit-integrations
+- @solana/web3.js integration: https://docs.privy.io/wallets/connectors/solana/web3-integrations
+- Solana networks config: https://docs.privy.io/basics/react/advanced/configuring-solana-networks
 - Gas sponsorship Solana: https://docs.privy.io/wallets/gas-and-asset-management/gas/solana
 - React Native Solana deeplinking: https://docs.privy.io/recipes/react-native/deeplinking-solana-wallets

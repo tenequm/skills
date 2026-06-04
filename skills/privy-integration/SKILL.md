@@ -2,7 +2,8 @@
 name: privy-integration
 description: Integrates Privy authentication, embedded wallets, and agent payment protocols into web and agentic apps. Covers React SDK (PrivyProvider, hooks, wagmi), Node.js SDK, smart wallets (ERC-4337), x402 and MPP machine payments, Tempo chain, and agentic wallets with policies. Use when setting up Privy auth, creating embedded or agentic wallets, adding x402 or MPP payments, integrating with Tempo, configuring wallet policies, or connecting Privy to MCP/Agent Auth flows.
 metadata:
-  version: "0.3.0"
+  version: "0.4.0"
+  upstream: "@privy-io/react-auth@3.29.1, @privy-io/node@0.20.0, @privy-io/wagmi@4.0.11, mppx@0.6.30, @x402/fetch@2.14.0"
   openclaw:
     homepage: https://github.com/tenequm/skills/tree/main/skills/privy-integration
     emoji: "🔐"
@@ -37,7 +38,7 @@ Key packages:
 - `@privy-io/node` - Server-side SDK (replaces deprecated `@privy-io/server-auth`)
 - `mppx` - MPP client/server SDK (settles on Tempo)
 
-Docs index: `https://docs.privy.io/llms.txt`
+Docs: Privy ships an official agent skill - `npx skills add https://docs.privy.io` (or fetch `https://docs.privy.io/skill.md`). The machine-readable doc index is `https://docs.privy.io/llms-full.txt` (plus `sitemap.xml`); `llms.txt` now only points to the skill installer. Privy restructures docs often - do not guess URLs, they 404.
 
 ## Workflow Decision Tree
 
@@ -48,6 +49,7 @@ Docs index: `https://docs.privy.io/llms.txt`
 **Building agentic wallets or agent auth?** -> Agentic Wallets below, then [references/agent-auth.md](references/agent-auth.md)
 **Solana-specific integration?** -> [references/solana.md](references/solana.md)
 **Wallet management (smart wallets, policies, funding)?** -> [references/wallets.md](references/wallets.md)
+**Wallet actions (DeFi earn, swap, cross-chain transfer/bridge)?** -> Wallet Actions in [references/wallets.md](references/wallets.md)
 
 ## Quick Start (React + Next.js)
 
@@ -207,7 +209,8 @@ const privy = new PrivyClient({
 });
 
 // Verify access token from Authorization header
-const {userId} = await privy.verifyAuthToken(accessToken);
+// (top-level privy.verifyAuthToken is deprecated - use utils().auth())
+const {userId} = await privy.utils().auth().verifyAccessToken(accessToken);
 ```
 
 ## Whitelabel Authentication
@@ -223,6 +226,8 @@ All auth flows can be fully whitelabeled with custom UI. Key hooks:
 | `useSignupWithPasskey` | Passkey signup |
 | `useLoginWithTelegram` | Telegram |
 | `useLogin` | General login with callbacks |
+
+**Footgun**: whitelabel flows (`useLoginWithEmail`, etc.) call Privy directly from the app domain, so they silently fail if that domain is not in the Dashboard's Allowed Origins/Domains - the hosted modal (`usePrivy().login()`) still works, masking the issue. Add every local dev port (e.g. `localhost:5173`) too. `useLoginWithEmail`'s `onError` returns a rich object, not `{message}` - log the whole thing to see the real rejection.
 
 ## x402 Payments (Quick Start)
 
@@ -320,14 +325,15 @@ Read the appropriate reference file for detailed integration guides:
 | Node.js SDK quickstart | https://docs.privy.io/basics/nodeJS/quickstart |
 | Solana recipe | https://docs.privy.io/recipes/solana/getting-started-with-privy-and-solana |
 | Connectors overview | https://docs.privy.io/wallets/connectors/overview |
-| Custom auth provider | https://docs.privy.io/authentication/user-authentication/custom-auth |
-| Webhooks | https://docs.privy.io/wallets/webhooks/overview |
+| Custom auth provider (JWT) | https://docs.privy.io/authentication/user-authentication/jwt-based-auth/overview |
+| Webhooks | https://docs.privy.io/wallets/actions/webhooks |
 | x402 integration | https://docs.privy.io/recipes/agent-integrations/x402 |
 | MPP integration | https://docs.privy.io/recipes/agent-integrations/mpp |
 | Agentic wallets | https://docs.privy.io/recipes/agent-integrations/agentic-wallets |
 | OpenClaw integration | https://docs.privy.io/recipes/agent-integrations/openclaw-agentic-wallets |
-| Tempo chain | https://docs.privy.io/recipes/evm/tempo |
-| Wallet policies | https://docs.privy.io/wallets/policies/overview |
+| Tempo chain | https://docs.privy.io/recipes/tempo/send-transactions |
+| Wallet policies | https://docs.privy.io/controls/policies/overview |
+| Wallet actions (earn/swap/transfer) | https://docs.privy.io/wallets/actions/overview |
 | Wallet signers | https://docs.privy.io/wallets/using-wallets/signers/overview |
 | x402 protocol | https://x402.org |
 | MPP protocol | https://mpp.dev |

@@ -29,7 +29,9 @@ const privy = new PrivyClient({
 });
 ```
 
-This replaces the deprecated `@privy-io/server-auth` package. Migration guide: https://docs.privy.io/basics/nodeJS/migration
+This replaces the deprecated `@privy-io/server-auth` package. Migration guide: https://docs.privy.io/basics/nodeJS/advanced/migrating-from-server-auth
+
+The client exposes these services: `wallets()`, `users()`, `policies()`, `transactions()`, `keyQuorums()`, `webhooks()`, `intents()`, and `apps()`. `wallets()` also has higher-level action sub-services - `earn()`, `transfer()`, and `swap` (see [wallets.md](wallets.md) "Wallet Actions").
 
 ## Wallet Operations
 
@@ -143,21 +145,27 @@ const user = await privy.users().create({
 ### Get User
 
 ```ts
-// By Privy user ID
-const user = await privy.users().get('did:privy:xxx');
+// By Privy user ID (note the underscore-prefixed method)
+const user = await privy.users()._get('did:privy:xxx');
 
-// By email
-const user = await privy.users().getByEmail('user@example.com');
+// By email - methods take an object body, NOT a positional string.
+// getByEmail / getByPhone do NOT exist; use the full names below.
+const user = await privy.users().getByEmailAddress({address: 'user@example.com'});
 
 // By wallet address
-const user = await privy.users().getByWalletAddress('0x...');
+const user = await privy.users().getByWalletAddress({address: '0x...'});
 
 // By phone
-const user = await privy.users().getByPhone('+1234567890');
+const user = await privy.users().getByPhoneNumber({number: '+1234567890'});
 
 // By Twitter username
-const user = await privy.users().getByTwitterUsername('username');
+const user = await privy.users().getByTwitterUsername({username: 'username'});
+
+// Identity-token lookup (parses a verified identity token into a User)
+const user = await privy.users().get({id_token: identityToken});
 ```
+
+These lookups throw a `NotFoundError` when no user matches (the older `@privy-io/server-auth` returned `null`); wrap in try/catch or `.catch(() => null)`.
 
 ### Search Users
 
@@ -195,8 +203,10 @@ await privy.users().setCustomMetadata('did:privy:xxx', {
 const authHeader = req.headers.authorization; // "Bearer <access-token>"
 const accessToken = authHeader?.replace('Bearer ', '');
 
+// Verification methods live under privy.utils().auth().
+// Top-level privy.verifyAuthToken() is DEPRECATED - use verifyAccessToken().
 try {
-  const {userId, sessionId, appId} = await privy.verifyAuthToken(accessToken);
+  const {userId, sessionId, appId} = await privy.utils().auth().verifyAccessToken(accessToken);
   // userId: 'did:privy:xxx'
   // Proceed with authenticated request
 } catch (error) {
@@ -210,7 +220,12 @@ try {
 Identity tokens contain user data (linked accounts, metadata). Must be enabled in Dashboard.
 
 ```ts
-const {userId, linkedAccounts, customMetadata} = await privy.verifyIdentityToken(identityToken);
+// Documented path: parse the identity token into a full User object
+const user = await privy.users().get({id_token: identityToken});
+// user.id, user.linked_accounts, user.custom_metadata
+
+// Lower-level verify is also available under utils().auth()
+const verified = await privy.utils().auth().verifyIdentityToken(identityToken);
 ```
 
 ### Getting Access Token on the Client
@@ -302,12 +317,14 @@ const privy = new PrivyClient({
 export async function POST(req: Request) {
   const body = await req.json();
 
+  // Pass raw svix headers via `headers`. The older `svix: {id, timestamp, signature}`
+  // key still works but is deprecated.
   const payload = await privy.webhooks().verify({
     payload: body,
-    svix: {
-      id: req.headers.get('svix-id')!,
-      timestamp: req.headers.get('svix-timestamp')!,
-      signature: req.headers.get('svix-signature')!
+    headers: {
+      'svix-id': req.headers.get('svix-id')!,
+      'svix-timestamp': req.headers.get('svix-timestamp')!,
+      'svix-signature': req.headers.get('svix-signature')!
     }
   });
 
@@ -327,6 +344,17 @@ export async function POST(req: Request) {
 Delivery: at-least-once with retries (immediately, 5s, 5min, 30min, 2h, 5h, 10h, 10h). Endpoint auto-disabled after 5 days of consecutive failure.
 
 Static IPs for allowlisting: `44.228.126.217`, `50.112.21.217`, `52.24.126.164`, `54.148.139.208`
+
+## Intents
+
+Intents are approval-gated wallet operations: the server authors an operation, it moves through a lifecycle (`intent.created` -> `intent.authorized` -> executed/failed - see the webhook events above), and execution can require human approval before it runs. Useful when an autonomous agent proposes an action but a person (or quorum) must sign off.
+
+```ts
+// The intents service exposes create / fetch / status operations
+const intents = privy.intents();
+```
+
+Approvals and intent lifecycle are configured under the Dashboard "controls". Docs: https://docs.privy.io/controls/dashboard/intents and https://docs.privy.io/controls/dashboard/intent-lifecycle
 
 ## REST API
 
@@ -387,7 +415,7 @@ await loginWithCustomAuth({customAccessToken: yourJWT});
 
 Configure in Dashboard: set your JWKS endpoint or public key, issuer, and audience.
 
-Docs: https://docs.privy.io/authentication/user-authentication/custom-auth
+Docs: https://docs.privy.io/authentication/user-authentication/jwt-based-auth/overview
 
 ## Agent Payments (x402 + MPP)
 
@@ -397,13 +425,12 @@ For x402 integration (`createX402Client` from `@privy-io/node/x402`), MPP integr
 
 - Node.js setup: https://docs.privy.io/basics/nodeJS/setup
 - Node.js quickstart: https://docs.privy.io/basics/nodeJS/quickstart
-- Migration from server-auth: https://docs.privy.io/basics/nodeJS/migration
-- Key concepts: https://docs.privy.io/basics/nodeJS/key-concepts
-- Python SDK: https://docs.privy.io/basics/python/quickstart
+- Migration from server-auth: https://docs.privy.io/basics/nodeJS/advanced/migrating-from-server-auth
+- Key concepts: https://docs.privy.io/basics/key-concepts
 - Go SDK: https://docs.privy.io/basics/go/quickstart
 - Rust SDK: https://docs.privy.io/basics/rust/quickstart
 - Java SDK: https://docs.privy.io/basics/java/quickstart
 - REST API quickstart: https://docs.privy.io/basics/rest-api/quickstart
 - Access tokens: https://docs.privy.io/authentication/user-authentication/access-tokens
-- Identity tokens: https://docs.privy.io/authentication/user-authentication/identity-tokens
-- Webhooks overview: https://docs.privy.io/wallets/webhooks/overview
+- Identity tokens: https://docs.privy.io/user-management/users/identity-tokens
+- Webhooks overview: https://docs.privy.io/wallets/actions/webhooks
