@@ -2,7 +2,7 @@
 
 Server functions let you define server-only logic that can be called from anywhere in your application - route loaders, components, hooks, event handlers, or other server functions. They run on the server but can be invoked from client code seamlessly through an auto-generated RPC layer.
 
-Official docs: https://tanstack.com/start/latest/docs/framework/react/server-functions
+Official docs: https://tanstack.com/start/latest/docs/framework/react/guide/server-functions
 
 ## createServerFn Basics
 
@@ -117,6 +117,18 @@ export const searchItems = createServerFn({ method: 'GET' })
   .inputValidator(arkTypeValidator(type({ query: 'string', page: 'number > 0' })))
   .handler(async ({ data }) => db.items.search(data.query, data.page))
 ```
+
+### Serialization Checks (`strict` mode)
+
+Inputs and outputs cross the network boundary, so TypeScript checks they are serializable. This is the default `strict: true`. Opt out per function only when you know the runtime serialization layer can handle the value:
+
+```tsx
+createServerFn({ strict: false })            // disable input + output checks
+createServerFn({ strict: { input: false } }) // disable input checks only
+createServerFn({ strict: { output: false } })// disable output checks only
+```
+
+`strict: false` relaxes only the type-level checks - values still need to survive runtime serialization. Prefer the default.
 
 ## Calling Patterns
 
@@ -259,6 +271,25 @@ Available utilities:
 | `setResponseHeaders(headers)` | Set multiple response headers via `Headers` object |
 | `setResponseStatus(code)` | Set the HTTP status code |
 
+### Cache-Control Safety
+
+`Cache-Control: public` tells every CDN/proxy between you and the user that the response may be served to anyone. The example above is safe *only* because it returns non-identity data. If a handler reads a session, cookie, or auth header - or branches on identity at all - `public` will cache one user's response and replay it to the next (cross-tenant data leak).
+
+```tsx
+// Authenticated data - must NOT be 'public'
+export const getMyOrders = createServerFn({ method: 'GET' }).handler(async () => {
+  const session = await requireSession()
+  setResponseHeaders(new Headers({
+    'Cache-Control': 'private, max-age=60',   // only the user-agent may cache
+    Vary: 'Cookie, Authorization',            // key any cache by identity, not URL alone
+  }))
+  return db.orders.findMany({ where: { userId: session.userId } })
+})
+
+// Sensitive data - opt out entirely:
+// setResponseHeaders(new Headers({ 'Cache-Control': 'no-store' }))
+```
+
 ## Error Handling
 
 Server functions support standard error throws, redirects, and not-found responses. Errors thrown inside handlers are serialized and sent to the client.
@@ -335,7 +366,7 @@ export const getPost = createServerFn()
 
 Server functions can stream typed data to the client using `ReadableStream` or async generators. This is particularly useful for AI/chat use cases.
 
-Official docs: https://tanstack.com/start/latest/docs/framework/react/streaming-data-from-server-functions
+Official docs: https://tanstack.com/start/latest/docs/framework/react/guide/streaming-data-from-server-functions
 
 ### Typed ReadableStream
 
@@ -464,7 +495,7 @@ function ContactForm() {
 
 Understanding how server functions execute across environments is critical for building secure TanStack Start applications.
 
-Official docs: https://tanstack.com/start/latest/docs/framework/react/execution-model
+Official docs: https://tanstack.com/start/latest/docs/framework/react/guide/execution-model
 
 ### Isomorphic by Default
 
@@ -499,7 +530,7 @@ You can customize function ID generation via `serverFns.generateFunctionId` in t
 
 Environment functions control function execution based on the runtime environment. They complement server functions for cases where you need different implementations per environment rather than RPC calls.
 
-Official docs: https://tanstack.com/start/latest/docs/framework/react/environment-functions
+Official docs: https://tanstack.com/start/latest/docs/framework/react/guide/environment-functions
 
 ```tsx
 import {
@@ -551,7 +582,7 @@ All environment functions are tree-shaken per bundle: `.client()` code is exclud
 
 Import protection prevents server-only code from leaking into client bundles and vice versa. It runs as a Vite plugin, enabled by default. In dev mode violations produce a mock (warning); in production builds they fail with an error.
 
-Official docs: https://tanstack.com/start/latest/docs/framework/react/import-protection
+Official docs: https://tanstack.com/start/latest/docs/framework/react/guide/import-protection
 
 **File conventions** - use `.server.*` / `.client.*` suffixes to restrict files:
 
@@ -600,7 +631,7 @@ const getStaticConfig = createServerFn({ method: 'GET' })
   .handler(async () => ({ siteName: 'My App', version: '1.0.0' }))
 ```
 
-At build time the result is cached as a static JSON file. On initial load the data is embedded in prerendered HTML and hydrated. On subsequent client navigations the static JSON file is fetched directly. See: https://tanstack.com/start/latest/docs/framework/react/static-server-functions
+At build time the result is cached as a static JSON file. On initial load the data is embedded in prerendered HTML and hydrated. On subsequent client navigations the static JSON file is fetched directly. See: https://tanstack.com/start/latest/docs/framework/react/guide/static-server-functions
 
 ## File Organization
 
@@ -685,11 +716,11 @@ export const startInstance = createStart(() => ({
 }))
 ```
 
-See the dedicated Middleware guide for full details: https://tanstack.com/start/latest/docs/framework/react/middleware
+See the dedicated Middleware guide for full details: https://tanstack.com/start/latest/docs/framework/react/guide/middleware
 
 ## Best Practices
 
-1. **Always use server functions for sensitive operations.** Route loaders are isomorphic (run on both server and client). Never access secrets, database connections, or server-only APIs directly in loaders - wrap them in `createServerFn()`.
+1. **Always use server functions for sensitive operations, and authorize inside them.** Route loaders are isomorphic (run on both server and client). Never access secrets, database connections, or server-only APIs directly in loaders - wrap them in `createServerFn()`. Because a server function is an endpoint reachable independently of any route, enforce auth in the handler or its middleware - `beforeLoad` route guards are UX, not the data boundary.
 
 2. **Validate all input with schemas.** Server functions cross a network boundary. Use Zod, Valibot, or ArkType to validate data at runtime, not just TypeScript types.
 

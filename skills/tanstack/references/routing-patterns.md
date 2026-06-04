@@ -203,6 +203,8 @@ src/routes/
 
 Import normally: `import { PostsTable } from './-posts-table'`
 
+**Also silently excluded: dot-prefixed files and directories.** Anything starting with `.` (e.g. `.well-known/`) is ignored by route generation and never appears in `routeTree.gen.ts` - with no error. This bites server routes for OAuth/discovery endpoints like `/.well-known/oauth-authorization-server`. Serve those another way (a non-dotted path, a server route file named via escaped matching, or framework-level static handling).
+
 ### `()` - Route Group Directories
 
 Purely organizational directories that do not affect URL or component tree:

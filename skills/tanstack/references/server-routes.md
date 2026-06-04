@@ -2,7 +2,7 @@
 
 Server routes are server-side HTTP endpoints defined alongside your application routes using the same file-based routing conventions as TanStack Router. They handle raw HTTP requests, form submissions, webhooks, and authentication callbacks.
 
-Official docs: https://tanstack.com/start/latest/docs/framework/react/server-routes
+Official docs: https://tanstack.com/start/latest/docs/framework/react/guide/server-routes
 
 ## Defining Server Routes
 
@@ -539,11 +539,11 @@ export const startInstance = createStart(() => ({
 
 ## References
 
-- Server Routes: https://tanstack.com/start/latest/docs/framework/react/server-routes
-- Middleware: https://tanstack.com/start/latest/docs/framework/react/middleware
-- SEO: https://tanstack.com/start/latest/docs/framework/react/seo
-- Databases: https://tanstack.com/start/latest/docs/framework/react/databases
-- Authentication: https://tanstack.com/start/latest/docs/framework/react/authentication
+- Server Routes: https://tanstack.com/start/latest/docs/framework/react/guide/server-routes
+- Middleware: https://tanstack.com/start/latest/docs/framework/react/guide/middleware
+- SEO: https://tanstack.com/start/latest/docs/framework/react/guide/seo
+- Databases: https://tanstack.com/start/latest/docs/framework/react/guide/databases
+- Authentication: https://tanstack.com/start/latest/docs/framework/react/guide/authentication
 - File-based routing: https://tanstack.com/router/latest/docs/framework/react/routing/file-based-routing
 - MDN Request API: https://developer.mozilla.org/en-US/docs/Web/API/Request
 - MDN Response API: https://developer.mozilla.org/en-US/docs/Web/API/Response

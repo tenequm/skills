@@ -2,7 +2,8 @@
 name: tanstack
 description: Build type-safe React apps with TanStack Query (data fetching, caching, mutations), Router (file-based routing, search params, loaders), and Start (SSR, server functions, middleware). Use when working with react-query, data fetching, server state, routing, search params, loaders, SSR, server functions, or full-stack React. Triggers on tanstack, react query, query client, useQuery, useMutation, invalidateQueries, tanstack router, file-based routing, search params, route loader, tanstack start, createServerFn, server functions, SSR.
 metadata:
-  version: "0.1.1"
+  version: "0.2.0"
+  upstream: "@tanstack/react-query@5.101.0, @tanstack/react-router@1.170.11, @tanstack/react-start@1.168.19, @tanstack/zod-adapter@1.167.0, @tanstack/router-plugin@1.168.14"
 ---
 
 # TanStack (Query + Router + Start)
@@ -227,7 +228,7 @@ export const Route = createFileRoute('/products')({
 })
 ```
 
-Use `fallback(...).default(...)` from the Zod adapter. Plain `.catch()` causes type loss.
+Use `fallback(...).default(...)` from the Zod adapter (Zod v3); plain `.catch()` causes type loss. With **Zod v4** the adapter is no longer needed - pass the schema directly to `validateSearch`, and `.catch()` retains type inference.
 
 ### Data Loading
 
@@ -272,14 +273,14 @@ export const Route = createFileRoute('/posts')({
 
 ---
 
-## TanStack Start (RC)
+## TanStack Start
 
-Full-stack framework extending Router with SSR, server functions, middleware. API stable, feature-complete. No RSC yet.
+Full-stack framework extending Router with SSR, server functions, middleware. Pre-1.0 (API stable, feature-complete, preparing for 1.0). React Server Components are available as an **experimental** feature - opt in with `tanstackStart({ rsc: { enabled: true } })` + `@vitejs/plugin-rsc` (requires React 19, Vite 7+). Vite is the default bundler; Rsbuild is also supported.
 
 ### Setup
 
 ```bash
-pnpm create @tanstack/start@latest
+npx @tanstack/cli@latest create   # or use TanStack Builder: https://tanstack.com/builder
 ```
 
 ```ts
@@ -350,6 +351,11 @@ export const startInstance = createStart(() => ({
 }))
 ```
 
+**CSRF**: Start auto-installs `createCsrfMiddleware()` for server functions *only when there is no `src/start.ts`*. Once you create `src/start.ts`, add it back explicitly, or non-GET server functions lose same-origin protection:
+```tsx
+requestMiddleware: [createCsrfMiddleware({ filter: (ctx) => ctx.handlerType === 'serverFn' }), logger]
+```
+
 ### SSR Modes
 
 | Mode | Use Case |
@@ -362,8 +368,7 @@ SPA mode: `tanstackStart({ spa: { enabled: true } })` in vite.config.ts
 
 ### Deployment
 
-- **Cloudflare Workers**: `@cloudflare/vite-plugin` (official partner)
-- **Netlify**: `@netlify/vite-plugin-tanstack-start`
+- **Official partners**: Cloudflare Workers (`@cloudflare/vite-plugin`), Netlify (`@netlify/vite-plugin-tanstack-start`), Railway
 - **Node/Vercel/Bun/Docker**: via Nitro
 - **Static**: `tanstackStart({ prerender: { enabled: true, crawlLinks: true } })`
 
@@ -386,7 +391,7 @@ SPA mode: `tanstackStart({ spa: { enabled: true } })` in vite.config.ts
 5. **Provide `from` on navigation** - narrows types, catches route mismatches
 6. **Use route context for DI** - pass QueryClient, auth via `createRootRouteWithContext`
 7. **Set `defaultPreload: 'intent'`** globally for perceived performance
-8. **Never put secrets in loaders** - use `createServerFn()` for server-only code
+8. **Enforce auth at the data boundary** - authorize inside the server function, server route, or API endpoint that reads/writes private data; `beforeLoad`/route guards are UX, not the security boundary. Never put secrets in isomorphic loaders - use `createServerFn()`
 9. **Compose middleware hierarchically** - global -> route -> function
 10. **Use `head()` on every content route** for SEO (title, description, OG tags)
 

@@ -210,6 +210,8 @@ function DeleteButton({ id }: { id: string }) {
 }
 ```
 
+Server-function inputs/outputs are checked for serializability (`strict: true` default). Opt out per function with `createServerFn({ strict: false })` (or `{ input: false }` / `{ output: false }`) only when you know the runtime can serialize the value.
+
 ### Server Context Utilities
 
 Access request/response from `@tanstack/react-start/server`: `getRequest()`, `getRequestHeader(name)`, `setResponseHeaders(headers)`, `setResponseStatus(code)`.

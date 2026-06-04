@@ -599,6 +599,19 @@ These bugs can manifest as invalidation-related surprises. They're fixed in late
 - **`useSuspenseQueries` duplicate keys (fixed v5.90.11):** Passing duplicate `queryKeys` to `useSuspenseQueries` caused infinite render loops instead of an error.
 - **SSR dehydration (fixed v5.90.3):** Unhandled promise rejections during de/rehydration of pending queries.
 
+### Pitfall: invalidate-then-navigate shows stale data
+
+`invalidateQueries` marks the query stale and kicks off a **background** refetch - it does not block. If you navigate (or render the destination) immediately after invalidating, the new view paints with the old cached data before the refetch lands (e.g. a just-closed item still appears in the list). Two fixes:
+
+```tsx
+// Option A: optimistically update the cache so the change is visible instantly
+queryClient.setQueryData(['todos'], (old) => old?.filter((t) => t.id !== id));
+
+// Option B: await the refetch before navigating
+await queryClient.invalidateQueries({ queryKey: ['todos'] });
+navigate({ to: '/todos' });
+```
+
 ## Best Practices
 
 1. **Be Specific with Query Keys**

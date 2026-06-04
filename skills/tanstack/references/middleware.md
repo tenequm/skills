@@ -2,7 +2,7 @@
 
 Middleware in TanStack Start lets you intercept and customize server requests (including SSR) and server functions. Middleware is composable, type-safe, and supports both client-side and server-side logic.
 
-Official docs: https://tanstack.com/start/latest/docs/framework/react/middleware
+Official docs: https://tanstack.com/start/latest/docs/framework/react/guide/middleware
 
 ## Two Types of Middleware
 
@@ -582,12 +582,12 @@ You can safely import server-only dependencies in `.server()` callbacks.
 
 6. **Compose small units.** Build focused middleware and compose via `.middleware([...])` rather than duplicating logic.
 
-7. **Combine middleware with beforeLoad for auth.** Middleware provides context; `beforeLoad` on layout routes like `_authed.tsx` provides redirect behavior. Use both together.
+7. **The auth boundary is the endpoint, not the route.** Authorize every server function and server route that reads or writes private data inside its handler or middleware - they are reachable independently of whichever route rendered the calling UI. `beforeLoad` on layout routes like `_authed.tsx` is route UX (redirects, navigation control), not the data-authorization boundary. Use both, but never rely on a route guard to protect data. Test direct unauthenticated calls to protected server functions - they must reject before returning data.
 
 ## Official References
 
-- Middleware: https://tanstack.com/start/latest/docs/framework/react/middleware
-- Authentication: https://tanstack.com/start/latest/docs/framework/react/authentication
-- Server functions: https://tanstack.com/start/latest/docs/framework/react/server-functions
-- Server routes: https://tanstack.com/start/latest/docs/framework/react/server-routes
+- Middleware: https://tanstack.com/start/latest/docs/framework/react/guide/middleware
+- Authentication: https://tanstack.com/start/latest/docs/framework/react/guide/authentication
+- Server functions: https://tanstack.com/start/latest/docs/framework/react/guide/server-functions
+- Server routes: https://tanstack.com/start/latest/docs/framework/react/guide/server-routes
 - DIY auth example: https://github.com/TanStack/router/tree/main/examples/react/start-basic-auth

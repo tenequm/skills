@@ -175,6 +175,8 @@ Use `ssr: false` when:
 - The route component depends on browser-only APIs
 - SEO is not important for this route
 
+**Hydration mismatches from client-only providers.** Providers whose initial render differs between server and client (wallet/web3 hooks, theme from `localStorage`, anything reading `window`) throw hydration-mismatch errors under SSR. Set `ssr: false` on the routes that need them, and/or wrap the client-only subtree in `<ClientOnly fallback={null}>` (from `@tanstack/react-router`) so it renders only after hydration.
+
 ### ssr: 'data-only' (Server Data, Client Rendering)
 
 A hybrid option. The server runs `beforeLoad` and `loader` and sends the data to the client, but the component renders only on the client.
@@ -1251,12 +1253,12 @@ Routes with `ssr: false` or `ssr: 'data-only'` should define a `pendingComponent
 
 ## Official Documentation
 
-- [Selective SSR](https://tanstack.com/start/latest/docs/framework/react/selective-ssr)
-- [SPA Mode](https://tanstack.com/start/latest/docs/framework/react/spa-mode)
-- [Static Prerendering](https://tanstack.com/start/latest/docs/framework/react/static-prerendering)
-- [ISR](https://tanstack.com/start/latest/docs/framework/react/isr)
-- [Hosting](https://tanstack.com/start/latest/docs/framework/react/hosting)
-- [Server Entry Point](https://tanstack.com/start/latest/docs/framework/react/server-entry-point)
-- [Client Entry Point](https://tanstack.com/start/latest/docs/framework/react/client-entry-point)
-- [Environment Variables](https://tanstack.com/start/latest/docs/framework/react/environment-variables)
-- [Execution Model](https://tanstack.com/start/latest/docs/framework/react/execution-model)
+- [Selective SSR](https://tanstack.com/start/latest/docs/framework/react/guide/selective-ssr)
+- [SPA Mode](https://tanstack.com/start/latest/docs/framework/react/guide/spa-mode)
+- [Static Prerendering](https://tanstack.com/start/latest/docs/framework/react/guide/static-prerendering)
+- [ISR](https://tanstack.com/start/latest/docs/framework/react/guide/isr)
+- [Hosting](https://tanstack.com/start/latest/docs/framework/react/guide/hosting)
+- [Server Entry Point](https://tanstack.com/start/latest/docs/framework/react/guide/server-entry-point)
+- [Client Entry Point](https://tanstack.com/start/latest/docs/framework/react/guide/client-entry-point)
+- [Environment Variables](https://tanstack.com/start/latest/docs/framework/react/guide/environment-variables)
+- [Execution Model](https://tanstack.com/start/latest/docs/framework/react/guide/execution-model)

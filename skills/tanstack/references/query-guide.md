@@ -127,6 +127,8 @@ useQuery({ queryKey: ['todos', 'list', { filters, page }], queryFn: fetchTodos }
 - `['todos', { page: 1 }]` - exact match with object
 - `{ queryKey: ['todos'] }` - matches all queries starting with 'todos'
 
+**Footgun - include every runtime dimension in the key.** If the result depends on a dimension that is *not* in the key (active network/chain, tenant, workspace, locale), switching that dimension serves cached data from the previous context. Add every input that changes the response: `['todos', { tenantId, network }]`.
+
 ### Query Functions
 
 Query functions must return a promise that resolves data or throws an error:
@@ -253,6 +255,31 @@ mutation.mutate({ title: 'New Todo' });
 mutation.mutateAsync({ title: 'New Todo' })
   .then(data => console.log(data))
   .catch(error => console.error(error));
+```
+
+**Two recurring mutation pitfalls:**
+- Mutations do **not** auto-invalidate or refetch related queries. Call `queryClient.invalidateQueries(...)` (or `setQueryData`) in `onSuccess`/`onSettled` yourself.
+- Under React StrictMode a submit handler can fire the mutation twice. Guard event handlers: `if (mutation.isPending) return;` before calling `mutate`.
+
+### Reusable Mutation Definitions with `mutationOptions`
+
+Just as `queryOptions()` co-locates query config, the native `mutationOptions()` helper (stable since v5; companion to `queryOptions`) shares a typed mutation definition across components, `useMutation`, and `queryClient.getMutationDefaults`:
+
+```tsx
+import { mutationOptions, useMutation, useQueryClient } from '@tanstack/react-query';
+
+function createTodoOptions(queryClient: QueryClient) {
+  return mutationOptions({
+    mutationKey: ['todos', 'create'],
+    mutationFn: (todo: { title: string }) =>
+      fetch('/api/todos', { method: 'POST', body: JSON.stringify(todo) }).then(r => r.json()),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['todos'] }),
+  });
+}
+
+// usage:
+const queryClient = useQueryClient();
+const mutation = useMutation(createTodoOptions(queryClient));
 ```
 
 ### React Suspense Integration

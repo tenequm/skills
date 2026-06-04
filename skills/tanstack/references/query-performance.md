@@ -31,6 +31,8 @@ useQuery({
 });
 ```
 
+**`staleTime` is not persistence.** It only suppresses refetches while data is fresh *and the query is mounted*. The cache is in-memory and is wiped on a full page reload - `staleTime` does nothing across reloads. For cross-reload persistence, wire up `@tanstack/query-persist-client-core` (localStorage/IndexedDB). Also note a low `staleTime` (the default is `0`) makes every navigation back to a route refetch; raise it for data that does not change per-visit.
+
 ### gcTime (formerly cacheTime)
 
 Control how long unused data stays in cache:

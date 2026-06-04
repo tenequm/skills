@@ -158,6 +158,8 @@ const postLink = linkOptions({ to: '/posts/$postId', params: { postId: '123' } }
 <Link {...postLink}>View Post</Link>
 ```
 
+**`to` rejects arbitrary strings.** Because routes are typed, `Link`/`useNavigate` `to` will not accept a plain `string` variable - passing a dynamic URL is a type error. For a known internal route use `linkOptions()`; for genuinely dynamic or external URLs, render a plain `<a href={url}>` (the external-link escape hatch) rather than casting.
+
 Always provide `from` on Link and hooks to narrow types and improve TS performance. Without `from`, TypeScript must check against all routes.
 
 ## Search Params
