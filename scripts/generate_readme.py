@@ -20,9 +20,6 @@ CLAWHUB_SLUG_OVERRIDES: dict[str, str] = {
     "founder-playbook": "founder-playbook-web3",
     "openclaw-ref": "openclaw-reference",
     "polish": "code-polish",
-    "skill-factory": "claude-skill-factory",
-    "skill-finder": "claude-skill-finder",
-    "solana": "solana-development",
     "vite": "vite-react",
     "x402": "x402-development",
 }
