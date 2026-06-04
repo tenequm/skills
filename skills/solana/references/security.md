@@ -2,7 +2,7 @@
 
 Essential security principles and defensive programming patterns for building secure Solana programs with Anchor or native Rust.
 
-> **Note:** This guide focuses on defensive programming during development. For comprehensive security audits, vulnerability analysis, and attack vectors, use the **`solana-security` skill**.
+> **Note:** This guide focuses on defensive programming during development. For comprehensive security audits, vulnerability analysis, and attack vectors, see the auditing references in this skill: [security-fundamentals.md](security-fundamentals.md), [vulnerability-patterns.md](vulnerability-patterns.md), [security-checklists.md](security-checklists.md), [anchor-security.md](anchor-security.md), and [native-security.md](native-security.md).
 
 ## Table of Contents
 
@@ -485,7 +485,7 @@ Before deploying to mainnet:
 
 - [ ] Internal code review completed
 - [ ] External security audit (recommended for >$100k TVL)
-- [ ] Use `solana-security` skill for systematic review
+- [ ] Run the systematic audit workflow (see [security-checklists.md](security-checklists.md) and [vulnerability-patterns.md](vulnerability-patterns.md))
 - [ ] All critical/high severity findings resolved
 - [ ] Medium findings assessed and documented
 
@@ -507,23 +507,17 @@ Before deploying to mainnet:
 
 ---
 
-## When to Use the Security Skill
+## Development vs Auditing
 
-Use the **`solana-security` skill** for:
+This guide covers **defensive programming during development** - secure coding patterns, implementation guidance, and development workflows (testing, deployment, optimization).
 
-- 🔍 **Comprehensive security audits** - Systematic review of entire codebase
-- 🐛 **Vulnerability analysis** - Identifying exploit scenarios
-- 📋 **Security checklists** - Category-by-category validation
-- ⚠️ **Attack vectors** - Understanding how programs can be exploited
-- 🛡️ **Framework-specific patterns** - Anchor vs native Rust security
-- 📚 **Vulnerability databases** - Learning from past exploits
+For **comprehensive security auditing**, use the auditing references in this skill:
 
-Use **this skill (solana-development)** for:
-
-- 💻 **Building programs** - Implementation guidance
-- ✅ **Defensive programming** - Secure coding patterns
-- 🏗️ **Development workflows** - Testing, deployment, optimization
-- 📖 **Framework learning** - Anchor and native Rust how-tos
+- 🔍 **Systematic audits** - [security-checklists.md](security-checklists.md): category-by-category validation
+- 🐛 **Vulnerability analysis** - [vulnerability-patterns.md](vulnerability-patterns.md): exploit scenarios and attack vectors
+- 🛡️ **Framework-specific patterns** - [anchor-security.md](anchor-security.md) and [native-security.md](native-security.md)
+- 📚 **Threat modeling and fundamentals** - [security-fundamentals.md](security-fundamentals.md)
+- ⚠️ **Known gotchas** - [caveats.md](caveats.md)
 
 ---
 
