@@ -231,9 +231,11 @@ FromSchema.pipe(
 14. Replace `Schedule.compose(Schedule.recurs(n))` with `Schedule.take(n)`; replace `Schedule.once` with `Schedule.recurs(0)`
 15. Move `RateLimiter` import from `"effect"` to `"effect/unstable/persistence"` and switch to its Service-based API
 
-## v4 beta additions since 2026-03
+## v4 beta additions (through beta.78)
 
-These landed in later betas and are worth knowing if you are currently on an older beta:
+These landed in later betas and are worth knowing if you are currently on an older beta. The skill tracks `effect@4.0.0-beta.78`; companion packages share that single version.
+
+### beta.55-58 (through 2026-04-28)
 
 - `Effect.abortSignal` for bridging AbortController-based APIs (beta.57, PR #2085)
 - `@effect/sql-pglite` package wrapping `@electric-sql/pglite` (beta.57, PR #2073)
@@ -245,3 +247,28 @@ These landed in later betas and are worth knowing if you are currently on an old
 - `Schema.withDecodingDefaultType` / `...TypeKey` added alongside the Encoded-side variants (PR #2013, 2026-04-10)
 - `AsyncResult.builder` (`effect/unstable/reactivity`) gained `.onInterrupt(...)` and an `.exhaustive()` finalizer; `.onDefect` / `.onFailure` typing refined so `.exhaustive()` is only callable when every case (success, error, initial, defect, interrupt) is handled (beta.58, PR #2097, 2026-04-28). Use `.exhaustive(): Out` instead of `.render(): Out | null` when you want a non-nullable result.
 - Stream -> `Uint8Array` conversion and HTTP body consumption now use fewer buffer copies - internal perf only, no public API change (beta.58, PR #2098, 2026-04-27).
+
+### beta.59-78 (2026-04-29 through 2026-06)
+
+Breaking / behavioral:
+
+- **`Schema.Error` / `Schema.Defect` are now constructor functions**, not constants — write `Schema.Error()` / `Schema.Defect()`. `ErrorWithStack` / `DefectWithStack` folded into `{ includeStack: true }`. `Schema.Defect()` now models defects as `unknown` with a JSON-encoded form, so non-`Error` objects no longer round-trip unchanged (beta.76, PR #2318).
+- **`Random.nextUUIDv4` removed** — `Random` is not cryptographically secure. Use the new platform-agnostic `Crypto` service's `randomUUIDv4` / `randomUUIDv7` (beta.68, PR #2180).
+- **`Effect.Yieldable` export removed** (beta.66, PR #2163). The Yieldable *concept* still applies (Ref/Deferred/Fiber/Option/Config implement it); only the re-export off `Effect` is gone.
+- `Types.MergeRecord` removed -> use `Types.MergeLeft` (beta.75, PR #2298).
+- `SchemaParser.makeUnsafe` -> `SchemaParser.make` (beta.67, PR #2172).
+- `Schema.asserts` signature changed to `asserts(schema, input)`; `Schema.Codec.ToAsserts` removed (beta.68, PR #2221).
+- `Model.Generated` -> `Model.GeneratedByDb` (beta.68, PR #2207). See `references/sql.md`.
+- `Workflow.make` now takes the tag as its **first** argument and supports `class X extends Workflow.make(...) {}` (beta.75, PR #2294). See `references/distributed.md`.
+- `Inspectable.stringifyCircular` removed (beta.60, PR #2119).
+
+Fixes / additions worth knowing:
+
+- `catch*` combinators no longer silently drop unhandled error types — the residual error channel is now preserved (beta.71, PR #2257).
+- `Effect.firstSuccessOf` ported from v3 (beta.61, PR #2120); `Effect.acquireDisposable` added (beta.63, PR #2123).
+- `Schedule.tap` added — observe full schedule metadata without altering inputs/outputs (beta.71, PR #2252).
+- `Stream.broadcastN` for fixed-size stream broadcasts (beta.68, PR #2210); `Channel.decodeText` UTF-8-across-chunk fix (beta.68, PR #2209).
+- `HttpApiTest` module added for testing HttpApi servers (beta.63, PR #2136); `HttpApiSecurity.http` for custom schemes (beta.73, PR #2291).
+- `Schema.DurationFromString` (beta.60, PR #2117); `Schema.isGUID` + RFC 9562 max-UUID support in `Schema.isUUID` (beta.76, PR #2320).
+- OTLP observability now reads `OTEL_*` environment variables and prefers them over explicit `OtlpResource.fromConfig` options (beta.77, PRs #2325/#2326).
+- `Config.literals` convenience constructor for `Schema.Literals` (beta.60, PR #2116).

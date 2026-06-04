@@ -44,7 +44,7 @@ class NotFoundError extends Schema.TaggedErrorClass<NotFoundError>()("NotFoundEr
 }) {}
 
 class NetworkError extends Schema.TaggedErrorClass<NetworkError>()("NetworkError", {
-  cause: Schema.Defect
+  cause: Schema.Defect() // v4 beta.76+: Schema.Defect is a constructor function, call it
 }) {}
 ```
 

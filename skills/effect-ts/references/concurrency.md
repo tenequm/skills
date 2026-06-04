@@ -192,3 +192,69 @@ const withWorker = Effect.scoped(
   })
 )
 ```
+
+## Managing Dynamic Sets of Fibers
+
+`FiberHandle` (one fiber), `FiberMap` (keyed) and `FiberSet` (unkeyed) manage fibers whose set changes at runtime. All three are **scoped** — closing the surrounding scope interrupts every managed fiber, and fibers self-remove on completion. `FiberMap.run(map, key, effect)` forks `effect` under `key`, interrupting any prior fiber at that key (pass `{ onlyIfMissing: true }` to keep the existing one).
+
+```typescript
+import { Effect, FiberMap } from "effect"
+
+const program = Effect.scoped(
+  Effect.gen(function*() {
+    const fibers = yield* FiberMap.make<string>()
+
+    // Start (or restart) a background fiber per connection id
+    yield* FiberMap.run(fibers, "conn-1", handleConnection(conn1))
+    yield* FiberMap.run(fibers, "conn-2", handleConnection(conn2))
+
+    yield* serveRequests()
+    // All managed fibers interrupted when this scope closes
+  })
+)
+```
+
+## SubscriptionRef (Observable State)
+
+`SubscriptionRef` is a `Ref` whose updates can be observed as a `Stream`. `.changes` emits the current value first, then every subsequent update — useful for reactive state, config hot-reload, or fan-out to watchers.
+
+```typescript
+import { Effect, Stream, SubscriptionRef } from "effect"
+
+const program = Effect.gen(function*() {
+  const ref = yield* SubscriptionRef.make(0)
+
+  // Subscribe in the background; receives 0, then each update
+  yield* Effect.forkScoped(
+    Stream.runForEach(SubscriptionRef.changes(ref), (n) =>
+      Effect.log(`value is now ${n}`)
+    )
+  )
+
+  yield* SubscriptionRef.set(ref, 1)
+  yield* SubscriptionRef.update(ref, (n) => n + 1) // 2
+})
+```
+
+## Worker Threads (`effect/unstable/workers`)
+
+There is **no `Worker.makePool` / high-level worker-pool API** in v4. The intended way to offload work to worker threads is **RPC-over-worker**: define an `RpcGroup` (see `references/rpc.md`), run an `RpcServer` inside the worker, and create a pooled client with `RpcClient.layerProtocolWorker({ size })`. Calling a typed RPC method dispatches it onto a worker in the pool.
+
+```typescript
+import { Layer } from "effect"
+import { RpcClient } from "effect/unstable/rpc"
+import { NodeWorker } from "@effect/platform-node"
+import { Worker as NodeWorkerThread } from "node:worker_threads"
+
+// Client side: a pool of worker threads; RPC calls run on a worker
+const WorkerClientLive = MyRpcClient.layer.pipe(
+  Layer.provide(RpcClient.layerProtocolWorker({ size: 4 })),
+  Layer.provide(
+    NodeWorker.layer(() => new NodeWorkerThread(new URL("./worker.ts", import.meta.url)))
+  )
+)
+// Inside ./worker.ts: RpcServer.layerProtocolWorkerRunner + your handler layer
+// + NodeWorkerRunner.layer (see references/rpc.md for the server side).
+```
+
+The low-level `Worker` / `WorkerRunner` modules exist but are platform primitives, not an ergonomic pool — prefer the RPC transport above.

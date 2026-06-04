@@ -40,6 +40,8 @@ This is the exhaustive reference for preventing hallucinated Effect code. Check 
 | `Tool.make("name", { ..., handler: ... })` | `Tool.make` defines schema only — there is no `handler` field. Attach handlers via `MyToolkit.toLayer({ ToolName: (params) => effect })`. |
 | `Chat.make()` / `Chat.send(session, msg)` | No such exports. Use `yield* Chat.empty` (or `Chat.fromPrompt`, `Chat.makePersisted`) and call methods on the instance: `chat.generateText({ prompt })`, `chat.streamText({ prompt })`, `chat.generateObject({ prompt, schema })`. |
 | `@effect/ai-amazon-bedrock` / `@effect/ai-google` (v4) | Not yet ported to v4. v4 ships only `@effect/ai-anthropic`, `@effect/ai-openai`, `@effect/ai-openai-compat`, `@effect/ai-openrouter`. |
+| `cause: Schema.Defect` / `error: Schema.Error` as bare field values (v4) | Since beta.76 `Schema.Defect` and `Schema.Error` are **constructor functions** — call them: `Schema.Defect()` / `Schema.Error()`. Stack control moved to an option: `Schema.Error({ includeStack: true })` (the old `Schema.ErrorWithStack` / `Schema.DefectWithStack` are removed). |
+| `Random.nextUUIDv4()` (v4) | Removed — `Random` is not cryptographically secure. Use the `Crypto` service: `yield* Crypto.Crypto` then `crypto.randomUUIDv4` / `crypto.randomUUIDv7`. |
 
 ## Wrong Import Paths
 

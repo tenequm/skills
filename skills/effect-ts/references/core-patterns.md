@@ -149,3 +149,34 @@ const results = yield* Effect.all([effectA, effectB], {
 | `Effect.match`   | Pattern match on success/failure                       |
 | `Effect.zip`     | Combine two effects into a tuple                       |
 | `Effect.orDie`   | Convert typed error to defect (unrecoverable)          |
+
+## Pattern Matching with `Match`
+
+`Match` builds type-safe, exhaustive matchers. Start from `Match.type<T>()` (matcher over a type) or `Match.value(x)` (match a concrete value), pipe in cases, then finish with `Match.exhaustive` (compile error if a case is missed) or `Match.orElse(fallback)`. The combinators are the same in v3 and v4.
+
+```typescript
+import { Match } from "effect"
+
+type Event =
+  | { readonly _tag: "Click"; readonly x: number }
+  | { readonly _tag: "Key"; readonly key: string }
+
+// Match on the discriminant tag, exhaustively
+const render = Match.type<Event>().pipe(
+  Match.tag("Click", ({ x }) => `click at ${x}`),
+  Match.tag("Key", ({ key }) => `key ${key}`),
+  Match.exhaustive
+)
+
+render({ _tag: "Click", x: 10 }) // "click at 10"
+
+// Predicate / partial matching with a fallback
+const classify = (n: number) =>
+  Match.value(n).pipe(
+    Match.when((x) => x < 0, () => "negative"),
+    Match.when(0, () => "zero"),
+    Match.orElse(() => "positive")
+  )
+```
+
+`Match.tag` narrows on `_tag` (works with `Data.TaggedError` / `Schema.TaggedErrorClass` errors); `Match.when` accepts a literal, a predicate, or a partial-shape pattern.
