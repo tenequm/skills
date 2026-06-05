@@ -2,7 +2,8 @@
 name: grafana-foundation-sdk
 description: Build Grafana dashboards as code with the grafana-foundation-sdk typed builders (TypeScript or Go). Use when creating, modifying, or generating Grafana dashboard JSON programmatically, converting hand-written dashboard JSON to typed code, building monitoring dashboards, or working with Prometheus/Loki queries in dashboards.
 metadata:
-  version: "0.1.0"
+  version: "0.2.0"
+  upstream: "@grafana/grafana-foundation-sdk@0.0.16, github.com/grafana/grafana-foundation-sdk/go@0.0.16"
 ---
 
 # Grafana Foundation SDK
@@ -21,16 +22,18 @@ The SDK is auto-generated from Grafana's internal CUE schemas via the `cog` tool
 
 ## Installation
 
+The SDK is published as concrete `v0.0.x` tags (latest: **v0.0.16**). Pin explicitly - it is pre-1.0 and the API churns between releases (see Known Gotchas).
+
 **TypeScript:**
 ```bash
-npm install @grafana/grafana-foundation-sdk
+npm install '@grafana/grafana-foundation-sdk@~0.0.16'
 # or
-pnpm add @grafana/grafana-foundation-sdk
+pnpm add '@grafana/grafana-foundation-sdk@~0.0.16'
 ```
 
 **Go:**
 ```bash
-go get github.com/grafana/grafana-foundation-sdk/go@next+cog-v0.0.x
+go get github.com/grafana/grafana-foundation-sdk/go@v0.0.16
 ```
 
 ## Core Architecture
@@ -318,6 +321,12 @@ These are sharp edges discovered from real usage and open issues on the SDK repo
 9. **Go: `Build()` returns error** - Always check it. TypeScript's `.build()` returns the object directly with compile-time type safety instead.
 
 10. **No typed query builders for plugin datasources** - Only core datasources (Prometheus, Loki, Tempo, Elasticsearch, CloudWatch, etc.) have builders. For third-party plugins, define custom query types by implementing the `Builder<Dataquery>` interface.
+
+11. **Dashboard schema v1 vs v2** - This skill targets the v1 dashboard (`@grafana/grafana-foundation-sdk/dashboard`, k8s apiVersion `dashboard.grafana.app/v1beta1`). A newer schema v2 ships as `dashboardv2beta1` (k8s apiVersion `dashboard.grafana.app/v2beta1`) with its own builders. v2beta1 is still stabilizing and has known sharp edges (e.g. transforms, annotation positioning, SQL expressions in Go) - prefer v1 unless you specifically need v2 layouts. Most query/panel builders are shared; some expose a `QueryV2Builder`/`VisualizationV2Builder` variant for v2.
+
+12. **Builders are only type-checked if wired into a tsconfig** - The SDK gives compile-time safety only when the generator file is actually type-checked. A generator sitting under a non-package directory (e.g. a Helm chart dir) that no `tsconfig` includes is silently unchecked, so type errors surface only at `.build()` runtime. Also: the SDK's output targets ES2024/`bundler` module resolution, which an older global `tsc` chokes on - run the project-local compiler (`npx tsc`), not a stale global one.
+
+13. **Regenerate JSON after every generator edit** - The deployed dashboard is the generated JSON, not the `.ts`/`.go` source. Edit the generator, re-run it, and commit the regenerated JSON together; never hand-edit the generated JSON (the next regen silently overwrites it). A repo rule ("never edit the dashboard JSON directly") is worth adding.
 
 ## Project-Specific Context
 

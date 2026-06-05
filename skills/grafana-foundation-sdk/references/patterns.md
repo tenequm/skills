@@ -46,7 +46,7 @@ ops/dashboards/
     "generate": "tsx generate.ts"
   },
   "dependencies": {
-    "@grafana/grafana-foundation-sdk": "^0.0.12"
+    "@grafana/grafana-foundation-sdk": "^0.0.16"
   },
   "devDependencies": {
     "tsx": "^4.0.0"

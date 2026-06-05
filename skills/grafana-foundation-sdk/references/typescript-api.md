@@ -47,14 +47,30 @@ import { PanelBuilder as GeoMapBuilder } from '@grafana/grafana-foundation-sdk/g
 import { PanelBuilder as XYChartBuilder } from '@grafana/grafana-foundation-sdk/xychart';
 import { PanelBuilder as TrendBuilder } from '@grafana/grafana-foundation-sdk/trend';
 import { PanelBuilder as CandlestickBuilder } from '@grafana/grafana-foundation-sdk/candlestick';
+import { PanelBuilder as CanvasBuilder } from '@grafana/grafana-foundation-sdk/canvas';
+import { PanelBuilder as DatagridBuilder } from '@grafana/grafana-foundation-sdk/datagrid';
+import { PanelBuilder as AnnotationsListBuilder } from '@grafana/grafana-foundation-sdk/annotationslist';
+import { PanelBuilder as DashboardListBuilder } from '@grafana/grafana-foundation-sdk/dashboardlist';
+import { PanelBuilder as NewsBuilder } from '@grafana/grafana-foundation-sdk/news';
+
+// Library panels (reference a shared, server-stored panel)
+import { LibraryPanelBuilder } from '@grafana/grafana-foundation-sdk/librarypanel';
 
 // Query builders (each exports DataqueryBuilder)
 import { DataqueryBuilder as PromQueryBuilder } from '@grafana/grafana-foundation-sdk/prometheus';
 import { DataqueryBuilder as LokiQueryBuilder } from '@grafana/grafana-foundation-sdk/loki';
 import { DataqueryBuilder as TempoQueryBuilder } from '@grafana/grafana-foundation-sdk/tempo';
+// Other core datasource query builders (same DataqueryBuilder pattern):
+//   elasticsearch, cloudwatch, azuremonitor, googlecloudmonitoring, bigquery,
+//   athena, testdata, parca, grafanapyroscope (Pyroscope profiling)
+import { DataqueryBuilder as TestDataQueryBuilder } from '@grafana/grafana-foundation-sdk/testdata';
+// Server-side / SQL expressions (math, reduce, resample, SQL across queries):
+import { DataqueryBuilder as ExprBuilder } from '@grafana/grafana-foundation-sdk/expr';
 
 // Common types and sub-builders
 import * as common from '@grafana/grafana-foundation-sdk/common';
+// Typed unit constants (alternative to hardcoded strings like 'reqps'/'ms'):
+import * as units from '@grafana/grafana-foundation-sdk/units';
 ```
 
 ---
@@ -205,14 +221,16 @@ new PanelBuilder()
 
 ### PieChart Panel
 
+PieChart uses its OWN legend builder (`PieChartLegendOptionsBuilder` from the `piechart` package), not the shared `common.VizLegendOptionsBuilder` - passing the common one is a type error because pie legends carry extra fields (`values`).
+
 ```typescript
-import { PanelBuilder } from '@grafana/grafana-foundation-sdk/piechart';
+import { PanelBuilder, PieChartLegendOptionsBuilder } from '@grafana/grafana-foundation-sdk/piechart';
 
 new PanelBuilder()
   .reduceOptions(new common.ReduceDataOptionsBuilder().calcs(['lastNotNull']))
   .pieType(common.PieChartType.Pie)          // Pie, Donut
   .legend(
-    new common.VizLegendOptionsBuilder()
+    new PieChartLegendOptionsBuilder()
       .showLegend(true)
       .placement(common.LegendPlacement.Right)
   )
@@ -430,6 +448,8 @@ import * as common from '@grafana/grafana-foundation-sdk/common';
 ---
 
 ## Common Units
+
+The SDK ships a typed `units` module (`@grafana/grafana-foundation-sdk/units`) with named constants for the strings below - use it to avoid typos, e.g. `.unit(units.RequestsPerSecond)` instead of `.unit('reqps')`. Plain strings still work and are fine for one-offs.
 
 Frequently used unit strings (pass to `.unit()`):
 
