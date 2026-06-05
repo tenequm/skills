@@ -1,15 +1,14 @@
 ---
 name: update-skill
-description: "Thorough on-demand refresh of one skill in this repo. Researches pond/upstream/docs in parallel, gates twice for approval, bumps version, updates CHANGELOG, runs just check, commits and watches CI. Use to update, refresh, or check the freshness of a specific skill."
-argument-hint: "[skill-name]"
+description: "Thorough on-demand refresh of one skill in a skills repository: researches usage/upstream/docs in parallel, gates twice for approval, bumps version, updates CHANGELOG, runs the repo's validation, then commits and watches CI. Install the pond MCP (https://pond.cascade.fyi/) for the prior-session usage angle; without it that angle is skipped. Use to update, refresh, or check the freshness of a specific skill."
 disable-model-invocation: true
 metadata:
-  version: "0.4.0"
+  version: "0.5.0"
 ---
 
 # Update Skill
 
-Run a thorough on-demand refresh of one skill in this repo. Two hard human-approval gates ensure no edits or commits happen without explicit confirmation.
+Run a thorough on-demand refresh of one skill in a skills repository. Two hard human-approval gates ensure no edits or commits happen without explicit confirmation.
 
 The target skill is: $ARGUMENTS
 
@@ -21,10 +20,10 @@ These rules apply across all phases:
 
 - **GATE 1 stops before any edit.** Do NOT call Edit or Write until the user replies affirmatively to the GATE 1 banner.
 - **GATE 2 stops before any commit or push.** Do NOT run `git commit` or `git push` until the user replies affirmatively to the GATE 2 banner.
-- **Privacy scan is a hard blocker.** Every skill here publishes publicly. The run does not reach a commit while a Phase 6 leak finding is unresolved.
+- **Privacy scan is a hard blocker.** Skills in a public repo can publish on merge, so the run does not reach a commit while a Phase 6 leak finding is unresolved.
 - **Sticky posture.** Once GATE 1 has been emitted, "report findings first" persists across follow-up rounds in the same session. If the user replies `changes` or asks for revisions, re-emit the gate after revising; never silently apply.
 - **Non-resume.** If the session is interrupted between GATE 1 and GATE 2, re-run `/update-skill <name>` from scratch. There is no checkpoint or resume mechanism.
-- **No `--no-verify`, no `--amend`, no force-push** unless the user explicitly authorizes it for this run. Per project CLAUDE.md.
+- **No `--no-verify`, no `--amend`, no force-push** unless the user explicitly authorizes it for this run. Per the repo's CLAUDE.md or AGENTS.md.
 
 ## Phase 1 - Pre-flight read
 
@@ -38,14 +37,14 @@ Capture state for the rest of the run:
 - `metadata.upstream` (current; parse to `{name: version}` map; empty if absent)
 - Topmost CHANGELOG entry date (if `CHANGELOG.md` exists; this is the "last verified" signal)
 - `git log -1 --format=%cs -- skills/<name>/` date (last touch)
-- `bootstrap_needed` flag = true if `metadata.upstream` is missing OR `CHANGELOG.md` is missing
+- `bootstrap_needed` flag = true if `metadata.upstream` is missing OR `CHANGELOG.md` is missing - **unless the skill is upstreamless by nature** (it wraps no package, spec, or living doc - e.g. a workflow or writing skill like `polish`). For those, omitting `metadata.upstream` is correct, not a gap: derive `bootstrap_needed` from the missing `CHANGELOG.md` alone and skip the upstream-candidate proposal.
 
 ## Phase 2 - Parallel research
 
 Dispatch three research subagents in a single message, one per angle. **Adapt each angle to the skill**: a skill wrapping a package researches that package's releases and source; a skill tracking living docs or a spec researches those docs and their source repos; a skill with no upstream at all still gets the usage angle.
 
-- **Usage** (pond): mine `mcp__pond__pond_search` with NO `project` filter for footguns, scenario-specific breakage, inefficiencies, gaps, and recurring misunderstandings the skill could absorb. Keep the query semantic (concepts, not project names); scope with filters. These are **advisory leads, not facts** - never verified, ground-checked in Phase 3.
-- **Upstream**: releases, commits, and merged PRs since the last-verified date. Read real source - clone to `~/pjv/<owner>/<repo>` (lowercase) or use the GitHub MCP pinned to a concrete tag/SHA.
+- **Usage** (pond - optional): if the pond MCP (`mcp__pond__pond_search`) is available, mine it with NO `project` filter for footguns, scenario-specific breakage, inefficiencies, gaps, and recurring misunderstandings the skill could absorb. Keep the query semantic (concepts, not project names); scope with filters. These are **advisory leads, not facts** - never verified, ground-checked in Phase 3. **If pond is not installed, skip this angle entirely** - dispatch only the upstream and docs agents, and note "Usage angle skipped: pond MCP not available (https://pond.cascade.fyi/)" in the Phase 3 report.
+- **Upstream**: releases, commits, and merged PRs since the last-verified date. Read real source - clone to a local scratch dir (e.g. `~/pjv/<owner>/<repo>`, lowercase) or use the GitHub MCP pinned to a concrete tag/SHA.
 - **Docs**: the current canonical docs, read from source (raw `.md` or cloned repo), not model-summarized. Two distinct jobs, **both required**:
   - **(a) Drift check** - compare the docs against the skill's current `SKILL.md` and `references/`, flagging API changes, deprecated or removed symbols, and patterns the skill should adopt. This is anchored to what the skill already says.
   - **(b) Coverage sweep** - enumerate upstream's *current* feature/concept surface from the docs nav / table of contents, the API index, and the "what's new" / changelog. List every major capability, primitive, or concept the skill has **zero mention of**. Do NOT anchor this to existing skill content - the whole point is to find net-new surface the skill is silent about (`ADD` findings). This is the step a "verify what's there" pass structurally misses.
@@ -75,7 +74,7 @@ Print a structured report, sections in order:
    ```
    Coverage sweep: enumerated upstream's current surface from <sources>. Net-new concepts the skill omits: <list> / none since <last-verified date>. Not reachable this run: <areas, or "none">.
    ```
-6. **Bootstrap proposal** (only when `bootstrap_needed`): candidate upstream packages greppable from the skill's content, each as `<package> (mentioned <N>x, first cite: <file>:<line>)` for the user to confirm or prune; plus a seed `CHANGELOG.md`.
+6. **Bootstrap proposal** (only when `bootstrap_needed`): candidate upstream packages greppable from the skill's content, each as `<package> (mentioned <N>x, first cite: <file>:<line>)` for the user to confirm or prune; plus a seed `CHANGELOG.md`. If the skill is **upstreamless by nature**, say so explicitly, propose no candidates, and leave `metadata.upstream` omitted - only seed the `CHANGELOG.md`.
 
 ### No-op short-circuit
 
@@ -124,20 +123,20 @@ Do NOT call Edit or Write until you receive an affirmative. Every revision round
 
 Apply each approved row with Edit/Write; batch independent edits in parallel. Then, in order:
 
-1. Update `metadata.upstream` to the new comma-separated `<name>@<version>` list. Reject floating tags - stop with an error if one appears.
-2. Bump `metadata.version` (semver per project CLAUDE.md: patch for fixes, minor for new content/sections, major for breaking removal).
+1. Update `metadata.upstream` to the new comma-separated `<name>@<version>` list. Reject floating tags - stop with an error if one appears. Skip entirely if the skill is upstreamless by nature - leave `metadata.upstream` omitted.
+2. Bump `metadata.version` (semver per the repo's CLAUDE.md or AGENTS.md: patch for fixes, minor for new content/sections, major for breaking removal).
 3. Append the new dated entry to `CHANGELOG.md` directly under `[Unreleased]`, above the previous entry. Add the `Verified against:` trailer only if a tracked version changed this run.
 4. If `bootstrap_needed`, write the full `CHANGELOG.md` from the bootstrap header plus the approved seed entry.
 
-## Phase 5 - just check
+## Phase 5 - Repo validation gate
 
-Run `just check` from the repo root (it regenerates `README.md` - the most common CI failure cause). On failure, surface the error verbatim, fix the root cause, and re-run until clean. No `--no-verify`, no `--amend`, no hook-skipping.
+If the repo defines a validation command - check its CLAUDE.md/AGENTS.md or `Justfile`/`package.json` (e.g. `just check`, `npm run lint`, `make check`) - run it from the repo root. In this repo that is `just check`, which also regenerates `README.md` (the most common CI failure cause). On failure, surface the error verbatim, fix the root cause, and re-run until clean. No `--no-verify`, no `--amend`, no hook-skipping. If the repo has no validation gate, skip this phase and note it.
 
 ## Phase 6 - Privacy scan + diff review + GATE 2
 
 ### Privacy / leak scan (hard blocker)
 
-Every skill here publishes publicly, and pond research draws on private cross-project conversations - a leak can reach the diff. Before showing the diff, dispatch a dedicated agent (separate from the Phase 2 research agents) to scan the added/changed lines under `skills/<name>/` and `README.md`.
+Skills in a public repo can publish on merge, and any research source can leak into the diff - especially pond, which draws on private cross-project conversations. This scan runs every time, whether or not pond was used. Before showing the diff, dispatch a dedicated agent (separate from the Phase 2 research agents) to scan the added/changed lines under `skills/<name>/` and `README.md` (if the repo generates one).
 
 It flags anything unsafe for a public skill: secrets (keys, tokens, passwords, `.env` values, connection strings), personal data (real names, emails, handles), and the easy-to-miss ones - non-public project or repo names, internal hostnames or endpoints, ticket IDs, local machine paths, pond session IDs. Intentional public references are fine (the public repo owner, official upstream repos and docs, published package names, spec URLs). The agent returns `[LEAK] <file>:<line> - <what> - suggested redaction: <text>` per issue, or exactly `NO LEAKS FOUND`.
 
@@ -159,9 +158,9 @@ Wait for explicit confirmation. Do not commit on ambiguous responses.
 
 ## Phase 7 - Commit, push, watch
 
-**Branch guard first.** Run `git rev-parse --abbrev-ref HEAD`. If the result is not `main`, ask the user: push to that branch and open a PR (recommended), force-push to main (only on explicit instruction - it skips PR review and publishes straight to ClawHub via CI), or cancel.
+**Branch guard first.** Run `git rev-parse --abbrev-ref HEAD`. If the result is not the repo's default branch, ask the user: push to the current branch and open a PR (recommended), push directly to the default branch (only on explicit instruction - if the repo auto-publishes on merge, this skips PR review and ships straight to the registry), or cancel.
 
-Commit with a conventional-commit message (type per content, per project CLAUDE.md) using the HEREDOC pattern:
+Commit with a conventional-commit message (type per content, per the repo's CLAUDE.md or AGENTS.md) using the HEREDOC pattern:
 
 ```bash
 git commit -m "$(cat <<'EOF'
@@ -172,10 +171,10 @@ EOF
 )"
 ```
 
-- **On `main`**: `git push`, then `gh run watch` the triggered run. On CI failure, surface logs verbatim; do not auto-retry.
-- **On a feature branch**: `git push -u origin <branch>`, then `gh pr create` with a body summarizing the Phase 3 report. Skip `gh run watch` (PR CI is non-publishing).
+- **On the default branch**: `git push`, then, if the repo has CI, `gh run watch` the triggered run. On CI failure, surface logs verbatim; do not auto-retry.
+- **On a feature branch**: `git push -u origin <branch>`, then `gh pr create` with a body summarizing the Phase 3 report. Skip `gh run watch` (PR CI is typically non-publishing).
 
-After CI is green on `main`, optionally confirm the GitHub Release (`gh release view skills-$(git rev-parse --short HEAD)`) and the ClawHub publish (the slug can differ from the folder name - see `CLAWHUB_SLUG_OVERRIDES` in `scripts/generate_readme.py`).
+If the repo auto-publishes on merge (e.g. to a registry via CI), confirm the publish landed once CI is green. The published slug and release/tag naming follow the repo's own pipeline - check its CLAUDE.md/AGENTS.md (the published slug can differ from the folder name).
 
 ## Done
 

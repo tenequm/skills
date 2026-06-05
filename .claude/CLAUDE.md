@@ -8,7 +8,7 @@ Public skills repo. Owner: @opwizardx
 skills/<name>/
 ├── SKILL.md          # Frontmatter (name, description, metadata.version) + body
 ├── references/       # On-demand detailed docs
-└── LICENSE.txt       # MIT-0 (auto-added, required by ClawHub)
+└── LICENSE.txt       # Apache-2.0 (required by ClawHub; copy from any existing skill)
 
 scripts/
 ├── generate_readme.py         # README table + ClawHub slug overrides
@@ -88,7 +88,7 @@ On push to `main`, `.github/workflows/release.yml`:
 1. Runs `just check` (lint, typecheck, skill validation, README sync)
 2. Diffs changed skills, builds manifest + zip bundles
 3. Publishes changed skills to ClawHub via `clawhub` CLI
-4. Creates a GitHub Release with bundles and notes
+4. Creates a GitHub Release tagged `skills-<short-sha>` (first 7 chars; verify with `gh release view skills-$(git rev-parse --short HEAD)`) with bundles and notes
 
 ### Manual publishing
 ```bash
