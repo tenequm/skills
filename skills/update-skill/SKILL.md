@@ -1,9 +1,10 @@
 ---
 name: update-skill
 description: "Thorough on-demand refresh of one skill in a skills repository: researches usage/upstream/docs in parallel, gates twice for approval, bumps version, updates CHANGELOG, runs the repo's validation, then commits and watches CI. Install the pond MCP (https://pond.cascade.fyi/) for the prior-session usage angle; without it that angle is skipped. Use to update, refresh, or check the freshness of a specific skill."
+argument-hint: "[skill-name]"
 disable-model-invocation: true
 metadata:
-  version: "0.5.0"
+  version: "0.6.0"
 ---
 
 # Update Skill

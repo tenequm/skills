@@ -34,6 +34,21 @@ OPENCLAW_EXTENSION_FIELDS = {
     "homepage",
     "user-invocable",
 }
+# Optional Claude Code skill/command fields documented in the
+# `skills-best-practices` skill. Not part of the open Agent Skills spec, which
+# ignores unknown fields, so they do not conflict with it; other agents safely
+# ignore them. (`allowed-tools`, `disable-model-invocation`, `user-invocable`
+# are covered by the sets above.)
+CLAUDE_CODE_FIELDS = {
+    "agent",
+    "argument-hint",
+    "arguments",
+    "context",
+    "effort",
+    "hooks",
+    "model",
+    "when_to_use",
+}
 # ClawHub allows these `metadata.*` keys to be nested mappings (per
 # docs/skill-format.md). Other metadata values must remain strings to satisfy
 # Anthropic's `metadata: dict[str, str]` contract.
@@ -177,7 +192,7 @@ def lint_skill(skill_md: Path) -> LintResult:
         elif not isinstance(version, str) or not version.strip():
             issues.append(LintIssue(skill_md, "`metadata.version` must be a non-empty string."))
 
-    allowed_fields = STANDARD_FIELDS | OPENCLAW_EXTENSION_FIELDS
+    allowed_fields = STANDARD_FIELDS | OPENCLAW_EXTENSION_FIELDS | CLAUDE_CODE_FIELDS
     unknown_fields = sorted(set(frontmatter) - allowed_fields)
     if unknown_fields:
         issues.append(
@@ -247,7 +262,7 @@ def normalize_skill(skill_dir: Path, dest_root: Path) -> Path:
         for line in match.group(1).splitlines():
             if not line.startswith(" ") and ":" in line:
                 key = line.split(":", 1)[0].strip()
-                if key in OPENCLAW_EXTENSION_FIELDS:
+                if key in OPENCLAW_EXTENSION_FIELDS or key in CLAUDE_CODE_FIELDS:
                     continue
             kept_lines.append(line)
 
