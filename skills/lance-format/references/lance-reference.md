@@ -1,11 +1,11 @@
 # Lance v7 reference
 
 Capability reference for **Lance** - the open columnar lakehouse format for multimodal AI -
-regrounded against the `lance-format/lance` repository at git tag **`v7.1.0-beta.2`**
-(commit `24b8afec`).
+regrounded against the `lance-format/lance` repository at git tag **`v7.2.0-beta.5`**
+(annotated tag -> commit `1506693b`).
 
 Citations are `path:line` relative to the repo root. Build a permalink as
-`https://github.com/lance-format/lance/blob/v7.1.0-beta.2/<path>`. Line numbers drift
+`https://github.com/lance-format/lance/blob/v7.2.0-beta.5/<path>`. Line numbers drift
 between tags; treat them as approximate. The authoritative in-repo sources are the format
 spec under `docs/src/format/`, the user guide under `docs/src/guide/`, the protobuf schemas
 under `protos/`, and the Rust workspace under `rust/`.
@@ -61,7 +61,7 @@ code. The format itself is the product - there is no server.
 ## 2. The crate workspace
 
 24 crate directories under `rust/`. `[workspace.package]` (`Cargo.toml:32-53`): `version =
-"7.1.0-beta.2"`, `edition = "2024"`, `rust-version = "1.91.0"`, `license = "Apache-2.0"`,
+"7.2.0-beta.5"`, `edition = "2024"`, `rust-version = "1.91.0"`, `license = "Apache-2.0"`,
 `resolver = "3"`. `exclude = ["python", "java/lance-jni"]`.
 
 | Crate dir | Published name | Purpose |
@@ -97,9 +97,10 @@ path dependency rather than an explicit member.
 
 **Bindings.** Python: package `pylance` (`python/pyproject.toml`), built with maturin, imported
 as `lance`; the Rust extension crate is `pylance` (`[lib] name = "lance"`); supports Python
-3.9-3.14; runtime deps `pyarrow>=14`, `numpy>=1.22`, `lance-namespace>=0.7.7,<0.8`. Java: an
+3.9-3.14; runtime deps `pyarrow>=14`, `numpy>=1.22`, `lance-namespace>=0.8.0,<0.9`. Java: an
 SDK under `java/` (Maven `org.lance`), bridged to Rust by the `lance-jni` crate
-(`java/lance-jni/`, excluded from the Rust workspace).
+(`java/lance-jni/`, excluded from the Rust workspace). Notable workspace deps at this tag
+(`Cargo.toml`): `lance-namespace-reqwest-client 0.8.0`, `opendal 0.57`, `jieba-rs 0.10`.
 
 **Building.** Five workspace crates carry a protobuf build script - `lance-encoding`,
 `lance-file`, `lance-index`, `lance-table`, `lance-datafusion` - so a `protoc` compiler must
@@ -122,15 +123,23 @@ The footer stores `u16` major and `u16` minor (`protos/file2.proto:90-91`).
 | `0.1` (`legacy`) | any | read-only, no longer writable | Initial Lance format |
 | `2.0` | 0.16.0 | stable | Removed row groups; null support for lists, fixed-size lists, primitives |
 | `2.1` | 0.38.1 | **current default** | Adaptive structural encodings; better integer/string compression; nulls in struct fields; better nested random access |
-| `2.2` | - | `next` (unstable) | Map type, Blob v2, `VariablePackedStruct`, larger mini-blocks; encodings may still change |
+| `2.2` | - | unstable | Map type, Blob v2, `VariablePackedStruct`, larger mini-blocks; encodings may still change. The real experimental frontier |
+| `2.3` | - | unstable (`next`) | The current `next` alias target. Scaffolding only - present in the enum but with no distinct encoding behavior yet |
 
-`stable` = the latest stable version in the running Lance release; `next` = the latest
-unstable version. `next` encodings can change and files written with them may become
-unreadable - "should only be used for experimentation and benchmarking"
-(`docs/src/format/file/versioning.md:8-11`). The default storage version became 2.1 in Lance
-5.0.0 (`docs/src/guide/migration.md`); 2.2 is required for the Map type and Blob v2 but is
-still marked unstable. Selected per-dataset via `data_storage_version` and **fixed at dataset
-creation** - to change it you write a new dataset.
+`stable` resolves to the default (2.1); `next` resolves to the latest unstable version. The
+enum order is `Legacy < 2.0 < 2.1 (#[default]) < Stable < 2.2 < Next < 2.3`, with
+`Stable => 2.1` and `Next => 2.3`, and `is_unstable() = self >= Next`
+(`rust/lance-encoding/src/version.rs:21-46`). Two consequences that surprise readers: (1)
+**`next` now resolves to 2.3, not 2.2** - writing with `next` produces a 2.3 file; (2)
+because 2.2 sits *below* `Next` in the ladder, the code does **not** flag 2.2 as unstable,
+yet the docs version table (`docs/src/format/file/versioning.md:21-29`) still lists only 2.2
+and labels it unstable. 2.3 is currently a placeholder (6 refs vs 98 for 2.2 across
+`lance-encoding`) - 2.2 is the version actually carrying Map / Blob v2 / `VariablePackedStruct`.
+`next` encodings can change and files written with them may become unreadable - "should only
+be used for experimentation and benchmarking" (`docs/src/format/file/versioning.md:8-11`).
+The default storage version became 2.1 in Lance 5.0.0 (`docs/src/guide/migration.md`); 2.2 is
+required for the Map type and Blob v2. Selected per-dataset via `data_storage_version` and
+**fixed at dataset creation** - to change it you write a new dataset.
 
 ### 3.2 Container layout
 
@@ -649,7 +658,12 @@ SIMD kernels in `lance-linalg`; the `fp16kernels` feature compiles C SIMD kernel
 
 **IVF_RQ requires the vector dimension to be divisible by 8** - enforced with the error
 "vector dimension must be divisible by 8 for IVF_RQ" (`rust/lance-index/src/vector/bq/builder.rs`).
-RaBitQ `num_bits` is currently always 1.
+RaBitQ is **1-bit-only** today: the 1-bit binary code is stored in `_rabit_codes`, and
+"future multi-bit support will store the remaining `num_bits - 1` ex-code bits separately
+instead of widening this binary code path" (`docs/src/format/index/vector/index.md:275`). The
+RabitQ metadata schema carries a `code_dim` (u32) field - the rotated-vector dimension for the
+1-bit code (`docs/src/format/index/vector/index.md:250`). Per-row storage is `dimension/8 + 16`
+bytes (8 for the row ID + 8 for the factors) (`docs/src/guide/performance.md:416`).
 
 On-disk layout (format V3): each vector index is two Lance files - an **index file**
 (`index.idx`, the search structure: IVF metadata, HNSW graph) and an **auxiliary file**
@@ -674,6 +688,17 @@ hard-errors below **256 rows** ("Not enough rows to train PQ. Requires {n} rows 
 available", `rust/lance-index/src/vector/pq/builder.rs:177`); IVF k-means separately needs at
 least `num_partitions` rows. Build vector indexes lazily, once the table holds data.
 
+**Batched vector queries** (PR #6828). `Scanner::nearest` accepts a batch of query vectors on
+a fixed-size-list column - there is no separate `nearest_batch` API. Batched results carry a
+synthetic 0-based `query_index` discriminator column (`QUERY_INDEX_COL`) so each result row is
+attributable to its source query (`rust/lance/src/dataset/scanner.rs:104,1972`).
+
+**Streaming IVF k-means training** (PR #6913). For bounded-memory IVF training on large
+datasets, the IVF builder exposes `streaming_sample_rate`, `streaming_coreset_rate`, and
+`streaming_refine_passes` (exposed through Python). When set, training loads at most
+`num_partitions * streaming_sample_rate` vectors and keeps the total sampled set bounded
+(`rust/lance-index/src/vector/ivf/builder.rs:44-51`).
+
 ### 11.2 Scalar indexes
 
 `docs/src/format/index/scalar/`. Results are **exact** (BTREE, BITMAP, LABEL_LIST) or
@@ -692,6 +717,13 @@ least `num_partitions` rows. Build vector indexes lazily, once the table holds d
 NGRAM, ZONEMAP, and BLOOM_FILTER are newer additions. A JSON scalar index wraps another
 index's details with a JSON path.
 
+**Scalar-index fast search** (PR #6784). `fast_search` now routes through scalar/BTREE-indexed
+fragments and skips unindexed ones, so a filtered query can return from the index without a
+flat scan of recently appended (still-unindexed) fragments. Not supported on the legacy file
+version (`LanceFileVersion::Legacy`). This mirrors the long-standing vector `fast_search`
+behavior - both return only what the index covers, trading completeness for latency until
+`optimize_indices` folds the new fragments in.
+
 ### 11.3 Full-text search
 
 The FTS (inverted) index maps terms to documents with **BM25** scoring
@@ -704,8 +736,14 @@ Storage: `tokens.lance` (dictionary), `docs.lance` (doc metadata), `invert.lance
 **partitioned** - every partition is searched at query time and results combined.
 
 Tokenizer pipeline (`InvertedIndexParams`): a base tokenizer (`simple`, `whitespace`, `raw`,
-`ngram`, `jieba/*` for Chinese, `lindera/*` for Japanese) followed by token filters
-(`RemoveLong`, `LowerCase`, `Stemmer`, `StopWords`, `AsciiFolding`). Config keys:
+`ngram`, `icu`, `jieba/*` for Chinese, `lindera/*` for Japanese) followed by token filters
+(`RemoveLong`, `LowerCase`, `Stemmer`, `StopWords`, `AsciiFolding`). The `icu` tokenizer
+(PR #6956) does ICU4X dictionary-based Unicode word segmentation with **bundled segmenter
+data** - unlike jieba/lindera it needs no external language model
+(`rust/lance-index/src/scalar/inverted/tokenizer.rs:390`, `docs/src/guide/tokenizer.md:1`). The
+default base tokenizer remains **`simple`** (`tokenizer.rs:187`); a PR making ICU the default
+(#6968) was reverted (#7006) because "ICU showed behavior differences that are too large for
+the default path." Config keys:
 `base_tokenizer`, `language`, `with_position` (store positions for phrase queries),
 `lower_case`, `stem`, `remove_stop_words`, `ascii_folding`, ngram `min_gram`/`max_gram`/
 `prefix_only`. 18 stemming/stop-word languages.
@@ -822,10 +860,11 @@ Disable globally with `LANCE_USE_VERSION_HINT=0`.
 
 ## 14. What changed in v7
 
-The v7 tag line ran `v7.0.0-beta.1` through `v7.0.0-beta.17`, then `v7.0.0-rc.1`, then the
-v7.1 line opened at `v7.1.0-beta.1` and continued at `v7.1.0-beta.2` - no `v7.0.0` final
-git tag was cut. The crates pin `7.1.0-beta.2`. Source: the `v7.0.0-beta.1..v7.1.0-beta.2`
-commit range plus the v6->v7 boundary commits.
+The v7 tag line ran `v7.0.0-beta.1` through `v7.0.0-beta.17`, then `v7.0.0-rc.1` - no
+`v7.0.0` final git tag was cut. The v7.1 line opened at `v7.1.0-beta.1`, continued through
+`v7.1.0-beta.4` and `v7.1.0-rc.1`, then the v7.2 line opened and the crates now pin
+`7.2.0-beta.5`. Source: the `v7.0.0-beta.1..v7.2.0-beta.5` commit range plus the v6->v7
+boundary commits.
 
 **The v6 -> v7 breaking change.** `feat!: make dataset object store access base-aware`
 (PR #6647, commit `456198cd`), immediately followed by the automated bump to `7.0.0-beta.1`.
@@ -916,11 +955,42 @@ Note: there is **no Tantivy-FTS-removal commit in the v7 range**. Lance FTS at t
 already its own native inverted-index implementation; the tokenizer vendoring (#6512)
 predates `v7.0.0-beta.1`. Do not attribute a Tantivy removal to v7.
 
+### The v7.1.0-beta.2 -> v7.2.0-beta.5 delta
+
+66 commits, **no breaking change** (no `!:` commit, no `BREAKING CHANGE` footer), **no new
+crate** (still 24), **no new transaction op** (still 15), no proto change. User-facing
+additions:
+
+- **ICU FTS tokenizer** (PR #6956) - `base_tokenizer="icu"`, ICU4X dictionary segmentation
+  with bundled data, no external model. A PR making ICU the default (#6968) was reverted
+  (#7006); the default base tokenizer stays `simple`. See section 11.3.
+- **Scalar-index fast search** (PR #6784) - `fast_search` routes through scalar/BTREE-indexed
+  fragments and skips unindexed ones (not on legacy file version). See section 11.2.
+- **Batched vector queries** (PR #6828) - `Scanner::nearest` takes a batch of query vectors
+  and exposes a synthetic 0-based `query_index` column. See section 11.1.
+- **Streaming IVF k-means** (PR #6913) - `streaming_sample_rate` / `streaming_coreset_rate` /
+  `streaming_refine_passes` for bounded-memory IVF training. See section 11.1.
+- **Arrow view-type support** (PR #6985) - `Utf8View` / `BinaryView` now encode (fixes an
+  encoder `todo!()` panic) and coerce correctly in filters.
+- **HuggingFace `download_mode`** (PR #7022) - storage-option keys `hf_download_mode` /
+  `download_mode` select the OpenDAL `http` (default) or `xet` backend on the existing
+  `hf://` provider; not a new object-store scheme.
+- **MemWAL LSM local-scoring FTS** (PR #6951) - `LsmScanner::full_text_search(column, query, k)`,
+  contained entirely in the `mem_wal` module.
+- Dependency bumps: pylance `lance-namespace>=0.8.0,<0.9` (PR #7031), `opendal 0.57`
+  (PR #7018), `jieba-rs 0.10` (PR #6955).
+- Doc clarification: RaBitQ (RQ) is documented 1-bit-only with multi-bit as future work, and
+  the RQ metadata schema gained a `code_dim` field (`docs/src/format/index/vector/index.md`).
+
+Unchanged and reverified at this tag: 15 transaction ops, the scalar/vector index-type set,
+all `protos/*.proto`, file-format `version.rs`, `rust-version 1.91.0`, `resolver 3`, edition
+2024, `CommitConfig num_retries=20`, MemWAL still experimental.
+
 ---
 
 ## 15. Capability matrix
 
-What Lance can and cannot do at `v7.1.0-beta.1`.
+What Lance can and cannot do at `v7.2.0-beta.5`.
 
 **Storage and format**
 
@@ -980,7 +1050,7 @@ dashboard.
 
 ## 16. Source map
 
-Where to look in `lance-format/lance` at `v7.1.0-beta.2`.
+Where to look in `lance-format/lance` at `v7.2.0-beta.5`.
 
 | Topic | Path |
 |-------|------|

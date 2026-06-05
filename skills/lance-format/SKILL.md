@@ -2,8 +2,8 @@
 name: lance-format
 description: Reference for Lance v7 - the open columnar lakehouse format for multimodal AI - and its Rust crate workspace (`lance`, `lance-table`, `lance-file`, `lance-encoding`, `lance-index`, `lance-io`, `lance-namespace`, and more). Use when building directly on the Lance crates - creating or reading `.lance` datasets, manifests, fragments, deletion files, the 2.x file format and structural encodings, vector / scalar / full-text / geo indexes, MemWAL streaming writes, optimistic-concurrency commits and commit handlers, schema evolution, versioning, time-travel, tags, branches, stable row IDs, namespaces, or object-store config. Triggers on lance crate, .lance file, lance dataset, lance file format, structural encoding, IVF_PQ, IVF_HNSW, IVF_RQ, RaBitQ, lance FTS, zonemap, MemWAL, OCC retry, lance schema evolution, lance namespace, pylance. This is the Lance format and engine (the `lance-format/lance` repo), not LanceDB the database product - but also the right reference for what LanceDB builds on.
 metadata:
-  version: "0.4.0"
-  upstream: "lance-format/lance@v7.1.0-beta.2"
+  version: "0.5.0"
+  upstream: "lance-format/lance@v7.2.0-beta.5"
   openclaw:
     homepage: https://github.com/tenequm/skills/tree/main/skills/lance-format
     emoji: "🗄️"
@@ -17,7 +17,7 @@ specs: a **file format**, a **table format**, **index formats**, **catalog specs
 **namespace client spec**. The Rust workspace at `lance-format/lance` implements all of them
 plus Python (`pylance`) and Java bindings.
 
-This skill tracks **`v7.1.0-beta.2`** (the `lance-format/lance` git tag). Pin against tags,
+This skill tracks **`v7.2.0-beta.5`** (the `lance-format/lance` git tag). Pin against tags,
 not `main` - Lance ships beta tags every few days and `next`-format encodings can change.
 
 The deep reference is `references/lance-reference.md`. Load it for any concrete schema, parameter,
@@ -62,7 +62,7 @@ beneath it. Full table with descriptions and citations in `references/lance-refe
 | `lance-namespace` / `-impls` / `-datafusion` | Namespace trait, Directory/REST impls, DataFusion catalog bridge |
 | `lance-arrow`, `lance-tools`, `fsst`, `lance-bitpacking`, ... | Arrow extensions, CLI, compression sub-crates |
 
-All share `version = "7.1.0-beta.2"` except `lance-arrow-scalar`, which is pinned at
+All share `version = "7.2.0-beta.5"` except `lance-arrow-scalar`, which is pinned at
 `58.0.0` to track Arrow. Workspace: edition 2024, `rust-version = 1.91.0`,
 `resolver = "3"`.
 
@@ -77,10 +77,13 @@ dataset).
 | `0.1` (`legacy`) | read-only | Original format; no longer writable |
 | `2.0` | stable | Removed row groups; null support for lists/FSL/primitives |
 | `2.1` | **current default** (`stable`) | Adaptive structural encodings; better integer/string compression; nulls in struct fields; better nested random access. Default since Lance 5.0.0 |
-| `2.2` | `next` (unstable) | Map type, Blob v2, `VariablePackedStruct`, larger mini-blocks. Required for Map and Blob v2; encodings may still change |
+| `2.2` | unstable | Map type, Blob v2, `VariablePackedStruct`, larger mini-blocks. Required for Map and Blob v2; the real experimental frontier - encodings may still change |
+| `2.3` | unstable (`next`) | The current `next` alias target (`V2_3` in the enum). Scaffolding only - no distinct encodings yet (6 refs vs 98 for 2.2 in `lance-encoding`); the docs version table still lists only 2.2 |
 
-`stable` and `next` are aliases resolved by the running Lance release - pin an explicit
-number for deterministic behavior.
+`stable` resolves to the default (2.1); `next` now resolves to **2.3** (not 2.2) in the
+running Lance release - pin an explicit number for deterministic behavior. In the version
+ladder 2.2 sits *below* `next`, so the code does not flag 2.2 as unstable even though the
+docs do; 2.2 is the version actually carrying the experimental features.
 
 ## What's new in v7
 
@@ -100,16 +103,19 @@ index specifications. The `v7.1.0-beta.1` tag opens the v7.1 line and adds a
 **`lance-select`** crate (#6879) and lands two MemWAL correctness fixes - flushed
 memtables now build their secondary indexes so vector rows are visible to `fast_search`
 (#6901), and a per-source PK-hash block-list post-filter suppresses stale LSM vector reads
-when the fresh row falls out of its source's top-k (#6899). Details in
-`references/lance-reference.md` section 14.
+when the fresh row falls out of its source's top-k (#6899). The v7.2 line
+(`v7.2.0-beta.5`, the current pin) adds an **ICU FTS tokenizer** (#6956), **scalar-index
+fast search** (#6784), **batched vector queries** (#6828), and **streaming IVF k-means**
+(#6913) - no breaking changes, no new crate (still 24), no new transaction op (still 15).
+Details in `references/lance-reference.md` section 14.
 
 ## Navigating the reference
 
-`references/lance-reference.md` is the full v7 reference, regrounded against the `v7.1.0-beta.2`
+`references/lance-reference.md` is the full v7 reference, regrounded against the `v7.2.0-beta.5`
 source. Load the section for your task:
 
 1. **What Lance is** - the lakehouse spec stack
-2. **Crate workspace** - all 23 crates, what each does, the public entry point
+2. **Crate workspace** - all 24 crates, what each does, the public entry point
 3. **File format** - versions, container layout, structural encoding (mini-block / full-zip /
    constant / blob page types), compression schemes, blob encoding
 4. **Data types** - Arrow type coverage, FixedSizeList for vectors, JSON (JSONB), blob, ML
@@ -133,9 +139,9 @@ source. Load the section for your task:
 ## Maintenance
 
 Citations in `references/lance-reference.md` are `path:line` relative to the `lance-format/lance` repo;
-build a permalink as `https://github.com/lance-format/lance/blob/v7.1.0-beta.2/<path>`.
+build a permalink as `https://github.com/lance-format/lance/blob/v7.2.0-beta.5/<path>`.
 
 To refresh: `git -C ~/pjv/lance-format/lance fetch --tags`, check out the newest `v7*` tag,
 re-read the format spec under `docs/src/format/` and the user guide under `docs/src/guide/`,
-re-verify the crate workspace, and bump `metadata.upstream` plus every `v7.1.0-beta.2`
+re-verify the crate workspace, and bump `metadata.upstream` plus every `v7.2.0-beta.5`
 reference. Line numbers in citations drift between tags - treat them as approximate.
