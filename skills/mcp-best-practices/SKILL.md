@@ -1,8 +1,8 @@
 ---
 name: mcp-best-practices
-description: Build production MCP servers with the TypeScript SDK. Covers spec 2025-11-25, SDK v1.29+/v2 alpha, transport selection, tool design, error handling, security, performance, known bugs with workarounds, MCP extensions, MCP Apps (interactive UIs), authorization extensions, and the MCP Registry. Use this skill whenever building MCP servers, designing MCP tools, choosing MCP transports, handling MCP errors, migrating to MCP v2, reviewing MCP security, optimizing MCP token usage, building MCP Apps, using MCP extensions, publishing to the MCP Registry, or working with registerTool, McpServer, streamable HTTP, outputSchema, structuredContent, tool annotations, ext-apps, or ext-auth.
+description: Build, secure, and optimize production MCP servers with the TypeScript SDK (spec 2025-11-25, SDK v1.29 / v2 alpha). Use when building or reviewing MCP servers or tools - covering transports, tool and schema design, error handling, security and OAuth, performance, known SDK bugs, content vs structuredContent delivery, v2 migration, MCP Apps, extensions, and the Registry.
 metadata:
-  version: "0.4.0"
+  version: "0.5.0"
   upstream: "@modelcontextprotocol/sdk@1.29.0, @modelcontextprotocol/server@2.0.0-alpha.2, @modelcontextprotocol/ext-apps@1.7.2"
 ---
 
@@ -101,15 +101,7 @@ app.delete("/mcp", handleMcpDelete); // Optional: session termination
 
 ### Registration API
 
-**v1 (current stable)** - `server.tool()` works but has ambiguous overloads. Prefer the config-object form when possible:
-```typescript
-server.tool("search_docs", "Search documents", {
-  query: z.string().describe("Search query"),
-  max_results: z.number().optional().describe("Max results (default 20)"),
-}, { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true },
-  async ({ query, max_results }) => { /* handler */ }
-);
-```
+**v1 (current stable)** - `server.tool(name, description, zodShape, annotations, handler)`. Positional overloads are ambiguous; same fields as v2 below minus `outputSchema`.
 
 **v2 (migration target)** - `registerTool()` with config object:
 ```typescript
@@ -128,6 +120,8 @@ server.registerTool("search_docs", {
 }, async ({ query, max_results }) => {
   const result = await fetchDocs(query, max_results);
   return {
+    // Both channels carry IDENTICAL bytes. Divergent payloads = the text block
+    // silently vanishes on Claude Code/Codex/Copilot. See "Tool Result Delivery" below.
     structuredContent: result,
     content: [{ type: "text", text: JSON.stringify(result) }],
   };
@@ -149,11 +143,10 @@ Service-prefix your tools (`github_*`, `jira_*`) when multiple servers are activ
 
 > For complete Zod-to-JSON-Schema conversion rules, what breaks silently, outputSchema/structuredContent patterns: see `references/tool-schema-guide.md`
 
-**Critical bugs**:
-- `z.union()` / `z.discriminatedUnion()` silently produce empty schemas on v1.x ([#1643](https://github.com/modelcontextprotocol/typescript-sdk/issues/1643)). The fix landed in the v2 line ([PR #1796](https://github.com/modelcontextprotocol/typescript-sdk/pull/1796)); the v1.x backport ([PR #2017](https://github.com/modelcontextprotocol/typescript-sdk/pull/2017)) is still open, so the bug is present on every released v1 version. Use flat `z.object()` with `z.enum()` discriminator field instead.
-- Plain JSON Schema objects silently dropped before v1.28.0. Fixed in v1.28 - now throws at registration ([#1596](https://github.com/modelcontextprotocol/typescript-sdk/issues/1596)).
-- `z.transform()` stripped during conversion - JSON Schema can't represent transforms ([#702](https://github.com/modelcontextprotocol/typescript-sdk/issues/702)).
-- **Client-side AJV strict-mode rejection**: Zod v4 `z.object()` produces JSON Schema with `additionalProperties: false`. The SDK's client validates `structuredContent` against `outputSchema` with AJV strict mode and rejects extra fields. Server-side `.parse()` strips extras silently, but the original `structuredContent` is sent to the client unchanged - so the server thinks it's fine and the client errors. Fix: explicitly `.parse()` upstream data before assigning to `structuredContent`, or use `.passthrough()` on schemas that intentionally pass through extra fields.
+**Critical bugs** (detail + status in the Known SDK Bugs table below; conversion deep-dive in the reference):
+- `z.union()`/`z.discriminatedUnion()` silently produce empty schemas on all released v1 ([#1643](https://github.com/modelcontextprotocol/typescript-sdk/issues/1643)) - use flat `z.object()` + `z.enum()` discriminator.
+- Raw JSON Schema objects throw at registration since v1.28 ([#1596](https://github.com/modelcontextprotocol/typescript-sdk/issues/1596)); `z.transform()` is silently stripped ([#702](https://github.com/modelcontextprotocol/typescript-sdk/issues/702)).
+- Client AJV rejects unstripped `structuredContent` extras (Zod v4 emits `additionalProperties: false`): `.parse()` upstream data before assigning, or `.passthrough()` for intentional extras.
 
 ### Annotations
 
@@ -168,21 +161,53 @@ All are optional hints (untrusted from untrusted servers per spec):
 
 Set them accurately - clients use them for consent prompts and auto-approval decisions.
 
-**Open SEPs expanding annotations**:
-- `#1913` Trust and Sensitivity - data classification hints
-- `#1984` Comprehensive annotations for governance/UX
-- `#1561` `unsafeOutputHint` - output may contain untrusted content
-- `#1560` `secretHint` - tool handles secrets/credentials
-- `#1487` `trustedHint` - server attestation of tool trustworthiness
+**The "Lethal Trifecta"**: combining (1) access to private data + (2) exposure to untrusted content + (3) external communication ability creates data-theft conditions (demonstrated via a malicious calendar event + MCP calendar server + code-execution tool). Design tool sets so no single agent holds all three.
 
-**The "Lethal Trifecta"**: Combining (1) access to private data + (2) exposure to untrusted content + (3) external communication ability creates data theft conditions. Researchers demonstrated this with a malicious calendar event, an MCP calendar server, and a code execution tool. Design tool sets to avoid granting all three simultaneously.
+## Tool Result Delivery: `content` vs `structuredContent`
 
-**Evaluation framework for new annotation proposals**:
-1. What client behavior changes? (No concrete action = don't add it)
-2. Does it require trust to be useful? (If yes, doesn't help against untrusted servers)
-3. Could `_meta` handle it? (Namespaced metadata better for single-deployment needs)
-4. Does it help reason about tool combinations?
-5. Is it a hint or contract? (Contracts belong in auth/transport/runtime layer)
+**The footgun:** when a tool returns BOTH a text `content` block and `structuredContent`, several major clients (Claude Code, Codex CLI, VS Code Copilot, Goose) silently drop the text block and forward only `structuredContent` to the model. If the two payloads differ, the human-readable one vanishes. This is **client behavior the spec does not constrain** - not an SDK transform. Don't return both channels expecting both to reach the model.
+
+### Empirically tested - Claude Code 2.1.165 (MCP 2025-11-25)
+
+Measured with `claude -p --output-format=stream-json`, reading the exact `tool_result` the model received:
+
+| Tool returns | What the model receives |
+|--------------|-------------------------|
+| One text block, no `structuredContent` | text verbatim |
+| `content: []` + `structuredContent` | `JSON.stringify(structuredContent)` as a string in the content slot - works |
+| text block + `structuredContent` | **text block silently dropped**; `structuredContent` wins |
+| text + `structuredContent` + `outputSchema` | same - **`outputSchema` makes zero difference** |
+| two text blocks, no `structuredContent` | both preserved verbatim |
+
+`structuredContent` is **not a separate typed channel to the model** on Claude Code - it is stringified into the standard `tool_result` content slot, so it costs the **same tokens** as the equivalent JSON-as-text. It does not buy cheaper or out-of-band structured data.
+
+Intentional, per Anthropic maintainer ([anthropics/claude-code#9962](https://github.com/anthropics/claude-code/issues/9962)): structuredContent support landed in Claude Code v2.0.21 and "we made `structuredContent` the default when both formats are present... optimizing for agent performance." Reproduced across unrelated servers (Laravel, Roblox Studio, YouTube) - host-side precedence, not a server bug.
+
+### What the spec actually says (2025-11-25)
+
+- `content` is **required** on `CallToolResult` (`content: ContentBlock[]`); `structuredContent?` and `isError?` are optional. An empty `content: []` is schema-valid.
+- Backwards-compat **SHOULD** (the only relevant normative line): *"a tool that returns structured content SHOULD also return the serialized JSON in a TextContent block."*
+- **No precedence rule.** The spec never says which field a client should prefer when both are present ([Discussion #1563](https://github.com/modelcontextprotocol/modelcontextprotocol/discussions/1563); clarification in flight via SEP-1624 -> SEP-2200). That gap is the documented root cause of client divergence.
+- `outputSchema`: servers **MUST** produce conforming `structuredContent`; clients **SHOULD** (not MUST) validate it.
+
+The official TypeScript SDK passes both fields through **verbatim** on server and client (the only mutation is optional outputSchema validation, which can throw). Any stringify-into-content you observe is the host harness, not the SDK.
+
+### Cross-client behavior (the matrix above is Claude Code only)
+
+| Client | When both `content` + `structuredContent` present |
+|--------|---------------------------------------------------|
+| Claude Code CLI, OpenAI Codex CLI, VS Code Copilot, Goose | **shadow** - only `structuredContent` reaches the model (text dropped) |
+| Cursor, Claude.ai web, ChatGPT MCP connector | prefer `content` / surface both to the model |
+| Google ADK (framework) | forwards both by default; content-only is opt-in |
+
+VS Code maintainer's framing ([microsoft/vscode#290063](https://github.com/microsoft/vscode/issues/290063)): *"structuredContent actually should not be presented to the model, its use case is PTC [programmatic tool calling]."* Clients disagree on enforcing that, so portable servers can't rely on it either way. (Non-Claude-Code rows come from issue trackers/maintainer statements, not the stream-json harness - treat exact delivery as client-version-dependent.)
+
+### The rule for server authors
+
+- **DON'T** return divergent `content` and `structuredContent` (e.g. a rendered ASCII table as text + different JSON as structured). On shadowing clients the text silently disappears and only the JSON reaches the model.
+- **DO**, if you emit `structuredContent`, mirror the **same bytes** into a text block: `content: [{ type: "text", text: JSON.stringify(payload) }]`. This is the spec's backwards-compat SHOULD. Shadowing clients use the structured copy; others fall back to the identical text - either way the model gets the data. Mirroring does not double tokens on shadowing clients (they drop the text).
+- **PREFER one channel per tool / per mode.** For a human-readable rendering (table, summary) to reach the model, return it as **text only, no `structuredContent`** - or expose a `format: "table" | "json"` arg (`table` -> text-only; `json` -> JSON mirrored into both channels). Both are empirically valid on Claude Code and keep one channel per call.
+- `outputSchema` gates client-side validation only; it does **not** make the text block survive on shadowing clients.
 
 ## Error Handling
 
@@ -270,7 +295,7 @@ Tool definitions consume context window before any conversation starts. GitHub M
 1. **5-15 tools per server** - community sweet spot. Split beyond that.
 2. **Outcome-oriented tools** - bundle multi-step operations into single tools (e.g., `track_order(email)` not `get_user` + `list_orders` + `get_status`).
 3. **Response granularity** - return curated results, not raw API dumps. 800-token user object vs 20-token summary.
-4. **`outputSchema` + `structuredContent`** - lets clients process data programmatically without LLM parsing overhead.
+4. **`outputSchema` + `structuredContent`** - typed output for programmatic/PTC clients. Caveat: on shadowing clients (Claude Code et al.) `structuredContent` is stringified into the model's context at the **same token cost as text** - it is not a free out-of-band channel. See "Tool Result Delivery: content vs structuredContent".
 5. **Dynamic tool loading** - register only relevant tool subsets based on request context (e.g., `?tools=search,fetch` query parameter).
 
 ### No-Parameter Tools
@@ -311,16 +336,11 @@ inputSchema: { type: "object" as const, additionalProperties: false }
 
 ### Auth (OAuth 2.1)
 
-MCP normatively requires **OAuth 2.1** ([draft-ietf-oauth-v2-1-13](https://datatracker.ietf.org/doc/html/draft-ietf-oauth-v2-1-13)). The spec states: "Authorization servers MUST implement OAuth 2.1." PKCE is mandatory, implicit flow is removed. Always build against OAuth 2.1 - not 2.0.
+MCP normatively requires **OAuth 2.1** ([draft-ietf-oauth-v2-1-13](https://datatracker.ietf.org/doc/html/draft-ietf-oauth-v2-1-13); "Authorization servers MUST implement OAuth 2.1"), not 2.0 - PKCE mandatory, implicit flow removed. Servers are OAuth 2.1 Resource Servers; clients MUST send Resource Indicators (RFC 8707) binding tokens to your server.
 
-MCP servers are OAuth 2.1 Resource Servers. Clients MUST include Resource Indicators (RFC 8707) binding tokens to specific servers. Key requirements:
-
-- **Validate audience** - reject tokens not issued for your server (token passthrough is explicitly forbidden)
-- **PKCE mandatory** - use `S256` code challenge method
-- **Short-lived tokens** - reduce blast radius of leaked credentials
-- **Scope minimization** - start with minimal scopes, elevate incrementally via `WWW-Authenticate` challenges
-- **Don't implement token validation yourself** - use tested libraries (Keycloak, Auth0, etc.)
-- **Don't log credentials** - never log Authorization headers, tokens, or secrets
+- **Validate audience** - reject tokens not issued for your server (passthrough is forbidden)
+- **PKCE `S256`**, **short-lived tokens**, **minimal scopes** (elevate via `WWW-Authenticate` challenges)
+- Use a tested validation library (Keycloak, Auth0, ...) - don't roll your own; never log Authorization headers/tokens/secrets
 
 > For full security attack/mitigation patterns and auth implementation details: see `references/security-auth.md`
 

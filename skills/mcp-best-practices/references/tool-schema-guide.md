@@ -189,9 +189,10 @@ server.registerTool("get_weather", {
 }, async ({ city }) => {
   const weather = await fetchWeather(city);
   return {
-    // Structured data - clients can process programmatically
+    // structuredContent and content MUST carry identical bytes. Several clients
+    // (Claude Code, Codex CLI, VS Code Copilot, Goose) drop the text block when
+    // structuredContent is present, so a divergent text payload silently vanishes.
     structuredContent: weather,
-    // Text fallback - backward compatibility with older clients
     content: [{ type: "text", text: JSON.stringify(weather) }],
   };
 });
@@ -203,12 +204,13 @@ server.registerTool("get_weather", {
 - Client SHOULD validate `structuredContent` against the schema
 - Server SHOULD also include serialized JSON in `content` for backward compatibility
 - "Soft contracts" - tools SHOULD produce schema-compliant outputs but the spec acknowledges AI-generated outputs may vary
+- **No precedence rule.** The spec never defines which field a client prefers when both `content` and `structuredContent` are present - left client-defined, which is why clients diverge (see SKILL.md "Tool Result Delivery: content vs structuredContent" for the empirical Claude Code 2.1.165 matrix, the cross-client table, and the maintainer confirmation).
 
-### Token Benefits
+### Token Reality (not a free channel)
 
-- Clients know output shape ahead of time - better context window management
-- Programmatic clients process structured data without LLM parsing
-- Enables client-side field projection (only show relevant fields to LLM)
+- Clients know output shape ahead of time - better context window management.
+- **But `structuredContent` is NOT a separate, cheaper channel to the model.** On shadowing clients (Claude Code, Codex CLI, VS Code Copilot, Goose) it is stringified into the model's `tool_result` content slot at the same token cost as the equivalent JSON-as-text, and the `content` text block is dropped. "Programmatic processing without LLM parsing" only holds for clients/flows (PTC, code-mode) that consume `structuredContent` outside the model context - not the default model-facing path.
+- Client-side field projection (showing only relevant fields to the LLM) is a client capability, not guaranteed by emitting `outputSchema`. Curate response size on the server; don't assume the client trims it.
 
 ### AJV Strict-Mode Rejects Unstripped Extras (high-impact gotcha)
 

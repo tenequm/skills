@@ -7,6 +7,16 @@ and this skill adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.h
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-06-05
+
+### Added
+- New section "Tool Result Delivery: `content` vs `structuredContent`" - the dual-channel shadowing footgun, prominent in SKILL.md. Empirically tested Claude Code 2.1.165 delivery matrix (via `claude -p --output-format=stream-json`): when both a text block and `structuredContent` are returned, the text block is silently dropped and `structuredContent` wins; `outputSchema` makes zero difference; `content: []` + `structuredContent` works (stringified into the content slot). Includes the maintainer confirmation (anthropics/claude-code#9962, intentional since Claude Code v2.0.21), the spec's no-precedence-rule gap (Discussion #1563, SEP-1624 -> SEP-2200), and a cross-client table (Claude Code/Codex CLI/VS Code Copilot/Goose shadow; Cursor/Claude.ai web/ChatGPT prefer content or both; Google ADK forwards both).
+- Server-author DO/DON'T rule: never return divergent `content`/`structuredContent`; if emitting `structuredContent`, mirror identical bytes into a text block (the spec's backwards-compat SHOULD); prefer one channel per tool/mode; `outputSchema` does not change delivery.
+
+### Changed
+- `structuredContent` is not a separate typed channel to the model on Claude Code - it is stringified into the `tool_result` content slot at the same token cost as JSON-as-text. Corrected the Token Bloat Mitigation bullet and the reference's "Token Benefits" -> "Token Reality" to stop implying a free out-of-band channel.
+- v2 `registerTool` example and the `tool-schema-guide.md` weather example now carry inline comments that both channels MUST hold identical bytes.
+
 ## [0.4.0] - 2026-05-21
 
 ### Added
