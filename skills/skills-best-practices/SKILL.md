@@ -2,7 +2,7 @@
 name: skills-best-practices
 description: Build high-quality Agent Skills for Claude following official Anthropic best practices. Covers SKILL.md structure, frontmatter, description writing, progressive disclosure, testing, patterns, troubleshooting, and distribution across all surfaces (Claude.ai, Claude Code, API, Agent SDK). Use when creating new skills, reviewing skill quality, debugging skill triggering, structuring skill directories, writing skill descriptions, or improving existing skills. Triggers on "build a skill", "create a skill", "skill structure", "SKILL.md", "skill best practices", "skill not triggering", "skill quality".
 metadata:
-  version: "0.4.0"
+  version: "0.5.0"
   openclaw:
     homepage: https://github.com/tenequm/skills/tree/main/skills/skills-best-practices
     emoji: "📐"
@@ -125,6 +125,8 @@ The agentskills.io standard and the Claude API require both fields. Claude Code 
 | `agent` | Subagent type when `context: fork` (e.g. `Explore`, `Plan`) |
 | `hooks` | Hooks scoped to this skill's lifecycle |
 | `paths` | Glob patterns limiting when skill activates |
+
+> **Publishing caveat:** every field above except `allowed-tools` is Claude Code-specific. They work in Claude Code at runtime, but the **official `agentskills validate` spec validator rejects them** - it allows only `name`, `description`, `license`, `compatibility`, `metadata`, `allowed-tools`, with no relax flag. If your repo or CI runs that validator (most ClawHub-publishing repos do), a skill using these fields fails validation unless you strip them from the copy you validate/publish. The ClawHub registry itself tends to tolerate extra top-level fields on publish, but the reference validator in your pipeline will not. See [Validate Against the Spec](#validate-against-the-spec).
 
 ### Naming Conventions
 
@@ -292,6 +294,16 @@ Test normal operations, edge cases, and out-of-scope requests. Run the same requ
 ### Debug Triggering
 
 Ask Claude: "When would you use the [skill-name] skill?" - it quotes the description back. Adjust based on what's missing.
+
+### Validate Against the Spec
+
+Run the official Agent Skills validator before publishing:
+
+```bash
+uvx --from skills-ref agentskills validate path/to/skill
+```
+
+Exit 0 means valid. It checks `SKILL.md` format and enforces the spec's strict frontmatter allowlist (`name`, `description`, `license`, `compatibility`, `metadata`, `allowed-tools`). Most registries (e.g. ClawHub) and CI gates run this, so validating locally catches failures early. If you rely on Claude Code-only frontmatter (see the publishing caveat under [Frontmatter Reference](#frontmatter-reference)), strip those fields from the copy you validate.
 
 ## Troubleshooting
 

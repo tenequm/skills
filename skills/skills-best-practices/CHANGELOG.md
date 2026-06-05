@@ -7,6 +7,12 @@ and this skill adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.h
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-06-05
+
+### Added
+- "Validate Against the Spec" testing section recommending `uvx --from skills-ref agentskills validate <skill>` before publishing.
+- Publishing caveat under Frontmatter Reference: Claude Code-only fields (`argument-hint`, `when_to_use`, `model`, `context`, etc.) are rejected by the strict `agentskills validate` spec validator that ClawHub-publishing repos run, and must be stripped from the validated/published copy.
+
 ## [0.4.0] - 2026-05-21
 
 ### Added
