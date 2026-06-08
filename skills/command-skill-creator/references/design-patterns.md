@@ -210,4 +210,4 @@ When to use: commands with extensive checklists, detailed rollback procedures, o
 | Modifying files in another project | Cross-Repo | different repo, different conventions |
 | Command exceeds 200 lines | Progressive Disclosure | complex checklists, rollback procedures |
 
-Patterns combine naturally. A real-world command might use Parallel Research for Phase 1, Cross-Repo for Phase 4, and Progressive Disclosure to keep it manageable. The `surf-inference-add-new-model` command uses all three: parallel research agents for pricing and capabilities, cross-repo adaptive discovery for the landing page updates, and the pricing considerations doc as external reference.
+Patterns combine naturally. A real-world command might use Parallel Research for Phase 1, Cross-Repo for Phase 4, and Progressive Disclosure to keep it manageable. The `glim-inference-add-new-model` command uses all three: parallel research agents for pricing and capabilities, cross-repo adaptive discovery for the landing page updates, and the pricing considerations doc as external reference.
