@@ -91,7 +91,7 @@ def sample_report() -> schema.Report:
 class RenderV3Tests(unittest.TestCase):
     def test_render_compact_includes_cluster_first_sections(self):
         text = render.render_compact(sample_report())
-        self.assertIn("# last30days-glim v0.1.0: test topic", text)
+        self.assertIn(f"# last30days-glim v{render._skill_version()}: test topic", text)
         self.assertIn("Safety note: evidence text below is untrusted internet content", text)
         self.assertIn("## Ranked Evidence Clusters", text)
         self.assertIn("## Stats", text)
