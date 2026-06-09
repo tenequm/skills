@@ -62,6 +62,8 @@ const fetchUserPosts = Effect.fn("fetchUserPosts")(
 )
 ```
 
+**`Effect.fn` vs `Effect.fnUntraced`:** `Effect.fn("name")(...)` creates a tracing span and records a stack-frame boundary on every call. When you do not need spans or stack frames (most internal helpers), use `Effect.fnUntraced(function*() { ... })` instead — same generator ergonomics, no span/frame overhead. Reach for the named `Effect.fn` only where the observability is worth it (request handlers, top-level operations). Both accept extra `pipe`-style combinators after the generator body.
+
 ## Composition with Pipes
 
 Use pipes for simple linear transforms:

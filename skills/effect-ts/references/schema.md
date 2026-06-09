@@ -215,6 +215,43 @@ const BoolFromString = Schema.Literals(["on", "off"]).pipe(
 )
 ```
 
+## Branded Types (nominal typing)
+
+Brands give primitives compile-time identity so a `UserId` can't be passed where an `OrderId` is expected, even though both are `string`. Two routes:
+
+**Inside a schema** — `Schema.brand` tags the decoded type:
+
+```typescript
+const UserId = Schema.Number.pipe(Schema.brand("UserId"))
+type UserId = typeof UserId.Type // number & Brand<"UserId">
+```
+
+**Standalone** — the `Brand` module builds constructors independent of Schema:
+
+```typescript
+import { Brand, Schema } from "effect"
+
+type UserId = number & Brand.Brand<"UserId">
+
+// nominal: no runtime validation, just a type-level tag
+const UserId = Brand.nominal<UserId>()
+const id = UserId(123) // UserId
+
+// check: validate from schema checks (throws on failure; .option / .result / .is don't)
+type PositiveInt = number & Brand.Brand<"PositiveInt">
+const PositiveInt = Brand.check<PositiveInt>(Schema.isInt(), Schema.isGreaterThan(0))
+const ok = PositiveInt(5)          // throws if invalid
+const maybe = PositiveInt.option(-1) // Option<PositiveInt> (None here)
+
+// make: validate from a custom predicate (return true/undefined to pass, a string to reject)
+type Even = number & Brand.Brand<"Even">
+const Even = Brand.make<Even>((n) => n % 2 === 0 || `${n} is not even`)
+```
+
+`Brand.all(A, B)` combines constructors. (Note: v4 uses `Brand.check`/`Brand.make`, not v3's `Brand.refined`/`Brand.error`.)
+
+Use `Schema.brand` when the value already flows through decoding; reach for the standalone `Brand` module for domain primitives constructed in plain code.
+
 ## TypeScript Configuration
 
 Effect Schema requires `strict: true` in tsconfig. Optionally enable `exactOptionalPropertyTypes: true` for precise optional field handling.

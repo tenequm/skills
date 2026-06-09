@@ -1,8 +1,8 @@
 ---
 name: effect-ts
-description: "Comprehensive Effect-TS development guide for TypeScript, supporting both v3 (stable) and v4 (beta). Use when building, debugging, reviewing, or generating Effect code: typed errors, fibers, Context/Layers, Scope, Schedule, streams, Schema, observability, HTTP, Config, SQL, CLI, RPC, STM, and Effect AI. Includes exhaustive wrong-vs-correct API tables to prevent hallucinated Effect code. Triggers when code imports from 'effect', '@effect/platform', '@effect/ai', or '@effect/sql', or the user mentions Effect-TS, functional TypeScript, Context, Layer, or Schema from Effect."
+description: "Comprehensive Effect-TS development guide for TypeScript, focused on Effect v4 (the recommended default) with full v3 (stable) support for existing codebases. Use when building, debugging, reviewing, or generating Effect code: typed errors, fibers, Context/Layers, Scope, Schedule, streams, Schema, observability, HTTP, Config, SQL, CLI, RPC, STM, and Effect AI. Includes exhaustive wrong-vs-correct API tables to prevent hallucinated Effect code. Triggers when code imports from 'effect', '@effect/platform', '@effect/ai', or '@effect/sql', or the user mentions Effect-TS, functional TypeScript, Context, Layer, or Schema from Effect."
 metadata:
-  version: "0.4.0"
+  version: "0.5.0"
   upstream: "effect@4.0.0-beta.78"
   openclaw:
     homepage: https://github.com/tenequm/skills/tree/main/skills/effect-ts
@@ -29,21 +29,26 @@ Before writing Effect code, detect which version the user is on:
 cat package.json | grep '"effect"'
 ```
 
-- **v3.x** (stable, most production codebases): `Context.Tag`, `Effect.catchAll`, `Effect.fork`, `Data.TaggedError`
-- **v4.x** (beta, Feb 2026+): `Context.Service`, `Effect.catch`, `Effect.forkChild`, `Schema.TaggedErrorClass`
+- **v4.x** (recommended, the direction Effect is heading): `Context.Service`, `Effect.catch`, `Effect.forkChild`, `Schema.TaggedErrorClass`
+- **v3.x** (stable, still common in production): `Context.Tag`, `Effect.catchAll`, `Effect.fork`, `Data.TaggedError`
 
-> Note: v4 beta briefly used a `ServiceMap` module, renamed back to `Context` on 2026-04-07 (PR #1961). If you see `ServiceMap.*` in any doc or older beta code, it is the current `Context.*`. Both v3 and v4 import `Context` from `"effect"`; the exports inside differ (`Context.Tag` in v3 vs `Context.Service` in v4).
+> Note: v4 beta briefly used a `ServiceMap` module, renamed back to `Context` on 2026-04-07 (PR #1961). If you see `ServiceMap.*` in any doc or older beta code, it is the current `Context.*`. Both v3 and v4 import `Context` from `"effect"`; the exports inside differ (`Context.Service` in v4 vs `Context.Tag` in v3).
 
-If the version is unclear, ask the user. Default to v3 patterns for existing codebases, v4 for new projects.
+**Prefer v4 for new projects** - it's where Effect is going. In an existing codebase, match the installed version: don't rewrite v3 code in v4 syntax unless asked. If the version is genuinely unclear, default to v4 and say so. v4 is still in beta, so pin an exact version (`4.0.0-beta.x`) and expect occasional API churn.
 
 ## Primary Documentation Sources
 
+**v4 (primary):**
+- https://github.com/Effect-TS/effect-smol (v4 source + migration guides)
+- https://github.com/Effect-TS/effect-smol/blob/main/LLMS.md (v4 LLM guide)
+
+**v3 (for existing codebases):**
 - https://effect.website/docs (v3 stable docs)
 - https://effect.website/llms.txt (LLM topic index)
 - https://effect.website/llms-full.txt (full docs for large context)
+
+**Both versions:**
 - https://tim-smart.github.io/effect-io-ai/ (concise API list)
-- https://github.com/Effect-TS/effect-smol (v4 source + migration guides)
-- https://github.com/Effect-TS/effect-smol/blob/main/LLMS.md (v4 LLM guide)
 
 ## AI Guardrails: Critical Corrections
 
@@ -104,12 +109,17 @@ Read only the reference files relevant to your task:
 - Services, DI, or Layer wiring → `references/dependency-injection.md`
 - Retries, timeouts, or backoff → `references/retry-scheduling.md`
 - Fibers, forking, or parallel work → `references/concurrency.md`
+- Request batching, N+1 elimination, DataLoader pattern → `references/concurrency.md`
+- Multi-provider fallback (`ExecutionPlan`) → `references/effect-ai.md` / `references/retry-scheduling.md`
 - Streams, queues, or SSE → `references/streams.md`
 - Resource lifecycle or cleanup → `references/resource-management.md`
+- Refreshable values (rotating credentials, polled config) → `references/resource-management.md`
 - Schema validation or decoding → `references/schema.md`
+- Branded / nominal types (`Brand`) → `references/schema.md`
 - Logging, metrics, or tracing → `references/observability.md`
 - HTTP clients or API calls → `references/http.md`
 - HTTP API servers → `references/http.md` (covers both client and server)
+- File uploads / multipart form-data → `references/http.md`
 - LLM/AI integration → `references/effect-ai.md`
 - Configuration, env vars, secrets → `references/configuration.md`
 - SQL / database access → `references/sql.md`
@@ -123,6 +133,7 @@ Read only the reference files relevant to your task:
 - Pooling resources (`Pool`) → `references/resource-management.md`
 - Fiber sets, SubscriptionRef, worker threads → `references/concurrency.md`
 - Testing Effect code → `references/testing.md`
+- Property-based testing / generating data from schemas → `references/testing.md`
 - Migrating from async/await → `references/migration-async.md`
 - Migrating from v3 to v4 → `references/migration-v4.md`
 - Core types, gen, pipe, running → `references/core-patterns.md`
@@ -149,16 +160,16 @@ Start with these ~20 functions (the official recommended set):
 
 **Running:** `Effect.runPromise`, `NodeRuntime.runMain` (preferred for entry points)
 
-**Error handling:** `Effect.catchTag`, `Effect.catchAll` (v3) / `Effect.catch` (v4), `Effect.orDie`
+**Error handling:** `Effect.catchTag`, `Effect.catch` (v4) / `Effect.catchAll` (v3), `Effect.orDie`
 
 **Resources:** `Effect.acquireRelease`, `Effect.acquireUseRelease`, `Effect.scoped`
 
 **Dependencies:** `Effect.provide`, `Effect.provideService`
 
-**Key modules:** `Effect`, `Schema`, `Layer`, `Option`, `Either` (v3) / `Result` (v4), `Array`, `Match`
+**Key modules:** `Effect`, `Schema`, `Layer`, `Option`, `Result` (v4) / `Either` (v3), `Array`, `Match`
 
-**DI (v3):** `Context.Tag`, `Context.Reference`
 **DI (v4):** `Context.Service`, `Context.Reference`, `Layer.effect`, `Effect.fn("name")`
+**DI (v3):** `Context.Tag`, `Context.Reference`
 
 ## Import Patterns
 
@@ -171,17 +182,17 @@ import { Context, Effect, Schema, Layer, Option, Stream } from "effect"
 For companion packages, import from the package name. v3 and v4 differ here:
 
 ```typescript
-// v3 (stable) companion packages
-import { NodeRuntime } from "@effect/platform-node"
-import { HttpClient } from "@effect/platform"
-import { NodeSdk } from "@effect/opentelemetry"
-
-// v4 (beta) - platform transports still separate, but HttpApi / observability
+// v4 (recommended) - platform transports still separate, but HttpApi / observability
 // moved under effect/unstable/*
 import { NodeRuntime } from "@effect/platform-node"
 import { FetchHttpClient } from "effect/unstable/http"
 import { HttpApi, HttpApiEndpoint, HttpApiGroup, HttpApiBuilder, HttpApiScalar } from "effect/unstable/httpapi"
 import { OtlpLogger, OtlpSerialization, OtlpTracer } from "effect/unstable/observability"
+
+// v3 (stable) companion packages
+import { NodeRuntime } from "@effect/platform-node"
+import { HttpClient } from "@effect/platform"
+import { NodeSdk } from "@effect/opentelemetry"
 ```
 
 Avoid deep module imports (`effect/Effect`) unless your bundler requires it for tree-shaking.
@@ -190,7 +201,7 @@ Avoid deep module imports (`effect/Effect`) unless your bundler requires it for 
 
 - Show imports in every code example
 - Prefer `Effect.gen` (imperative) for multi-step logic; pipelines for transforms
-- In v4, use `Effect.fn("name")` instead of bare `Effect.gen` for named functions
+- In v4, use `Effect.fn("name")` instead of bare `Effect.gen` for named functions; use `Effect.fnUntraced` for internal helpers that don't need a span/stack-frame
 - Never call `Effect.runPromise` / `Effect.runSync` inside library code - only at program edges
 - Use `NodeRuntime.runMain` for CLI/server entry points (handles SIGINT gracefully)
 - Use `ManagedRuntime` when integrating Effect into non-Effect frameworks (Hono, Express, etc.)

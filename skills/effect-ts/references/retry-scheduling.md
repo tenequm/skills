@@ -164,6 +164,10 @@ const resilientClientV4 = HttpClient.retryTransient({
 })
 ```
 
+## Ordered Fallback (ExecutionPlan)
+
+When retrying the *same* effect isn't enough and you need to fall back to a different resource (backup provider, replica DB, alternate region), use `ExecutionPlan` instead of a bare `Schedule`. Each step provides its own `Layer` with optional `attempts` + `schedule`, and `Effect.withExecutionPlan(effect, plan)` walks the steps until one succeeds. See `references/effect-ai.md` for a full example.
+
 ## RateLimiter
 
 ```typescript

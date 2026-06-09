@@ -270,6 +270,27 @@ HttpApiEndpoint.post("create", "/", {
 
 Without this transform, bad payloads cause a defect (500-style) instead of a typed error. This is a deliberate 2026-04-20 change (commit `8e04bfc9`).
 
+### File uploads (Multipart, v4)
+
+For `multipart/form-data` (file uploads), brand the endpoint payload with `HttpApiSchema.asMultipart()` and type file fields with the schemas from `effect/unstable/http/Multipart` (`SingleFileSchema`, `FilesSchema`, `PersistedFileSchema`). Files are persisted to disk and arrive as `PersistedFile` (with `.path`, `.name`, `.contentType`).
+
+```typescript
+import { Schema } from "effect"
+import { HttpApiEndpoint, HttpApiSchema } from "effect/unstable/httpapi"
+import { Multipart } from "effect/unstable/http"
+
+const upload = HttpApiEndpoint.post("upload", "/upload", {
+  payload: Schema.Struct({
+    title: Schema.String,
+    file: Multipart.SingleFileSchema // a single PersistedFile; FilesSchema for many
+  }).pipe(HttpApiSchema.asMultipart()),
+  success: Schema.Struct({ path: Schema.String })
+})
+// handler: ({ payload }) => ... payload.file.path / payload.file.name
+```
+
+Tune limits with `Context.Reference`s from `Multipart` (`MaxFileSize`, `MaxParts`, `MaxFieldSize`, `FieldMimeTypes`) provided into the server layer. Outside HttpApi, a raw `HttpServerRequest` exposes `request.multipart` (buffered) and `request.multipartStream` (streaming), plus `HttpServerRequest.schemaBodyMultipart(schema)`. Use `HttpApiSchema.asMultipartStream()` for streaming large uploads instead of buffering.
+
 ## Integrating Effect with Hono
 
 Use `ManagedRuntime` to bridge Effect into Hono routes:

@@ -236,6 +236,43 @@ const program = Effect.gen(function*() {
 })
 ```
 
+## Request Batching & Caching (Request / RequestResolver)
+
+When the same data is fetched repeatedly (the classic N+1 problem), model each fetch as a typed `Request` and resolve a batch of them through a `RequestResolver`. Effect automatically deduplicates identical requests in flight and batches those collected within the same step, then `Effect.request` reads a single result. The resolver receives all pending entries at once — issue one bulk query, then complete each entry.
+
+```typescript
+import { Console, Effect, Exit, Request, RequestResolver } from "effect"
+
+interface GetUser extends Request.Request<string, Error> {
+  readonly _tag: "GetUser"
+  readonly id: number
+}
+const GetUser = Request.tagged<GetUser>("GetUser")
+
+// runAll receives the full batch of pending entries; complete each with an Exit
+const UserResolver = RequestResolver.make<GetUser>(
+  Effect.fnUntraced(function*(entries) {
+    const ids = entries.map((e) => e.request.id)
+    const rows = yield* bulkFetchUsers(ids) // ONE query for the whole batch
+    for (const entry of entries) {
+      yield* Request.complete(entry, Exit.succeed(rows[entry.request.id]))
+    }
+  })
+)
+
+const program = Effect.gen(function*() {
+  // These two run in the same step -> batched into one runAll call
+  const [a, b] = yield* Effect.all(
+    [Effect.request(GetUser({ id: 1 }), UserResolver),
+     Effect.request(GetUser({ id: 2 }), UserResolver)],
+    { concurrency: "unbounded" }
+  )
+  yield* Console.log([a, b])
+})
+```
+
+`Request.tagged<T>(tag)` builds the constructor; `Request.Class` is the class form. `RequestResolver.make(runAll)` is the basic batched resolver; `RequestResolver.makeGrouped` partitions entries by a computed key, and `RequestResolver.fromEffect` lifts a per-request effect. Group several resolvers behind a service so callers just `yield* Effect.request(...)`.
+
 ## Worker Threads (`effect/unstable/workers`)
 
 There is **no `Worker.makePool` / high-level worker-pool API** in v4. The intended way to offload work to worker threads is **RPC-over-worker**: define an `RpcGroup` (see `references/rpc.md`), run an `RpcServer` inside the worker, and create a pooled client with `RpcClient.layerProtocolWorker({ size })`. Calling a typed RPC method dispatches it onto a worker in the pool.

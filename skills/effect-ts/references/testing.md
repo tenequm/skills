@@ -135,6 +135,37 @@ it.effect("uses custom logger", () =>
 )
 ```
 
+## Property-Based Testing (FastCheck + Schema Arbitrary)
+
+`Schema.toArbitrary(schema)` derives a `fast-check` `Arbitrary` directly from any schema, so you can generate valid sample data and run property tests without writing generators by hand. Effect re-exports fast-check as `FastCheck` from `effect/testing`.
+
+```typescript
+import { Schema } from "effect"
+import { FastCheck } from "effect/testing"
+
+const Person = Schema.Struct({
+  name: Schema.String,
+  age: Schema.Number.check(Schema.isGreaterThanOrEqualTo(0))
+})
+
+const PersonArb = Schema.toArbitrary(Person)
+
+// Generate a sample
+const sample = FastCheck.sample(PersonArb, 1)[0]
+
+// Property: every generated value round-trips through encode -> decode
+FastCheck.assert(
+  FastCheck.property(PersonArb, (person) => {
+    const decoded = Schema.decodeUnknownSync(Person)(
+      Schema.encodeSync(Person)(person)
+    )
+    expect(decoded).toEqual(person)
+  })
+)
+```
+
+Derived arbitraries respect schema checks (`isGreaterThan`, `isMinLength`, etc.), so generated data is always valid input. Combine with `it.effect` to property-test effectful logic over generated inputs.
+
 ## Common Testing Mistakes
 
 1. **Forgetting TestContext**: `TestClock.adjust` requires `TestContext.TestContext` to be provided

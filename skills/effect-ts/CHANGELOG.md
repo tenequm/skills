@@ -7,6 +7,24 @@ and this skill adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.h
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-06-09
+### Added
+- `concurrency.md`: Request / RequestResolver section (batching, dedup, N+1 elimination via `Effect.request`).
+- `effect-ai.md` + `retry-scheduling.md`: `ExecutionPlan` for ordered multi-provider fallback (`Effect.withExecutionPlan`).
+- `http.md`: Multipart file-upload section (`HttpApiSchema.asMultipart`, `Multipart.SingleFileSchema`/`FilesSchema`, limit references).
+- `testing.md`: property-based testing via `Schema.toArbitrary` + `FastCheck` (from `effect/testing`).
+- `schema.md`: branded / nominal types (`Brand.nominal`/`check`/`make`/`all`; notes v4 has no `refined`/`error`).
+- `resource-management.md`: `Resource` (refreshable scoped value via `Resource.auto`/`manual`/`refresh`).
+- `core-patterns.md` + SKILL.md: `Effect.fnUntraced` guidance (use it for helpers that don't need a span/stack-frame; reserve named `Effect.fn` for traced operations).
+- SKILL.md progressive-disclosure index entries for the new concepts.
+
+### Changed
+- Repositioned the skill to recommend Effect v4 as the default while keeping full v3 support. The stance is now "prefer v4 for new projects; in an existing codebase match the installed version, default to v4 when unclear."
+- `SKILL.md` description now leads with v4 (the recommended default) instead of presenting v3/v4 as co-equal.
+- Version Detection: lists v4 first, replaces the v3-default guidance, keeps the beta caveat (pin an exact `4.0.0-beta.x`).
+- Primary documentation sources grouped as v4 (primary) / v3 (existing codebases) / both.
+- Flipped `v3 / v4` orderings to `v4 / v3` in the starter function set, key modules, DI list, and import patterns so v4 reads as primary.
+
 ## [0.4.0] - 2026-06-04
 ### Added
 - CHANGELOG; upstream tracking established.

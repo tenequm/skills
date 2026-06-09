@@ -157,6 +157,32 @@ const program = Effect.scoped(
 
 `Pool.get` hands back a **scoped** resource: wrap the borrow in `Effect.scoped` (or a child scope) so it is released back to the pool deterministically when that scope closes. Use `Pool.makeWithTTL({ acquire, min, max, timeToLive })` for elastic sizing, and `Pool.invalidate(pool, item)` to discard a known-bad item.
 
+## Refreshable Values with `Resource`
+
+`Resource` caches the latest result of an acquisition and lets you refresh it — either on a `Schedule` (`Resource.auto`) or on demand (`Resource.manual` + `Resource.refresh`). Use it for values that go stale and must be re-fetched without tearing down dependents: rotating credentials, polled remote config, cached tokens. Distinct from `Pool` (many concurrent instances) and `Cache` (keyed lookups) — a `Resource` is one value that periodically renews.
+
+```typescript
+import { Effect, Resource, Schedule } from "effect"
+
+const program = Effect.scoped(
+  Effect.gen(function*() {
+    // Re-acquire the token every 50 minutes in the background
+    const token = yield* Resource.auto(
+      fetchAuthToken,                       // Effect<Token, AuthError>
+      Schedule.spaced("50 minutes")
+    )
+
+    // Read the current cached value (fails with the stored error if the last acquire failed)
+    const current = yield* Resource.get(token)
+
+    // Force an immediate refresh when needed
+    yield* Resource.refresh(token)
+  })
+)
+```
+
+`Resource.auto(acquire, policy)` forks the refresh loop into the surrounding scope; `Resource.manual(acquire)` skips the schedule so you control refresh timing entirely via `Resource.refresh`. Both require a `Scope`.
+
 ## v4: Scope Changes
 
 In v4, `Scope` remains conceptually the same. Key change: `Effect.forkScoped` behavior is unchanged, but `Effect.fork` is renamed to `Effect.forkChild` (which is NOT scope-tied - use `Effect.forkScoped` for scope-tied fibers).

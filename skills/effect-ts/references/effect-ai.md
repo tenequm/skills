@@ -172,6 +172,31 @@ const test = summarize(text).pipe(
 )
 ```
 
+## Provider Fallback (ExecutionPlan)
+
+`ExecutionPlan` declares an ordered sequence of attempts, each providing its own `Layer` (e.g. a different model/provider) with optional `attempts` and retry `schedule`. `Effect.withExecutionPlan` runs the effect against each step until one succeeds or the plan is exhausted — ideal for primary -> backup model fallback.
+
+```typescript
+import { Effect, ExecutionPlan, Schedule } from "effect"
+import type { Layer } from "effect"
+import type { LanguageModel } from "effect/unstable/ai"
+
+declare const primary: Layer.Layer<LanguageModel.LanguageModel>
+declare const backup: Layer.Layer<LanguageModel.LanguageModel>
+
+const ThePlan = ExecutionPlan.make(
+  // try the primary model twice, 3s apart
+  { provide: primary, attempts: 2, schedule: Schedule.spaced("3 seconds") },
+  // then fall back to the backup model (one attempt when attempts/schedule omitted)
+  { provide: backup }
+)
+
+declare const summarize: Effect.Effect<string, never, LanguageModel.LanguageModel>
+const resilient = Effect.withExecutionPlan(summarize, ThePlan)
+```
+
+Each step's `provide` accepts a `Layer` or `Context`; `Stream.withExecutionPlan` is the streaming equivalent. Not AI-specific — use it anywhere you need ordered, layer-swapping fallback (primary -> replica DB, region failover).
+
 ## Observability
 
 Effect AI integrates with Effect's built-in tracing. Each model call produces spans with:
