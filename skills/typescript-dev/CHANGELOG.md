@@ -7,6 +7,33 @@ and this skill adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.h
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-06-09
+
+### Added
+- references/hono.md - comprehensive Hono 4.12 reference: mental model, routing, Context,
+  HonoRequest, middleware (built-in + `createMiddleware` + chained type inference), validation
+  (`hono/validator`, `@hono/zod-validator`, Standard Schema), end-to-end type-safe RPC (`hc`,
+  status-code inference, larger-app chaining, `hcWithType` IDE-perf fix), OpenAPI
+  (`@hono/zod-openapi`), error handling (`HTTPException`/`onError`), helpers (cookie, streaming/SSE,
+  JWT sign/verify/decode, context-storage `getContext`, factory), realtime WebSocket
+  (`upgradeWebSocket` + RPC `$ws`), auth middleware (basic/bearer/jwt), server-side JSX,
+  static files across runtimes, multi-runtime deployment (Workers/Node/Bun/Deno), and testing.
+  Includes a prominent pointer to Hono's `llms-full.txt`/`llms.txt` as the authoritative
+  long-tail source, plus a categorized resource/link section.
+- SKILL.md: Hono added to the stack overview, references list, and version-targets table; new
+  cross-cutting rule on the Hono RPC seam (version match, `strict: true`, status codes, no
+  `c.notFound()` on RPC routes).
+- references/shadcn.md: documented the `search`/`list` command - new `-t, --type` and `--json`
+  flags, optional `[registries]` arg (searches all registries in `components.json` when omitted),
+  and the 4.11 switch of default output from JSON to human-readable.
+
+### Changed
+- Repositioned the skill from "frontend" to full-stack TypeScript: description and intro now
+  cover the Hono backend/edge layer and its RPC integration with the React frontend.
+- Bumped documented shadcn CLI version 4.10.0 -> 4.11.0 (SKILL.md version table + shadcn.md).
+
+Verified against: hono@4.12.25, @hono/node-server@2.0.4, @hono/zod-validator@0.8.0, @hono/zod-openapi@1.4.0
+
 ## [0.1.0] - 2026-06-05
 
 ### Added

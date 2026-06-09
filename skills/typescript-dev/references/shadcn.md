@@ -1,6 +1,6 @@
 # shadcn/ui
 
-Copy-in component patterns built on Tailwind v4 and a primitive library (Radix UI or Base UI). shadcn/ui is not a dependency you import - the CLI (latest `4.10.0`) writes component source into your project, which you then own and edit. For the Tailwind layer (theming, tokens) see [tailwind.md](tailwind.md).
+Copy-in component patterns built on Tailwind v4 and a primitive library (Radix UI or Base UI). shadcn/ui is not a dependency you import - the CLI (latest `4.11.0`) writes component source into your project, which you then own and edit. For the Tailwind layer (theming, tokens) see [tailwind.md](tailwind.md).
 
 ## Component authoring pattern
 
@@ -75,6 +75,17 @@ pnpm dlx shadcn@latest add @acme/button          # named registry
 pnpm dlx shadcn@latest add username/repo/item     # GitHub source registry
 pnpm dlx shadcn@latest registry validate          # validate before publishing
 ```
+
+Discover items with `search` (aliased as `list`). The registries arg is optional - omit it to
+search every registry in `components.json`:
+
+```bash
+pnpm dlx shadcn@latest search @acme -q button -t ui   # filter by type: ui, block, hook (CSV)
+pnpm dlx shadcn@latest search --json                  # machine-readable output
+```
+
+`--type`/`-t` and `--json` are new in CLI 4.11; before 4.11 `search` always printed JSON, so if
+you script it, pass `--json` explicitly now that the default is human-readable.
 
 Presets are encoded codes that rewrite component code (not just colors): `shadcn preset decode <code>`, `shadcn apply <code> --only theme`.
 

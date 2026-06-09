@@ -1,14 +1,14 @@
 ---
 name: typescript-dev
-description: "Build modern TypeScript frontend apps with Vite 8, React 19, Tailwind CSS v4, shadcn/ui, Biome, and Vitest. Covers the full stack - build tooling and dev server (Vite/Rolldown), type-safe React 19 components and hooks, strict TypeScript 6.0 config, utility-first styling with shadcn/ui, linting and formatting with Biome, and testing with Vitest. Use this whenever setting up or working in a TypeScript React project - configuring Vite, writing components, typing props and hooks, wiring the React Compiler, styling with Tailwind or shadcn, theming, fixing the dev server or HMR, splitting bundles, writing tests, or setting up lint/format/CI. Triggers on vite, rolldown, react, react 19, tsx, typescript, tsconfig, react compiler, tailwind, shadcn, cva, dark mode, biome, lint, format, vitest, hmr, dev server, build optimization, vite config, frontend setup."
+description: "Build full-stack TypeScript apps with Vite 8, React 19, Tailwind CSS v4, shadcn/ui, Biome, Vitest, and Hono. Covers the frontend (Vite/Rolldown build + dev server, type-safe React 19, strict TypeScript 6.0, Tailwind/shadcn styling, Biome lint/format, Vitest) and the Hono 4 backend/edge layer (routing, middleware, Zod validation, end-to-end type-safe RPC, OpenAPI, multi-runtime deploy). Use when setting up or working in a TypeScript project: configuring Vite, writing components, the React Compiler, Tailwind/shadcn, dev server/HMR, bundles, tests, lint/format/CI, or building a Hono API and wiring its RPC client to React. Triggers on vite, rolldown, react, tsx, typescript, tsconfig, react compiler, tailwind, shadcn, cva, biome, vitest, hmr, dev server, hono, hono rpc, hc client, cloudflare workers, edge api, zod validator, zod-openapi."
 metadata:
-  version: "0.1.0"
-  upstream: "vite@8.0.16, @vitejs/plugin-react@6.0.2, react@19.2.7, typescript@6.0.3, tailwindcss@4.3.0, @biomejs/biome@2.4.16, vitest@4.1.8, babel-plugin-react-compiler@1.0.0, class-variance-authority@0.7.1"
+  version: "0.2.0"
+  upstream: "vite@8.0.16, @vitejs/plugin-react@6.0.2, react@19.2.7, typescript@6.0.3, tailwindcss@4.3.0, @biomejs/biome@2.4.16, vitest@4.1.8, babel-plugin-react-compiler@1.0.0, class-variance-authority@0.7.1, hono@4.12.25"
 ---
 
 # TypeScript Frontend Development
 
-One coherent stack for building type-safe React apps: **Vite 8** (build + dev server, Rolldown-powered), **React 19.2** with the React Compiler, **TypeScript 6.0** (strict), **Tailwind CSS v4.3 + shadcn/ui** for styling, **Biome 2.4** for linting and formatting, and **Vitest 4** for testing. The pieces are designed to fit together - this skill covers how they wire up and the sharp edges that span more than one of them.
+One coherent stack for building type-safe TypeScript apps: **Vite 8** (build + dev server, Rolldown-powered), **React 19.2** with the React Compiler, **TypeScript 6.0** (strict), **Tailwind CSS v4.3 + shadcn/ui** for styling, **Biome 2.4** for linting and formatting, **Vitest 4** for testing, and **Hono 4** for the backend/edge API. The pieces are designed to fit together - this skill covers how they wire up and the sharp edges that span more than one of them. Hono's RPC client (`hc`) shares server types directly with the React frontend, so the front and back end stay type-safe end to end without codegen.
 
 The body below is the cross-cutting layer: the rules that bite when these tools meet, plus one working end-to-end setup. Each tool also has a deep-dive reference - read the one you need:
 
@@ -19,6 +19,7 @@ The body below is the cross-cutting layer: the rules that bite when these tools 
 - **[references/shadcn.md](references/shadcn.md)** - shadcn/ui CLI, component authoring with CVA + `data-slot`, registries, Radix vs Base UI.
 - **[references/biome.md](references/biome.md)** - Biome config, `biome check`, domains, type-aware linting, GritQL, ESLint/Prettier migration.
 - **[references/vitest.md](references/vitest.md)** - Vitest config, Testing Library, jsdom/happy-dom, coverage, browser mode, projects.
+- **[references/hono.md](references/hono.md)** - Hono 4 web framework: routing, context, middleware, validation (Zod), end-to-end type-safe RPC, OpenAPI, helpers, and multi-runtime deployment (Workers/Node/Bun/Deno).
 
 ## Version targets
 
@@ -30,9 +31,10 @@ The body below is the cross-cutting layer: the rules that bite when these tools 
 | babel-plugin-react-compiler | 1.0.0 | pin with `--save-exact` |
 | TypeScript | 6.0.3 | last JS-based TS; bridge to tsgo/TS 7 |
 | Tailwind CSS | 4.3.0 | CSS-first config, no JS config file |
-| shadcn/ui CLI | 4.10.0 | `create` is an alias of `init` |
+| shadcn/ui CLI | 4.11.0 | `create` is an alias of `init` |
 | Biome | 2.4.16 | single binary for lint + format + imports |
 | Vitest | 4.1.8 | Vite-native test runner; reuses vite.config |
+| Hono | 4.12.25 | Web Standards backend/edge framework; no v5 |
 
 ## Cross-cutting critical rules
 
@@ -85,6 +87,17 @@ TS 6.0 bakes in much of what used to be manual: `strict` and `noUncheckedSideEff
 ### One Biome command, and `files.includes` is the only include key
 
 Run `biome check` (or `biome ci`) - it formats, lints, and organizes imports in a single pass; never split into separate `lint`+`format` calls. And in Biome 2.x the only file-selection key is `files.includes` (with the `s`); `files.ignore`/`files.include`/`files.exclude` do not exist and throw `Found an unknown key`. Exclude with negation: `"includes": ["**", "!**/routeTree.gen.ts"]`. More in [biome.md](references/biome.md).
+
+### Hono RPC ties the backend's types to the React frontend - keep them in sync
+
+When the API is Hono, the React app talks to it through the `hc<AppType>()` client, which
+imports the server's exported `typeof app` directly. That shared type is the seam: it only
+works if **both sides run the same Hono version** and both `tsconfig.json` set `"strict": true`
+(a mismatch throws "Type instantiation is excessively deep"). Two more rules that bite at this
+seam: handlers must specify status codes (`c.json(data, 200)`) for the client to infer
+responses, and routes the client calls must not use `c.notFound()`. As the route count grows,
+compile the client type once (`hcWithType`) so the IDE stays fast. Full details in
+[hono.md](references/hono.md).
 
 ## End-to-end setup
 
