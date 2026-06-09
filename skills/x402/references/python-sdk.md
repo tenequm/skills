@@ -1,13 +1,17 @@
 # Python SDK Reference
 
-Version: 2.10.0
+Version: 2.12.0
 
-## Recent Additions (v2.7-v2.10)
+## Recent Additions (v2.7-v2.12)
 
 - **`upto` scheme** - usage-based EVM billing (client/server/facilitator) via `x402.mechanisms.evm.upto`, added in v2.8.0.
-- **`batch-settlement` scheme** - commit-now / settle-asynchronously EVM mechanism via `x402.mechanisms.evm.batch_settlement`.
+- **`batch-settlement` scheme** - commit-now / settle-asynchronously EVM mechanism via `x402.mechanisms.evm.batch_settlement` (cumulative vouchers, single on-chain claim; `FileChannelStorage`), in v2.11.0.
+- **`siwx` (sign-in-with-x) extension** - CAIP-122 wallet auth now available in Python (v2.11.0).
+- **Networks** - ADI Chain (`eip155:36900`) and HPP / HPP Sepolia (`eip155:190415` / `eip155:181228`, Bridged USDC) added to EVM default-asset resolution (v2.11.0); plus Radius and Arbitrum earlier.
 - **TVM (TON) exact mechanism** - `x402.mechanisms.tvm` for TON testnet/mainnet jetton transfers (Python SDK only), added in v2.10.0.
-- **Radius and Arbitrum networks** - added to EVM default-asset resolution.
+- **Security (v2.12.0)** - ERC-6492 factory-injection fix (`eip6492_allowed_factories: list[str]` is now the sole gate; empty/omitted disables and returns `eip6492_factory_not_allowed`; `DeployERC4337WithEIP6492` removed); SVM exact dedup keyed on tx message hash (cache-bypass fix).
+- **Lifecycle hooks + adapter pattern** - missing lifecycle hooks and extension/scheme-level adapter pattern added (v2.11.0); failure hooks now run after after-hook errors.
+- **MCP fixes (v2.12.0)** - client-factory helpers exported from `x402.mcp`; FastMCP `CallToolResult` metadata preserved when attaching payment responses.
 - **`EXTENSION-RESPONSES` header** - decoded and logged by the HTTP facilitator client.
 
 ## Installation

@@ -2,8 +2,8 @@
 name: x402
 description: "Build internet-native payments with the x402 open protocol - HTTP 402 Payment Required for on-chain micropayments with no accounts or API keys. Use when developing paid APIs, paywalled content, AI agent payment flows, or MCP tools that charge per call. Covers the TypeScript, Python, and Go SDKs across EVM, Solana, Stellar, and Aptos."
 metadata:
-  version: "0.8.0"
-  upstream: "@x402/core@2.12.0, x402@2.10.0, github.com/x402-foundation/x402/go@v2.11.0"
+  version: "0.9.0"
+  upstream: "@x402/core@2.14.0, @x402/evm@2.14.0, x402@2.12.0, github.com/x402-foundation/x402/go/v2@v2.14.0"
   openclaw:
     homepage: https://github.com/tenequm/skills/tree/main/skills/x402
     emoji: "💰"
@@ -148,9 +148,9 @@ Install: `pip install "x402[fastapi,evm]"`
 
 ```go
 import (
-    x402http "github.com/x402-foundation/x402/go/http"
-    ginmw "github.com/x402-foundation/x402/go/http/gin"
-    evm "github.com/x402-foundation/x402/go/mechanisms/evm/exact/server"
+    x402http "github.com/x402-foundation/x402/go/v2/http"
+    ginmw "github.com/x402-foundation/x402/go/v2/http/gin"
+    evm "github.com/x402-foundation/x402/go/v2/mechanisms/evm/exact/server"
 )
 
 facilitator := x402http.NewHTTPFacilitatorClient(&x402http.FacilitatorConfig{URL: facilitatorURL})
@@ -172,7 +172,7 @@ r.Use(ginmw.X402Payment(ginmw.Config{
 }))
 ```
 
-Install: `go get github.com/x402-foundation/x402/go`
+Install: `go get github.com/x402-foundation/x402/go/v2`
 
 ## Multi-Network Support (EVM + Solana)
 
@@ -227,6 +227,9 @@ registerExactSvmScheme(client, { signer: svmSigner });
 | Avalanche | `eip155:43114` | Via community facilitators |
 | Radius Mainnet | `eip155:723487` | Mainnet (SBC default) |
 | Radius Testnet | `eip155:72344` | Testnet (SBC default) |
+| ADI Chain | `eip155:36900` | Mainnet (USDC.e default) |
+| HPP Mainnet | `eip155:190415` | Mainnet (Bridged USDC default) |
+| HPP Sepolia | `eip155:181228` | Testnet (Bridged USDC default) |
 | TON Mainnet | `tvm:-239` | Mainnet (jetton transfers; Python SDK) |
 | TON Testnet | `tvm:-3` | Testnet |
 | Hedera Mainnet | `hedera:mainnet` | Mainnet (HBAR + HTS tokens) |
@@ -237,7 +240,7 @@ Default facilitator (`https://x402.org/facilitator`) supports Base Sepolia, Sola
 
 ## SDK Packages
 
-### TypeScript v2.12.0 ([npm](https://www.npmjs.com/org/x402), [GitHub](https://github.com/x402-foundation/x402/tree/main/typescript))
+### TypeScript v2.14.0 ([npm](https://www.npmjs.com/org/x402), [GitHub](https://github.com/x402-foundation/x402/tree/main/typescript))
 | Package | Purpose |
 |---------|---------|
 | `@x402/core` | Core types, client, server, facilitator |
@@ -246,6 +249,7 @@ Default facilitator (`https://x402.org/facilitator`) supports Base Sepolia, Sola
 | `@x402/stellar` | Stellar scheme (SEP-41 Soroban token transfers) |
 | `@x402/aptos` | Aptos scheme (Fungible Asset transfers) |
 | `@x402/avm` | Algorand (AVM) scheme |
+| `@x402/hedera` | Hedera scheme (HBAR + HTS fungible-asset transfers) |
 | `@x402/express` | Express middleware |
 | `@x402/fastify` | Fastify middleware |
 | `@x402/hono` | Hono edge middleware |
@@ -256,7 +260,7 @@ Default facilitator (`https://x402.org/facilitator`) supports Base Sepolia, Sola
 | `@x402/mcp` | MCP client + server |
 | `@x402/extensions` | Bazaar, offer-receipt, payment-identifier, sign-in-with-x, gas sponsoring |
 
-### Python v2.10.0 ([PyPI](https://pypi.org/project/x402/), [GitHub](https://github.com/x402-foundation/x402/tree/main/python))
+### Python v2.12.0 ([PyPI](https://pypi.org/project/x402/), [GitHub](https://github.com/x402-foundation/x402/tree/main/python))
 ```bash
 pip install "x402[httpx]"      # Async HTTP client
 pip install "x402[requests]"   # Sync HTTP client
@@ -268,10 +272,17 @@ pip install "x402[extensions]" # Extensions (bazaar, gas sponsoring, etc.)
 pip install "x402[all]"        # Everything
 ```
 
-### Go v2.11.0 ([GitHub](https://github.com/x402-foundation/x402/tree/main/go))
+### Go v2.14.0 ([GitHub](https://github.com/x402-foundation/x402/tree/main/go))
+
+The Go module path carries a `/v2` suffix - the bare `.../x402/go` path no longer resolves tagged releases.
+
 ```bash
-go get github.com/x402-foundation/x402/go
+go get github.com/x402-foundation/x402/go/v2
 ```
+
+### Java (Java 17+, [GitHub](https://github.com/x402-foundation/x402/tree/main/java))
+
+A fourth official binding is in the repo (`PaymentFilter`, `FacilitatorClient`, `X402HttpClient`). Not published to a package registry yet - build from source.
 
 ## Key Concepts
 

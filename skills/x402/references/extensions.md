@@ -63,7 +63,7 @@ extensions: {
 
 **Go:**
 ```go
-import "github.com/x402-foundation/x402/go/extensions/bazaar"
+import "github.com/x402-foundation/x402/go/v2/extensions/bazaar"
 
 Extensions: bazaar.DeclareDiscoveryExtension(bazaar.DiscoveryInfo{
     Output: map[string]interface{}{
@@ -193,7 +193,7 @@ appendPaymentIdentifierToExtensions(extensions); // Adds ID only if server decla
 
 **Go (client):**
 ```go
-import "github.com/x402-foundation/x402/go/extensions/paymentidentifier"
+import "github.com/x402-foundation/x402/go/v2/extensions/paymentidentifier"
 err := paymentidentifier.AppendPaymentIdentifierToExtensions(extensions, "")
 ```
 
@@ -220,7 +220,7 @@ id, err := paymentidentifier.ExtractPaymentIdentifier(payload, true) // validate
 
 ## Sign-In With X (Wallet Authentication)
 
-CAIP-122 wallet-based authentication. Clients prove wallet ownership by signing a challenge, allowing servers to skip payment for addresses that previously paid. TypeScript only.
+CAIP-122 wallet-based authentication. Clients prove wallet ownership by signing a challenge, allowing servers to skip payment for addresses that previously paid. TypeScript and Python (`x402.extensions.sign_in_with_x`, added Python v2.11.0).
 
 ### Supported Chains
 
@@ -281,7 +281,7 @@ Go: `erc20approvalgassponsor.DeclareExtension()`
 
 ## Builder Code (On-Chain Attribution)
 
-The `builder-code` extension enables on-chain attribution tracking for x402 payments. Attribution is encoded as an ERC-8021 Schema 2 CBOR "builder code" appended to the settlement transaction calldata, so integrators and tooling can be credited for the payments they originate. Spec-defined; no SDK helper yet. See `specs/extensions/builder_code.md`.
+The `builder-code` extension enables on-chain attribution tracking for x402 payments. Attribution is encoded as an ERC-8021 Schema 2 CBOR "builder code" appended to the settlement transaction calldata, so integrators and tooling can be credited for the payments they originate (app, service, and wallet parties can each attach a code). SDK helpers: TypeScript (`@x402/extensions/builder-code`) and Go (`go/v2/extensions/buildercode`, `DeclareBuilderCodeExtension` + client/server/facilitator + CBOR). Python helper pending. See `specs/extensions/builder_code.md`.
 
 ## HTTP Message Signatures (Agent Identity)
 
@@ -299,9 +299,10 @@ The `auth-hints` extension provides authentication hints for specific payment re
 |-----------|------------|-----|--------|
 | bazaar | Yes | Yes | Yes |
 | offer-receipt | Yes | No | No |
-| sign-in-with-x | Yes | No | No |
+| sign-in-with-x | Yes | No | Yes |
 | payment-identifier | Yes | Yes | Yes |
 | eip2612GasSponsoring | Yes | Yes | Yes |
 | erc20ApprovalGasSponsoring | Yes | Yes | Yes |
+| builder-code | Yes | Yes | No |
 
-The `builder-code`, `http-message-signatures`, and `auth-hints` extensions are defined in the protocol spec but do not yet have SDK helpers in any language.
+The `http-message-signatures` and `auth-hints` extensions are defined in the protocol spec but do not yet have SDK helpers in any language. `builder-code` now ships TypeScript and Go helpers (Python pending).

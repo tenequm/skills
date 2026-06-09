@@ -62,18 +62,20 @@ The `transaction` field contains the base64-encoded, serialized, partially-signe
 
 ### 1. Instruction Layout
 
-The decompiled transaction MUST contain 3 to 6 instructions in this order:
+The decompiled transaction MUST contain 3 to 7 instructions in this order (the static-path ceiling was raised from 6 to 7 in TS v2.14.0 to accommodate wallets that inject multiple Lighthouse assertions):
 
 1. `ComputeBudget::SetComputeUnitLimit` (discriminator `2`)
 2. `ComputeBudget::SetComputeUnitPrice` (discriminator `3`)
 3. `SPL Token` or `Token-2022` `TransferChecked`
-4. (Optional) Lighthouse or Memo program instruction
-5. (Optional) Lighthouse or Memo program instruction
-6. (Optional) Memo program instruction
+4-7. (Optional) Lighthouse or Memo program instructions
 
 - Allowed optional programs: Lighthouse (`<LIGHTHOUSE_PROGRAM>`) and Memo (`<MEMO_PROGRAM>`)
 - Phantom injects 1 Lighthouse instruction; Solflare injects 2
 - Memo instructions enable transaction uniqueness
+
+#### Simulation-Based Smart-Wallet Verification (Path 2)
+
+When `enableSmartWalletVerification` is set, transactions the static positional path rejects (smart-wallet-wrapped layouts, extra instructions) are re-verified by simulating the transaction and inspecting CPI inner instructions for a matching `TransferChecked`. This accepts payments from any allowlisted smart-wallet program (Squads, Swig, SPL Governance, Metaplex Core, Lighthouse) without a per-wallet parser, with fee-payer isolation (Address Lookup Table resolution), operator-configurable compute-budget caps, post-settlement transfer verification (TOCTOU defense), and seller-required memo enforcement.
 
 ### 2. Fee Payer Safety
 
@@ -111,7 +113,7 @@ Solana's transaction deduplication ensures only one transfer executes on-chain, 
 
 All SDKs provide a `SettlementCache` that prevents this race condition:
 
-- **Cache key**: Base64-encoded transaction string
+- **Cache key**: the transaction **message hash** (as of TS v2.14.0 / Python 2.12.0 / Go 2.13.0). Earlier versions keyed on the full Base64 signed-transaction string, which let an attacker bypass the cache by randomizing the mutable fee-payer signature slot - keying on the message hash closes that bypass.
 - **TTL**: 120 seconds (covers Solana blockhash lifetime of ~60-90s plus margin)
 - **Behavior**: If key exists in cache, reject with `duplicate_settlement` error; otherwise insert and proceed
 - **Eviction**: Entries older than 120 seconds are automatically removed
@@ -130,7 +132,7 @@ new ExactSvmScheme(signer, cache); // optional - one is created if omitted
 **Go**: Thread-safe `SettlementCache` with `sync.Mutex`. Must pass a shared instance to both V1 and V2 scheme registrations:
 
 ```go
-import "github.com/x402-foundation/x402/go/mechanisms/svm"
+import "github.com/x402-foundation/x402/go/v2/mechanisms/svm"
 cache := svm.NewSettlementCache()
 ```
 

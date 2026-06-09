@@ -66,6 +66,10 @@ If your server settles payments directly on Solana (without a facilitator), a ra
 
 Mitigation: maintain a short-lived in-memory cache of transaction payloads being settled. Reject duplicates with `"duplicate_settlement"` error. Evict entries after 120 seconds. If using a facilitator, the SVM libraries include built-in `SettlementCache` protection.
 
+#### Optimistic Settlement: Data Served Before On-Chain Confirmation
+
+x402 is optimistic by design: the server verifies the payment off-chain (`/verify`), serves the resource, then settles on-chain (`/settle`) - often after the response has already been sent. Settlement can therefore FAIL *after* the buyer received the data (service delivered, money not collected). Treat `/settle` as fire-and-forget you must reconcile: record settlement outcomes (e.g. via the `onAfterSettle` / `onSettleFailure` hooks), and for high-value resources gate delivery on a successful settle. The standard failure signal is a `402` carrying a `PAYMENT-RESPONSE` header with `success: false` and an `errorReason` (see `references/transports.md`).
+
 ## Facilitator
 
 An optional but recommended service that simplifies payment verification and settlement.
@@ -267,6 +271,9 @@ facilitator.register("eip155:43114", new ExactEvmScheme({
 | Mezo Testnet | `eip155:31611` | mUSD (Permit2 + EIP-2612) | Community |
 | Radius Mainnet | `eip155:723487` | SBC (Permit2 + EIP-2612) | Community |
 | Radius Testnet | `eip155:72344` | SBC (Permit2 + EIP-2612) | Community |
+| ADI Chain | `eip155:36900` | USDC.e (EIP-3009) | Community |
+| HPP Mainnet | `eip155:190415` | Bridged USDC | Community |
+| HPP Sepolia | `eip155:181228` | Bridged USDC | Community |
 | TON Mainnet | `tvm:-239` | Jettons (USDT default) | Community |
 | Hedera Mainnet | `hedera:mainnet` | HBAR + HTS tokens | Community |
 | Algorand Mainnet | `algorand:wGHE2Pwdvd7S12BL5FaOP20EGYesN73ktiC1qzkkit8=` | USDC ASA | Community |

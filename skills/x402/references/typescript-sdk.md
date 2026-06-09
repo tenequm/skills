@@ -1,6 +1,6 @@
 # TypeScript SDK Reference
 
-## Packages (v2.12.0)
+## Packages (v2.14.0)
 
 | Package | Purpose |
 |---------|---------|
@@ -10,6 +10,7 @@
 | `@x402/stellar` | Stellar scheme (SEP-41 Soroban token transfers) |
 | `@x402/aptos` | Aptos scheme (Fungible Asset transfers) |
 | `@x402/avm` | Algorand (AVM) scheme |
+| `@x402/hedera` | Hedera scheme (HBAR + HTS fungible-asset transfers) |
 | `@x402/express` | Express.js middleware |
 | `@x402/fastify` | Fastify middleware |
 | `@x402/hono` | Hono edge middleware |
@@ -21,6 +22,10 @@
 | `@x402/extensions` | Bazaar, offer-receipt, sign-in-with-x, payment-identifier, eip2612-gas-sponsoring, erc20-approval-gas-sponsoring |
 
 ## Recent Changes
+
+**v2.14.0** - `auth-capture` TypeScript client scheme (`@x402/evm/auth-capture/client`). Full `batch-settlement` TS SDK surface (`@x402/evm/batch-settlement/{client,server,facilitator}` plus `*/file-storage` and `server/redis-storage` subpaths). SVM exact: simulation-based smart-wallet verification (`enableSmartWalletVerification`) for allowlisted programs (Squads, Swig, SPL Governance, Metaplex Core, Lighthouse), static instruction-count ceiling raised 6 -> 7, plus security fixes (dedup keyed on tx message hash; compute-unit-price cap bypass). EVM: ERC-6492 factory-injection fix (`eip6492AllowedFactories` allowlist sole gate, `DeployERC4337WithEIP6492` removed). Bazaar service metadata threaded into `PaymentRequired.resource`; full schema validation moved to middleware (shallow validation removed from core).
+
+**v2.13.0** - Networks ADI Chain (`eip155:36900`) and HPP / HPP Sepolia (`eip155:190415` / `eip155:181228`) in default-asset resolution. Extension hook adapters for client/HTTP flows. `paymentPayload.accepted.extra` may carry additive client fields. Security: paywall-bypass via encoded path separators (`%2F`/`%5C`) closed; reflected-XSS surface removed from fallback paywall HTML.
 
 **v2.12.0** - Bazaar service-metadata fields (`serviceName`, `tags`, `iconUrl`) on `ResourceInfo`, with `@x402/extensions/bazaar` validation helpers. Scheme-extensibility surface: optional `schemeHooks`, verify/route/settle skip primitives, `VerifyResponse`/`SettleResponse` `extra`, `onPaymentResponse` client hook, `processPaymentResult` utility. `EXTENSION-RESPONSES` header decoded and logged by `HTTPFacilitatorClient`. `viem` floor raised to `^2.48.11`.
 
@@ -89,6 +94,21 @@ Replace `Evm` with `Svm`, `Stellar`, or `Aptos` accordingly.
 | `@x402/evm/upto/client` | `UptoEvmScheme` | Client-side max-amount signing |
 | `@x402/evm/upto/server` | `UptoEvmScheme` | Server-side with `setSettlementOverrides` |
 | `@x402/evm/upto/facilitator` | `UptoEvmScheme` | Facilitator verify/settle (variable amount) |
+
+### Auth-Capture Subpath Exports (`@x402/evm`)
+
+| Subpath | Role |
+|---------|------|
+| `@x402/evm/auth-capture/client` | Client-side detect + sign auth-capture payloads (escrow / authorize-then-capture with void, refund, reclaim). Client scheme shipped in v2.14.0; server/facilitator still landing. |
+
+### Batch-Settlement Subpath Exports (`@x402/evm`)
+
+| Subpath | Role |
+|---------|------|
+| `@x402/evm/batch-settlement/client` | Client-side cumulative-voucher signing (commit now, settle async) |
+| `@x402/evm/batch-settlement/server` | Server-side channel management |
+| `@x402/evm/batch-settlement/facilitator` | Facilitator verify/claim |
+| `@x402/evm/batch-settlement/{client,server}/file-storage`, `server/redis-storage` | Optional storage backends (split out so default bundles avoid Node-fs/Redis) |
 
 ## Server: Express
 

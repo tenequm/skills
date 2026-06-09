@@ -149,6 +149,14 @@ const results = await multicall(signer.readContract.bind(signer), calls);
 4. Undeployed + has ERC-6492 factory + `allowUndeployed`: return false but preserve deployment info
 5. Deployed: EIP-1271 verification
 
+## ERC-6492 Factory Allowlist (Security)
+
+ERC-6492 verification simulates a counterfactual smart-wallet's deploy factory before checking the signature. To close a factory-call-injection vector, the allowed deploy factories are now gated by an explicit allowlist - the sole gate in current SDKs:
+
+- TypeScript: `eip6492AllowedFactories` | Go: `EIP6492AllowedFactories` | Python: `eip6492_allowed_factories: list[str]`
+- An empty or omitted list **disables** counterfactual ERC-6492 deployment entirely and returns `eip6492_factory_not_allowed`.
+- The previous `DeployERC4337WithEIP6492` boolean config field was **removed** across all three SDKs (breaking for facilitator implementers that deployed ERC-4337 smart wallets via EIP-6492).
+
 ## Extensions
 
 ### EIP-2612 Gas Sponsoring
@@ -169,6 +177,9 @@ When a server uses price string syntax (`"$0.001"`), the SDK resolves to the cha
 | Base Mainnet (`eip155:8453`) | USD Coin | `0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913` | 6 | EIP-3009 | - |
 | MegaETH (`eip155:4326`) | MegaUSD | `0xFAfDdbb3FC7688494971a79cc65DCa3EF82079E7` | 18 | Permit2 | Yes |
 | Monad (`eip155:143`) | USD Coin | `0x754704Bc059F8C67012fEd69BC8A327a5aafb603` | 6 | EIP-3009 | - |
+| ADI Chain (`eip155:36900`) | USDC.e | `0x9cb8142aEBBcdc60AF7c97Af897A67A8f3CA71C2` | 6 | EIP-3009 | - |
+| HPP (`eip155:190415`) | Bridged USDC | `0x401eCb1D350407f13ba348573E5630B83638E30D` | 6 | EIP-3009 | - |
+| HPP Sepolia (`eip155:181228`) | Bridged USDC | `0x401eCb1D350407f13ba348573E5630B83638E30D` | 6 | EIP-3009 | - |
 
 ### Custom Tokens with registerMoneyParser
 

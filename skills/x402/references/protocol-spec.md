@@ -346,13 +346,17 @@ Uses `0x1::primary_fungible_store::transfer` for fungible assets. Key details:
 
 Use it when per-request on-chain settlement is impractical: gas fees exceed per-request value, block confirmation is too slow for HTTP latency, or settlement runs asynchronously from HTTP. It supports **dynamic pricing** - the client commits up to `PaymentRequirements.amount` (the maximum), and the server may charge a lower actual price, communicated via `PAYMENT-RESPONSE`.
 
-SDK support: Go (`go/mechanisms/evm/batch-settlement`) and Python (`x402.mechanisms.evm.batch_settlement`); EVM and Cloudflare network bindings. See `specs/schemes/batch-settlement/`.
+SDK support: TypeScript (`@x402/evm/batch-settlement/{client,server,facilitator}` plus `*/file-storage` and `server/redis-storage`), Go (`go/v2/mechanisms/evm/batch-settlement`), and Python (`x402.mechanisms.evm.batch_settlement`); EVM and Cloudflare network bindings. See `specs/schemes/batch-settlement/`.
 
 ## Auth-Capture Scheme
 
 `auth-capture` is a payment scheme where funds can be held and settled later. The client authorizes a maximum amount; the facilitator either locks funds in escrow for later capture (two-phase) or sends them directly with refund capability (single-shot). Unlike `exact`, it supports returning funds via **void, refund, and reclaim** - useful for escrow, pre-authorization, and refundable purchases.
 
-The **captureAuthorizer** is the entity allowed to authorize, capture, void, refund, or charge a payment. Spec-defined; no SDK implementation yet. See `specs/schemes/auth-capture/`.
+The **captureAuthorizer** is the entity allowed to authorize, capture, void, refund, or charge a payment. A TypeScript **client** scheme shipped in v2.14.0 (`@x402/evm/auth-capture/client`); server/facilitator support is still landing. See `specs/schemes/auth-capture/`.
+
+## Spec-Stage Chains (No SDK Yet)
+
+Beyond the SDK-supported networks, the spec defines `exact` schemes for additional chains that have no SDK implementation yet (spec only). As of this writing: Concordium, Cardano, NEAR, Sui, and Keeta. See `specs/schemes/exact/scheme_exact_<chain>.md`. A Cloudflare variant of `batch-settlement` is also spec-defined (`specs/schemes/batch-settlement/scheme_batch_settlement_cloudflare.md`).
 
 ## Network Identifiers (CAIP-2)
 
