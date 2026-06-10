@@ -7,6 +7,56 @@ and this skill adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.h
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-06-10
+
+### Changed
+- Re-grounded against upstream tag `v7.2.0-beta.5` -> `v8.0.0-beta.9` (annotated tag,
+  commit `a0664baf1`); bumped every version pin, permalink base, and the title from
+  "Lance v7 reference" to "Lance v8 reference". 86-commit range, 6 breaking changes.
+- The v8 boundary is the unification of all index builds onto one segment-based
+  lifecycle. Bitmap migrated to the segment-based distributed workflow (PR #6869); the
+  old public `create_scalar_index(..., fragment_ids=)` + `merge_index_metadata(...,
+  "BITMAP")` Bitmap shard path is no longer exposed. Distributed BTree moved to the same
+  segmented framework (PR #7013).
+- RaBitQ (IVF_RQ) is no longer 1-bit-only: multi-bit shipped (`num_bits` 1..=9). Ex-code
+  bits store in `__ex_codes` (+ `__add_factors_ex`/`__scale_factors_ex`); a `query_estimator`
+  field selects `residual_query` (legacy default) or `raw_query`; raw-query search adds
+  `__error_factors` for lower-bound pruning (PR #7038, #7078). The `dimension/8 + 16`
+  per-row formula now holds only for `num_bits=1`.
+- Crate workspace 24 -> 25 (see Added). Workspace dep versions: arrow 58, datafusion 53,
+  opendal 0.57, jieba-rs 0.10, lance-namespace 8.0.0-beta.9, lance-namespace-reqwest-client
+  0.8.2; pylance `lance-namespace>=0.8.0,<0.9`.
+- Distributed indexing: `merge_existing_index_segments(...)` now covers vector, inverted,
+  bitmap, BTree, and zone map segments (was vector/bitmap/btree/FTS); added independent
+  per-worker vector models (each worker trains its own IVF/PQ model) (PR #7148, #7128).
+- File/index writers' `finish()` now returns `FileWriteSummary { num_rows, size_bytes }`
+  instead of a bare row count (PR #7096). `describe_indices()` reports full nested field
+  paths and derives type from index details without opening the index; `list_indices()` is
+  now a typed `IndexInformation` wrapper; the `load_indices()` Python binding was removed
+  (PR #6903).
+- Added a merge-insert (upsert / find-or-create) note to section 6: default
+  `SourceDedupeBehavior::Fail` on duplicate source PKs (opt into `FirstSeen`); empty `on`
+  keys fall back to the schema PK; `WhenMatched::UpdateAll` rewrites whole fragments.
+
+### Added
+- New `lance-derive` crate (PR #6229): `#[derive(DeepSizeOf)]` proc-macro for Arrow-aware
+  memory accounting, replacing the external `deepsize` crate (which double-counts Arc-shared
+  Arrow buffers). Crate workspace count goes 24 -> 25.
+- FM-Index scalar index (Section 11.2): a Ferragina-Manzini / Burrows-Wheeler compressed
+  substring index for arbitrary substring, prefix, and regex search on raw bytes. Built on
+  the Segmented Index architecture (`num_segments`), normalization-independent, sanitizes
+  `\x00`/`\xFF` to space at build time.
+- Volcengine TOS object store (`tos://`, `tos_endpoint`/`tos_region`/...) and a feature-gated
+  GooseFS provider (`goosefs://`, `goosefs_master_addr` with HA) (Section 13).
+
+### Removed
+- `IndexSegmentBuilder` API removed from Rust, Python, and Java (PR #6997); staged segments
+  now publish directly via `create_index_uncommitted` / `execute_uncommitted` +
+  `merge_existing_index_segments` + `commit_existing_index_segments`. `build_all()` is gone.
+  The old builder's `target_segment_bytes` size-based grouping has no direct replacement.
+
+Verified against: lance-format/lance@v8.0.0-beta.9
+
 ## [0.5.0] - 2026-06-05
 
 ### Changed

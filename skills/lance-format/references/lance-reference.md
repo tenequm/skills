@@ -1,11 +1,11 @@
 # Lance v7 reference
 
 Capability reference for **Lance** - the open columnar lakehouse format for multimodal AI -
-regrounded against the `lance-format/lance` repository at git tag **`v7.2.0-beta.5`**
-(annotated tag -> commit `1506693b`).
+regrounded against the `lance-format/lance` repository at git tag **`v8.0.0-beta.9`**
+(annotated tag -> commit `a0664baf1`).
 
 Citations are `path:line` relative to the repo root. Build a permalink as
-`https://github.com/lance-format/lance/blob/v7.2.0-beta.5/<path>`. Line numbers drift
+`https://github.com/lance-format/lance/blob/v8.0.0-beta.9/<path>`. Line numbers drift
 between tags; treat them as approximate. The authoritative in-repo sources are the format
 spec under `docs/src/format/`, the user guide under `docs/src/guide/`, the protobuf schemas
 under `protos/`, and the Rust workspace under `rust/`.
@@ -60,9 +60,9 @@ code. The format itself is the product - there is no server.
 
 ## 2. The crate workspace
 
-24 crate directories under `rust/`. `[workspace.package]` (`Cargo.toml:32-53`): `version =
-"7.2.0-beta.5"`, `edition = "2024"`, `rust-version = "1.91.0"`, `license = "Apache-2.0"`,
-`resolver = "3"`. `exclude = ["python", "java/lance-jni"]`.
+25 crate directories under `rust/`. `[workspace.package]`: `version = "8.0.0-beta.9"`,
+`edition = "2024"`, `rust-version = "1.91.0"`, `license = "Apache-2.0"`, `resolver = "3"`
+(`Cargo.toml:31-55`). `exclude = ["python", "java/lance-jni"]`.
 
 | Crate dir | Published name | Purpose |
 |-----------|----------------|---------|
@@ -78,6 +78,7 @@ code. The format itself is the product - there is no server.
 | `lance-arrow` | `lance-arrow` | Arrow extensions (`RecordBatchExt`, `SchemaExt`). Considered never-stable |
 | `lance-select` | `lance-select` | Row-selection primitives: `RowAddrMask`/`NullableRowAddrMask`, `RowIdMask`, `IndexExprResult`. Extracted from `lance-core`/`lance-index` in v7.1.0-beta.2 (PR #6879) so benchmarks and filter consumers can depend on masks without pulling in either larger crate |
 | `lance-tokenizer` | `lance-tokenizer` | FTS tokenizer stack: `TextAnalyzer`, jieba/lindera/ngram, filters |
+| `lance-derive` | `lance-derive` | Proc-macro crate (`proc-macro = true`): `#[derive(DeepSizeOf)]` for Arrow-aware memory accounting. New in v8 (PR #6229), replacing the external `deepsize` crate, which double-counts Arrow buffers shared across `Arc` |
 | `lance-geo` | `lance-geo` | Geospatial UDFs. Feature-gated `geo` |
 | `lance-namespace` | `lance-namespace` | `LanceNamespace` trait + data models |
 | `lance-namespace-impls` | `lance-namespace-impls` | `DirectoryNamespace`, `RestNamespace`, REST adapter, credential vendors |
@@ -92,7 +93,7 @@ code. The format itself is the product - there is no server.
 | `arrow-stats` | `lance-arrow-stats` | Statistics accumulator (min, max, null_count, nan_count) |
 
 `rust/examples` (`lance-examples`) holds non-published example binaries. The workspace
-`members` array lists 24 paths; `rust/lance-datafusion` is part of the workspace as a
+`members` array lists 25 paths; `rust/lance-datafusion` is part of the workspace as a
 path dependency rather than an explicit member.
 
 **Bindings.** Python: package `pylance` (`python/pyproject.toml`), built with maturin, imported
@@ -100,7 +101,11 @@ as `lance`; the Rust extension crate is `pylance` (`[lib] name = "lance"`); supp
 3.9-3.14; runtime deps `pyarrow>=14`, `numpy>=1.22`, `lance-namespace>=0.8.0,<0.9`. Java: an
 SDK under `java/` (Maven `org.lance`), bridged to Rust by the `lance-jni` crate
 (`java/lance-jni/`, excluded from the Rust workspace). Notable workspace deps at this tag
-(`Cargo.toml`): `lance-namespace-reqwest-client 0.8.0`, `opendal 0.57`, `jieba-rs 0.10`.
+(`Cargo.toml`): `arrow 58.0.0`, `datafusion 53.0.0`, `opendal 0.57`, `jieba-rs 0.10`,
+`lance-namespace-reqwest-client 0.8.2`. The `lance-namespace`/`-impls` crates publish at
+the workspace version (`8.0.0-beta.9`); note the `[workspace.dependencies]` declaration
+still pins `lance-namespace-datafusion` consumers to `=7.0.0-beta.9` even though that crate
+itself publishes at the workspace version.
 
 **Building.** Five workspace crates carry a protobuf build script - `lance-encoding`,
 `lance-file`, `lance-index`, `lance-table`, `lance-datafusion` - so a `protoc` compiler must
@@ -379,6 +384,15 @@ metadata (`lance-schema:unenforced-primary-key`). "Unenforced" - Lance does not 
 validate uniqueness; it is used for merge-insert dedup and last-write-wins. PK fields must be
 non-nullable leaf primitives; clustering-key fields may be nullable.
 
+**Merge-insert (upsert / find-or-create).** `MergeInsertBuilder` defaults to find-or-create
+semantics ("By default this will build a job that has the same semantics as find-or-create",
+`rust/lance/src/dataset/write/merge_insert.rs:418`); enable `when_matched(WhenMatched::UpdateAll)`
+for upsert - note `UpdateAll` rewrites whole fragments. The default behavior for **duplicate
+source rows that match the same target** is to **fail the operation**
+(`SourceDedupeBehavior::Fail`, `merge_insert.rs:322,472`); opt into `SourceDedupeBehavior::FirstSeen`
+to keep the first and skip later duplicates. Empty `on` keys fall back to the schema's
+unenforced primary key.
+
 ---
 
 ## 7. Versioning, tags, branches
@@ -654,16 +668,22 @@ SIMD kernels in `lance-linalg`; the `fp16kernels` feature compiles C SIMD kernel
 | FLAT | `dimension * 4` | 1x (exact) |
 | SQ (8-bit) | `dimension` | ~4x |
 | PQ | `num_sub_vectors` (one uint8 code per sub-vector) | ~`(dimension*4)/m` |
-| RQ (RaBitQ, 1 bit/dim) | `dimension/8` + 8 bytes correction factors | ~32x |
+| RQ (RaBitQ, `num_bits` bits/dim) | `ceil(dimension * num_bits / 8)` + correction factors | ~32x at 1 bit |
 
 **IVF_RQ requires the vector dimension to be divisible by 8** - enforced with the error
 "vector dimension must be divisible by 8 for IVF_RQ" (`rust/lance-index/src/vector/bq/builder.rs`).
-RaBitQ is **1-bit-only** today: the 1-bit binary code is stored in `_rabit_codes`, and
-"future multi-bit support will store the remaining `num_bits - 1` ex-code bits separately
-instead of widening this binary code path" (`docs/src/format/index/vector/index.md:275`). The
-RabitQ metadata schema carries a `code_dim` (u32) field - the rotated-vector dimension for the
-1-bit code (`docs/src/format/index/vector/index.md:250`). Per-row storage is `dimension/8 + 16`
-bytes (8 for the row ID + 8 for the factors) (`docs/src/guide/performance.md:416`).
+**RaBitQ is now multi-bit** (new in v8, PR #7038): `num_bits` is "in the range 1..=9"
+(`docs/src/format/index/vector/index.md:255`). IVF_RQ always stores the 1-bit binary sign
+code in `_rabit_codes`; "for `num_bits > 1`, the remaining `num_bits - 1` ex-code bits are
+stored in `__ex_codes` instead of widening the binary code path"
+(`index.md:282-284`), alongside `__add_factors_ex` / `__scale_factors_ex` correction columns.
+A new `query_estimator` metadata field selects the distance-estimator layout: "`residual_query`
+or `raw_query`. Missing values are read as `residual_query` for compatibility with released
+1-bit IVF_RQ indexes" (`index.md:258`); raw-query search (PR #7078) adds an `__error_factors`
+column "for raw-query lower-bound pruning" (`index.md:201`). The metadata schema also carries
+`code_dim` (u32, the rotated-vector dimension). Per-row storage is `dimension/8 + 16` bytes
+(8 for the row ID + 8 for the factors) **only at `num_bits=1`**
+(`docs/src/guide/performance.md:416`); multi-bit adds the `__ex_codes` and ex-factor columns.
 
 On-disk layout (format V3): each vector index is two Lance files - an **index file**
 (`index.idx`, the search structure: IVF metadata, HNSW graph) and an **auxiliary file**
@@ -712,10 +732,28 @@ datasets, the IVF builder exposes `streaming_sample_rate`, `streaming_coreset_ra
 | NGRAM | Substring matching | Overlapping trigrams (ASCII-folded, lowercased); query `contains` |
 | ZONEMAP | Scan pruning / predicate pushdown | Per-zone min/max/null stats (default 8192 rows/zone); a *primary skipping structure* |
 | BLOOM_FILTER | Probabilistic membership | Zone-based Split Block Bloom Filters (xxHash64; default 8192 items/zone, FPP 0.00057) |
+| FM_INDEX | Substring / prefix / regex search on raw bytes | Compressed BWT index over raw byte arrays; built on the Segmented Index architecture (see 11.5). New in v8 |
 | RTREE | 2D spatial pruning | See 11.4 |
 
 NGRAM, ZONEMAP, and BLOOM_FILTER are newer additions. A JSON scalar index wraps another
 index's details with a JSON path.
+
+**FM-Index** (new in v8, `docs/src/format/index/scalar/fmindex.md`,
+`protos/index.proto` `FMIndexIndexDetails`). The Ferragina-Manzini index is "a compressed
+substring index based on the Burrows-Wheeler Transform (BWT)" that "enables efficient
+**arbitrary substring search**, **prefix match**, and **suffix/regular-expression search**
+directly on raw bytes" (`fmindex.md:3`) - unlike the NGRAM index (fixed trigrams) or FTS
+(distinct words). It indexes columns of strings or binary as raw byte arrays, so it is
+**normalization-independent by design**: any case-folding / Unicode / stemming normalization
+is the caller's job and must be applied identically to the column at build time and to the
+query (`fmindex.md`). Two bytes are reserved as BWT sentinels (`\x00` terminator, `\xFF`
+row separator) and any incoming `\x00`/`\xFF` are sanitized to space (`\x20`) at build time.
+Because a BWT suffix array cannot be merged by concatenation, FM-Index is partitioned via
+the Segmented Index architecture: a `num_segments` parameter (set at index creation) splits
+fragments into disjoint subsets, each a self-contained FM-Index; appends build a new segment
+over the unindexed fragments, and `merge_segments` re-reads the covered fragments' raw text
+to rebuild a unified segment (`fmindex.md:53`). Queries (`CONTAINS(column, "...")`) return an
+inexact candidate set; the engine verifies.
 
 **Scalar-index fast search** (PR #6784). `fast_search` now routes through scalar/BTREE-indexed
 fragments and skips unindexed ones, so a filtered query can return from the index without a
@@ -799,16 +837,29 @@ workflow (Ray and Spark integrations exist for the common cases).
    (`Overwrite`, `Append`, `Merge`, or `Update`) via `lance.LanceDataset.commit(uri, op,
    read_version=)`.
 
-**Distributed indexing** (`docs/src/guide/distributed_indexing.md`): workers each build an
-index **segment** for a fragment subset via `create_index_builder(...).fragments(...)
-.execute_uncommitted()`, writing under `_indices/<segment_uuid>/`. The caller then commits
-segments as-is via `commit_existing_index_segments(...)` or groups and merges them via
+**Distributed indexing** (`docs/src/guide/distributed_indexing.md`). v8 unifies **all** index
+builds onto one segment-based lifecycle: workers each build an index **segment** for a
+fragment subset via `create_index_builder(...).fragments(...).execute_uncommitted()` (Rust;
+`create_index_uncommitted(..., fragment_ids=)` in Python), writing under
+`_indices/<segment_uuid>/`. The caller then commits segments as-is via
+`commit_existing_index_segments(...)` or groups and merges them via
 `merge_existing_index_segments(...)`. Within one commit, segments must have **disjoint
 fragment coverage**. Uncommitted staging directories are cleaned by `cleanup_old_versions`.
+The standalone `IndexSegmentBuilder` API (and its `build_all()` / `target_segment_bytes`
+size-based grouping) was **removed in v8** from Rust, Python, and Java (PR #6997); use the
+`execute_uncommitted` path above. Distributed BTree and bitmap builds were folded into this
+same framework (PR #7013, #6869) - the old Python Bitmap shard path
+(`create_scalar_index(..., fragment_ids=)` + `merge_index_metadata(..., "BITMAP")`) is gone.
 
-Distributed builds are supported for vector indexes, bitmap, segmented btree, and segmented
-inverted (FTS) indexes; the `filtered_read` proto serializes the `FilteredReadExec` scan
-operator for plan-then-execute distributed scans.
+`merge_existing_index_segments(...)` "currently supports vector, inverted, bitmap, BTree, and
+zone map segments" (`distributed_indexing.md:109-110`); other scalar families can still be
+committed without merging. **Vector model scope**: workers may share one trained IVF/PQ model
+*or* use **independent segment models** - "each worker trains the IVF/PQ model for its own
+`fragment_ids`. The resulting segments can be committed together as one logical index without
+sharing centroids or codebooks" (`distributed_indexing.md:124`, PR #7148). Distributed builds
+cover vector indexes, bitmap, segmented btree, segmented inverted (FTS), and zone map; the
+`filtered_read` proto serializes the `FilteredReadExec` scan operator for plan-then-execute
+distributed scans.
 
 ---
 
@@ -816,7 +867,8 @@ operator for plan-then-execute distributed scans.
 
 The object store is chosen by URI scheme (`docs/src/guide/object_store.md`): `s3://`,
 `s3+ddb://` (S3 + DynamoDB commits), `gs://`, `az://` / `abfss://`, `oss://` (Alibaba),
-`cos://` (Tencent), `file://`, `memory://`, `shared-memory://` (in-memory, cross-component).
+`cos://` (Tencent), `tos://` (Volcengine, new in v8), `goosefs://` (feature-gated `goosefs`,
+new in v8), `file://`, `memory://`, `shared-memory://` (in-memory, cross-component).
 Config comes from environment variables or the `storage_options` map passed to
 `lance.dataset` / `lance.write_dataset`.
 
@@ -846,6 +898,13 @@ Per-backend highlights:
 - **Azure** - `account_name` / `account_key`, service principal, SAS tokens, managed
   identity, workload-identity federation.
 - **Alibaba OSS** - `oss_endpoint` (required), `oss_access_key_id`, `oss_secret_access_key`.
+- **Volcengine TOS** (new in v8, `object_store.md:222-246`) - `tos://bucket/path` with
+  `tos_endpoint` required (e.g. `https://tos-cn-beijing.volces.com`), plus `tos_region` and
+  access-key options.
+- **GooseFS** (new in v8, feature-gated `goosefs`; not in the object-store guide) -
+  `goosefs://host:port/path`; the master address comes from `goosefs_master_addr`
+  (HA-aware: `"addr1:port,addr2:port"`) or the URL host
+  (`rust/lance-io/src/object_store/providers/goosefs.rs:24-61`).
 
 **Base-aware access (v7).** `Dataset::object_store` takes an `Option<u32>` base id - `None`
 for the primary store, `Some(base_id)` for an additional base. Caching/instrumentation
@@ -858,13 +917,14 @@ Disable globally with `LANCE_USE_VERSION_HINT=0`.
 
 ---
 
-## 14. What changed in v7
+## 14. What changed (v7 -> v8)
 
-The v7 tag line ran `v7.0.0-beta.1` through `v7.0.0-beta.17`, then `v7.0.0-rc.1` - no
-`v7.0.0` final git tag was cut. The v7.1 line opened at `v7.1.0-beta.1`, continued through
-`v7.1.0-beta.4` and `v7.1.0-rc.1`, then the v7.2 line opened and the crates now pin
-`7.2.0-beta.5`. Source: the `v7.0.0-beta.1..v7.2.0-beta.5` commit range plus the v6->v7
-boundary commits.
+The v7 tag line ran `v7.0.0-beta.1` through `v7.0.0-beta.17`, then `v7.0.0-rc.1` and
+`v7.0.0`. The v7.1 line opened at `v7.1.0-beta.1`, continued through `v7.1.0-beta.4` and
+`v7.1.0-rc.1`; the v7.2 line ran through `v7.2.0-beta.5`; then the **v8 line opened** and the
+crates now pin `8.0.0-beta.9`. This section keeps the full v7 history below (still useful
+context) and adds the **v7.2.0-beta.5 -> v8.0.0-beta.9 delta** at the end - that delta is the
+current major-version boundary and the most important part for a v8 reader.
 
 **The v6 -> v7 breaking change.** `feat!: make dataset object store access base-aware`
 (PR #6647, commit `456198cd`), immediately followed by the automated bump to `7.0.0-beta.1`.
@@ -986,17 +1046,77 @@ Unchanged and reverified at this tag: 15 transaction ops, the scalar/vector inde
 all `protos/*.proto`, file-format `version.rs`, `rust-version 1.91.0`, `resolver 3`, edition
 2024, `CommitConfig num_retries=20`, MemWAL still experimental.
 
+### The v7.2.0-beta.5 -> v8.0.0-beta.9 delta (current major boundary)
+
+86 commits. This is a **major version bump** whose unifying theme is moving *every* index
+build onto one segment-based lifecycle. **Six breaking changes** (`!:` commits):
+
+- **`feat!: migrate bitmap to index segment based`** (PR #6869) - the defining v8 change.
+  Bitmap now flows through the segment workflow; the old public Python Bitmap shard path
+  (`create_scalar_index(..., fragment_ids=)` + `merge_index_metadata(..., "BITMAP")`) "is no
+  longer exposed; callers should use the segment workflow instead." `execute_uncommitted`
+  writes canonical `bitmap_page_lookup.lance` segment roots
+  (`rust/lance-index/src/scalar/bitmap.rs:59`).
+- **`refactor!: remove index segment builder`** (PR #6997) - the `IndexSegmentBuilder` API
+  was removed from Rust, Python, and Java; staged publishing routes through
+  `create_index_uncommitted` / `execute_uncommitted` + `merge_existing_index_segments` +
+  `commit_existing_index_segments`. `build_all()` and `target_segment_bytes` size-based
+  grouping are gone with no direct replacement (`docs/src/guide/migration.md` "7.2.0").
+- **`refactor(index)!: move distributed BTree build to segmented index framework`** (PR #7013)
+  - distributed BTree now uses the same `create_index_uncommitted` / merge / commit path.
+- **`feat!: return write summaries from file writers`** (PR #7096) - `finish()` changed from
+  `Result<u64>` to `Result<FileWriteSummary>` (`{ num_rows: u64, size_bytes: u64 }`,
+  `rust/lance-file/src/writer.rs:54-58,768`). Python `LanceFileWriter.finish` keeps its
+  row-count return.
+- **`fix(python)!: derive index type from details`** (PR #6903) - `describe_indices()` "now
+  reports nested and special-character field names as full field paths (e.g. `meta.lang`)
+  instead of just the leaf name"; `list_indices()` is a thin typed `IndexInformation` wrapper
+  that no longer opens each index; the `load_indices()` Python binding was removed.
+- **`perf!: avoid listing index files after writes`** (PR #7129) - `IndexFile` metadata is
+  propagated from writer/builder APIs into manifest metadata instead of listing index
+  directories after writes (a writer/builder trait-level break).
+
+Net-new user-facing features:
+
+- **`lance-derive` crate** (PR #6229) - `#[derive(DeepSizeOf)]` for Arrow-aware memory
+  accounting, replacing the external `deepsize` crate. Crate workspace 24 -> 25. See section 2.
+- **FM-Index scalar index** (`docs/src/format/index/scalar/fmindex.md`,
+  `protos/index.proto` `FMIndexIndexDetails`) - BWT substring/prefix/regex search on raw
+  bytes via the Segmented Index architecture (`num_segments`). See section 11.2.
+- **Multi-bit IVF_RQ** (PR #7038) - RaBitQ `num_bits` 1..=9; ex-code bits in `__ex_codes`
+  (+ `__add_factors_ex` / `__scale_factors_ex`). **Raw-query RQ search** (PR #7078) adds the
+  `query_estimator` field and `__error_factors` lower-bound pruning. See section 11.1.
+- **Independent per-worker vector index models** (PR #7148) for distributed builds; zone-map
+  segments now mergeable via `merge_existing_index_segments` (PR #7128); HNSW segment merge
+  (PR #7178); segmented BTree merge (PR #6889). See section 12.
+- **Volcengine TOS** (`tos://`) and feature-gated **GooseFS** (`goosefs://`, PR #7034) object
+  stores. See section 13.
+- Smaller: `tracked_files` / `all_files` on `LanceDataset` (PR #6011); multi-segment FM-Index
+  build config; `add_columns` UDFs no longer require pandas (PR #7131); FTS flat match now
+  searches all unindexed fragments (PR #7188); AVX-512 distance tables compiled for the
+  target CPU (PR #7121).
+- Dependency facts: arrow 58, datafusion 53, opendal 0.57, jieba-rs 0.10,
+  lance-namespace-reqwest-client 0.8.2; pylance `lance-namespace>=0.8.0,<0.9`.
+
+Unchanged and reverified at `v8.0.0-beta.9`: **15 transaction ops** (`protos/transaction.proto`
+diff empty); file-format `version.rs` (`Next => 2.3`, `#[default]` still `V2_1`, no 2.4 - so
+section 3 holds unchanged); `CommitConfig num_retries = 20`
+(`rust/lance-table/src/io/commit.rs:1530`); the feature-flag bits; the
+`ConditionalPutCommitHandler` routing; `rust-version 1.91.0`, `resolver 3`, edition 2024;
+MemWAL docs and system-index docs byte-identical; MemWAL still experimental.
+
 ---
 
 ## 15. Capability matrix
 
-What Lance can and cannot do at `v7.2.0-beta.5`.
+What Lance can and cannot do at `v8.0.0-beta.9`.
 
 **Storage and format**
 
 | Capability | Status |
 |------------|--------|
-| Local FS, S3 (+ S3-compatible), S3 Express, GCS, Azure, Alibaba OSS, Tencent COS | yes |
+| Local FS, S3 (+ S3-compatible), S3 Express, GCS, Azure, Alibaba OSS, Tencent COS, Volcengine TOS | yes |
+| GooseFS (`goosefs://`) | yes (feature-gated `goosefs`) |
 | In-memory store (`memory://`, `shared-memory://`) | yes |
 | Multi-base storage (hot/cold, multi-region, shallow clone) | yes (`FLAG_BASE_PATHS`) |
 | File format 2.1 (default), 2.0, legacy 0.1 (read-only) | yes |
@@ -1022,12 +1142,13 @@ What Lance can and cannot do at `v7.2.0-beta.5`.
 
 | Capability | Status |
 |------------|--------|
-| Vector ANN - IVF + FLAT/HNSW + FLAT/PQ/SQ/RQ | yes |
+| Vector ANN - IVF + FLAT/HNSW + FLAT/PQ/SQ/RQ (RQ multi-bit, `num_bits` 1..=9) | yes |
 | Distance metrics L2 / Cosine / Dot / Hamming | yes |
-| Scalar - btree, bitmap, label-list, ngram, zonemap, bloom filter | yes |
+| Scalar - btree, bitmap, label-list, ngram, zonemap, bloom filter, FM-Index | yes |
+| FM-Index substring / prefix / regex search on raw bytes | yes (segment-based) |
 | Full-text search - BM25, multilingual tokenizers, phrase queries | yes (Lance-native) |
 | Geo / RTree spatial index + geo UDFs | yes (`geo` feature) |
-| Distributed index builds (vector, bitmap, btree, FTS) | yes (no scheduler) |
+| Distributed index builds (vector, bitmap, btree, FTS, zone map) | yes (no scheduler) |
 | SQL over datasets | via DataFusion (`LanceTableProvider`) |
 
 **Concurrency and ops**
@@ -1050,14 +1171,14 @@ dashboard.
 
 ## 16. Source map
 
-Where to look in `lance-format/lance` at `v7.2.0-beta.5`.
+Where to look in `lance-format/lance` at `v8.0.0-beta.9`.
 
 | Topic | Path |
 |-------|------|
 | Format spec overview | `docs/src/format/index.md` |
 | File format | `docs/src/format/file/{index,encoding,versioning}.md` |
 | Table format | `docs/src/format/table/{index,layout,schema,transaction,versioning,branch_tag,row_id_lineage,mem_wal}.md` |
-| Index spec | `docs/src/format/index/{index.md,vector/,scalar/,system/}` |
+| Index spec | `docs/src/format/index/{index.md,vector/,scalar/,system/}` (scalar incl. `scalar/fmindex.md`) |
 | User guide | `docs/src/guide/{blob,data_evolution,data_types,json,object_store,read_and_write,performance,tags_and_branches,tokenizer,distributed_write,distributed_indexing,migration}.md` |
 | Integrations | `docs/src/integrations/{index,datafusion,pytorch,tensorflow}.md` |
 | Protobuf schemas | `protos/{file2,table,transaction,rowids,index,ann,filtered_read,table_identifier}.proto` |
