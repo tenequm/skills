@@ -2,8 +2,8 @@
 name: mcp-best-practices
 description: Build, secure, and optimize production MCP servers with the TypeScript SDK (spec 2025-11-25, SDK v1.29 / v2 alpha). Use when building or reviewing MCP servers or tools - covering transports, tool and schema design, error handling, security and OAuth, performance, known SDK bugs, content vs structuredContent delivery, v2 migration, MCP Apps, extensions, and the Registry.
 metadata:
-  version: "0.5.0"
-  upstream: "@modelcontextprotocol/sdk@1.29.0, @modelcontextprotocol/server@2.0.0-alpha.2, @modelcontextprotocol/ext-apps@1.7.2"
+  version: "0.6.0"
+  upstream: "@modelcontextprotocol/sdk@1.29.0, @modelcontextprotocol/server@2.0.0-alpha.2, @modelcontextprotocol/ext-apps@1.7.4"
 ---
 
 # MCP Best Practices
@@ -14,7 +14,7 @@ Decision reference for building production MCP servers with the TypeScript SDK. 
 
 | Component | Current | Next |
 |-----------|---------|------|
-| Spec | **2025-11-25** ([spec.modelcontextprotocol.io](https://spec.modelcontextprotocol.io)) | - |
+| Spec | **2025-11-25** ([spec.modelcontextprotocol.io](https://spec.modelcontextprotocol.io)) | Unreleased [draft](https://modelcontextprotocol.io/specification/draft/changelog): stateless/sessionless overhaul (see "Spec Draft Direction") |
 | TS SDK (stable) | **v1.29.0** (`@modelcontextprotocol/sdk`) | v2 alpha published |
 | TS SDK (v2) | **Alpha** (`2.0.0-alpha.2` on npm, Apr 2026): `/server`, `/client`, `/core`, `/hono`, `/express`, `/node`, `/fastify` | Stable pending; only alpha published |
 | JSON Schema | **2020-12** default (explicit `$schema` supported) | - |
@@ -373,6 +373,23 @@ MCP normatively requires **OAuth 2.1** ([draft-ietf-oauth-v2-1-13](https://datat
 9. DNS rebinding protection enabled by default for localhost servers
 
 v1.x gets 6 more months of support after v2 stable ships. No rush, but write new code with v2 patterns in mind.
+
+## Spec Draft Direction (post-2025-11-25, unreleased)
+
+2025-11-25 is the latest **released** revision (everything above targets it). The next spec is still an unversioned [draft](https://modelcontextprotocol.io/specification/draft/changelog) - not implementable in any released SDK - but it sets a clear direction worth knowing before you commit design decisions today. The TS SDK has begun landing the wire-contract types on `main` against a `2026-07-28` target ([#2252](https://github.com/modelcontextprotocol/typescript-sdk/pull/2252), 2026-06-08).
+
+Decision-relevant shifts:
+
+- **MCP becomes stateless and sessionless.** The draft removes the `initialize`/`notifications/initialized` handshake and the `Mcp-Session-Id` header entirely ([SEP-2575](https://github.com/modelcontextprotocol/modelcontextprotocol/pull/2575), [SEP-2567](https://github.com/modelcontextprotocol/modelcontextprotocol/pull/2567)). Every request carries its protocol version, client identity, and capabilities in `_meta`. Servers needing cross-call state return a **server-minted handle from a creation tool and accept it as an ordinary tool argument** - not protocol sessions. This validates the skill's existing "prefer stateless" stance; do not build new servers on session affinity.
+- **`server/discover` RPC** replaces initialize-time negotiation for advertising versions/capabilities/identity (SEP-2575).
+- **Multi Round-Trip Requests (MRTR)** replace server-initiated requests (`roots/list`, `sampling/createMessage`, `elicitation/create`): a tool returns `inputRequests`; the client answers with `inputResponses` on the next call ([SEP-2322](https://github.com/modelcontextprotocol/modelcontextprotocol/pull/2322)).
+- **Formal feature lifecycle** (Active/Deprecated/Removed, 12-month minimum window, [deprecated registry](https://modelcontextprotocol.io/specification/draft/deprecated), [SEP-2596](https://github.com/modelcontextprotocol/modelcontextprotocol/pull/2596)). Under it, **Roots, Sampling, and Logging are now formally Deprecated** (SEP-2577, the advisory deprecation above made formal) and the **HTTP+SSE transport is reclassified Deprecated** (SEP-2596).
+- **Auth**: OAuth 2.0 Dynamic Client Registration is **deprecated in favor of Client ID Metadata Documents (CIMD)** ([PR #2858](https://github.com/modelcontextprotocol/modelcontextprotocol/pull/2858)); clients MUST validate a present `iss` (RFC 9207, [SEP-2468](https://github.com/modelcontextprotocol/modelcontextprotocol/pull/2468)) and key persisted credentials by issuer ([SEP-2352](https://github.com/modelcontextprotocol/modelcontextprotocol/pull/2352)).
+- **Caching**: list/read results gain required `ttlMs` + `cacheScope` (`public`/`private`) via a `CacheableResult` interface ([SEP-2549](https://github.com/modelcontextprotocol/modelcontextprotocol/pull/2549)); tools SHOULD be returned in deterministic order for prompt-cache hits.
+- **HTTP**: Streamable HTTP POSTs require `Mcp-Method`/`Mcp-Name` headers, with optional `x-mcp-header` to mirror tool params into headers ([SEP-2243](https://github.com/modelcontextprotocol/modelcontextprotocol/pull/2243)).
+- **Schemas loosen**: `inputSchema`/`outputSchema` accept any JSON Schema 2020-12 keywords (with `$ref` resolution), and `structuredContent` may be any JSON value ([SEP-2106](https://github.com/modelcontextprotocol/modelcontextprotocol/pull/2106)).
+
+The `content` vs `structuredContent` dual-delivery footgun is **unchanged** in the draft - the backwards-compat SHOULD persists and no precedence rule landed, so the guidance above still holds.
 
 ## Extensions
 

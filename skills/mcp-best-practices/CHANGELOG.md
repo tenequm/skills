@@ -7,6 +7,18 @@ and this skill adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.h
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-06-10
+
+### Added
+- New section "Spec Draft Direction (post-2025-11-25, unreleased)" - the draft spec's stateless/sessionless overhaul: removal of the `initialize` handshake and `Mcp-Session-Id` (SEP-2575/2567, state via server-minted handles passed as tool args), `server/discover` RPC, Multi Round-Trip Requests replacing server-initiated `roots/list`/`sampling`/`elicitation` (SEP-2322), `subscriptions/listen` (SEP-2575), `CacheableResult`/`ttlMs`/`cacheScope` (SEP-2549), required `Mcp-Method`/`Mcp-Name` headers + `x-mcp-header` (SEP-2243), schema loosening to full JSON Schema 2020-12 / any-JSON structuredContent (SEP-2106). Formal feature-lifecycle deprecation of Roots/Sampling/Logging (SEP-2577) and the HTTP+SSE transport (SEP-2596); DCR deprecated in favor of Client ID Metadata Documents (PR #2858); `iss` validation / issuer-keyed credentials (SEP-2468/2352). Flagged as unreleased draft; the TS SDK has begun landing 2026-07-28 wire-contract types on `main` (#2252).
+- `transport-patterns.md`: operational gotchas for stateless servers - the client's SSE-opening `GET /mcp` is rejected with 406 (can tear down some clients); only `JSON.parse` the POST body and route GET/DELETE straight to the transport.
+
+### Changed
+- Quick Reference "Next" column for Spec now points to the draft direction instead of "-".
+- ext-apps pin 1.7.2 -> 1.7.4 (1.7.3 lazy-auth-server example; 1.7.4 npm-audit/transitive security bumps - "No SDK API changes in this release"). SDK v1.29.0 and server 2.0.0-alpha.2 re-confirmed as the latest published versions.
+
+Verified against: @modelcontextprotocol/ext-apps@1.7.4
+
 ## [0.5.0] - 2026-06-05
 
 ### Added

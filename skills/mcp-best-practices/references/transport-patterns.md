@@ -78,6 +78,11 @@ const transport = new WebStandardStreamableHTTPServerTransport({
 });
 ```
 
+### Operational Gotchas
+
+- **Client SSE-opening GET is rejected with 406.** A stateless transport (`sessionIdGenerator: undefined`, `enableJsonResponse: true`) has no notification stream, so when `StreamableHTTPClientTransport` sends `GET /mcp` to open one, the server returns `406 Not Acceptable`. Some clients' error handling then tears down the whole connection. If you must support such clients, either run stateful or return a benign empty SSE/`405` your client tolerates.
+- **Only parse the body on POST.** Route GET and DELETE straight to the transport - calling `JSON.parse` (or a body-parsing middleware) on a bodyless GET/DELETE throws and 500s the request before the transport sees it.
+
 ### K8s Specifics
 
 - No sticky sessions needed (`sessionIdGenerator: undefined`)
