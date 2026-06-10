@@ -2,8 +2,8 @@
 name: tanstack
 description: Build type-safe React apps with TanStack Query (data fetching, caching, mutations), Router (file-based routing, search params, loaders), and Start (SSR, server functions, middleware). Use when working with react-query, data fetching, server state, routing, search params, loaders, SSR, server functions, or full-stack React. Triggers on tanstack, react query, query client, useQuery, useMutation, invalidateQueries, tanstack router, file-based routing, search params, route loader, tanstack start, createServerFn, server functions, SSR.
 metadata:
-  version: "0.2.0"
-  upstream: "@tanstack/react-query@5.101.0, @tanstack/react-router@1.170.11, @tanstack/react-start@1.168.19, @tanstack/zod-adapter@1.167.0, @tanstack/router-plugin@1.168.14"
+  version: "0.3.0"
+  upstream: "@tanstack/react-query@5.101.0, @tanstack/react-router@1.170.15, @tanstack/react-start@1.168.25, @tanstack/zod-adapter@1.167.0, @tanstack/router-plugin@1.168.18"
 ---
 
 # TanStack (Query + Router + Start)
@@ -311,7 +311,7 @@ export const getUsers = createServerFn({ method: 'GET' })
 
 // POST - validated input
 export const createUser = createServerFn({ method: 'POST' })
-  .inputValidator(z.object({ name: z.string(), email: z.string().email() }))
+  .validator(z.object({ name: z.string(), email: z.string().email() }))
   .handler(async ({ data }) => db.users.create(data))
 
 // Call from loader

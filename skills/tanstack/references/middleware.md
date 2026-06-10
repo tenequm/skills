@@ -12,13 +12,13 @@ Runs on every server request that passes through it - server routes, SSR, and se
 
 ### Server Function Middleware
 
-Runs specifically for server functions. Created with `createMiddleware({ type: 'function' })`. Has `.client()`, `.server()`, and `.inputValidator()` methods. The `.client()` method wraps the RPC call on the client side.
+Runs specifically for server functions. Created with `createMiddleware({ type: 'function' })`. Has `.client()`, `.server()`, and `.validator()` methods. The `.client()` method wraps the RPC call on the client side.
 
 | Feature          | Request Middleware          | Server Function Middleware     |
 |------------------|----------------------------|--------------------------------|
 | Scope            | All server requests        | Server functions only          |
 | Methods          | `.server()`                | `.client()`, `.server()`       |
-| Input Validation | No                         | Yes (`.inputValidator()`)      |
+| Input Validation | No                         | Yes (`.validator()`)      |
 | Client-side Logic| No                         | Yes                            |
 | Dependencies     | Request middleware only     | Both request and function types |
 
@@ -45,7 +45,7 @@ const loggingMiddleware = createMiddleware().server(
 
 ## Creating Server Function Middleware
 
-Method order is enforced by TypeScript: `.middleware()` -> `.inputValidator()` -> `.client()` -> `.server()`.
+Method order is enforced by TypeScript: `.middleware()` -> `.validator()` -> `.client()` -> `.server()`.
 
 ```typescript
 import { createMiddleware } from '@tanstack/react-start'
@@ -67,9 +67,11 @@ const timingMiddleware = createMiddleware({ type: 'function' })
 
 The `.client()` callback receives `next`, `context`, `data`, `method`, `signal`, `serverFnMeta`, and `filename`. The `.server()` callback receives `next`, `context`, `data`, `method`, `serverFnMeta`, and `signal`.
 
-### The .inputValidator() Method
+### The .validator() Method
 
 Validates and transforms input data before it reaches the middleware chain. Works with `zodValidator`, `valibotValidator`, and `arktypeValidator`.
+
+> The method is `.validator()`. The older `.inputValidator()` spelling is deprecated and the compiler now emits warnings for it (TanStack/router PR #7566).
 
 ```typescript
 import { createMiddleware } from '@tanstack/react-start'
@@ -77,7 +79,7 @@ import { zodValidator } from '@tanstack/zod-adapter'
 import { z } from 'zod'
 
 const workspaceMiddleware = createMiddleware({ type: 'function' })
-  .inputValidator(zodValidator(z.object({ workspaceId: z.string().uuid() })))
+  .validator(zodValidator(z.object({ workspaceId: z.string().uuid() })))
   .server(({ next, data }) => {
     console.log('Validated workspace ID:', data.workspaceId)
     return next()
@@ -212,7 +214,7 @@ import { redirect } from '@tanstack/react-router'
 import { useAppSession } from './session'
 
 export const loginFn = createServerFn({ method: 'POST' })
-  .inputValidator((d: { email: string; password: string }) => d)
+  .validator((d: { email: string; password: string }) => d)
   .handler(async ({ data }) => {
     const user = await authenticateUser(data.email, data.password)
     if (!user) {
@@ -428,7 +430,7 @@ import { zodValidator } from '@tanstack/zod-adapter'
 import { z } from 'zod'
 
 const paginationMiddleware = createMiddleware({ type: 'function' })
-  .inputValidator(zodValidator(z.object({ page: z.number().default(1), limit: z.number().max(100).default(20) })))
+  .validator(zodValidator(z.object({ page: z.number().default(1), limit: z.number().max(100).default(20) })))
   .server(({ next, data }) => { console.log(`Page ${data.page}`); return next() })
 
 // Valibot
@@ -436,7 +438,7 @@ import { valibotValidator } from '@tanstack/valibot-adapter'
 import * as v from 'valibot'
 
 const vMiddleware = createMiddleware({ type: 'function' })
-  .inputValidator(valibotValidator(v.object({ workspaceId: v.pipe(v.string(), v.uuid()) })))
+  .validator(valibotValidator(v.object({ workspaceId: v.pipe(v.string(), v.uuid()) })))
   .server(({ next, data }) => next({ context: { workspaceId: data.workspaceId } }))
 
 // ArkType
@@ -444,7 +446,7 @@ import { arktypeValidator } from '@tanstack/arktype-adapter'
 import { type } from 'arktype'
 
 const aMiddleware = createMiddleware({ type: 'function' })
-  .inputValidator(arktypeValidator(type({ tenantId: 'string' })))
+  .validator(arktypeValidator(type({ tenantId: 'string' })))
   .server(({ next, data }) => next({ context: { tenantId: data.tenantId } }))
 ```
 
@@ -572,7 +574,7 @@ You can safely import server-only dependencies in `.server()` callbacks.
 
 1. **Start with request middleware for cross-cutting concerns.** Logging, security headers, CORS, and auth session resolution apply to all requests including SSR.
 
-2. **Use function middleware only when you need `.client()` or `.inputValidator()`.** If you only need server-side logic, request middleware is simpler.
+2. **Use function middleware only when you need `.client()` or `.validator()`.** If you only need server-side logic, request middleware is simpler.
 
 3. **Always return the result of next().** Forgetting to return breaks the pipeline.
 

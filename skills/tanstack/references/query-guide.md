@@ -282,6 +282,20 @@ const queryClient = useQueryClient();
 const mutation = useMutation(createTodoOptions(queryClient));
 ```
 
+### Reading mutation state across components with `useMutationState`
+
+`useMutationState` reads state from the mutation cache without holding the `useMutation` instance - useful for shared pending/optimistic UI (e.g. showing in-flight items in a list the mutation does not own):
+
+```tsx
+import { useMutationState } from '@tanstack/react-query';
+
+// All variables of currently-pending create-todo mutations
+const pendingTodos = useMutationState({
+  filters: { mutationKey: ['todos', 'create'], status: 'pending' },
+  select: (mutation) => mutation.state.variables as { title: string },
+});
+```
+
 ### React Suspense Integration
 
 TanStack Query supports React Suspense with dedicated hooks:

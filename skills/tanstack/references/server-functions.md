@@ -41,13 +41,15 @@ const greeting = await greetUser({ data: { name: 'John' } })
 
 Since server functions cross the network boundary, validating input ensures type safety and runtime correctness. TanStack Start supports inline validators and schema-library adapters.
 
+> The method is `.validator()`. The older `.inputValidator()` spelling is deprecated and the compiler now emits warnings for it (TanStack/router PR #7566).
+
 ### Inline Validator
 
 The simplest approach - pass a function that validates and returns typed data:
 
 ```tsx
 export const getUser = createServerFn({ method: 'GET' })
-  .inputValidator((data: { id: string }) => data)
+  .validator((data: { id: string }) => data)
   .handler(async ({ data }) => {
     // data is typed as { id: string }
     return db.users.findById(data.id)
@@ -70,7 +72,7 @@ const CreatePostSchema = z.object({
 })
 
 export const createPost = createServerFn({ method: 'POST' })
-  .inputValidator(zodValidator(CreatePostSchema))
+  .validator(zodValidator(CreatePostSchema))
   .handler(async ({ data }) => {
     // data is fully typed and validated:
     // { title: string; body: string; tags?: string[] }
@@ -78,11 +80,11 @@ export const createPost = createServerFn({ method: 'POST' })
   })
 ```
 
-You can also pass a Zod schema directly to `inputValidator` without the adapter:
+You can also pass a Zod schema directly to `validator` without the adapter:
 
 ```tsx
 export const createUser = createServerFn({ method: 'POST' })
-  .inputValidator(
+  .validator(
     z.object({
       name: z.string().min(1),
       age: z.number().min(0),
@@ -103,7 +105,7 @@ import { valibotValidator } from '@tanstack/valibot-adapter'
 import * as v from 'valibot'
 
 export const updateProfile = createServerFn({ method: 'POST' })
-  .inputValidator(valibotValidator(v.object({
+  .validator(valibotValidator(v.object({
     displayName: v.pipe(v.string(), v.minLength(1)),
     bio: v.optional(v.pipe(v.string(), v.maxLength(500))),
   })))
@@ -114,7 +116,7 @@ import { arkTypeValidator } from '@tanstack/arktype-adapter'
 import { type } from 'arktype'
 
 export const searchItems = createServerFn({ method: 'GET' })
-  .inputValidator(arkTypeValidator(type({ query: 'string', page: 'number > 0' })))
+  .validator(arkTypeValidator(type({ query: 'string', page: 'number > 0' })))
   .handler(async ({ data }) => db.items.search(data.query, data.page))
 ```
 
@@ -164,7 +166,7 @@ import { useServerFn } from '@tanstack/react-start'
 import { useMutation } from '@tanstack/react-query'
 
 const deletePost = createServerFn({ method: 'POST' })
-  .inputValidator((data: { id: string }) => data)
+  .validator((data: { id: string }) => data)
   .handler(async ({ data }) => {
     await db.posts.delete({ where: { id: data.id } })
     return { success: true }
@@ -350,7 +352,7 @@ import { createServerFn } from '@tanstack/react-start'
 import { notFound } from '@tanstack/react-router'
 
 export const getPost = createServerFn()
-  .inputValidator((data: { id: string }) => data)
+  .validator((data: { id: string }) => data)
   .handler(async ({ data }) => {
     const post = await db.posts.findById(data.id)
 
@@ -384,7 +386,7 @@ type ChatChunk = {
 }
 
 const streamChat = createServerFn({ method: 'POST' })
-  .inputValidator((data: { prompt: string }) => data)
+  .validator((data: { prompt: string }) => data)
   .handler(async ({ data }) => {
     const aiResponse = await callAIProvider(data.prompt)
 
@@ -426,7 +428,7 @@ A cleaner alternative to `ReadableStream`. Use `async function*` as the handler:
 
 ```tsx
 const streamMessages = createServerFn({ method: 'POST' })
-  .inputValidator((data: { prompt: string }) => data)
+  .validator((data: { prompt: string }) => data)
   .handler(async function* ({ data }) {
     const messages = await generateAIResponse(data.prompt)
 
@@ -454,11 +456,11 @@ const handleStream = useCallback(async () => {
 
 ## FormData Handling
 
-Server functions support native `FormData` as input. Validate and extract fields in the `inputValidator`:
+Server functions support native `FormData` as input. Validate and extract fields in the `validator`:
 
 ```tsx
 export const submitContactForm = createServerFn({ method: 'POST' })
-  .inputValidator((data) => {
+  .validator((data) => {
     if (!(data instanceof FormData)) throw new Error('Expected FormData')
     const name = data.get('name')?.toString()
     const email = data.get('email')?.toString()
@@ -673,11 +675,11 @@ import { findUserById } from './users.server'
 import { CreateUserSchema } from './schemas'
 
 export const getUser = createServerFn({ method: 'GET' })
-  .inputValidator((data: { id: string }) => data)
+  .validator((data: { id: string }) => data)
   .handler(async ({ data }) => findUserById(data.id))
 
 export const createUser = createServerFn({ method: 'POST' })
-  .inputValidator(zodValidator(CreateUserSchema))
+  .validator(zodValidator(CreateUserSchema))
   .handler(async ({ data }) => db.insert(users).values(data).returning())
 ```
 
@@ -704,7 +706,7 @@ export const getUserSettings = createServerFn()
   })
 ```
 
-Middleware can also validate input via `inputValidator` and run client-side logic via `.client()`. Apply middleware globally to all server functions through `src/start.ts`:
+Middleware can also validate input via `validator` and run client-side logic via `.client()`. Apply middleware globally to all server functions through `src/start.ts`:
 
 ```tsx
 // src/start.ts

@@ -7,6 +7,27 @@ and this skill adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.h
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-06-10
+
+### Changed
+- Server functions & middleware: renamed `.inputValidator()` -> `.validator()`
+  across SKILL.md, server-functions.md, middleware.md, start-guide.md (29 call
+  sites). `validator()` is now the canonical method; `inputValidator()` is
+  deprecated and the compiler emits warnings for it (TanStack/router PR #7566).
+- start-guide.md: dropped the stale "Release Candidate" header and the "No RSC
+  support yet" claim, aligning it with SKILL.md (Pre-1.0; RSC experimental opt-in).
+
+### Added
+- Query cross-reload persistence setup (query-performance.md):
+  `PersistQueryClientProvider` + storage persister, `gcTime >= maxAge`, `buster`
+  for cache-shape changes, and excluding credential-bearing queries via
+  `shouldDehydrateQuery`; corrected the React package name to
+  `@tanstack/react-query-persist-client`.
+- Network Mode note (`online` / `always` / `offlineFirst`) in query-performance.md.
+- `useMutationState` note for shared cross-component mutation UI in query-guide.md.
+
+Verified against: @tanstack/react-router@1.170.15, @tanstack/react-start@1.168.25, @tanstack/router-plugin@1.168.18
+
 ## [0.2.0] - 2026-06-04
 
 ### Changed

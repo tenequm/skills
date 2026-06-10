@@ -31,7 +31,44 @@ useQuery({
 });
 ```
 
-**`staleTime` is not persistence.** It only suppresses refetches while data is fresh *and the query is mounted*. The cache is in-memory and is wiped on a full page reload - `staleTime` does nothing across reloads. For cross-reload persistence, wire up `@tanstack/query-persist-client-core` (localStorage/IndexedDB). Also note a low `staleTime` (the default is `0`) makes every navigation back to a route refetch; raise it for data that does not change per-visit.
+**`staleTime` is not persistence.** It only suppresses refetches while data is fresh *and the query is mounted*. The cache is in-memory and is wiped on a full page reload - `staleTime` does nothing across reloads. Also note a low `staleTime` (the default is `0`) makes every navigation back to a route refetch; raise it for data that does not change per-visit. For cross-reload persistence, wire up the persist-client plugin (see below).
+
+### Cross-reload persistence
+
+The cache is in-memory only, so every full reload refetches from scratch (spinners, empty states). For React, persist it with `PersistQueryClientProvider` from `@tanstack/react-query-persist-client` plus a storage persister:
+
+```tsx
+import { PersistQueryClientProvider } from '@tanstack/react-query-persist-client'
+import { createSyncStoragePersister } from '@tanstack/query-sync-storage-persister'
+
+const queryClient = new QueryClient({
+  defaultOptions: { queries: { gcTime: 1000 * 60 * 60 * 24 } }, // gcTime >= maxAge
+})
+
+const persister = createSyncStoragePersister({ storage: window.localStorage })
+
+<PersistQueryClientProvider
+  client={queryClient}
+  persistOptions={{
+    persister,
+    maxAge: 1000 * 60 * 60 * 24,         // discard restored cache older than this
+    buster: import.meta.env.VITE_BUILD_ID, // bump to invalidate on cache-shape changes
+    dehydrateOptions: {
+      // Never persist credential-bearing or per-identity queries to storage.
+      shouldDehydrateQuery: (q) => q.queryKey[0] !== 'session',
+    },
+  }}
+>
+  <App />
+</PersistQueryClientProvider>
+```
+
+Footguns:
+- **`gcTime` must be >= `maxAge`** or garbage collection discards the cache before the persister can restore it (defaults: `gcTime` 5min, `maxAge` 24h).
+- **Set `buster`** to a build/schema version. Without it, a changed cache shape silently hydrates a stale snapshot into new code.
+- **Exclude credential/identity queries** via `shouldDehydrateQuery` - tokens, API keys, and per-user data should not land in `localStorage`.
+- **SSR**: persistence is client-only; guard `window` access (`typeof window !== 'undefined'`) so it does not run on the server.
+- **Version-match** the persist-client package to your installed `@tanstack/react-query` version (TanStack companion packages must share the same version).
 
 ### gcTime (formerly cacheTime)
 
@@ -488,6 +525,18 @@ useQuery({
   retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 30000),
 });
 ```
+
+### Network Mode
+
+`networkMode` controls how queries and mutations behave without a network connection:
+
+```tsx
+useQuery({ queryKey: ['todos'], queryFn: fetchTodos, networkMode: 'online' });
+```
+
+- `'online'` (default) - only fetches when online; offline queries are paused (status stays as-is, `fetchStatus: 'paused'`).
+- `'always'` - always runs the `queryFn`, ignoring online status (use for cache-only or in-memory sources).
+- `'offlineFirst'` - runs once, then pauses retries when offline (use when a service worker / HTTP cache may serve the first request).
 
 ## Dependent Queries
 

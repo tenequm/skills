@@ -3,7 +3,7 @@
 
 Full-stack React framework powered by TanStack Router and Vite. Adds SSR, streaming, server functions, middleware, server routes, and universal deployment to TanStack Router's type-safe routing.
 
-> TanStack Start is in Release Candidate stage. API is stable and feature-complete. No RSC support yet (in active development).
+> TanStack Start is Pre-1.0. The API is stable and feature-complete, preparing for 1.0. React Server Components are available as an experimental feature - opt in with `tanstackStart({ rsc: { enabled: true } })` + `@vitejs/plugin-rsc` (requires React 19, Vite 7+).
 
 ## When to Use This Skill
 
@@ -172,14 +172,14 @@ const CreatePostSchema = z.object({
 })
 
 export const createPost = createServerFn({ method: 'POST' })
-  .inputValidator(CreatePostSchema)
+  .validator(CreatePostSchema)
   .handler(async ({ data }) => {
     return await db.posts.create(data)
   })
 
 // Redirect and notFound
 export const getPost = createServerFn()
-  .inputValidator((data: { id: string }) => data)
+  .validator((data: { id: string }) => data)
   .handler(async ({ data }) => {
     const post = await db.findPost(data.id)
     if (!post) throw notFound()
@@ -451,7 +451,7 @@ tanstackStart({ prerender: { enabled: true, crawlLinks: true } })
 4. **Compose middleware hierarchically** - Global for cross-cutting concerns, route-level for groups, function-level for specifics.
 5. **Use `head()` on every content route** - Title, description, OG tags. Use loader data for dynamic pages.
 6. **Choose SSR mode per route** - `true` for SEO, `false` for browser-only, `'data-only'` for dashboards.
-7. **Validate all server function inputs** - Zod or custom validators via `.inputValidator()`.
+7. **Validate all server function inputs** - Zod or custom validators via `.validator()`.
 
 ## Advanced Topics
 
