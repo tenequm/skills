@@ -1,11 +1,11 @@
-# Lance v7 reference
+# Lance v8 reference
 
 Capability reference for **Lance** - the open columnar lakehouse format for multimodal AI -
-regrounded against the `lance-format/lance` repository at git tag **`v8.0.0-beta.9`**
-(annotated tag -> commit `a0664baf1`).
+regrounded against the `lance-format/lance` repository at git tag **`v8.0.0-beta.14`**
+(commit `c188de59f`).
 
 Citations are `path:line` relative to the repo root. Build a permalink as
-`https://github.com/lance-format/lance/blob/v8.0.0-beta.9/<path>`. Line numbers drift
+`https://github.com/lance-format/lance/blob/v8.0.0-beta.14/<path>`. Line numbers drift
 between tags; treat them as approximate. The authoritative in-repo sources are the format
 spec under `docs/src/format/`, the user guide under `docs/src/guide/`, the protobuf schemas
 under `protos/`, and the Rust workspace under `rust/`.
@@ -29,7 +29,7 @@ this reference is still authoritative for the format underneath it.
 11. [Indexes](#11-indexes)
 12. [Distributed write and indexing](#12-distributed-write-and-indexing)
 13. [Object store](#13-object-store)
-14. [What changed in v7](#14-what-changed-in-v7)
+14. [What changed (v7 -> v8)](#14-what-changed-v7---v8)
 15. [Capability matrix](#15-capability-matrix)
 16. [Source map](#16-source-map)
 
@@ -60,7 +60,7 @@ code. The format itself is the product - there is no server.
 
 ## 2. The crate workspace
 
-25 crate directories under `rust/`. `[workspace.package]`: `version = "8.0.0-beta.9"`,
+25 crate directories under `rust/`. `[workspace.package]`: `version = "8.0.0-beta.14"`,
 `edition = "2024"`, `rust-version = "1.91.0"`, `license = "Apache-2.0"`, `resolver = "3"`
 (`Cargo.toml:31-55`). `exclude = ["python", "java/lance-jni"]`.
 
@@ -98,12 +98,12 @@ path dependency rather than an explicit member.
 
 **Bindings.** Python: package `pylance` (`python/pyproject.toml`), built with maturin, imported
 as `lance`; the Rust extension crate is `pylance` (`[lib] name = "lance"`); supports Python
-3.9-3.14; runtime deps `pyarrow>=14`, `numpy>=1.22`, `lance-namespace>=0.8.0,<0.9`. Java: an
+3.9-3.14; runtime deps `pyarrow>=14`, `numpy>=1.22`, `lance-namespace>=0.8.5,<0.9`. Java: an
 SDK under `java/` (Maven `org.lance`), bridged to Rust by the `lance-jni` crate
 (`java/lance-jni/`, excluded from the Rust workspace). Notable workspace deps at this tag
 (`Cargo.toml`): `arrow 58.0.0`, `datafusion 53.0.0`, `opendal 0.57`, `jieba-rs 0.10`,
-`lance-namespace-reqwest-client 0.8.2`. The `lance-namespace`/`-impls` crates publish at
-the workspace version (`8.0.0-beta.9`); note the `[workspace.dependencies]` declaration
+`lance-namespace-reqwest-client 0.8.4`. The `lance-namespace`/`-impls` crates publish at
+the workspace version (`8.0.0-beta.14`); note the `[workspace.dependencies]` declaration
 still pins `lance-namespace-datafusion` consumers to `=7.0.0-beta.9` even though that crate
 itself publishes at the workspace version.
 
@@ -441,7 +441,9 @@ branch, so unused branches must be deleted to reclaim space.
 A file referenced by no manifest is deleted only if >=7 days old unless `delete_unverified`
 is set. `CleanupPolicy` knobs: `before_timestamp`, `before_version`, `delete_unverified`,
 `error_if_tagged_old_versions` (default true), `clean_referenced_branches`,
-`delete_rate_limit` (max delete requests/sec, to avoid S3 throttling).
+`delete_rate_limit` (max delete requests/sec, to avoid S3 throttling). A newer
+`Dataset::cleanup(policy)` API (new in v8, PR #7147) splits this into `explain()` (returns a
+`CleanupExplanation` of what would be removed - a dry run) and `execute()`.
 
 ---
 
@@ -685,6 +687,16 @@ column "for raw-query lower-bound pruning" (`index.md:201`). The metadata schema
 (8 for the row ID + 8 for the factors) **only at `num_bits=1`**
 (`docs/src/guide/performance.md:416`); multi-bit adds the `__ex_codes` and ex-factor columns.
 
+**Approx mode** (new in `v8.0.0-beta.10`, PR #7179). Vector search takes a public
+`approx_mode` with three values - "`fast`, `normal`, and `accurate`" - to pick the
+speed/accuracy tradeoff "when the backing index supports it" (RaBitQ today). "The public API
+avoids exposing RaBitQ/HACC terminology" (commit `e25620710`). It threads through the Rust
+scanner, the ANN proto, and Python query parsing; serialized as `VectorApproxMode approx_mode`
+(`protos/ann.proto:16,45`) - a **breaking ANN-proto change**, so any consumer matching Lance's
+serialized ANN query proto must regenerate. Multi-bit RaBitQ ex-code reranking also got
+dedicated SIMD kernels (PR #7205, `rust/lance-index/src/vector/bq/ex_dot.rs`). **IVF_RQ now
+defaults `target_partition_size` to 4096** (was the generic fallback, PR #7273).
+
 On-disk layout (format V3): each vector index is two Lance files - an **index file**
 (`index.idx`, the search structure: IVF metadata, HNSW graph) and an **auxiliary file**
 (`auxiliary.idx`, quantized vector storage). HNSW construction defaults: `max_level` 7, `m`
@@ -898,13 +910,18 @@ Per-backend highlights:
 - **Azure** - `account_name` / `account_key`, service principal, SAS tokens, managed
   identity, workload-identity federation.
 - **Alibaba OSS** - `oss_endpoint` (required), `oss_access_key_id`, `oss_secret_access_key`.
+- **Tencent COS** (`object_store.md:252`) - `cos://bucket/path` with `cos_endpoint`,
+  `cos_secret_id`, `cos_secret_key`, and optional `cos_enable_versioning`; env vars are read
+  from the `COS_` or `TENCENTCLOUD_` prefixes.
 - **Volcengine TOS** (new in v8, `object_store.md:222-246`) - `tos://bucket/path` with
   `tos_endpoint` required (e.g. `https://tos-cn-beijing.volces.com`), plus `tos_region` and
   access-key options.
-- **GooseFS** (new in v8, feature-gated `goosefs`; not in the object-store guide) -
-  `goosefs://host:port/path`; the master address comes from `goosefs_master_addr`
-  (HA-aware: `"addr1:port,addr2:port"`) or the URL host
-  (`rust/lance-io/src/object_store/providers/goosefs.rs:24-61`).
+- **GooseFS** (new in v8, feature-gated `goosefs`, now documented at `object_store.md:306`) -
+  `goosefs://host:port/path`; master address comes from `goosefs_master_addr` (HA-aware:
+  `"addr1:port,addr2:port"`), the URL host, or default port `9200`. Optional keys:
+  `goosefs_write_type` (`MUST_CACHE` / `CACHE_THROUGH` / `THROUGH` / `ASYNC_THROUGH`),
+  `goosefs_auth_type` (`nosasl` / `simple`), `goosefs_auth_username`, `goosefs_block_size`,
+  `goosefs_chunk_size` (`rust/lance-io/src/object_store/providers/goosefs.rs:24-61`).
 
 **Base-aware access (v7).** `Dataset::object_store` takes an `Option<u32>` base id - `None`
 for the primary store, `Some(base_id)` for an additional base. Caching/instrumentation
@@ -922,9 +939,10 @@ Disable globally with `LANCE_USE_VERSION_HINT=0`.
 The v7 tag line ran `v7.0.0-beta.1` through `v7.0.0-beta.17`, then `v7.0.0-rc.1` and
 `v7.0.0`. The v7.1 line opened at `v7.1.0-beta.1`, continued through `v7.1.0-beta.4` and
 `v7.1.0-rc.1`; the v7.2 line ran through `v7.2.0-beta.5`; then the **v8 line opened** and the
-crates now pin `8.0.0-beta.9`. This section keeps the full v7 history below (still useful
-context) and adds the **v7.2.0-beta.5 -> v8.0.0-beta.9 delta** at the end - that delta is the
-current major-version boundary and the most important part for a v8 reader.
+crates now pin `8.0.0-beta.14`. This section keeps the full v7 history below (still useful
+context), the **v7.2.0-beta.5 -> v8.0.0-beta.9 delta** (the major-version boundary - the most
+important part for a v8 reader), and finally the **v8.0.0-beta.9 -> v8.0.0-beta.14 delta**
+(the current tag) at the very end.
 
 **The v6 -> v7 breaking change.** `feat!: make dataset object store access base-aware`
 (PR #6647, commit `456198cd`), immediately followed by the automated bump to `7.0.0-beta.1`.
@@ -1046,7 +1064,7 @@ Unchanged and reverified at this tag: 15 transaction ops, the scalar/vector inde
 all `protos/*.proto`, file-format `version.rs`, `rust-version 1.91.0`, `resolver 3`, edition
 2024, `CommitConfig num_retries=20`, MemWAL still experimental.
 
-### The v7.2.0-beta.5 -> v8.0.0-beta.9 delta (current major boundary)
+### The v7.2.0-beta.5 -> v8.0.0-beta.9 delta (major-version boundary)
 
 86 commits. This is a **major version bump** whose unifying theme is moving *every* index
 build onto one segment-based lifecycle. **Six breaking changes** (`!:` commits):
@@ -1105,11 +1123,50 @@ section 3 holds unchanged); `CommitConfig num_retries = 20`
 `ConditionalPutCommitHandler` routing; `rust-version 1.91.0`, `resolver 3`, edition 2024;
 MemWAL docs and system-index docs byte-identical; MemWAL still experimental.
 
+### The v8.0.0-beta.9 -> v8.0.0-beta.14 delta (current tag)
+
+31 commits, **two breaking changes** - both vector/RaBitQ. No new crate (still 25), no new
+transaction op (still 15), no file-format change.
+
+- **`feat(vector)!: add approx mode for RaBitQ search`** (PR #7179) - a public
+  `approx_mode` with values `fast` / `normal` / `accurate` for vector search "when the backing
+  index supports it" (commit `e25620710`), threaded through the Rust scanner, Python query
+  parsing, and ANN proto serialization. **Breaking proto change**: the ANN query proto now
+  carries `VectorApproxMode approx_mode` (`protos/ann.proto:16,45`) - regenerate any consumer
+  that matches the serialized ANN proto. See section 11.1.
+- **`perf(vector)!: add dedicated SIMD kernels for RaBitQ ex-code reranking`** (PR #7205,
+  `rust/lance-index/src/vector/bq/ex_dot.rs`).
+- **IVF_RQ default `target_partition_size` is now 4096** (was the generic fallback, PR #7273).
+- **Cleanup explain API** (PR #7147) - `Dataset::cleanup(policy)` splits into `explain()`
+  (returns a `CleanupExplanation`, a dry run) and `execute()`. See section 7.
+- **Object-store docs** (PR #7151) - the guide gained full Tencent COS and GooseFS config
+  sections (`docs/src/guide/object_store.md:252,306`); GooseFS is no longer undocumented. See
+  section 13.
+- **Smaller adds**: Python zonemap segment builds exposed (PR #7177); per-query I/O metrics
+  (`bytes_read` / `iops` / `requests`) on `ANNSubIndex` / `ANNIvfPartition` in EXPLAIN ANALYZE
+  (PR #7204); branch-aware version ops in the Directory/REST namespaces (CreateTableBranch /
+  ListTableBranches / DeleteTableBranch, PR #7166); enriched `IndexContent` fields in dir
+  namespace `ListTableIndices` (PR #7109).
+- **Fixes**: resolve Blob v2 external URIs and clean failed writes in `add_columns`
+  (PR #7152); coerce filter literals for dictionary-encoded columns (PR #7003);
+  composite-key `merge_insert` probes every indexed key column (PR #6878).
+- **Removals**: `table_version_storage_enabled` and the `__manifest`-backed table-version path
+  removed - version ops now use `_versions/` exclusively (PR #7222); brotli dropped from the
+  dependency graph (PR #7270).
+- **Dep pins**: `lance-namespace-reqwest-client` 0.8.2 -> 0.8.4; pylance `lance-namespace`
+  `>=0.8.0,<0.9` -> `>=0.8.5,<0.9`. arrow 58 / datafusion 53 / opendal 0.57 / jieba-rs 0.10
+  unchanged.
+
+Unchanged and reverified at `v8.0.0-beta.14`: 25 crates; 15 transaction ops; file-format
+`version.rs` (`Next => 2.3`, `#[default] V2_1`, no 2.4); `CommitConfig num_retries = 20`
+(`rust/lance-table/src/io/commit.rs:1550`); `rust-version 1.91.0`, `resolver 3`, edition 2024;
+feature-flag bits; `ConditionalPutCommitHandler` routing.
+
 ---
 
 ## 15. Capability matrix
 
-What Lance can and cannot do at `v8.0.0-beta.9`.
+What Lance can and cannot do at `v8.0.0-beta.14`.
 
 **Storage and format**
 
@@ -1142,7 +1199,7 @@ What Lance can and cannot do at `v8.0.0-beta.9`.
 
 | Capability | Status |
 |------------|--------|
-| Vector ANN - IVF + FLAT/HNSW + FLAT/PQ/SQ/RQ (RQ multi-bit, `num_bits` 1..=9) | yes |
+| Vector ANN - IVF + FLAT/HNSW + FLAT/PQ/SQ/RQ (RQ multi-bit, `num_bits` 1..=9; `approx_mode` fast/normal/accurate) | yes |
 | Distance metrics L2 / Cosine / Dot / Hamming | yes |
 | Scalar - btree, bitmap, label-list, ngram, zonemap, bloom filter, FM-Index | yes |
 | FM-Index substring / prefix / regex search on raw bytes | yes (segment-based) |
@@ -1171,7 +1228,7 @@ dashboard.
 
 ## 16. Source map
 
-Where to look in `lance-format/lance` at `v8.0.0-beta.9`.
+Where to look in `lance-format/lance` at `v8.0.0-beta.14`.
 
 | Topic | Path |
 |-------|------|
