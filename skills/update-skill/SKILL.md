@@ -4,7 +4,7 @@ description: "Thorough on-demand refresh of one skill in a skills repository: re
 argument-hint: "[skill-name]"
 disable-model-invocation: true
 metadata:
-  version: "0.6.0"
+  version: "0.7.0"
 ---
 
 # Update Skill
@@ -25,6 +25,18 @@ These rules apply across all phases:
 - **Sticky posture.** Once GATE 1 has been emitted, "report findings first" persists across follow-up rounds in the same session. If the user replies `changes` or asks for revisions, re-emit the gate after revising; never silently apply.
 - **Non-resume.** If the session is interrupted between GATE 1 and GATE 2, re-run `/update-skill <name>` from scratch. There is no checkpoint or resume mechanism.
 - **No `--no-verify`, no `--amend`, no force-push** unless the user explicitly authorizes it for this run. Per the repo's CLAUDE.md or AGENTS.md.
+- **Working directory.** Every path, every `just check`, and every working git command (`status`/`diff`/`add`/`commit`/`push`) in the phases below runs against `<workdir>` - the worktree created in Phase 0 if the user opted in, otherwise `${CLAUDE_PROJECT_DIR}`. Use absolute paths under `<workdir>`; do not mix in the main checkout once a worktree is chosen. The exception is Phase 0's own `git worktree add`/`remove`, which must run against `${CLAUDE_PROJECT_DIR}` (the main checkout).
+
+## Phase 0 - Worktree choice (ask first)
+
+After resolving `<name>`, ask exactly once: "Run this update in a dedicated git worktree, so you can update other skills in parallel? (yes / no)". Wait for the reply.
+
+- **no** (default) -> set `<workdir>` = `${CLAUDE_PROJECT_DIR}` and proceed to Phase 1 in the current checkout.
+- **yes** -> create an isolated worktree on a fresh branch and use it as `<workdir>` for the entire run:
+  ```bash
+  git -C "${CLAUDE_PROJECT_DIR}" worktree add "${CLAUDE_PROJECT_DIR}/../skills-<name>" -b chore/update-<name>
+  ```
+  Set `<workdir>` = `${CLAUDE_PROJECT_DIR}/../skills-<name>`. If that path or branch already exists, add the same numeric suffix (`-2`, `-3`, ...) to both the worktree path and the branch name until both are free, and carry that suffix into `<workdir>`. Every later phase - reads, edits, `just check`, diff review, commit, push - operates inside `<workdir>`. The Phase 7 branch guard will see `chore/update-<name>` and route to the push + PR flow automatically. After the run finishes (PR opened, or user aborts), remove the worktree: `git -C "${CLAUDE_PROJECT_DIR}" worktree remove "<workdir>"` (it refuses if there are uncommitted changes - leave it in place and tell the user if so).
 
 ## Phase 1 - Pre-flight read
 
@@ -131,7 +143,7 @@ Apply each approved row with Edit/Write; batch independent edits in parallel. Th
 
 ## Phase 5 - Repo validation gate
 
-If the repo defines a validation command - check its CLAUDE.md/AGENTS.md or `Justfile`/`package.json` (e.g. `just check`, `npm run lint`, `make check`) - run it from the repo root. In this repo that is `just check`, which also regenerates `README.md` (the most common CI failure cause). On failure, surface the error verbatim, fix the root cause, and re-run until clean. No `--no-verify`, no `--amend`, no hook-skipping. If the repo has no validation gate, skip this phase and note it.
+If the repo defines a validation command - check its CLAUDE.md/AGENTS.md or `Justfile`/`package.json` (e.g. `just check`, `npm run lint`, `make check`) - run it from `<workdir>` (the repo root, or the Phase 0 worktree). In this repo that is `just check`, which also regenerates `README.md` (the most common CI failure cause). On failure, surface the error verbatim, fix the root cause, and re-run until clean. No `--no-verify`, no `--amend`, no hook-skipping. If the repo has no validation gate, skip this phase and note it.
 
 ## Phase 6 - Privacy scan + diff review + GATE 2
 

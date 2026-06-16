@@ -7,6 +7,11 @@ and this skill adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.h
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-06-16
+
+### Added
+- Phase 0 worktree choice: the run now asks once whether to operate in a dedicated git worktree (`git worktree add ... -b chore/update-<name>`), enabling parallel updates of multiple skills without README/index/diff contention. All phases operate against a new `<workdir>` variable (the worktree if chosen, else `${CLAUDE_PROJECT_DIR}`); the existing Phase 7 branch guard handles the resulting feature-branch PR flow, and the worktree is removed after the run.
+
 ## [0.6.0] - 2026-06-05
 
 ### Added
