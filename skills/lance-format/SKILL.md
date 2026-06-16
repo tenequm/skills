@@ -2,8 +2,8 @@
 name: lance-format
 description: Reference for Lance v8 - the open columnar lakehouse format for multimodal AI - and its Rust crate workspace (`lance`, `lance-table`, `lance-file`, `lance-encoding`, `lance-index`, `lance-io`, `lance-namespace`, and more). Use when building directly on the Lance crates - creating or reading `.lance` datasets, manifests, fragments, deletion files, the 2.x file format and structural encodings, vector / scalar / full-text / FM-Index / geo indexes, MemWAL streaming writes, optimistic-concurrency commits and commit handlers, schema evolution, versioning, time-travel, tags, branches, stable row IDs, namespaces, or object-store config. Triggers on lance crate, .lance file, lance dataset, lance file format, structural encoding, IVF_PQ, IVF_HNSW, IVF_RQ, RaBitQ, FM-Index, lance FTS, zonemap, MemWAL, OCC retry, lance schema evolution, lance namespace, pylance. This is the Lance format and engine (the `lance-format/lance` repo), not LanceDB the database product - but also the right reference for what LanceDB builds on.
 metadata:
-  version: "0.6.0"
-  upstream: "lance-format/lance@v8.0.0-beta.9"
+  version: "0.7.0"
+  upstream: "lance-format/lance@v8.0.0-beta.14"
   openclaw:
     homepage: https://github.com/tenequm/skills/tree/main/skills/lance-format
     emoji: "🗄️"
@@ -17,7 +17,7 @@ specs: a **file format**, a **table format**, **index formats**, **catalog specs
 **namespace client spec**. The Rust workspace at `lance-format/lance` implements all of them
 plus Python (`pylance`) and Java bindings.
 
-This skill tracks **`v8.0.0-beta.9`** (the `lance-format/lance` git tag). Pin against tags,
+This skill tracks **`v8.0.0-beta.14`** (the `lance-format/lance` git tag). Pin against tags,
 not `main` - Lance ships beta tags every few days and `next`-format encodings can change.
 
 The deep reference is `references/lance-reference.md`. Load it for any concrete schema, parameter,
@@ -63,7 +63,7 @@ beneath it. Full table with descriptions and citations in `references/lance-refe
 | `lance-namespace` / `-impls` / `-datafusion` | Namespace trait, Directory/REST impls, DataFusion catalog bridge |
 | `lance-arrow`, `lance-tools`, `fsst`, `lance-bitpacking`, ... | Arrow extensions, CLI, compression sub-crates |
 
-All share `version = "8.0.0-beta.9"` except `lance-arrow-scalar`, which is pinned at
+All share `version = "8.0.0-beta.14"` except `lance-arrow-scalar`, which is pinned at
 `58.0.0` to track Arrow. Workspace: edition 2024, `rust-version = 1.91.0`,
 `resolver = "3"`; notable deps arrow 58, datafusion 53, opendal 0.57, jieba-rs 0.10.
 
@@ -112,12 +112,18 @@ models** for distributed builds; and the **Volcengine TOS** (`tos://`) and featu
 zone-map segments. Unchanged at v8: still **15 transaction ops**, `next` still resolves to
 **2.3** (default still 2.1), `CommitConfig.num_retries` still **20**, the feature-flag bits,
 and the `ConditionalPutCommitHandler` routing. The v7 era - MemWAL, branches, the geo/RTree
-index, the `lance-select` crate, ICU FTS - all carry forward. Details in
-`references/lance-reference.md` section 14.
+index, the `lance-select` crate, ICU FTS - all carry forward.
+
+Later v8 betas (`beta.9` -> `beta.14`) add a public vector-search **`approx_mode`**
+(`fast`/`normal`/`accurate`) for RaBitQ indexes (a breaking `ann.proto` change), a 4096
+default IVF_RQ `target_partition_size`, a **cleanup explain** API, and full Tencent COS /
+GooseFS object-store config docs; they remove the `table_version_storage_enabled` /
+`__manifest` version path and brotli. All structural invariants above are unchanged.
+Details in `references/lance-reference.md` section 14.
 
 ## Navigating the reference
 
-`references/lance-reference.md` is the full v8 reference, regrounded against the `v8.0.0-beta.9`
+`references/lance-reference.md` is the full v8 reference, regrounded against the `v8.0.0-beta.14`
 source. Load the section for your task:
 
 1. **What Lance is** - the lakehouse spec stack
@@ -145,9 +151,9 @@ source. Load the section for your task:
 ## Maintenance
 
 Citations in `references/lance-reference.md` are `path:line` relative to the `lance-format/lance` repo;
-build a permalink as `https://github.com/lance-format/lance/blob/v8.0.0-beta.9/<path>`.
+build a permalink as `https://github.com/lance-format/lance/blob/v8.0.0-beta.14/<path>`.
 
 To refresh: `git -C ~/pjv/lance-format/lance fetch --tags`, check out the newest `v8*` tag,
 re-read the format spec under `docs/src/format/` and the user guide under `docs/src/guide/`,
-re-verify the crate workspace, and bump `metadata.upstream` plus every `v8.0.0-beta.9`
+re-verify the crate workspace, and bump `metadata.upstream` plus every `v8.0.0-beta.14`
 reference. Line numbers in citations drift between tags - treat them as approximate.

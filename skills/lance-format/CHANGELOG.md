@@ -7,6 +7,47 @@ and this skill adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.h
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-06-16
+
+### Changed
+- Re-grounded against upstream tag `v8.0.0-beta.9` -> `v8.0.0-beta.14` (commit
+  `c188de59f`); bumped the workspace version pin, permalink base, and citation tag.
+  31-commit range, 2 breaking changes (both RaBitQ/vector). All structural invariants
+  reverified unchanged: 25 crates, arrow 58, datafusion 53, opendal 0.57, jieba-rs 0.10,
+  rust 1.91.0, resolver 3, edition 2024, version enum (`Next => 2.3`, default `V2_1`),
+  15 transaction ops, `CommitConfig num_retries = 20`.
+- Dep pins: `lance-namespace-reqwest-client` 0.8.2 -> 0.8.4; pylance `lance-namespace`
+  `>=0.8.0,<0.9` -> `>=0.8.5,<0.9`.
+- IVF_RQ default `target_partition_size` is now 4096 (was the generic fallback) (PR #7273).
+
+### Added
+- Public vector-search `approx_mode` (`fast` / `normal` / `accurate`) for RaBitQ-backed
+  indexes; serialized as `VectorApproxMode approx_mode` in `protos/ann.proto` (PR #7179,
+  breaking proto change). Dedicated SIMD kernels for RaBitQ ex-code reranking (PR #7205).
+  (Section 11.1)
+- Cleanup explain API: `Dataset::cleanup(policy)` with `explain()` / `execute()` returning
+  a `CleanupExplanation` (PR #7147). (Section 7)
+- Tencent COS and GooseFS object-store config keys now documented in the object-store guide
+  (COS: `cos_endpoint` / `cos_secret_id` / `cos_secret_key` / `cos_enable_versioning`,
+  `COS_`/`TENCENTCLOUD_` env prefixes; GooseFS: `goosefs_write_type` / `goosefs_auth_type` /
+  `goosefs_block_size` / `goosefs_chunk_size`, default port 9200) (PR #7151). (Section 13)
+- Python zonemap segment builds exposed (PR #7177); per-query I/O metrics
+  (`bytes_read`/`iops`/`requests`) on ANN operators in EXPLAIN ANALYZE (PR #7204);
+  branch-aware version ops in Directory/REST namespaces (PR #7166). (Section 14 delta)
+
+### Removed
+- Upstream removed `table_version_storage_enabled` and the `__manifest`-backed table-version
+  path (version ops now use `_versions/` exclusively, PR #7222); brotli dropped from the
+  dependency graph (PR #7270).
+
+### Fixed
+- Corrected the reference-file H1 and table-of-contents, which still read "Lance v7" though
+  the body is v8 (carryover miss from the 0.6.0 v7->v8 re-grounding).
+- Dropped the stale claim that GooseFS is "not in the object-store guide" - it now has a
+  full guide section.
+
+Verified against: lance-format/lance@v8.0.0-beta.14
+
 ## [0.6.0] - 2026-06-10
 
 ### Changed
