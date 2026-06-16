@@ -6,6 +6,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.2.2] - 2026-06-16
+
+### Changed
+
+- Re-published under the `last30days-glim` slug. The 2026-06-08 `surf -> glim` rename never reached ClawHub (CI `release-prepare` aborted: skill files changed without a version bump), leaving the new slug unpublished and the old `last30days-surf` slug orphaned on the registry. Bumped the version to trigger publication; `last30days-surf` retired.
+
 ## [0.2.1] - 2026-04-30
 
 ### Changed

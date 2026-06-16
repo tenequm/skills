@@ -2,7 +2,7 @@
 name: last30days-glim
 description: "Research what people actually said about any topic over the last 30 days across Reddit, X/Twitter, YouTube, GitHub, Hacker News, Polymarket, Bluesky, TikTok, Instagram, Threads, and the open web. One glim API key replaces the seven keys upstream needed (xAI, ScrapeCreators, Brave, OpenRouter, Apify, X cookies, yt-dlp install). Use when the user runs /last30days-glim <topic>, /l30, asks 'what's new with X', 'what are people saying about Y', 'last 30 days of Z', wants 'X vs Y' comparison, asks for competitors of a brand, prepares for a meeting/launch/trip, asks 'is X any good lately', or wants engagement-ranked discussion (upvotes, likes, dollar-backed odds) instead of SEO-ranked editorial content. Triggers: /last30days-glim, /l30, last 30 days, past month, past 30 days, recent discussion, what's new with, what are people saying about, vs mode, competitor comparison, before a meeting, before a launch, before a trip."
 metadata:
-  version: "0.2.1"
+  version: "0.2.2"
   upstream: "last30days-skill@5b87cca"
   openclaw:
     homepage: https://github.com/tenequm/skills/tree/main/skills/last30days-glim
