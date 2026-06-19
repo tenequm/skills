@@ -337,6 +337,23 @@ gh repo view owner/repo --json name, description
 
 ## Command-Specific Quirks
 
+### gh search code has no sorting
+
+`gh search code` is powered by GitHub's legacy code-search engine and supports **no** `--sort`/`--order` flags - passing them fails with `unknown flag: --sort`. A `stars:>N` (or similar repo-popularity) qualifier inside the query is matched as literal file text, not a filter. Scope results with the available flags instead:
+
+```bash
+# ✅ Available scoping flags
+gh search code "useWallet" --language=typescript --owner=vercel
+gh search code --filename Dockerfile --extension dockerfile
+gh search code react --match path   # match file path vs file contents {file|path}
+
+# ❌ Wrong - no such flag on code search
+gh search code "useWallet" --sort indexed
+gh search code "useWallet" --sort stars
+```
+
+`--sort`/`--order` *do* work on `gh search repos` ({forks|help-wanted-issues|stars|updated}) and `gh search issues`/`gh search prs` - it is only code search that dropped them.
+
 ### gh search vs gh api
 
 Different approaches for different use cases:

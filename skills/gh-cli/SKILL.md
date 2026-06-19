@@ -2,7 +2,8 @@
 name: gh-cli
 description: GitHub CLI for remote repository analysis, file fetching, codebase comparison, and discovering trending code/repos. Use when analyzing repos without cloning, comparing codebases, or searching for popular GitHub projects.
 metadata:
-  version: "1.1.2"
+  version: "1.2.0"
+  upstream: "gh@2.95.0"
   openclaw:
     homepage: https://github.com/tenequm/skills/tree/main/skills/gh-cli
     emoji: "🐙"
@@ -139,11 +140,11 @@ gh search repos "topic:machine-learning" --sort stars --order desc
 ### Discover popular code patterns
 
 ```bash
-# Find popular implementations
-gh search code "function useWallet" --language=typescript --sort indexed
+# Find popular implementations (code search has no sorting - scope with filters)
+gh search code "function useWallet" --language=typescript
 
-# Find code in popular repos only
-gh search code "implementation" "stars:>1000"
+# Scope to a known repo (code search can't filter by stars - stars:>N is literal text)
+gh search code "implementation" --repo=honojs/hono
 
 # Search specific organization
 gh search code "authentication" --owner=anthropics

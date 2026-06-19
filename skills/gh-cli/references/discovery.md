@@ -78,13 +78,18 @@ gh search repos "stars:>500 forks:<50"
 
 ### By file presence
 
+Use the `--filename` flag (not an in-query `filename:` qualifier) and `--extension`/`--match` to scope. Code search has no sorting flags.
+
 ```bash
 # Find repos by file presence (e.g., has Dockerfile)
-gh search code "filename:Dockerfile" --sort indexed
+gh search code --filename Dockerfile
 
 # Has specific config files
-gh search code "filename:vite.config.ts" --sort indexed
-gh search code "filename:wxt.config.ts" --sort indexed
+gh search code --filename vite.config.ts
+gh search code --filename wxt.config.ts
+
+# Restrict matching to the file path vs file contents
+gh search code react --match path --extension tsx
 ```
 
 ### By description keywords
@@ -120,24 +125,27 @@ gh search repos "org:anthropics"
 ### Find implementations
 
 ```bash
-# Find popular implementations
-gh search code "function useWallet" --language=typescript --sort indexed
+# Find implementations (code search has no sorting - scope with --language/--owner/--repo)
+gh search code "function useWallet" --language=typescript
 gh search code "async fn main" --language=rust
 
 # Specific patterns
-gh search code "createContext" --language=typescript --sort indexed
+gh search code "createContext" --language=typescript
 gh search code "impl Display for" --language=rust
 ```
 
-### By popularity
+### By repository
+
+Code search cannot sort by stars, and a `stars:>N` qualifier in the query is matched as literal file text, not a popularity filter. To find code in known-popular repos, first discover the repos with `gh search repos`, then scope code search to them with `--owner`/`--repo`.
 
 ```bash
-# Most starred code in specific language
-gh search code "authentication" --language=typescript --sort stars
+# Scope code search to a specific owner or repo
+gh search code "authentication" --language=typescript --owner=vercel
+gh search code "middleware" --repo=honojs/hono
 
-# Find code in popular repos only
-gh search code "implementation" "stars:>1000"
-gh search code "middleware" "stars:>500" --language=typescript
+# Two-step: find popular repos, then search their code
+gh search repos "topic:web-framework stars:>1000" --json fullName --jq '.[].fullName'
+gh search code "middleware" --repo=<one-of-the-above>
 ```
 
 ### By organization
