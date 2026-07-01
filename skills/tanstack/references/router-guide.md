@@ -162,6 +162,23 @@ const postLink = linkOptions({ to: '/posts/$postId', params: { postId: '123' } }
 
 Always provide `from` on Link and hooks to narrow types and improve TS performance. Without `from`, TypeScript must check against all routes.
 
+### Custom Link Components (`createLink` / `useLinkProps`)
+
+To give a third-party or styled component (a UI-library `<Button>`, a framer-motion anchor) the same type-safe `to`/`params`/`search`/`activeProps` API as `Link`, wrap it with `createLink`. For full manual control, `useLinkProps` returns the resolved anchor props (href, active state, click handler) to spread onto your own element.
+
+```tsx
+import { createLink } from '@tanstack/react-router'
+
+// Component must forward a ref and accept anchor props
+const BasicLink = React.forwardRef<HTMLAnchorElement, React.AnchorHTMLAttributes<HTMLAnchorElement>>(
+  (props, ref) => <a ref={ref} {...props} className="my-link" />,
+)
+
+export const AppLink = createLink(BasicLink) // now typed: <AppLink to="/posts/$postId" params={{ postId: '1' }} />
+```
+
+If the wrapped component defines its own props, intersect them so both sets stay typed. Prefer `createLink` over hand-rolling an `<a>` when you need active styling or preloading.
+
 ## Search Params
 
 Search params are first-class - validated, typed, JSON-serialized, and subscribable with fine-grained selectors.

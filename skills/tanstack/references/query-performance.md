@@ -250,6 +250,29 @@ function PaginatedList({ page }) {
 }
 ```
 
+### Prefetch During Render (`usePrefetchQuery`)
+
+The imperative `queryClient.prefetchQuery` above runs in an effect or event handler. `usePrefetchQuery` / `usePrefetchInfiniteQuery` prefetch during the render phase instead - use them to warm a child's data in the parent that renders it (typically alongside `useSuspenseQuery` in the child), so the request starts before the child mounts. They return nothing and never suspend the caller.
+
+```tsx
+import { usePrefetchQuery, useSuspenseQuery } from '@tanstack/react-query';
+
+function Parent() {
+  // Kicks off the fetch during render; child reads it from cache
+  usePrefetchQuery(commentsQueryOptions);
+  return (
+    <Suspense fallback={<Spinner />}>
+      <Comments />
+    </Suspense>
+  );
+}
+
+function Comments() {
+  const { data } = useSuspenseQuery(commentsQueryOptions);
+  return <CommentList comments={data} />;
+}
+```
+
 ## Data Transformation
 
 ### Use select for Transformation
