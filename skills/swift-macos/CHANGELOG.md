@@ -7,6 +7,10 @@ and this skill adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.h
 
 ## [Unreleased]
 
+## [0.6.1] - 2026-07-01
+### Changed
+- Moved the "Fall 2026 Releases (WWDC 2026)" section out of SKILL.md into `references/fall-2026-releases.md` (progressive disclosure), keeping SKILL.md under the 500-line policy limit. Content unchanged, expanded slightly with sources.
+
 ## [0.6.0] - 2026-07-01
 ### Changed
 - Current toolchain updated to Swift 6.3.3 / Xcode 26.6 (macOS 26.5 Tahoe SDK); dropped the stale "Swift 6.2.4, Feb 2026 latest" framing.
