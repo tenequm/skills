@@ -134,6 +134,7 @@ Read only the reference files relevant to your task:
 - Transactional state (STM, `Tx*`) → `references/stm.md`
 - Date/time handling → `references/datetime.md`
 - Immutable nested updates (optics) → `references/optics.md`
+- Graphs, dependency ordering, shortest paths, cycle detection → `references/graph.md`
 - Pattern matching (`Match`) → `references/core-patterns.md`
 - Pooling resources (`Pool`) → `references/resource-management.md`
 - Fiber sets, SubscriptionRef, worker threads → `references/concurrency.md`

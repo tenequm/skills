@@ -14,6 +14,7 @@ and this skill adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.h
 - `dependency-injection.md`: `LayerMap.Service` for per-key dynamic layers, and a `ManagedRuntime` bridge pattern for non-Effect frameworks (Hono/Express) with fiber-local request context via `Context.Reference`.
 - `resource-management.md`: `RcRef`/`RcMap` reference-counted shared resources.
 - `streams.md`: stream framing/encoding via `Stream.pipeThroughChannel` + `Ndjson`/`Msgpack` (`effect/unstable/encoding`).
+- `graph.md` (new reference): the `Graph` module - directed/undirected graphs, traversal (`dfs`/`bfs`/`topo`), analysis (`isAcyclic`, connected/strongly-connected components), and shortest paths (`dijkstra`/`astar`/`bellmanFord`/`floydWarshall`).
 - `schema.md`: note that `SchemaError` is a tagged `Data.TaggedError` (catchable via `Effect.catchTag`).
 - SKILL.md progressive-disclosure index entries for the new concepts.
 ### Changed
