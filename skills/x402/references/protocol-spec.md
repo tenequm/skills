@@ -348,6 +348,8 @@ Use it when per-request on-chain settlement is impractical: gas fees exceed per-
 
 SDK support: TypeScript (`@x402/evm/batch-settlement/{client,server,facilitator}` plus `*/file-storage` and `server/redis-storage`), Go (`go/v2/mechanisms/evm/batch-settlement`), and Python (`x402.mechanisms.evm.batch_settlement`); EVM and Cloudflare network bindings. See `specs/schemes/batch-settlement/`.
 
+As of 2.17.0 the facilitator `authorizerSigner` (Go/TS) / `receiver_authorizer_signer` (Python) is **optional**. A facilitator that omits it no longer advertises a `receiverAuthorizer` in `/supported`, and servers must then supply their own claim/refund authorizer - claim/refund without one errors with `invalid_batch_settlement_evm_authorizer_not_configured` (Go `ErrAuthorizerNotConfigured`). A server intending to delegate fails fast at `initialize()` (via `validateFacilitatorSupport`) when the facilitator advertises no usable `receiverAuthorizer`.
+
 ## Auth-Capture Scheme
 
 `auth-capture` is a payment scheme where funds can be held and settled later. The client authorizes a maximum amount; the facilitator either locks funds in escrow for later capture (two-phase) or sends them directly with refund capability (single-shot). Unlike `exact`, it supports returning funds via **void, refund, and reclaim** - useful for escrow, pre-authorization, and refundable purchases.
@@ -356,7 +358,7 @@ The **captureAuthorizer** is the entity allowed to authorize, capture, void, ref
 
 ## Spec-Stage Chains (No SDK Yet)
 
-Beyond the SDK-supported networks, the spec defines `exact` schemes for additional chains that have no SDK implementation yet (spec only). As of this writing: Concordium, Cardano, NEAR, Sui, and Keeta. See `specs/schemes/exact/scheme_exact_<chain>.md`. A Cloudflare variant of `batch-settlement` is also spec-defined (`specs/schemes/batch-settlement/scheme_batch_settlement_cloudflare.md`).
+Beyond the SDK-supported networks, the spec defines `exact` schemes for additional chains that have no SDK implementation yet (spec only). As of this writing: Cardano, NEAR, and Sui. (Concordium and Keeta graduated to TypeScript SDKs - `@x402/concordium`, `@x402/keeta`.) See `specs/schemes/exact/scheme_exact_<chain>.md`. A Cloudflare variant of `batch-settlement` is also spec-defined (`specs/schemes/batch-settlement/scheme_batch_settlement_cloudflare.md`).
 
 ## Network Identifiers (CAIP-2)
 
@@ -390,6 +392,14 @@ Format: `{namespace}:{reference}`
 | Hedera Mainnet | `hedera:mainnet` |
 | Hedera Testnet | `hedera:testnet` |
 | Algorand Mainnet | `algorand:wGHE2Pwdvd7S12BL5FaOP20EGYesN73ktiC1qzkkit8=` |
+| Mezo Mainnet | `eip155:31612` |
+| Mezo Testnet | `eip155:31611` |
+| XDC Network Mainnet | `eip155:50` |
+| XDC Apothem Testnet | `eip155:51` |
+| Keeta Mainnet | `keeta:21378` |
+| Keeta Testnet | `keeta:1413829460` |
+| Concordium Mainnet | `ccd:9dd9ca4d19e9393877d2c44b70f89acb` |
+| Concordium Testnet | `ccd:4221332d34e1694168c2a0c0b3fd0f27` |
 
 ## Discovery API (Bazaar)
 
@@ -427,6 +437,9 @@ Semantic search over discoverable resources, with cursor-based pagination (`quer
 | `invalid_network` | Network not supported |
 | `invalid_payload` | Malformed payload |
 | `invalid_payment_requirements` | Payment requirements invalid or malformed |
+| `asset_not_deployed_contract` | EVM asset address has no bytecode (an EOA); verify rejects it before a no-op settlement |
+| `invalid_batch_settlement_evm_authorizer_not_configured` | Batch-settlement claim/refund attempted but no `receiverAuthorizer` is configured or advertised |
+| `eip6492_factory_not_allowed` | Counterfactual ERC-6492 wallet's deploy factory is not in the `eip6492AllowedFactories` allowlist |
 | `invalid_scheme` | Scheme not supported |
 | `unsupported_scheme` | Scheme not supported by facilitator |
 | `invalid_x402_version` | Version not supported |

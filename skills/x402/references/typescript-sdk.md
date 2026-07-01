@@ -1,6 +1,6 @@
 # TypeScript SDK Reference
 
-## Packages (v2.14.0)
+## Packages (v2.17.0)
 
 | Package | Purpose |
 |---------|---------|
@@ -11,6 +11,9 @@
 | `@x402/aptos` | Aptos scheme (Fungible Asset transfers) |
 | `@x402/avm` | Algorand (AVM) scheme |
 | `@x402/hedera` | Hedera scheme (HBAR + HTS fungible-asset transfers) |
+| `@x402/tvm` | TON scheme (jetton transfers, W5R1/Highload V3 facilitator) |
+| `@x402/keeta` | Keeta scheme (exact) |
+| `@x402/concordium` | Concordium scheme (native CCD, exact) |
 | `@x402/express` | Express.js middleware |
 | `@x402/fastify` | Fastify middleware |
 | `@x402/hono` | Hono edge middleware |
@@ -22,6 +25,12 @@
 | `@x402/extensions` | Bazaar, offer-receipt, sign-in-with-x, payment-identifier, eip2612-gas-sponsoring, erc20-approval-gas-sponsoring |
 
 ## Recent Changes
+
+**v2.17.0** - Expanded wallet compatibility: plain EOAs, deployed smart accounts (ERC-4337 / ERC-7579), counterfactual ERC-6492 wallets, and ERC-7702-delegated EOAs; pre-verification mirrors on-chain signature checking (a payment that passes `verify` succeeds at `settle`), with ERC-6492 now in `exact` + `batch-settlement`. Added `validateFacilitatorSupport` hook on `SchemeNetworkServer`, wired into `x402ResourceServer.initialize()` to fail fast on facilitator capability mismatch. Batch-settlement facilitator `authorizerSigner` made optional (`receiverAuthorizer` declared optional in `/supported`; new error `invalid_batch_settlement_evm_authorizer_not_configured`). New `@x402/concordium` package (native CCD, `ccd:*`).
+
+**v2.16.0** - `dynamicInfoFields` extension capability: mark per-response nonce/timestamp fields to exclude from client-echo `extension_echo_mismatch` validation; wired into offer-receipt and sign-in-with-x.
+
+**v2.15.0** - Transport-agnostic `parsePaymentResult` returning `HTTPResourceResponse` (`{ status, body, header }`) so clients surface server-delivered payment errors without branching. New networks in default-asset resolution: Mezo mainnet (`eip155:31612`, mUSD 18 decimals), XDC Network (`eip155:50`) and XDC Apothem (`eip155:51`). New `@x402/tvm` (TON) and `@x402/keeta` mechanism packages. builder-code extension implemented (`@x402/extensions/builder-code`, multiple service codes + `calldataSuffix`). EVM verify rejects EOA asset addresses (`asset_not_deployed_contract`); `validAfter` set to 0; wildcard route/network matching hardened.
 
 **v2.14.0** - `auth-capture` TypeScript client scheme (`@x402/evm/auth-capture/client`). Full `batch-settlement` TS SDK surface (`@x402/evm/batch-settlement/{client,server,facilitator}` plus `*/file-storage` and `server/redis-storage` subpaths). SVM exact: simulation-based smart-wallet verification (`enableSmartWalletVerification`) for allowlisted programs (Squads, Swig, SPL Governance, Metaplex Core, Lighthouse), static instruction-count ceiling raised 6 -> 7, plus security fixes (dedup keyed on tx message hash; compute-unit-price cap bypass). EVM: ERC-6492 factory-injection fix (`eip6492AllowedFactories` allowlist sole gate, `DeployERC4337WithEIP6492` removed). Bazaar service metadata threaded into `PaymentRequired.resource`; full schema validation moved to middleware (shallow validation removed from core).
 

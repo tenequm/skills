@@ -7,6 +7,36 @@ and this skill adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.h
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-07-01
+
+### Fixed
+- infinite-queries.md: removed the v4-only `refetchPage` invalidation API (deleted
+  in Query v5) from three examples; replaced with the `maxPages` option, which caps
+  stored and refetched pages (TanStack Query migrating-to-v5: "Removed `refetchPage`
+  in favor of `maxPages`").
+
+### Added
+- Query: `useIsFetching` / `useIsMutating` for app-wide loading/mutating indicators
+  (query-guide.md).
+- Query: `maxPages` option to cap stored/refetched pages in infinite queries
+  (infinite-queries.md).
+- Query: `usePrefetchQuery` / `usePrefetchInfiniteQuery` render-phase prefetch hooks,
+  distinct from the imperative `queryClient.prefetchQuery` (query-performance.md).
+- Query: referential-stability footgun - `data ?? []` and per-render new objects/proxy
+  getters in queryKeys or effect deps cause infinite refetch loops / "Maximum update
+  depth exceeded"; use hoisted stable constants (query-guide.md).
+- Router: View Transitions - `viewTransition` on Link/navigate, `defaultViewTransition`
+  on the router (routing-patterns.md).
+- Router: route lifecycle callbacks `onEnter` / `onStay` / `onLeave` and `remountDeps`
+  remount control (routing-patterns.md).
+- Router: `createLink` / `useLinkProps` for custom, type-safe Link components wrapping
+  UI-library anchors (router-guide.md).
+- Start: testing a server function via curl requires the `x-tsr-serverFn: true` header,
+  else the handler never runs; thrown errors return HTTP 200 with the error framed in
+  the body (server-functions.md).
+
+Verified against: @tanstack/react-query@5.101.2, @tanstack/react-router@1.170.16, @tanstack/react-start@1.168.26
+
 ## [0.3.0] - 2026-06-10
 
 ### Changed

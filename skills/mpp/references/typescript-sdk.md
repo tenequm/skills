@@ -6,16 +6,16 @@
 npm install mppx viem
 ```
 
-**Peer dependencies** (install as needed, per mppx 0.6.30):
+**Peer dependencies** (install as needed, per mppx 0.8.1):
 - `viem` >= 2.51.0 (required)
 - `@modelcontextprotocol/sdk` >= 1.25.0 (for MCP integration)
-- `hono` >= 4.12.18 (for Hono middleware)
+- `hono` >= 4.12.25 (for Hono middleware)
 - `express` >= 5 (for Express middleware)
 - `elysia` >= 1 (for Elysia middleware)
 
 ## Package Exports
 
-Authoritative `exports` keys from `mppx` 0.6.30:
+Authoritative `exports` keys from `mppx` 0.8.1:
 
 | Subpath | Purpose |
 |---|---|
@@ -30,8 +30,8 @@ Authoritative `exports` keys from `mppx` 0.6.30:
 | `mppx/html` | Payment link UI customization (Config, Text, Theme types, init()) |
 | `mppx/discovery` | OpenAPI-first discovery tooling |
 | `mppx/cli`, `mppx/cli/plugins` | CLI config + plugin authoring |
-| `mppx/mcp-sdk/client` | MCP client wrapper |
-| `mppx/mcp-sdk/server` | MCP server wrapper |
+| `mppx/mcp/client` | MCP client wrapper (0.8.0+; `mppx/mcp-sdk/client` is a retained alias) |
+| `mppx/mcp/server` | MCP server wrapper (0.8.0+; `mppx/mcp-sdk/server` is a retained alias) |
 | `mppx/hono` | Hono framework middleware |
 | `mppx/express` | Express framework middleware |
 | `mppx/nextjs` | Next.js middleware |
@@ -260,7 +260,7 @@ const app = new Elysia()
 ### Creating a Proxy
 
 ```ts
-import { Proxy, openai, stripe } from 'mppx/proxy'
+import { Proxy, openai, anthropic, stripe } from 'mppx/proxy'
 import { Mppx, tempo } from 'mppx/server'
 
 const mppx = Mppx.create({
@@ -280,6 +280,12 @@ const proxy = Proxy.create({
         'GET /v1/models': mppx.free(),
       },
     }),
+    anthropic({
+      apiKey: process.env.ANTHROPIC_API_KEY,
+      routes: {
+        'POST /v1/messages': mppx.charge({ amount: '0.01' }),
+      },
+    }),
     stripe({
       apiKey: process.env.STRIPE_API_KEY,
       routes: {
@@ -289,6 +295,8 @@ const proxy = Proxy.create({
   ],
 })
 ```
+
+Built-in service presets (all from `mppx/proxy`): `openai()`, `anthropic()`, `stripe()`. Each takes an `apiKey` and a `routes` map; use `mppx.free()` to mark a route as free.
 
 ### Discovery Endpoints
 
@@ -322,7 +330,7 @@ http.createServer(proxy.listener).listen(3000)
 ### Server - Wrapping an MCP Server
 
 ```ts
-import { McpServer } from 'mppx/mcp-sdk/server'
+import { McpServer } from 'mppx/mcp/server'
 import { Server } from '@modelcontextprotocol/sdk/server/index.js'
 
 const baseServer = new Server({ name: 'my-mcp', version: '1.0.0' })
@@ -338,7 +346,7 @@ Payment errors use MCP error code `-32042`.
 ### Client - Wrapping an MCP Client
 
 ```ts
-import { McpClient } from 'mppx/mcp-sdk/client'
+import { McpClient } from 'mppx/mcp/client'
 import { Client } from '@modelcontextprotocol/sdk/client/index.js'
 
 const baseClient = new Client({ name: 'my-client', version: '1.0.0' })
@@ -347,6 +355,8 @@ const client = McpClient.wrap(baseClient, {
   methods: [tempo()],
 })
 ```
+
+The MCP subpaths moved to `mppx/mcp/server` and `mppx/mcp/client` in mppx 0.8.0; the `mppx/mcp-sdk/*` specifiers remain as aliases. `McpClient.wrap` is now the single client-wrap API - the in-place `wrapClient` variant was collapsed into it. MCP-over-HTTP challenges settle in the same payment-aware fetch: `Transport.http()` extracts JSON-RPC `-32042` challenges and retries with the credential in MCP metadata, so a single client can pay both HTTP `402`s and MCP-over-HTTP challenges.
 
 ## CLI
 
@@ -490,6 +500,8 @@ const store = Store.from({
 tempo.session({ currency, recipient, store, sse: { poll: true } })
 ```
 
+Client-side, pass a `channelStore` to the Tempo **session client** (`tempo.session` / `tempo.session.manager`) to persist and reuse payer session channels across processes (mppx 0.8.0) - distinct from the server-side `store` above. The client-side `authorizedSigner` override was removed in 0.8.0; voucher authority derives from the selected account.
+
 ## AtomicStore
 
 `AtomicStore` extends `Store` with a safe `update(key, fn)` method for concurrent read-modify-write operations (0.5.7+):
@@ -580,7 +592,7 @@ const response = await mppx.fetch('https://api.example.com/paid')
 **Key details:**
 - `signTransaction` uses `signSecp256k1` (raw hash signing) because Tempo has a custom serialization format (type `0x76`). Privy's higher-level `signTransaction` doesn't support custom serializers.
 - `signMessage` maps directly to Privy's `signMessage` for EIP-191 personal signatures
-- `signTypedData` maps directly for EIP-712 typed data (used by zero-dollar auth proofs)
+- `signTypedData` maps directly for EIP-712 typed data (used by zero-dollar auth proofs). As of mppx 0.8.0 the Tempo zero-amount `Proof` typed-data includes an `account` field bound to the payer wallet and its domain version is `3` (exposed as `tempo.Proof`) - a proof signed for one account no longer verifies against another
 - For Tempo testnet (Moderato, chain 42431): use `tempo({ account, testnet: true })` in `Mppx.create`
 
 See the [Privy MPP demo](https://github.com/privy-io/examples/tree/main/privy-next-mpp-agent-demo) for a full Next.js reference implementation including wallet creation, funding from a treasury, and executing paid API calls.

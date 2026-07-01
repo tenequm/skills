@@ -222,7 +222,18 @@ function LikeButton({ postId }: { postId: string }) {
 }
 ```
 
-## Server Context
+### Testing / Invoking Directly (curl)
+
+A server function's route is a real HTTP endpoint, but a bare `curl` returns an empty `200` and never runs your handler - the handler only fires when the request carries the `x-tsr-serverFn: true` header (the client fetcher sets it automatically). To exercise one directly:
+
+```bash
+curl -X POST 'http://localhost:3000/_serverFn/<serverFnId>' \
+  -H 'x-tsr-serverFn: true' \
+  -H 'content-type: application/json' \
+  -d '{"data":{"id":"123"}}'
+```
+
+Also note a thrown error still returns HTTP **200**; the error is framed in the response body (`$TSR/Error`), not the status code - assert on the body, not the status, in tests and monitoring.
 
 Access request/response utilities inside server function handlers via `@tanstack/react-start/server`.
 

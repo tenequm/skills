@@ -7,6 +7,26 @@ and this skill adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.h
 
 ## [Unreleased]
 
+## [0.10.0] - 2026-07-01
+
+### Added
+- Networks: Mezo mainnet (`eip155:31612`, mUSD, 18 decimals, Permit2 + EIP-2612), XDC Network mainnet (`eip155:50`, USDC) and XDC Apothem testnet (`eip155:51`, USDC).
+- SDK bindings: `@x402/tvm` (TON exact scheme) and `@x402/keeta` (`keeta:21378`/`keeta:1413829460`) in TS 2.15.0; `@x402/concordium` (native CCD, `ccd:*`) in TS 2.17.0.
+- Core APIs: transport-agnostic `parsePaymentResult` -> `HTTPResourceResponse` (2.15.0); `validateFacilitatorSupport` startup hook (Go `FacilitatorSupportValidator`) that fails fast on facilitator capability mismatch (2.17.0); `dynamicInfoFields` extension capability for per-response nonce/timestamp fields (2.16.0).
+- Expanded EVM wallet compatibility: plain EOA, ERC-4337/ERC-7579 smart accounts, ERC-6492 counterfactual, and ERC-7702-delegated EOAs; ERC-6492 now covers exact + batch-settlement (2.17.0).
+- Go gained sign-in-with-x server + client (`go/v2/extensions/signinwithx`, v2.16.0), closing the extensions SDK matrix.
+- Error codes: `asset_not_deployed_contract` (EVM verify rejects EOA asset addresses) and `invalid_batch_settlement_evm_authorizer_not_configured` (optional batch-settlement `receiverAuthorizer`).
+- Default facilitator now also supports Hedera Testnet; Hedera HBAR native token usable via asset id `0.0.0` (tinybars, 10^8).
+
+### Changed
+- SDK versions: TypeScript 2.14.0 -> 2.17.0, Python 2.12.0 -> 2.14.0, Go v2.14.0 -> v2.17.0.
+- Spec-stage `exact` chains with no SDK narrowed to Cardano, NEAR, Sui (Concordium and Keeta now ship TypeScript SDKs); TON is now TypeScript + Python (was Python-only).
+- Avalanche marked as runtime-registration only (no pre-configured default asset in v2).
+- EVM client authorization `validAfter` now set to 0 to reduce onchain timing failures; Go raised the default resource-server `maxTimeoutSeconds` from 60 to 300.
+- builder-code extension: multiple service codes (`s` as string or array) and EVM `calldataSuffix` plumbing.
+
+Verified against: @x402/core@2.17.0, @x402/evm@2.17.0, x402@2.14.0, github.com/x402-foundation/x402/go/v2@v2.17.0
+
 ## [0.9.0] - 2026-06-09
 
 ### Added

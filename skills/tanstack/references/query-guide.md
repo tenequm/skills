@@ -129,6 +129,8 @@ useQuery({ queryKey: ['todos', 'list', { filters, page }], queryFn: fetchTodos }
 
 **Footgun - include every runtime dimension in the key.** If the result depends on a dimension that is *not* in the key (active network/chain, tenant, workspace, locale), switching that dimension serves cached data from the previous context. Add every input that changes the response: `['todos', { tenantId, network }]`.
 
+**Footgun - keep key inputs referentially stable.** A queryKey is compared structurally, but a *new reference produced every render* still churns downstream code that treats it as a dependency. The classic loop: a hook returns `query.data ?? []`, handing back a fresh `[]` each render; feed that into a `useEffect` dep array or another queryKey and you get infinite refetches or "Maximum update depth exceeded". Fixes: hoist a stable `const EMPTY: Item[] = []` and return `query.data ?? EMPTY`; use `select` to derive stable values; and avoid putting freshly-constructed objects/arrays (or proxy getters that return a new object per access) directly into a key or dep array.
+
 ### Query Functions
 
 Query functions must return a promise that resolves data or throws an error:
@@ -203,6 +205,20 @@ const { data, status, fetchStatus, isLoading, isFetching } = useQuery({
 
 // isLoading = status === 'pending'
 // isFetching = fetchStatus === 'fetching'
+```
+
+### App-Wide Loading Indicators
+
+`useIsFetching` / `useIsMutating` return the *number* of queries currently fetching / mutations currently running across the whole cache - ideal for a global top-bar spinner without threading state through components. Both accept optional filters to scope the count.
+
+```tsx
+import { useIsFetching, useIsMutating } from '@tanstack/react-query';
+
+function GlobalSpinner() {
+  const fetching = useIsFetching();                          // all queries
+  const mutating = useIsMutating({ mutationKey: ['todos'] }); // scoped
+  return fetching + mutating > 0 ? <TopProgressBar /> : null;
+}
 ```
 
 ### Query Invalidation

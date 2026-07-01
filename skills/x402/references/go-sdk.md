@@ -1,11 +1,17 @@
 # Go SDK Reference
 
-Version: 2.14.0 | Module: `github.com/x402-foundation/x402/go/v2` | Go 1.24+
+Version: 2.17.0 | Module: `github.com/x402-foundation/x402/go/v2` | Go 1.24+
 
 > **Module path:** as of v2.14.0 the module is `github.com/x402-foundation/x402/go/v2`. The old bare `.../x402/go` path no longer resolves tagged releases (it falls back to pseudo-versions). Update all imports to include `/v2`.
 
-## Recent Additions (v2.8-v2.14)
+## Recent Additions (v2.8-v2.17)
 
+- **Wallet compatibility (v2.17.0)** - payments verify + settle across plain EOAs, ERC-4337 / ERC-7579 smart accounts, counterfactual ERC-6492 wallets, and ERC-7702-delegated EOAs; pre-verification mirrors on-chain signature checking. ERC-6492 gated by `EIP6492AllowedFactories`.
+- **`FacilitatorSupportValidator` hook (v2.17.0)** - resource server fails fast at `Initialize()` when a scheme delegates a capability (e.g. batch-settlement `receiverAuthorizer`) the facilitator does not advertise. Batch-settlement `authorizerSigner` is now optional; missing authorizer signatures error with `ErrAuthorizerNotConfigured` (`invalid_batch_settlement_evm_authorizer_not_configured`).
+- **`sign-in-with-x` (v2.16.0)** - Go gains SIWX server + client (`go/v2/extensions/signinwithx`): SIWX storage, auth hooks, EVM EIP-191 sign/verify, HTTP auth retry; also covers undeployed EIP-6492 and SVM. `dynamicInfoFields` capability added.
+- **Networks (v2.15.0)** - Mezo mainnet (`eip155:31612`, mUSD 18 decimals), XDC Network (`eip155:50`) and XDC Apothem (`eip155:51`) in EVM default-asset resolution.
+- **builder-code (v2.15.0)** - ERC-8021 attribution with `dataSuffix` helpers (`ResolveDataSuffix`, `AppendDataSuffix`, `BuilderCodeFacilitatorExtension`) threaded through all EVM settle paths; multiple service codes (`[]string`).
+- **Verify/timing (v2.15.0)** - EVM verify rejects EOA asset addresses (`asset_not_deployed_contract`); authorization `validAfter` set to 0 and default resource-server `maxTimeoutSeconds` raised from 60 to 300.
 - **Go module `/v2` path** - module is now `github.com/x402-foundation/x402/go/v2` so consumers resolve tagged releases instead of pseudo-versions (v2.14.0).
 - **`builder-code` extension** - Go SDK helper at `go/v2/extensions/buildercode` (ERC-8021 Schema 2 attribution; client/server/facilitator + CBOR).
 - **`batch-settlement` scheme** - commit-now / settle-asynchronously EVM mechanism via `go/v2/mechanisms/evm/batch-settlement`.
@@ -332,4 +338,5 @@ client.
 | EIP-2612 gas sponsor | `github.com/x402-foundation/x402/go/v2/extensions/eip2612gassponsor` |
 | ERC-20 approval sponsor | `github.com/x402-foundation/x402/go/v2/extensions/erc20approvalgassponsor` |
 | Builder-code extension | `github.com/x402-foundation/x402/go/v2/extensions/buildercode` |
+| Sign-in-with-x extension | `github.com/x402-foundation/x402/go/v2/extensions/signinwithx` |
 | Batch-settlement (EVM) | `github.com/x402-foundation/x402/go/v2/mechanisms/evm/batch-settlement` |

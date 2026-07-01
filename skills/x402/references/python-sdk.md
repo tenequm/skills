@@ -1,9 +1,13 @@
 # Python SDK Reference
 
-Version: 2.12.0
+Version: 2.14.0
 
-## Recent Additions (v2.7-v2.12)
+## Recent Additions (v2.7-v2.14)
 
+- **Wallet compatibility (v2.14.0)** - payments verify + settle across plain EOAs, ERC-4337 / ERC-7579 smart accounts, counterfactual ERC-6492 wallets, and ERC-7702-delegated EOAs; ERC-6492 support in `exact` + `batch-settlement`, gated by `eip6492_allowed_factories`. Batch-settlement `receiver_authorizer_signer` is now optional, with a fail-fast `initialize()` check when the facilitator advertises no usable `receiverAuthorizer`.
+- **Networks (v2.13.0)** - Mezo mainnet (`eip155:31612`, mUSD 18 decimals), XDC Network (`eip155:50`) and XDC Apothem (`eip155:51`) in EVM default-asset resolution.
+- **Verify guard (v2.13.0)** - EVM verify rejects EOA asset addresses (no bytecode) across EIP-3009 / Permit2 exact / Permit2 upto with `asset_not_deployed_contract`; authorization `validAfter` set to 0; payment-creation failure hooks now run when after-payment hooks raise.
+- **SVM client cache (v2.13.1)** - exact SVM client caches mint metadata to avoid repeated mint-account RPC fetches.
 - **`upto` scheme** - usage-based EVM billing (client/server/facilitator) via `x402.mechanisms.evm.upto`, added in v2.8.0.
 - **`batch-settlement` scheme** - commit-now / settle-asynchronously EVM mechanism via `x402.mechanisms.evm.batch_settlement` (cumulative vouchers, single on-chain claim; `FileChannelStorage`), in v2.11.0.
 - **`siwx` (sign-in-with-x) extension** - CAIP-122 wallet auth now available in Python (v2.11.0).
