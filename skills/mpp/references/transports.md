@@ -75,6 +75,8 @@ Content-Type: application/json
 
 The MCP (Model Context Protocol) transport uses JSON-RPC encoding for payment flows. This enables MCP tool calls to require payment without breaking the JSON-RPC protocol.
 
+The mppx MCP wrappers import from `mppx/mcp/server` and `mppx/mcp/client` (mppx 0.8.0+; the `mppx/mcp-sdk/*` specifiers remain as aliases). MCP-over-HTTP challenges settle in the same payment-aware fetch as HTTP `402`s: `Transport.http()` extracts the `-32042` challenge from `error.data.challenges` and retries with the credential in `_meta`.
+
 ### Challenge Delivery
 
 Payment challenges are returned as JSON-RPC errors with code `-32042` (servers may also issue `-32043`):

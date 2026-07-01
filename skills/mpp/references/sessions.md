@@ -6,6 +6,18 @@ Usage-based billing needs payment verification that keeps pace with the service.
 
 Key insight: a session amortizes on-chain cost across many interactions. Instead of 0.001 USD per on-chain tx per request, you pay one open tx + one close tx regardless of how many requests happen in between.
 
+## Sessions v2 (default) vs Legacy v1
+
+Since mppx 0.7.0, `tempo.session()` is the **v2** flow built on the TIP-1034 session precompile. The earlier contract-backed escrow implementation (the escrow-contract and channel-recovery mechanics described later in this file) is **Sessions v1**, still shipped as `tempo.sessionLegacy` on both `mppx/server` and `mppx/client`.
+
+- **Default:** `tempo.session()` = v2; `tempo.sessionLegacy()` = v1.
+- **Interop cliff:** a v2-expecting client rejects a v1 session challenge (it lacks `methodDetails.sessionProtocol: "v2"`) and falls back to the charge path. A server still on old mppx serving v1 sessions silently denies newer clients their working path - keep client and server on matching flows, or advertise v2.
+- **Refunds:** v2 reserves funds in the channel without immediately claiming them, so unclaimed reserved funds are refunded by default. v1 refunds by closing the channel (unspent escrow returned to the client).
+
+Two client entry points:
+- `tempo.session({ account, maxDeposit })` - creates the method registered in `Mppx.create()`; the managed `fetch` opens and reuses the channel transparently.
+- `tempo.session.manager({ account, maxDeposit })` - returns a managed client for direct lifecycle control (`.sse()`, `.close()`), used when you drive the session yourself instead of through `fetch`.
+
 ## Session Lifecycle
 
 Four phases define a session's life:
@@ -68,6 +80,7 @@ const res = await fetch('http://localhost:3000/api/resource')
 - `maxDeposit`: maximum tokens locked in escrow. At $0.01/unit, 1 pathUSD covers 100 requests.
 - If the server sets `suggestedDeposit`, the client uses `min(suggestedDeposit, maxDeposit)`.
 - Channels remain open for reuse across multiple requests. Close explicitly when done.
+- `channelStore`: pass a store to persist and reuse payer session channels across processes/restarts (mppx 0.8.0). The client-side `authorizedSigner` override was removed in 0.8.0 - voucher authority now derives from the selected account.
 
 ## SSE Streaming
 
@@ -95,7 +108,8 @@ export const GET = mppx.session({ amount: '0.001', unitType: 'word' })(
 ### Client
 
 ```typescript
-const session = tempo.session({ account, maxDeposit: '1' })
+// .sse()/.close() live on the managed client from tempo.session.manager()
+const session = tempo.session.manager({ account, maxDeposit: '1' })
 const stream = await session.sse('http://localhost:3000/api/poem')
 for await (const word of stream) {
   process.stdout.write(word + ' ')

@@ -111,6 +111,7 @@ const tempoClient = tempo.charge({
 | `clientId` | `string` | Client identifier |
 | `mode` | `'push' \| 'pull'` | Transaction broadcast mode (default: `'pull'`) |
 | `getClient` | `function` | Custom viem client factory |
+| `expectedChainId` | `number` | Reject charge challenges whose `methodDetails.chainId` differs - pins the client to one Tempo network (mppx 0.7.0+) |
 
 **autoSwap options:**
 
@@ -197,6 +198,8 @@ const charge = tempo.charge({
 
 ## Tempo Session
 
+Since mppx 0.7.0, `tempo.session()` is the **v2** (TIP-1034 precompile) flow; the prior contract-backed flow is `tempo.sessionLegacy` (server and client). Use `tempo.session()` for `Mppx.create()` registration and `tempo.session.manager({ account, maxDeposit })` for direct lifecycle control (`.sse()`, `.close()`). `tempo.common()` registers the Tempo charge + session bundle in one call.
+
 ### Server Configuration
 
 ```ts
@@ -242,7 +245,8 @@ const handler = mppx.session({
 ### Client Configuration
 
 ```ts
-const session = tempo.session({
+// Direct lifecycle control (.sse()/.close()) comes from tempo.session.manager()
+const session = tempo.session.manager({
   account: privateKeyToAccount("0x..."),
   maxDeposit: "5.00", // max tokens locked in escrow
 });
@@ -335,7 +339,7 @@ const result = await mppx.charge({
 })(request);
 ```
 
-The server verifies that the sum of split amounts equals the total charge amount and that each transfer targets the expected recipient. See [mpp.dev/guides/split-payments](https://mpp.dev/guides/split-payments) for the full guide.
+Documented constraints: **1-10 splits per charge**, each split may carry its own memo, and `expectedRecipients` restricts which recipient addresses a split is allowed to target (server-side validation). The server verifies that the sum of split amounts equals the total charge amount and that each transfer targets an expected recipient. See [mpp.dev/guides/split-payments](https://mpp.dev/guides/split-payments) for the full guide.
 
 ## Stripe Integration
 

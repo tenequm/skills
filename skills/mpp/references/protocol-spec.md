@@ -4,7 +4,7 @@
 
 MPP (Machine Payments Protocol) defines a Payment HTTP Authentication Scheme built on **HTTP 402 Payment Required**. It follows the structure of RFC 9110 HTTP Authentication but uses the `402` status code instead of `401` to signal that access requires payment rather than identity credentials.
 
-MPP is submitted to the IETF as an Internet-Draft with intended status **Standards Track** (originally Experimental). Two draft names are in circulation: `draft-ryan-httpauth-payment` on the IETF datatracker and `draft-httpauth-payment` on paymentauth.org. It leverages existing HTTP semantics, making it compatible with standard web infrastructure - proxies, CDNs, and load balancers pass through the headers without modification.
+MPP is submitted to the IETF as an Internet-Draft with intended status **Standards Track** (originally Experimental). The current revision on the datatracker is `draft-ryan-httpauth-payment-01` (expires 2026-09-19). Two draft names are in circulation: `draft-ryan-httpauth-payment` on the IETF datatracker and `draft-httpauth-payment` on paymentauth.org. It leverages existing HTTP semantics, making it compatible with standard web infrastructure - proxies, CDNs, and load balancers pass through the headers without modification.
 
 The flow:
 1. Client requests a protected resource.

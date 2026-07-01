@@ -1,6 +1,12 @@
 # pympp Python SDK
 
-Verified against pympp 0.8.2. Python currently supports the **charge** intent only - the session (payment-channel) intent is TypeScript/Rust-only per the official SDK capability matrix.
+Verified against pympp 0.9.0. Python supports the **charge** intent (plus Stripe, fee sponsorship, Proof Credentials, event handling, and MCP support per the official SDK capability matrix); the session (payment-channel) intent remains TypeScript/Rust-only.
+
+## What's New in 0.9.0
+
+- **Credential `source` validation**: the Tempo hash-credential verification path now validates the credential `source`, requiring the TIP-20 transfer to originate from the declared source address. A `validate_sender` callback (`SenderValidation` / `ValidateSender`) on `ChargeIntent` adds custom sender checks.
+- **Sponsored charge pre-broadcast simulation**: sponsored (fee-payer) charges dry-run the co-signed transaction via `tempo_simulateV1` before broadcasting; if it would revert on-chain the sponsor rejects it (fails closed).
+- **MCP support**: pympp now covers the MCP transport per the official SDK capability matrix.
 
 ## Installation
 

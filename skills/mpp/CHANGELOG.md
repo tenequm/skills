@@ -7,6 +7,31 @@ and this skill adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.h
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-07-01
+
+### Changed
+- Sessions overhaul: `tempo.session()` is now the TIP-1034 precompile flow (Sessions v2); the escrow-contract flow the skill documented is now `tempo.sessionLegacy` (Sessions v1). Two client APIs: `tempo.session()` (Mppx registration) vs `tempo.session.manager()` (direct lifecycle control - `.sse()`/`.close()`). Documented the v1<->v2 interop cliff.
+- MCP subpaths moved to `mppx/mcp/client` and `mppx/mcp/server` (`mppx/mcp-sdk/*` retained as aliases); `McpClient.wrap` unified. MCP-over-HTTP `-32042` challenges now settle in the payment-aware fetch (`Transport.http()`).
+- SDK table: Go is now the official `mpp-go` (net/http, Gin, Echo, Chi); added community Swift `mpp-swift`; Python and Ruby now have MCP, Stripe, and event handling. Corrected parity sentence (session still TS/Rust only; Go has no Stripe/MCP/events).
+- Solana now supports charge + session (Token-2022), not charge-only.
+- Stellar (`@stellar/mpp` 0.7.0): removed the non-functional channel `open` action - Stellar is charge-only; added payer-bound `signedHash` push, `allowUnsignedPush` opt-in, `credentialTypes` advertisement.
+- Refunds reframed against v2 sessions (unclaimed reserved funds refunded by default).
+- CLI no longer auto-discovers config from local directories (mppx 0.8.1) - pass config explicitly.
+- Peer dep: `hono` >= 4.12.25 (was 4.12.18). Subpath-export labels bumped to mppx 0.8.1.
+
+### Added
+- Payment Hooks section: server (`onChallengeCreated`/`onPaymentSuccess`/`onPaymentFailed`/`on('*')`) and client (`onChallengeReceived`/`onCredentialCreated`/`onPaymentResponse`/`onPaymentFailed`) lifecycle observability.
+- Managing Agent Spend section: Tempo access keys (delegated signing keys with token limits, contract/function/recipient scopes, expiry) via `provider.getMppxParameters({ accessKey })`.
+- Client chain pinning (`tempo.charge({ expectedChainId })`); `tempo.common()` charge+session bundle alias; pluggable client `channelStore` (client `authorizedSigner` override removed); proxy `anthropic()` service preset; split-payment limits (1-10, per-split memos, `expectedRecipients`).
+- Services MCP discovery server (`mpp.dev/mcp/services`), docs MCP (`mpp.dev/api/mcp`), and `npx skills add tempoxyz/mpp -g` install path; IETF `draft-ryan-httpauth-payment-01`; docs monorepo `tempoxyz/mpp`.
+- pympp 0.9.0: credential `source` validation + `validate_sender` callback on `ChargeIntent`; sponsored charges dry-run via `tempo_simulateV1` before broadcast; Python MCP support.
+- Production gotchas (advisory): mppx/viem version coupling (arity-crash), `mppx.fetch` probe masks upstream 5xx; RedotPay `@redotpay/mpp` not-yet-on-npm caveat.
+
+### Security
+- Zero-amount proof credentials bound to the payer wallet: EIP-712 `Proof` gains an `account` field, domain version bumped to 3 (`tempo.Proof`).
+
+Verified against: mppx@0.8.1, pympp@0.9.0, @stellar/mpp@0.7.0
+
 ## [0.7.0] - 2026-06-04
 
 ### Fixed
