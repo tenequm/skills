@@ -1,9 +1,9 @@
 ---
 name: mcp-best-practices
-description: Build, secure, and optimize production MCP servers with the TypeScript SDK (spec 2025-11-25, SDK v1.29 / v2 alpha). Use when building or reviewing MCP servers or tools - covering transports, tool and schema design, error handling, security and OAuth, performance, known SDK bugs, content vs structuredContent delivery, v2 migration, MCP Apps, extensions, and the Registry.
+description: Build, secure, and optimize production MCP servers with the TypeScript SDK (spec 2025-11-25, SDK v1.29 / v2 beta). Use when building or reviewing MCP servers or tools - covering transports, tool and schema design, error handling, security and OAuth, performance, known SDK bugs, content vs structuredContent delivery, v2 migration, MCP Apps, extensions, and the Registry.
 metadata:
-  version: "0.6.0"
-  upstream: "@modelcontextprotocol/sdk@1.29.0, @modelcontextprotocol/server@2.0.0-alpha.2, @modelcontextprotocol/ext-apps@1.7.4"
+  version: "0.7.0"
+  upstream: "@modelcontextprotocol/sdk@1.29.0, @modelcontextprotocol/server@2.0.0-beta.1, @modelcontextprotocol/ext-apps@1.7.4"
 ---
 
 # MCP Best Practices
@@ -15,8 +15,8 @@ Decision reference for building production MCP servers with the TypeScript SDK. 
 | Component | Current | Next |
 |-----------|---------|------|
 | Spec | **2025-11-25** ([spec.modelcontextprotocol.io](https://spec.modelcontextprotocol.io)) | Unreleased [draft](https://modelcontextprotocol.io/specification/draft/changelog): stateless/sessionless overhaul (see "Spec Draft Direction") |
-| TS SDK (stable) | **v1.29.0** (`@modelcontextprotocol/sdk`) | v2 alpha published |
-| TS SDK (v2) | **Alpha** (`2.0.0-alpha.2` on npm, Apr 2026): `/server`, `/client`, `/core`, `/hono`, `/express`, `/node`, `/fastify` | Stable pending; only alpha published |
+| TS SDK (stable) | **v1.29.0** (`@modelcontextprotocol/sdk`) | v2 beta published |
+| TS SDK (v2) | **Beta** (`2.0.0-beta.1` on npm, 2026-06-30, `latest`): `/server`, `/client`, `/core`, `/hono`, `/express`, `/node`, `/fastify` (+ `/server-legacy`, `/codemod`) | Stable targeted 2026-07-28 alongside the finalized spec |
 | JSON Schema | **2020-12** default (explicit `$schema` supported) | - |
 | Transport | **Streamable HTTP** (remote), **stdio** (local) | SSE + WebSocket removed in v2 |
 | Extensions | **MCP Apps** (Stable, SEP-1865), **Auth Extensions** (official) | Domain-specific WGs |
@@ -29,7 +29,7 @@ import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 ```
 
-**v2 imports** (when stable):
+**v2 imports** (v2 beta, installable now; stable pending 2026-07-28):
 ```typescript
 import { McpServer } from "@modelcontextprotocol/server";
 import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/server";
@@ -263,6 +263,20 @@ server.resource("search-operators", "docs://search-operators", {
 }));
 ```
 
+## Other Server Primitives
+
+Beyond tools, the spec (2025-11-25) defines primitives a production server often needs. All are optional capabilities negotiated at initialization; a server that omits them still conforms.
+
+| Primitive | Methods | When you need it |
+|-----------|---------|------------------|
+| **Prompts** | `prompts/list`, `prompts/get` (`registerPrompt`) | Reusable, parameterized prompt templates users invoke by name (slash-commands, canned workflows). Args are completable. |
+| **Resource Templates** | `resources/templates/list` (RFC 6570 URI templates) | Parameterized resources - `docs://{id}` instead of enumerating every static URI. Template variables are completable. |
+| **Pagination** | opaque `cursor` param + `nextCursor` in result, on every `*/list` | Large tool/resource/prompt catalogs. The cursor is opaque - never parse or synthesize it; loop until `nextCursor` is absent. Distinct from in-tool `offset`/`limit` args. |
+| **Completions** | `completion/complete` | Argument autocomplete for prompt args and resource-template variables. Return ranked candidates with `hasMore`/`total` hints. |
+| **Cancellation** | `notifications/cancelled` | Client aborts an in-flight long request by id. Honor it via the handler's abort signal (`extra.signal` v1 / `ctx.mcpReq.signal` v2) - stop work, release resources. |
+
+Pagination is the one most servers actually hit first: a `tools/list` (or `resources/list`) with 50+ entries should paginate rather than dump everything in one response.
+
 ## Performance
 
 ### Module-Level Caching
@@ -349,7 +363,7 @@ MCP normatively requires **OAuth 2.1** ([draft-ietf-oauth-v2-1-13](https://datat
 | Issue | Severity | Status | Workaround |
 |-------|----------|--------|------------|
 | [#1643](https://github.com/modelcontextprotocol/typescript-sdk/issues/1643) - `z.union()`/`z.discriminatedUnion()` silently dropped | High | Fixed in v2 line ([PR #1796](https://github.com/modelcontextprotocol/typescript-sdk/pull/1796)); v1.x backport [PR #2017](https://github.com/modelcontextprotocol/typescript-sdk/pull/2017) still open | Use flat `z.object()` + `z.enum()` - bug present on all released v1 |
-| [#1699](https://github.com/modelcontextprotocol/typescript-sdk/issues/1699) - Transport closure stack overflow (15-25+ concurrent) | High | Fixed in PR #1788 (closed 2026-04-02) | Upgrade to ≥ v1.29.0 / v2 alpha |
+| [#1699](https://github.com/modelcontextprotocol/typescript-sdk/issues/1699) - Transport closure stack overflow (15-25+ concurrent) | High | Fixed in PR #1788 (closed 2026-04-02) | Upgrade to ≥ v1.29.0 / v2 beta |
 | [#1619](https://github.com/modelcontextprotocol/typescript-sdk/issues/1619) - HTTP/2 + SSE Content-Length error | Medium | Closed (reclassified to upstream `@hono/node-server#266`) | Use `enableJsonResponse: true` or avoid HTTP/2 upstream |
 | [#893](https://github.com/modelcontextprotocol/typescript-sdk/issues/893) - Dynamic registration after connect blocked | Medium | Open | Register all tools/resources before `connect()` |
 | [#1596](https://github.com/modelcontextprotocol/typescript-sdk/issues/1596) - Plain JSON Schema silently dropped | Fixed | v1.28.0 | Upgrade to v1.28+ |
@@ -376,13 +390,16 @@ v1.x gets 6 more months of support after v2 stable ships. No rush, but write new
 
 ## Spec Draft Direction (post-2025-11-25, unreleased)
 
-2025-11-25 is the latest **released** revision (everything above targets it). The next spec is still an unversioned [draft](https://modelcontextprotocol.io/specification/draft/changelog) - not implementable in any released SDK - but it sets a clear direction worth knowing before you commit design decisions today. The TS SDK has begun landing the wire-contract types on `main` against a `2026-07-28` target ([#2252](https://github.com/modelcontextprotocol/typescript-sdk/pull/2252), 2026-06-08).
+2025-11-25 is the latest **released** revision (everything above targets it). The next spec is still an unversioned [draft](https://modelcontextprotocol.io/specification/draft/changelog), targeted to be finalized as revision **2026-07-28** - but nothing is stamped yet (the changelog still reads "since 2025-11-25"). The TS SDK has moved fast on it: **v2 `2.0.0-beta.1` (2026-06-30) already implements the 2026-07-28 wire contract** - multi-round-trip requests, `subscriptions/listen`, `server/discover`, header routing ([#2286](https://github.com/modelcontextprotocol/typescript-sdk/pull/2286)) - so the draft is implementable in a beta SDK even though the spec revision itself is unreleased. Stable v2 is targeted to ship alongside the finalized spec on 2026-07-28.
 
 Decision-relevant shifts:
 
 - **MCP becomes stateless and sessionless.** The draft removes the `initialize`/`notifications/initialized` handshake and the `Mcp-Session-Id` header entirely ([SEP-2575](https://github.com/modelcontextprotocol/modelcontextprotocol/pull/2575), [SEP-2567](https://github.com/modelcontextprotocol/modelcontextprotocol/pull/2567)). Every request carries its protocol version, client identity, and capabilities in `_meta`. Servers needing cross-call state return a **server-minted handle from a creation tool and accept it as an ordinary tool argument** - not protocol sessions. This validates the skill's existing "prefer stateless" stance; do not build new servers on session affinity.
 - **`server/discover` RPC** replaces initialize-time negotiation for advertising versions/capabilities/identity (SEP-2575).
-- **Multi Round-Trip Requests (MRTR)** replace server-initiated requests (`roots/list`, `sampling/createMessage`, `elicitation/create`): a tool returns `inputRequests`; the client answers with `inputResponses` on the next call ([SEP-2322](https://github.com/modelcontextprotocol/modelcontextprotocol/pull/2322)).
+- **`subscriptions/listen` replaces the HTTP GET stream and `resources/subscribe`/`resources/unsubscribe`** - one long-lived POST-response stream with opt-in notification types (SEP-2575). Servers SHOULD emit an SSE comment keep-alive (`:\r\n`); clients MUST ignore SSE comment lines ([#2954](https://github.com/modelcontextprotocol/modelcontextprotocol/pull/2954)). The same SEP-2575 pass **removes `ping`, `logging/setLevel`, and `notifications/roots/list_changed`** (log level moves per-request into `_meta`).
+- **Multi Round-Trip Requests (MRTR)** replace server-initiated requests (`roots/list`, `sampling/createMessage`, `elicitation/create`): a tool returns `inputRequests`; the client answers with `inputResponses` on the next call ([SEP-2322](https://github.com/modelcontextprotocol/modelcontextprotocol/pull/2322)). All results now carry a required `resultType` (`complete` | `input_required`); an `input_required` result is an `InputRequiredResult` carrying `inputRequests`.
+- **Error-code allocation policy + renumbering** ([PR #2907](https://github.com/modelcontextprotocol/modelcontextprotocol/pull/2907)): `-32000..-32019` implementation-defined, `-32020..-32099` reserved for the spec. `HeaderMismatch` -32001->-32020, `MissingRequiredClientCapability` -32003->-32021, `UnsupportedProtocolVersion` -32004->-32022; resource-not-found settles on `-32602`.
+- **OpenTelemetry trace-context propagation** via `_meta` (`traceparent`, `tracestate`, `baggage`) for cross-service tracing ([SEP-414](https://github.com/modelcontextprotocol/modelcontextprotocol/pull/414)).
 - **Formal feature lifecycle** (Active/Deprecated/Removed, 12-month minimum window, [deprecated registry](https://modelcontextprotocol.io/specification/draft/deprecated), [SEP-2596](https://github.com/modelcontextprotocol/modelcontextprotocol/pull/2596)). Under it, **Roots, Sampling, and Logging are now formally Deprecated** (SEP-2577, the advisory deprecation above made formal) and the **HTTP+SSE transport is reclassified Deprecated** (SEP-2596).
 - **Auth**: OAuth 2.0 Dynamic Client Registration is **deprecated in favor of Client ID Metadata Documents (CIMD)** ([PR #2858](https://github.com/modelcontextprotocol/modelcontextprotocol/pull/2858)); clients MUST validate a present `iss` (RFC 9207, [SEP-2468](https://github.com/modelcontextprotocol/modelcontextprotocol/pull/2468)) and key persisted credentials by issuer ([SEP-2352](https://github.com/modelcontextprotocol/modelcontextprotocol/pull/2352)).
 - **Caching**: list/read results gain required `ttlMs` + `cacheScope` (`public`/`private`) via a `CacheableResult` interface ([SEP-2549](https://github.com/modelcontextprotocol/modelcontextprotocol/pull/2549)); tools SHOULD be returned in deterministic order for prompt-cache hits.
@@ -405,7 +422,7 @@ MCP extensions are optional, strictly additive capabilities on top of the core p
 | **OAuth Client Credentials** | `io.modelcontextprotocol/oauth-client-credentials` | Machine-to-machine auth (CI/CD, daemons, server-to-server) |
 | **Enterprise-Managed Auth** | `io.modelcontextprotocol/enterprise-managed-authorization` | Centralized access control via enterprise IdP |
 
-**Client support**: Claude (web + Desktop), ChatGPT, VS Code Copilot, Goose, Postman, MCPJam all support MCP Apps. Auth extensions not yet widely adopted.
+**Client support**: Claude (web + Desktop), ChatGPT, VS Code Copilot, Goose, Postman, MCPJam all support MCP Apps. Among auth extensions, **Enterprise-Managed Authorization reached Stable** (2026-06-18); OAuth Client Credentials is still Draft, and client adoption of both remains limited.
 
 > For MCP Apps architecture, ext-apps SDK, and build patterns: see `references/mcp-apps.md`
 > For extensions system, auth extensions, and MCP Registry: see `references/extensions-registry.md`
@@ -419,4 +436,4 @@ MCP extensions are optional, strictly additive capabilities on top of the core p
 | **Tasks** | Long-running ops with lifecycle management | Official extension (SEP-2663) |
 | **Progress** | Incremental progress on requests | `ctx.mcpReq.sendProgress()` |
 
-**Deprecation / status notice**: [SEP-2577](https://github.com/modelcontextprotocol/modelcontextprotocol/pull/2577) (final, 2026-05-15) advisory-deprecates **Roots, Sampling, and Logging** - no wire changes, features stay functional for 1+ year, but design new servers without them. **Tasks** moved out of the core `2025-11-25` spec (the experimental `tasks` feature there is removed) into an official extension ([SEP-2663](https://github.com/modelcontextprotocol/modelcontextprotocol/pull/2663), final, 2026-05-15): a server may answer `tools/call` with an async task handle the client polls via `tasks/get`, `tasks/update`, `tasks/cancel`.
+**Deprecation / status notice**: [SEP-2577](https://github.com/modelcontextprotocol/modelcontextprotocol/pull/2577) (final, 2026-05-15) advisory-deprecates **Roots, Sampling, and Logging** - no wire changes, features stay functional for 1+ year, but design new servers without them. **Tasks** moved out of the core `2025-11-25` spec (the experimental `tasks` feature there is removed) into the official `io.modelcontextprotocol/tasks` extension ([SEP-2663](https://github.com/modelcontextprotocol/modelcontextprotocol/pull/2663), final, 2026-05-15; redesigned in the draft): a server may answer `tools/call` with an async task handle the client **polls** via `tasks/get` + `tasks/update` (`tasks/cancel` to abort). The draft redesign drops the blocking `tasks/result` and `tasks/list` methods and allows servers to return task handles unsolicited.

@@ -179,6 +179,8 @@ return toolError("Invalid date format. Use ISO (YYYY-MM-DD).");
 
 For MCP servers gated by payment protocols (x402, MPP), errors need to carry payment metadata that clients can act on programmatically.
 
+> **HTTP status is always 200.** A payment/auth challenge returned as an `isError: true` tool result is a *successful* JSON-RPC response, so it rides HTTP `200` - not `401`/`402`. Clients (and anyone testing with `curl`) must parse the JSON-RPC body for the challenge; don't gate on the HTTP status code. Misreading this as "auth is broken" is a common false alarm.
+
 ### Payment Required `-32042` (IETF pattern)
 
 `-32042` is the JSON-RPC error code reserved for "Payment Required" in the IETF draft [`draft-payment-transport-mcp-00`](https://datatracker.ietf.org/doc/draft-payment-transport-mcp/). Unlike most McpError codes, the McpServer wire path preserves `-32042`'s `error.data` end-to-end, so it can carry payment challenges. Some payment libraries (e.g. `mppx`) deliberately use `-32042` for this reason. If you need standards alignment with the IETF draft and your client supports it, prefer `-32042`. The broader ecosystem still relies on the `isError: true` pattern below for cross-client compatibility today.

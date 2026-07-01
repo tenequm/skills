@@ -7,6 +7,23 @@ and this skill adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.h
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-07-01
+
+### Added
+- New SKILL.md section "Other Server Primitives" covering core primitives the skill previously omitted (all grep-verified absent): **Prompts** (`prompts/list`/`get`, `registerPrompt`), **Resource Templates** (`resources/templates/list`, RFC 6570), protocol-level **Pagination** (opaque `cursor`/`nextCursor` on every `*/list`, distinct from in-tool `offset`/`limit`), **Completions** (`completion/complete` for prompt args + template vars), and **Cancellation** (`notifications/cancelled`).
+- v2 migration ref: two new packages - `@modelcontextprotocol/server-legacy` (frozen v1 SSE transport + OAuth AS helpers, PR #2206) and `@modelcontextprotocol/codemod` (`npx @modelcontextprotocol/codemod@beta v1-to-v2 .`).
+- New "Alpha -> Beta Changes (2.0.0-beta.1)" subsection in v2-migration.md: web-standards-only `createMcpHandler` + `toNodeHandler`, `serveStdio()`, `eraSupport` removed, `Ajv2020` default validator (true 2020-12), `CallToolResult.content` now required (missing -> -32602), `structuredContent` widened to `unknown`, error-code renumbering (-32020/-32021/-32022), TS>=6.0 needs `"types": ["node"]` (PR #2286, #2394).
+- error-handling.md: note that a payment/auth challenge returned as `isError` rides HTTP 200 (not 401/402) - parse the JSON-RPC body, don't gate on status code.
+- tool-schema-guide.md: client-side typing note that `CallToolResult`'s `[x: string]: unknown` index signature defeats narrowing on `result.content`.
+
+### Changed
+- v2 status corrected from "alpha only / 2.0.0-alpha.2" to **beta** (`2.0.0-beta.1`, npm `latest`, published 2026-06-30); stable v2 targeted to ship alongside the finalized spec on 2026-07-28. Updated Quick Reference, frontmatter description, v2 imports header, and v2-migration.md header + timeline.
+- Spec Draft Direction: v2 beta.1 now fully implements the `2026-07-28` target wire contract (was "begun landing wire-contract types on main"); spec revision itself remains an undated draft. Added post-2026-06-10 draft deltas: `subscriptions/listen` replacing `resources/subscribe`/`unsubscribe` + the GET stream and removing `ping`/`logging/setLevel`/`notifications/roots/list_changed` (SEP-2575), required `resultType` + `InputRequiredResult` under MRTR (SEP-2322), error-code allocation/renumbering (PR #2907), OTel trace-context in `_meta` (SEP-414).
+- Tasks: now the `io.modelcontextprotocol/tasks` extension; draft redesign replaces blocking `tasks/result` with polling `tasks/get` + `tasks/update`, drops `tasks/list`, allows unsolicited task handles (SKILL.md + extensions-registry.md).
+- Enterprise-Managed Authorization extension marked **Stable** (was Draft; launched 2026-06-18).
+
+Verified against: @modelcontextprotocol/server@2.0.0-beta.1
+
 ## [0.6.0] - 2026-06-10
 
 ### Added

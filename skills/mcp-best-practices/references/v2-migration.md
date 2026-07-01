@@ -1,6 +1,6 @@
 # V2 Migration Guide
 
-Comprehensive guide for migrating from `@modelcontextprotocol/sdk` v1 to v2. v2 is **alpha-published on npm** (`2.0.0-alpha.2` as of April 2026). Expect breaking changes between alphas; v1.x remains recommended for production. No firm v2 stable date is published - only alpha releases exist so far.
+Comprehensive guide for migrating from `@modelcontextprotocol/sdk` v1 to v2. v2 is **beta-published on npm** (`2.0.0-beta.1`, npm `latest`, published 2026-06-30); v1.x remains recommended for production until v2 stable. Stable v2 is targeted to ship alongside the finalized spec revision on **2026-07-28**; the API is settling but can still change before then.
 
 ## Table of Contents
 - [Package Split](#package-split)
@@ -26,6 +26,8 @@ v1 ships as a single package. v2 splits into focused packages:
 | - | `@modelcontextprotocol/express` | Express middleware + DNS rebinding protection |
 | - | `@modelcontextprotocol/hono` | Hono middleware |
 | - | `@modelcontextprotocol/fastify` | Fastify middleware (added 2.0.0-alpha.1, [PR #1536](https://github.com/modelcontextprotocol/typescript-sdk/pull/1536)) |
+| - | `@modelcontextprotocol/server-legacy` | Frozen v1 SSE transport + OAuth Authorization Server helpers, for v1->v2 migration (added 2.0.0-alpha.3, [PR #2206](https://github.com/modelcontextprotocol/typescript-sdk/pull/2206)) |
+| - | `@modelcontextprotocol/codemod` | CLI codemod for the mechanical migration: `npx @modelcontextprotocol/codemod@beta v1-to-v2 .` |
 
 ## Import Changes
 
@@ -310,6 +312,17 @@ const app = express();
 app.use("/mcp", mcpApp);
 ```
 
+## Alpha -> Beta Changes (2.0.0-beta.1)
+
+v2 entered beta on 2026-06-30. Beta signals a settling (not frozen) API with support for the upcoming `2026-07-28` spec revision. Breaking changes since the alphas, almost all from [PR #2286](https://github.com/modelcontextprotocol/typescript-sdk/pull/2286):
+
+- **`createMcpHandler` is now web-standards-only**, returning `{ fetch, close, notify, bus }`. The duck-typed `.node(req, res)` face is gone - wrap once with `toNodeHandler(handler)` from `@modelcontextprotocol/node` for Express/Node.
+- **`serveStdio(factory, options?)`** (`@modelcontextprotocol/server/stdio`) is the new stdio entry point; `ServerOptions.eraSupport` was removed (migrate `new McpServer(info, { eraSupport })` + `connect()` to `serveStdio(() => new McpServer(info))`).
+- **Default JSON Schema validator is now `Ajv2020`** (true 2020-12) instead of draft-07 - `$defs`, `prefixItems`, `unevaluatedProperties`, `dependentRequired` are now enforced.
+- **`CallToolResult.content` is required at the wire boundary** - a handler result without `content` is rejected with `-32602`. `CallToolResult.structuredContent` is widened to `unknown` (a deliberate source-level break for typed consumers).
+- **Protocol error codes renumbered**: `HeaderMismatch -32020`, `MissingRequiredClientCapability -32021`, `UnsupportedProtocolVersion -32022`; unknown-URI `resources/read` answers `-32602` with a typed `ResourceNotFoundError` (`data.uri`).
+- **TypeScript >= 6.0 consumers must set `"types": ["node"]`** in tsconfig or the `.d.mts` declarations fail under `skipLibCheck: false` ([PR #2394](https://github.com/modelcontextprotocol/typescript-sdk/pull/2394)).
+
 ## Migration Checklist
 
 ### Phase 1: Prepare (do now, on v1)
@@ -347,4 +360,4 @@ app.use("/mcp", mcpApp);
 
 ### Timeline
 
-v1.x gets 6 months of support after v2 stable ships. No firm v2 stable date has been published - only alpha releases exist so far - so v1 remains the production choice. No rush to migrate, but write new code with v2 patterns in mind.
+v1.x gets 6 months of support after v2 stable ships. v2 stable is targeted for **2026-07-28** alongside the finalized spec revision; only pre-releases exist today (`2.0.0-beta.1`), so v1 remains the production choice. No rush to migrate, but write new code with v2 patterns in mind - and the `@modelcontextprotocol/codemod` `v1-to-v2` codemod handles the mechanical parts.

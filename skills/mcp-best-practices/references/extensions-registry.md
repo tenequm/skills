@@ -33,7 +33,7 @@ Format: `{vendor-prefix}/{extension-name}`
 |-----------|-----------|--------|------|
 | MCP Apps | `io.modelcontextprotocol/ui` | Stable (SEP-1865, 2026-01-26) | [ext-apps](https://github.com/modelcontextprotocol/ext-apps) |
 | OAuth Client Credentials | `io.modelcontextprotocol/oauth-client-credentials` | Draft | [ext-auth](https://github.com/modelcontextprotocol/ext-auth) |
-| Enterprise-Managed Auth | `io.modelcontextprotocol/enterprise-managed-authorization` | Draft | [ext-auth](https://github.com/modelcontextprotocol/ext-auth) |
+| Enterprise-Managed Auth | `io.modelcontextprotocol/enterprise-managed-authorization` | Stable (2026-06-18) | [ext-auth](https://github.com/modelcontextprotocol/ext-auth) |
 
 ### Negotiation
 
@@ -106,7 +106,7 @@ Breaking changes: removing/renaming fields, changing types, altering semantics, 
 | Postman | Yes | - | - |
 | MCPJam | Yes | - | - |
 
-Auth extensions not yet widely adopted. Check [ext-auth](https://github.com/modelcontextprotocol/ext-auth) for latest status.
+Enterprise-Managed Authorization reached **Stable** (2026-06-18); OAuth Client Credentials remains Draft. Client adoption of auth extensions is still limited - check [ext-auth](https://github.com/modelcontextprotocol/ext-auth) for latest status.
 
 ## Authorization Extensions
 
@@ -223,7 +223,7 @@ Related SEP: [#1577](https://github.com/modelcontextprotocol/modelcontextprotoco
 
 ### Tasks (SEP-2663)
 
-Long-running operations with lifecycle management - progress tracking, cancellation, and status updates for operations spanning multiple requests. [SEP-2663](https://github.com/modelcontextprotocol/modelcontextprotocol/pull/2663) (final, 2026-05-15) supersedes the earlier SEP-1686 proposal: Tasks moved out of the core `2025-11-25` spec (the experimental `tasks` feature there is removed) into an official extension. A server may answer a `tools/call` with an async task handle instead of a final result; the client polls via `tasks/get`, `tasks/update`, and `tasks/cancel`, keyed off a `resultType: "task"` discriminator.
+Long-running operations with lifecycle management - progress tracking, cancellation, and status updates for operations spanning multiple requests. [SEP-2663](https://github.com/modelcontextprotocol/modelcontextprotocol/pull/2663) (final, 2026-05-15) supersedes the earlier SEP-1686 proposal: Tasks moved out of the core `2025-11-25` spec (the experimental `tasks` feature there is removed) into the official `io.modelcontextprotocol/tasks` extension. A server may answer a `tools/call` with an async task handle instead of a final result; the client **polls** via `tasks/get` and `tasks/update` (`tasks/cancel` to abort). The draft redesign drops the blocking `tasks/result` and `tasks/list` methods and allows servers to return task handles unsolicited.
 
 ### Progress
 

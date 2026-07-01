@@ -241,6 +241,8 @@ const outputSchema = z.object({ id: z.string(), name: z.string() }).passthrough(
 
 **Operational note**: Clients cache `outputSchema` from the `tools/list` response. If you change a tool's schema (or remove `outputSchema` entirely), already-connected sessions keep validating against the cached schema. Reconnecting the client clears the cache.
 
+**Client-side typing note**: `CallToolResult` carries an open `[x: string]: unknown` index signature, which defeats normal narrowing on `result.content` - e.g. `result.content.find(c => c.type === "text")` types the element as `unknown`. Consumers iterating tool results need an explicit cast or type guard rather than relying on inference.
+
 **Default rule for upstream pass-through**: When an `outputSchema` (or a nested response object) forwards data straight from an upstream API, default it to `.passthrough()`. Upstream payloads routinely carry fields you didn't model, and a strict outer schema turns every one into a client-side AJV rejection. Reserve the `.parse()`-strip path (FIX 1) for response schemas where you deliberately want to drop upstream fields before they reach the client. `inputSchema` is the opposite - keep it strict so the LLM can't pass unmodeled arguments.
 
 ## Tool Design Patterns
