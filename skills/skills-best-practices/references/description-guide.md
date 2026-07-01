@@ -13,8 +13,9 @@ A strong description has three parts:
 ## Rules
 
 - Write in **third person**: "Processes files..." not "I help you..."
-- Max **1024 characters**
+- Max **1024 characters** - going over is a hard load-time failure: the whole skill is skipped, not just the description
 - No XML angle brackets (`<` or `>`)
+- Keep it valid YAML: a bare `Triggers:` (colon-space) or straight `"quotes"` inside an unquoted value breaks frontmatter parsing - quote the whole value if it contains either
 - Include **WHAT** + **WHEN**
 - Be slightly "pushy" - Claude tends to undertrigger
 - Write natural prose, not keyword dumps - Claude matches on semantic meaning, so a long "Triggers on X, Y, Z..." list adds little over a clear sentence

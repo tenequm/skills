@@ -87,7 +87,7 @@ Validate your skill before upload or sharing. Based on Anthropic's official chec
 - [ ] No time-sensitive information (or in "old patterns" section)
 - [ ] No Windows-style paths (all forward slashes)
 - [ ] No deprecated APIs referenced
-- [ ] Frontmatter validated with `skills-ref validate ./<skill>` (Agent Skills reference validator)
+- [ ] Frontmatter validated with `uvx --from skills-ref agentskills validate <skill>` (Agent Skills reference validator)
 
 ## After Upload
 

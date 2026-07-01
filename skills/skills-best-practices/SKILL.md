@@ -1,8 +1,8 @@
 ---
 name: skills-best-practices
-description: Build high-quality Agent Skills for Claude following official Anthropic best practices. Covers SKILL.md structure, frontmatter, description writing, progressive disclosure, testing, patterns, troubleshooting, and distribution across all surfaces (Claude.ai, Claude Code, API, Agent SDK). Use when creating new skills, reviewing skill quality, debugging skill triggering, structuring skill directories, writing skill descriptions, or improving existing skills. Triggers on "build a skill", "create a skill", "skill structure", "SKILL.md", "skill best practices", "skill not triggering", "skill quality".
+description: Build high-quality Agent Skills for Claude following official Anthropic best practices. Covers SKILL.md structure, frontmatter, description writing, progressive disclosure, testing, patterns, troubleshooting, and distribution across all surfaces (Claude.ai, Claude Code, API, Agent SDK). Use when creating a skill, reviewing skill quality, debugging why a skill won't trigger, structuring skill directories, or writing skill descriptions.
 metadata:
-  version: "0.5.0"
+  version: "0.6.0"
   openclaw:
     homepage: https://github.com/tenequm/skills/tree/main/skills/skills-best-practices
     emoji: "📐"
@@ -109,6 +109,8 @@ More examples in [references/description-guide.md](references/description-guide.
 
 The agentskills.io standard and the Claude API require both fields. Claude Code is more lenient: `name` falls back to the directory name, and `description` falls back to the first markdown paragraph. Write both anyway for portability.
 
+The spec also defines optional `license`, `compatibility`, and `metadata` fields. `compatibility` is capped at 500 characters and states environment requirements (intended product, system packages, network access).
+
 ### Optional Fields (Claude Code)
 
 | Field | Purpose |
@@ -118,7 +120,8 @@ The agentskills.io standard and the Claude API require both fields. Claude Code 
 | `arguments` | Named positional arguments for `$name` substitution (space-separated string or list) |
 | `disable-model-invocation` | `true` = only user can invoke (for deploy, commit) |
 | `user-invocable` | `false` = hidden from `/` menu (background knowledge) |
-| `allowed-tools` | Pre-approves tools (no permission prompt); space-separated, e.g. `Read Grep Glob` |
+| `allowed-tools` | Pre-approves tools (no permission prompt); space-separated, e.g. `Read Grep Glob`. In the spec allowlist but tagged **(Experimental)** |
+| `disallowed-tools` | Removes tools from Claude's pool while the skill is active; clears on your next message |
 | `model` | Override model for this skill; accepts `inherit`. Lasts the current turn only |
 | `effort` | Override effort level: `low`, `medium`, `high`, `xhigh`, `max` |
 | `context` | `fork` = run in isolated subagent |
@@ -315,6 +318,9 @@ Exit 0 means valid. It checks `SKILL.md` format and enforces the spec's strict f
 | Slow/degraded responses | SKILL.md too large | Move content to references/, keep under 500 lines |
 | "Could not find SKILL.md" | Wrong filename | Must be exactly `SKILL.md` (case-sensitive) |
 | "Invalid skill name" | Spaces or capitals | Use kebab-case: `my-skill-name` |
+| Whole skill silently skipped at load | Description exceeds 1024 chars | Trim it - the loader rejects the file, not just the description |
+| Frontmatter fails to parse | `Triggers:` (colon-space) or straight `"quotes"` inside an unquoted `description` value | Quote the whole value or remove the colon/quotes |
+| A doc example runs a shell command | Literal `` !`cmd` `` in skill content executes even inside a code fence | Move the example to `references/` or break the literal (see Security) |
 
 ## Distribution
 
@@ -331,7 +337,11 @@ Skills don't sync across surfaces - deploy separately to each.
 
 ### Using Skills with the API
 
-Custom skills are uploaded through the Skill Management API; `anthropic`-type skills are pre-built by Anthropic. Both are used identically - pass them in the Messages API `container` parameter, each as `{type, skill_id, version}` where `type` is `anthropic` or `custom`. Up to 8 Skills per request. Requires the code execution tool and the beta headers `code-execution-2025-08-25` and `skills-2025-10-02` (plus `files-api-2025-04-14` for file upload/download). The API code execution environment has **no network access and no runtime package installation** - bundle dependencies or use pre-installed packages.
+Custom skills are uploaded through the Skill Management API; `anthropic`-type skills are pre-built by Anthropic. Both are used identically - pass them in the Messages API `container` parameter, each as `{type, skill_id, version}` where `type` is `anthropic` or `custom`. Up to 8 Skills per request, 30 MB max upload (all files combined), and all files must share a common root directory. Requires the code execution tool and the beta headers `code-execution-2025-08-25` and `skills-2025-10-02` (plus `files-api-2025-04-14` for file upload/download).
+
+**Network access differs by surface.** The API code execution environment has **no network access and no runtime package installation** - bundle dependencies or use pre-installed packages. On claude.ai, by contrast, Skills **can** install packages from npm and PyPI and pull from GitHub.
+
+Further API details when you need them: a `pause_turn` stop reason signals a long-running Skill operation to resume; reuse a container across turns via `container.id`; Skill-generated files return `file_id` and are fetched via the Files API; changing the Skills list breaks prompt caching; and Skills are not ZDR-eligible (data is retained per the standard policy).
 
 ## Security
 
@@ -339,6 +349,7 @@ Custom skills are uploaded through the Skill Management API; `anthropic`-type sk
 - No XML angle brackets in frontmatter (injection risk)
 - Audit all bundled scripts and resources before using third-party skills
 - Be cautious of skills that fetch from external URLs
+- **Documenting the `` !`command` `` injection syntax?** The Claude Code loader executes it even inside a markdown code fence - it cannot tell a doc example from a directive. Keep such examples in `references/` or break the literal (e.g. add a zero-width space) so a meta-skill about skills doesn't run shell commands on load
 
 ## Additional References
 
