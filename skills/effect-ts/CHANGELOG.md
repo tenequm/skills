@@ -7,6 +7,23 @@ and this skill adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.h
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-07-01
+### Added
+- `migration-v4.md`: extended the "v4 beta additions" ledger from beta.78 to beta.92 (SchemaError now a tagged `Data.TaggedError`; `Schema.Void` void-return semantics; `Config.make` removed + `Config.withDefault`/`Config.schema` recovery changes; `Effect.try` thunk form; `RpcGroup.toHandlers` definition-first; `Effect.transposeOption`; `Effect.fromOption` callbacks; `Random.choice`; `Latch.isOpen`; `String.configCase`; `Statement.valuesUnprepared`; `Schema.toCodecArrayFromSingle`; `Graph.successors`/`predecessors`; arbitrary-derivation metadata migration; HTTP API streaming responses).
+- `concurrency.md`: child-process execution via `effect/unstable/process` (`ChildProcess`, `ChildProcessSpawner`; `spawner.string`/`lines`/`spawn`, `ChildProcess.pipeTo`).
+- `dependency-injection.md`: `LayerMap.Service` for per-key dynamic layers, and a `ManagedRuntime` bridge pattern for non-Effect frameworks (Hono/Express) with fiber-local request context via `Context.Reference`.
+- `resource-management.md`: `RcRef`/`RcMap` reference-counted shared resources.
+- `streams.md`: stream framing/encoding via `Stream.pipeThroughChannel` + `Ndjson`/`Msgpack` (`effect/unstable/encoding`).
+- `schema.md`: note that `SchemaError` is a tagged `Data.TaggedError` (catchable via `Effect.catchTag`).
+- SKILL.md progressive-disclosure index entries for the new concepts.
+### Changed
+- `llm-corrections.md` + SKILL.md: corrected `Schema.makeOption`/`makeEffect` to instance methods (`schema.makeOption(...)`); softened the unverified "PR #2057" attribution for HttpApi-errors-as-defects to a source-grounded statement.
+### Fixed
+- `error-modeling.md`: warn that `Effect.catch`/`catchTag` don't catch defects or interrupts (use `catchDefect`/`catchCause`) and that `Effect.catch(() => Effect.void)` silently swallows the typed error.
+- `concurrency.md`: clarify that `Effect.forkDetach` parents to the global scope (survives `runtime.dispose()`); use `Effect.forkScoped` for runtime-tied background fibers.
+
+Verified against: effect@4.0.0-beta.92
+
 ## [0.5.0] - 2026-06-09
 ### Added
 - `concurrency.md`: Request / RequestResolver section (batching, dedup, N+1 elimination via `Effect.request`).

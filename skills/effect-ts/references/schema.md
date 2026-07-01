@@ -86,6 +86,8 @@ const userEffect = User.makeEffect({ id: "1", name: "Alice", age: 30 })
 
 Decode/encode/construct failures are `SchemaError` instances carrying a `SchemaIssue.Issue` on the `.issue` field. Narrow thrown errors with `Schema.isSchemaError` and format issues via the `SchemaIssue` module. v3's `ParseResult` module is gone.
 
+Since beta.84, `SchemaError` extends `Data.TaggedError` — it is a native `Error` with `_tag: "SchemaError"`, so within Effect code you can also branch on it with `Effect.catchTag("SchemaError", ...)` instead of a `try`/`catch`. The `SchemaParser` Promise adapters reject an `Error` whose `cause` is the underlying `SchemaIssue.Issue`.
+
 ```typescript
 import { Schema, SchemaIssue } from "effect"
 

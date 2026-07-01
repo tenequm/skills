@@ -164,3 +164,26 @@ const sseStream = Effect.gen(function*() {
   )
 })
 ```
+
+## Framing Streams (NDJSON / MessagePack)
+
+To encode or decode a stream of structured values over a byte stream, pipe it through a `Channel` from the `effect/unstable/encoding` modules with `Stream.pipeThroughChannel`. `Ndjson` frames newline-delimited JSON; `Msgpack` frames MessagePack; `Sse` handles server-sent events. Each module exposes `decode`/`encode` (raw) and `decodeSchema`/`encodeSchema` (validate against a `Schema`) channels.
+
+```typescript
+import { Schema, Stream } from "effect"
+import { Ndjson } from "effect/unstable/encoding"
+
+const Event = Schema.Struct({ id: Schema.Number, kind: Schema.String })
+
+// Decode a byte stream of newline-delimited JSON into typed values
+const events = byteStream.pipe(
+  Stream.pipeThroughChannel(Ndjson.decodeSchema(Event))
+)
+
+// Encode typed values back into an NDJSON byte stream
+const bytes = typedStream.pipe(
+  Stream.pipeThroughChannel(Ndjson.encodeSchema(Event))
+)
+```
+
+For RPC transport framing (a different use), NDJSON/MessagePack are provided as serialization layers — see `references/rpc.md`.

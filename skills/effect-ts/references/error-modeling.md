@@ -108,6 +108,8 @@ const mapped = program.pipe(
 
 ## Defect Handling (Advanced)
 
+> **`Effect.catch` / `Effect.catchTag` only handle typed `E`-channel failures.** Defects (thrown bugs, `Effect.die`) and interruptions pass straight through them — a common wrong assumption is that `catch` swallows everything. To handle defects use `Effect.catchDefect`; to handle the full `Cause` (failures + defects + interrupts) use `Effect.catchCause` (see below). Also beware `Effect.catch(() => Effect.void)`: it silently discards the typed error, which turns a real failure into an invisible no-op and is a frequent source of "it just does nothing" debugging dead-ends — log or re-raise instead of returning `void`.
+
 Defects are for debugging, not normal recovery. Use sparingly:
 
 ```typescript

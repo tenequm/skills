@@ -183,6 +183,43 @@ const program = Effect.scoped(
 
 `Resource.auto(acquire, policy)` forks the refresh loop into the surrounding scope; `Resource.manual(acquire)` skips the schedule so you control refresh timing entirely via `Resource.refresh`. Both require a `Scope`.
 
+## Reference-Counted Resources (`RcRef` / `RcMap`)
+
+When several concurrent consumers should *share* a single expensive resource that is acquired on first use and released once the last user is done, use an `RcRef` (single resource) or `RcMap` (one per key). Each `get` increments a reference count scoped to the current `Scope`; when the count hits zero the resource is released, optionally after an `idleTimeToLive` grace period so a quick re-acquire reuses it.
+
+```typescript
+import { Effect, RcRef, RcMap } from "effect"
+
+// Single shared resource: one connection behind many borrowers
+const shared = Effect.gen(function*() {
+  const ref = yield* RcRef.make({
+    acquire: Effect.acquireRelease(openConnection, closeConnection),
+    idleTimeToLive: "5 seconds"
+  })
+
+  // Each borrow is scoped; the connection is opened once and reused
+  yield* Effect.scoped(Effect.gen(function*() {
+    const conn = yield* RcRef.get(ref)
+    yield* useConnection(conn)
+  }))
+})
+
+// Keyed variant: one shared resource per key (e.g. per host)
+const perKey = Effect.gen(function*() {
+  const clients = yield* RcMap.make({
+    lookup: (host: string) => Effect.acquireRelease(connect(host), disconnect),
+    idleTimeToLive: "30 seconds"
+  })
+
+  yield* Effect.scoped(Effect.gen(function*() {
+    const client = yield* RcMap.get(clients, "api.example.com")
+    yield* client.ping()
+  }))
+})
+```
+
+`RcMap.make` also accepts a `capacity`; exceeding it fails with `Cause.ExceededCapacityError`. Prefer `RcRef`/`RcMap` over `Pool` when consumers should transparently *share* one live instance rather than each borrow a distinct one from a pool.
+
 ## v4: Scope Changes
 
 In v4, `Scope` remains conceptually the same. Key change: `Effect.forkScoped` behavior is unchanged, but `Effect.fork` is renamed to `Effect.forkChild` (which is NOT scope-tied - use `Effect.forkScoped` for scope-tied fibers).

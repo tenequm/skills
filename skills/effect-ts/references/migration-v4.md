@@ -231,9 +231,9 @@ FromSchema.pipe(
 14. Replace `Schedule.compose(Schedule.recurs(n))` with `Schedule.take(n)`; replace `Schedule.once` with `Schedule.recurs(0)`
 15. Move `RateLimiter` import from `"effect"` to `"effect/unstable/persistence"` and switch to its Service-based API
 
-## v4 beta additions (through beta.78)
+## v4 beta additions (through beta.92)
 
-These landed in later betas and are worth knowing if you are currently on an older beta. The skill tracks `effect@4.0.0-beta.78`; companion packages share that single version.
+These landed in later betas and are worth knowing if you are currently on an older beta. The skill tracks `effect@4.0.0-beta.92`; companion packages share that single version.
 
 ### beta.55-58 (through 2026-04-28)
 
@@ -272,3 +272,29 @@ Fixes / additions worth knowing:
 - `Schema.DurationFromString` (beta.60, PR #2117); `Schema.isGUID` + RFC 9562 max-UUID support in `Schema.isUUID` (beta.76, PR #2320).
 - OTLP observability now reads `OTEL_*` environment variables and prefers them over explicit `OtlpResource.fromConfig` options (beta.77, PRs #2325/#2326).
 - `Config.literals` convenience constructor for `Schema.Literals` (beta.60, PR #2116).
+
+### beta.79-92 (2026-06 through 2026-07)
+
+Breaking / behavioral:
+
+- **`SchemaError` now extends `Data.TaggedError`** (beta.84, PR #2407) — it is also a native `Error` with `_tag: "SchemaError"`, catchable via `Effect.catchTag`. The `SchemaParser` Promise APIs reject an `Error` whose `cause` is the `SchemaIssue.Issue`; the `is`/`asserts`/`Promise`/`Sync`/`Result`/`Option`/`make`/`makeOption` adapters now distinguish schema issues from non-schema causes.
+- **`Schema.Void` now models ignored `void` return values** (beta.89, PR #2475) — it accepts any present value and discards it as `undefined`. Use `Schema.Undefined` when you need to match `undefined` exactly.
+- **`Config.make` low-level constructor removed** (beta.84, PR #2383) — use the config constructors/combinators or `ConfigProvider.make`. `ConfigProvider.fromDir` now returns `undefined` when neither file nor dir exists, so you can chain `orElse` fallbacks.
+- **`Config.withDefault` recovery narrowed** (beta.81, PRs #2387/#2388) — it now only recovers from *missing* data for literal/union schemas; present-but-invalid values and filter failures propagate the validation error instead of falling back to the default. `Config.schema` also treats a missing array value as missing data so `withDefault` applies (beta.90, PR #2483).
+- **`Effect.try` accepts a thunk directly** (beta.84, PR #2415), matching `Effect.tryPromise`; `tryPromise` only creates an `AbortController` when the thunk declares an `AbortSignal` parameter.
+- **`RpcGroup.toHandlers` is now definition-first** (beta.84, PR #2423); RpcClient HTTP requests fail with a *defect* when the response stream closes before a terminal response (beta.86, PR #2461).
+- **Schema arbitrary-derivation metadata migrated** (beta.79, PR #2348) — custom filter annotations use `arbitrary: { constraint }` instead of `toArbitraryConstraint`, bucketed constraints are flattened (`string.minLength` -> `minLength`, `number.isInteger` -> `integer`), `ctx.constraints` -> `ctx.constraint`, and `Schema.toArbitrary(schema, { report: true })` returns `{ value, report }`. Plain `Schema.toArbitrary(schema)` (as shown in `references/testing.md`) is unaffected.
+- `keepDeclarations` option removed from `Schema.toCodecStringTree` (beta.86, PR #2452).
+- `Graph.neighborsDirected` deprecated in favor of `Graph.successors` / `Graph.predecessors` (beta.80, PR #2376).
+
+Fixes / additions worth knowing:
+
+- `Effect.transposeOption` turns `Option<Effect<A, E, R>>` into `Effect<Option<A>, E, R>` (beta.84, PR #2420); `Effect.fromOption` gained custom error callbacks (beta.89, PR #2479).
+- `Random.choice` selects a random element from an iterable (beta.85, PR #2425); `Latch.isOpen` queries latch state (beta.88, PR #2428).
+- `String.configCase` for configuration-key casing, plus a numeric-segment fix in `camelCase`/`pascalCase` (beta.91, PR #2488).
+- HTTP API streaming response support (beta.81, PR #2270); malformed JSON request bodies now return 400 (unreleased, PR #2492).
+- `Statement.valuesUnprepared` returns unprepared SQL rows as arrays (beta.86, PR #2462); `Schema.toCodecArrayFromSingle` added (beta.86, PR #2442); the original input schema is now exposed on `Schema.toType`/`toEncoded`/`toCodecJson`/`toCodecStringTree` via a `.schema` property (beta.87, PR #2468).
+- `RequestResolver` interruption fixed (beta.91, PR #2485); `Schedule.andThenResult` now emits `self` outputs as `Failure` and `other` as `Success` (beta.91, PR #2497); `Schema.toTaggedUnion(...).isAnyOf` narrowing fixed for custom discriminant keys (beta.81, PR #2386).
+- Adaptive consume + feedback operations on the unstable persistent `RateLimiterStore` API (in-memory + Redis, 429 Retry-After feedback) (beta.88, PR #2472).
+- `OtlpTracer` now renders causes in exception events (beta.89, PR #2480); excess-property handling fixed in schema-backed class constructors (beta.92, PR #2499).
+- `@effect/ai-anthropic`: non-streaming responses no longer throw on tool-call `caller` metadata (emits `null` for `caller.toolId`, beta.88, PR #2450).

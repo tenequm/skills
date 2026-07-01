@@ -26,11 +26,11 @@ This is the exhaustive reference for preventing hallucinated Effect code. Check 
 | `Layer.fromService`                   | `Layer.effect(Tag, Effect.gen(function*() { ... }))`          |
 | `Schema.nullable`                     | `Schema.NullOr(schema)`                                      |
 | `Schema.optional` (standalone)        | `Schema.optional(schema)` for struct fields only              |
-| `Schema.makeUnsafe(input)` (v4)       | `Schema.make(input)` - throws `SchemaError` on invalid input; also `Schema.makeOption`, `Schema.makeEffect` |
+| `Schema.makeUnsafe(input)` (v4)       | `Schema.make(input)` - throws `SchemaError` on invalid input; also instance methods `schema.makeOption(...)`, `schema.makeEffect(...)` |
 | `ServiceMap.Service` / `ServiceMap.Reference` (v4) | Renamed back to `Context.Service` / `Context.Reference` on 2026-04-07 (PR #1961). Import `Context` from `"effect"`. |
 | `Otlp.layer({ url, serviceName })` (v4) | Canonical split form: `OtlpTracer.layer({ url, resource: { serviceName } })` + `OtlpSerialization.layerJson` + `FetchHttpClient.layer`. The aggregator `Otlp.layer` exists but uses `baseUrl` + `resource.serviceName`, not `url` + `serviceName`. |
 | Chained `HttpApiEndpoint.get(n, p).pipe(HttpApiEndpoint.setPath(...), setPayload(...), setSuccess(...))` (v4) | Object-option form: `HttpApiEndpoint.get(name, path, { params, query, payload, success, error })` |
-| `HttpApiEndpoint` parse failures surface as typed errors (v4) | Since PR #2057 (2026-04-20) endpoint schema failures default to **defects** unless transformed via `HttpApiSchema` helpers. Use `HttpApiSchemaError` when you need typed error responses. |
+| `HttpApiEndpoint` parse failures surface as typed errors (v4) | In current v4 betas, endpoint schema failures default to **defects** unless transformed via `HttpApiSchema` helpers. Use `HttpApiSchemaError` when you need typed error responses. |
 | `Layer.scoped(Tag, eff)` (v4) | Removed. `Layer.effect(Tag, eff)` strips `Scope` from the requirements automatically. |
 | `Effect.async((resume) => ...)` (v4) | Renamed to `Effect.callback`. Register signature is `(resume, signal: AbortSignal) => void \| Effect<void, never, R>`. |
 | `Effect.makeSemaphore(n)` (v4) | Removed from `Effect`. Use `Semaphore.make(n)` from the `Semaphore` module. `withPermits` is data-first: `Semaphore.withPermits(sem, n)(eff)`. |
