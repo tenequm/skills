@@ -18,7 +18,6 @@ DEFAULT_CLAWHUB_BASE = "https://clawhub.ai/skills"
 CLAWHUB_SLUG_OVERRIDES: dict[str, str] = {
     "erc-8004": "erc-8004-development",
     "founder-playbook": "founder-playbook-web3",
-    "openclaw-ref": "openclaw-reference",
     "polish": "code-polish",
     "x402": "x402-development",
 }
