@@ -7,6 +7,56 @@ and this skill adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.h
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-07-01
+
+### Changed
+- Re-grounded against upstream tag `v8.0.0-beta.14` -> `v9.0.0-beta.10` (commit
+  `e25b71e74`); retitled "Lance v8 reference" -> "Lance v9 reference", bumped the
+  workspace version pin, permalink base, and citation tag. 129-commit range, major
+  version boundary. All structural invariants reverified unchanged: 25 crates, arrow 58,
+  datafusion 53, opendal 0.57, jieba-rs 0.10, rust 1.91.0, resolver 3, edition 2024,
+  version enum (`Next => 2.3`, default `V2_1`), 15 transaction ops, `CommitConfig
+  num_retries = 20`.
+- The v9 major bump is auto-triggered by `ci/check_breaking_changes.py` (GitHub
+  `breaking-change` label detection), fired by #7158 and #7345 - not by the FMIndex rename.
+- Dep pins: `lance-namespace-reqwest-client` 0.8.4 -> 0.8.6; `itertools` 0.13 -> 0.14.
+  pylance runtime `lance-namespace>=0.8.5,<0.9` unchanged.
+- Section 3.1: docs version table (`file/versioning.md`) now lists **2.3 as unstable** and
+  no longer labels 2.2 unstable (was "docs still list only 2.2").
+- Section 3.3: miniblock value chunks now tunable up to 32k via `LANCE_MINIBLOCK_MAX_VALUES`
+  (PR #7356; default stays 4096).
+- Section 7: `cleanup` / cleanup-explain now exposed to Python and Java (PR #7248).
+- Section 6: `alter_columns` now allows Dict <-> value-type casts (PR #7289).
+
+### Added
+- Section 14: new "v8.0.0-beta.14 -> v9.0.0-beta.10 delta (major-version boundary)"
+  subsection covering the three breaking changes, the `as_vector_index` removal, and
+  net-new features.
+- SKILL.md: note that v8.0.0 is the concurrent stabilizing release (rc.3) for users who
+  need a stable pin instead of the v9 dev betas.
+- Section 11.1: hamming clustering / near-dup detection utility over 64-bit binary hashes
+  (`pairwise_hamming_distance`, `UnionFind`, `hamming_clustering_for_ivf_partition`,
+  PR #7379); COUNT(*) pushdown now works on stable-row-id datasets (PR #7360).
+- Section 3.5: per-column blob inline/dedicated thresholds
+  (`lance-encoding:blob-inline-size-threshold` / `...-dedicated-size-threshold`, PR #7269).
+- Section 11.2: ngram index now accelerates regex and infix LIKE (PR #7139).
+- Section 11.3: ICU split tokenizer variant `icu/split` (PR #7474); mixed-language FTS stop
+  words (PR #7324).
+- Section 12: distributed LabelList scalar index builds (PR #7223).
+
+### Removed
+- Section 11.1: `as_vector_index` removed from the public `Index` trait (PR #7392);
+  callers downcast via `as_any()`.
+
+### Changed (breaking, upstream)
+- FM-Index proto message renamed `FMIndexIndexDetails` -> `FMIndexDetails` (PR #7397) -
+  existing FM indexes become unreadable (sections 11.2, 16).
+- Python 3.9 dropped; minimum is now 3.10 (PR #7345) - section 2 binding note.
+- `alter_columns` cast now fails-fast when the column has an attached index; drop the index
+  first (PR #7158) - section 6.
+
+Verified against: lance-format/lance@v9.0.0-beta.10
+
 ## [0.7.0] - 2026-06-16
 
 ### Changed
