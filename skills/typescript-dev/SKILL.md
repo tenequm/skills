@@ -2,8 +2,8 @@
 name: typescript-dev
 description: "Build full-stack TypeScript apps with Vite 8, React 19, Tailwind CSS v4, shadcn/ui, Biome, Vitest, and Hono. Covers the frontend (Vite/Rolldown build + dev server, type-safe React 19, strict TypeScript 6.0, Tailwind/shadcn styling, Biome lint/format, Vitest) and the Hono 4 backend/edge layer (routing, middleware, Zod validation, end-to-end type-safe RPC, OpenAPI, multi-runtime deploy). Use when setting up or working in a TypeScript project: configuring Vite, writing components, the React Compiler, Tailwind/shadcn, dev server/HMR, bundles, tests, lint/format/CI, or building a Hono API and wiring its RPC client to React. Triggers on vite, rolldown, react, tsx, typescript, tsconfig, react compiler, tailwind, shadcn, cva, biome, vitest, hmr, dev server, hono, hono rpc, hc client, cloudflare workers, edge api, zod validator, zod-openapi."
 metadata:
-  version: "0.2.0"
-  upstream: "vite@8.0.16, @vitejs/plugin-react@6.0.2, react@19.2.7, typescript@6.0.3, tailwindcss@4.3.0, @biomejs/biome@2.4.16, vitest@4.1.8, babel-plugin-react-compiler@1.0.0, class-variance-authority@0.7.1, hono@4.12.25"
+  version: "0.3.0"
+  upstream: "vite@8.1.2, @vitejs/plugin-react@6.0.3, react@19.2.7, typescript@6.0.3, tailwindcss@4.3.2, @biomejs/biome@2.5.2, vitest@4.1.9, babel-plugin-react-compiler@1.0.0, class-variance-authority@0.7.1, hono@4.12.27"
 ---
 
 # TypeScript Frontend Development
@@ -25,16 +25,16 @@ The body below is the cross-cutting layer: the rules that bite when these tools 
 
 | Tool | Version | Note |
 |------|---------|------|
-| Vite | 8.0.16 | Rolldown is the single default bundler |
-| @vitejs/plugin-react | 6.0.2 | v6 removed the inline `babel` option |
+| Vite | 8.1.2 | Rolldown is the single default bundler |
+| @vitejs/plugin-react | 6.0.3 | v6 removed the inline `babel` option |
 | React / react-dom | 19.2.7 | React Compiler is stable (1.0) |
 | babel-plugin-react-compiler | 1.0.0 | pin with `--save-exact` |
-| TypeScript | 6.0.3 | last JS-based TS; bridge to tsgo/TS 7 |
-| Tailwind CSS | 4.3.0 | CSS-first config, no JS config file |
-| shadcn/ui CLI | 4.11.0 | `create` is an alias of `init` |
-| Biome | 2.4.16 | single binary for lint + format + imports |
-| Vitest | 4.1.8 | Vite-native test runner; reuses vite.config |
-| Hono | 4.12.25 | Web Standards backend/edge framework; no v5 |
+| TypeScript | 6.0.3 | last JS-based TS; TS 7.0 (tsgo) now RC |
+| Tailwind CSS | 4.3.2 | CSS-first config, no JS config file |
+| shadcn/ui CLI | 4.12.0 | `create` is an alias of `init` |
+| Biome | 2.5.2 | single binary for lint + format + imports |
+| Vitest | 4.1.9 | Vite-native test runner; reuses vite.config |
+| Hono | 4.12.27 | Web Standards backend/edge framework; no v5 |
 
 ## Cross-cutting critical rules
 
@@ -160,7 +160,7 @@ export default defineConfig({
   "formatter": { "enabled": true, "indentStyle": "space", "lineWidth": 100 },
   "linter": {
     "enabled": true,
-    "rules": { "recommended": true },
+    "rules": { "preset": "recommended" },
     "domains": { "react": "recommended" }
   },
   "javascript": { "formatter": { "quoteStyle": "double" } },

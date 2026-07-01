@@ -1,6 +1,6 @@
 # shadcn/ui
 
-Copy-in component patterns built on Tailwind v4 and a primitive library (Radix UI or Base UI). shadcn/ui is not a dependency you import - the CLI (latest `4.11.0`) writes component source into your project, which you then own and edit. For the Tailwind layer (theming, tokens) see [tailwind.md](tailwind.md).
+Copy-in component patterns built on Tailwind v4 and a primitive library (Radix UI or Base UI). shadcn/ui is not a dependency you import - the CLI (latest `4.12.0`) writes component source into your project, which you then own and edit. For the Tailwind layer (theming, tokens) see [tailwind.md](tailwind.md).
 
 ## Component authoring pattern
 
@@ -56,7 +56,12 @@ export function cn(...inputs: ClassValue[]) { return twMerge(clsx(inputs)) }
 pnpm dlx shadcn@latest init        # scaffold config + tokens + lib/utils
 pnpm dlx shadcn@latest add button card form   # add components
 pnpm dlx shadcn@latest add button --overwrite # update an existing component
+pnpm dlx shadcn@latest add button --dry-run   # preview what add would write, no changes
+pnpm dlx shadcn@latest add button --diff      # show a diff against your current files
+pnpm dlx shadcn@latest add button --view      # print the item's source without writing
 ```
+
+`--dry-run`, `--diff`, and `--view` (CLI 4.12) let you inspect an item before it touches your tree - useful before overwriting a component you've edited.
 
 `init` adds `@import "shadcn/tailwind.css"` to your global CSS (custom variants like `data-open:` / `data-closed:` and utilities like `no-scrollbar`). `shadcn eject` inlines that file if you want full control.
 
@@ -98,6 +103,12 @@ Presets are encoded codes that rewrite component code (not just colors): `shadcn
 ```bash
 pnpm dlx shadcn@latest mcp init    # exposes registry/search/add to an AI client
 ```
+
+### Recent additions (4.12)
+
+- **Chat-interface component family** - `MessageScroller`, `Message`, `Bubble`, `Attachment`, and `Marker` for building chat UIs.
+- **`@shadcn/react`** - a new package of unstyled, headless primitives (first one shipped: `@shadcn/react/message-scroller`) for when you want behavior without the styled shadcn layer.
+- **`scroll-fade` and `shimmer`** CSS utilities added to the shadcn utility set.
 
 ## Primitives: Radix vs Base UI
 

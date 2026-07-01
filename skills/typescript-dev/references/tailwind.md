@@ -1,6 +1,6 @@
 # Tailwind CSS v4
 
-Utility-first styling, CSS-first configuration. Tailwind **v4.3** (latest `4.3.0`) configures everything in CSS - there is no `tailwind.config.js`. In a Vite project the integration is the `@tailwindcss/vite` plugin (no PostCSS config). For shadcn/ui component authoring see [shadcn.md](shadcn.md).
+Utility-first styling, CSS-first configuration. Tailwind **v4.3** (latest `4.3.2`) configures everything in CSS - there is no `tailwind.config.js`. In a Vite project the integration is the `@tailwindcss/vite` plugin (no PostCSS config). For shadcn/ui component authoring see [shadcn.md](shadcn.md).
 
 ## CSS-first configuration
 
@@ -150,6 +150,7 @@ shadcn/ui colors use `oklch(lightness chroma hue)`: lightness 0-1, chroma 0-0.4 
 - **Colors not updating:** confirm the variable is in your CSS, `@theme inline` includes the mapping, then clear the build cache.
 - **`tailwind.config.js` present:** delete it; run `npx @tailwindcss/upgrade` to migrate to CSS-first.
 - **Classes not detected:** check `@source` covers your component paths and that no class name is constructed dynamically.
+- **A custom-token utility renders nothing:** a class like `bg-brand` whose token is not mapped under `@theme`/`@theme inline` emits no CSS and no error - tsc, Biome, and the Vite build all stay green. Cross-check the utility against your mapped tokens; a typo'd or unmapped token fails silently.
 
 ## Resources
 

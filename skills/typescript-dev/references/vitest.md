@@ -1,6 +1,6 @@
 # Vitest
 
-The Vite-native test runner. Vitest **4** (latest `4.1.8`) reuses your `vite.config.ts` - same plugins, resolve aliases, and transforms - so tests see the app exactly as the bundler builds it. It requires **Vite >= 6.0.0 and Node >= 20.0.0**, and works with the Vite 8 / Rolldown stack (the old "Vitest 3.2+ for Vite 7" floor is superseded; use Vitest 4.x today).
+The Vite-native test runner. Vitest **4** (latest `4.1.9`) reuses your `vite.config.ts` - same plugins, resolve aliases, and transforms - so tests see the app exactly as the bundler builds it. It requires **Vite >= 6.0.0 and Node >= 20.0.0**, and works with the Vite 8 / Rolldown stack (the old "Vitest 3.2+ for Vite 7" floor is superseded; use Vitest 4.x today).
 
 ## Configuration
 

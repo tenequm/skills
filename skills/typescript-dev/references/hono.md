@@ -7,9 +7,15 @@ dependencies; the `hono/tiny` preset is under 14kB. It is the backend/edge count
 this stack's React frontend - its RPC client (`hc`) shares server types directly with
 React, giving end-to-end type safety without code generation.
 
-Version target: **hono@4.12.x** (Hono 4 is current; there is no v5). Node.js >= 18.14.1.
+Version target: **hono@4.12.27** (Hono 4 is current; there is no v5). Node.js >= 18.14.1.
 Adapters/middleware are versioned independently (`@hono/node-server@2`, `@hono/zod-validator`,
 `@hono/zod-openapi@1`).
+
+> **Keep Hono patched - the 4.12.x line has shipped frequent security fixes.** 4.12.27 alone
+> fixes two SSR issues: `hono/jsx` stored context process-wide instead of per request, so a value
+> read after an `await` in an async component could leak across concurrent requests
+> (GHSA-hvrm-45r6-mjfj), and `hono/css` `cx()` marked its output as pre-escaped, allowing XSS via
+> untrusted class names (GHSA-w62v-xxxg-mg59). Pin to the latest patch, not an older 4.12.x.
 
 > **For anything this file does not cover, fetch Hono's own LLM-optimized docs** - they are
 > the fastest authoritative source and are kept in sync with releases:
