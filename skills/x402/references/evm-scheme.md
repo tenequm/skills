@@ -157,6 +157,15 @@ ERC-6492 verification simulates a counterfactual smart-wallet's deploy factory b
 - An empty or omitted list **disables** counterfactual ERC-6492 deployment entirely and returns `eip6492_factory_not_allowed`.
 - The previous `DeployERC4337WithEIP6492` boolean config field was **removed** across all three SDKs (breaking for facilitator implementers that deployed ERC-4337 smart wallets via EIP-6492).
 
+### Wallet Compatibility (2.17.0)
+
+Payments verify and settle consistently across plain EOAs, deployed smart accounts (ERC-4337 / ERC-7579), counterfactual ERC-6492 wallets, and ERC-7702-delegated EOAs. Pre-verification now mirrors on-chain signature checking, so a payment that passes `verify` is the same one that succeeds at `settle`. ERC-6492 counterfactual support covers both the `exact` and `batch-settlement` flows.
+
+## Verify-Time Guards
+
+- **Asset must be a deployed contract**: EVM facilitator `verify` calls `eth_getCode` on the asset address early in `verifyEIP3009`, `verifyPermit2`, and `verifyUptoPermit2`. Any address with no bytecode (an EOA) is rejected with `asset_not_deployed_contract`. This closes a silent no-op where `eth_call` on an EOA returns empty data without reverting, so on-chain simulation passes but settlement transfers nothing.
+- **`validAfter` is set to 0**: clients set the EIP-3009/Permit2 authorization `validAfter` to 0 to reduce on-chain timing failures when payloads are queued or block timestamps lag behind client clocks. Expiration is still bounded by `validBefore`/`deadline` derived from `maxTimeoutSeconds`.
+
 ## Extensions
 
 ### EIP-2612 Gas Sponsoring
@@ -180,6 +189,9 @@ When a server uses price string syntax (`"$0.001"`), the SDK resolves to the cha
 | ADI Chain (`eip155:36900`) | USDC.e | `0x9cb8142aEBBcdc60AF7c97Af897A67A8f3CA71C2` | 6 | EIP-3009 | - |
 | HPP (`eip155:190415`) | Bridged USDC | `0x401eCb1D350407f13ba348573E5630B83638E30D` | 6 | EIP-3009 | - |
 | HPP Sepolia (`eip155:181228`) | Bridged USDC | `0x401eCb1D350407f13ba348573E5630B83638E30D` | 6 | EIP-3009 | - |
+| Mezo Mainnet (`eip155:31612`) | Mezo USD (mUSD) | `0xdD468A1DDc392dcdbEf6db6e34E89AA338F9F186` | 18 | Permit2 | Yes |
+| XDC Network (`eip155:50`) | USDC (Bridged) | `0xfA2958CB79b0491CC627c1557F441eF849Ca8eb1` | 6 | EIP-3009 | - |
+| XDC Apothem (`eip155:51`) | USDC (Bridged) | `0xb5AB69F7bBada22B28e79C8FFAECe55eF1c771D4` | 6 | EIP-3009 | - |
 
 ### Custom Tokens with registerMoneyParser
 

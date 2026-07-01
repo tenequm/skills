@@ -99,7 +99,7 @@ Multiple production facilitators are available. The ecosystem is permissionless 
 
 | Facilitator | Networks | Use Case |
 |-------------|----------|----------|
-| x402.org (default) | Base Sepolia, Solana Devnet, Stellar Testnet, Aptos Testnet | Testing/development, no setup needed |
+| x402.org (default) | Base Sepolia, Solana Devnet, Stellar Testnet, Aptos Testnet, Hedera Testnet | Testing/development, no setup needed |
 | [Production facilitators](https://www.x402.org/ecosystem?filter=facilitators) | Base, Solana, Polygon, Avalanche, etc. | Production use |
 | Self-hosted | Any EVM chain | Full control |
 
@@ -140,6 +140,8 @@ Format: `{namespace}:{reference}`
 - **TON**: `tvm:<workchain>` (e.g., `tvm:-239` for mainnet)
 - **Hedera**: `hedera:<network>` (e.g., `hedera:mainnet`)
 - **Algorand**: `algorand:<genesisHash>` (e.g., `algorand:wGHE2Pwdvd7S12BL5FaOP20EGYesN73ktiC1qzkkit8=` for mainnet)
+- **Keeta**: `keeta:<chainId>` (e.g., `keeta:21378` for mainnet, `keeta:1413829460` for testnet)
+- **Concordium**: `ccd:<genesisHash>` (e.g., `ccd:9dd9ca4d19e9393877d2c44b70f89acb` for mainnet)
 
 ### Token Support
 
@@ -150,6 +152,8 @@ Format: `{namespace}:{reference}`
 **Aptos**: Any fungible asset via `0x1::primary_fungible_store::transfer`. Supports sponsored (gasless) transactions. TypeScript SDK only.
 
 **Stellar**: Any Soroban token implementing SEP-41. Uses `transfer(from, to, amount)`. TypeScript SDK only. Ledger-based expiration (~12 ledgers, ~60 seconds).
+
+**Hedera**: HBAR (native token) or any HTS fungible token. HBAR is used via asset id `0.0.0` with amounts in tinybars (1 HBAR = 10^8 tinybars).
 
 **USDC** is the default token, supported across all networks. When you use price strings like `"$0.001"`, the system infers USDC.
 
@@ -268,6 +272,9 @@ facilitator.register("eip155:43114", new ExactEvmScheme({
 | Stable Testnet | `eip155:2201` | USDT0 | Community |
 | Arbitrum One | `eip155:42161` | USDC | Production facilitators |
 | Arbitrum Sepolia | `eip155:421614` | USDC | Community |
+| XDC Network Mainnet | `eip155:50` | USDC (Bridged, EIP-3009) | Community |
+| XDC Apothem Testnet | `eip155:51` | USDC (Bridged, EIP-3009) | Community |
+| Mezo Mainnet | `eip155:31612` | mUSD (18 decimals, Permit2 + EIP-2612) | Community |
 | Mezo Testnet | `eip155:31611` | mUSD (Permit2 + EIP-2612) | Community |
 | Radius Mainnet | `eip155:723487` | SBC (Permit2 + EIP-2612) | Community |
 | Radius Testnet | `eip155:72344` | SBC (Permit2 + EIP-2612) | Community |
@@ -277,6 +284,10 @@ facilitator.register("eip155:43114", new ExactEvmScheme({
 | TON Mainnet | `tvm:-239` | Jettons (USDT default) | Community |
 | Hedera Mainnet | `hedera:mainnet` | HBAR + HTS tokens | Community |
 | Algorand Mainnet | `algorand:wGHE2Pwdvd7S12BL5FaOP20EGYesN73ktiC1qzkkit8=` | USDC ASA | Community |
+| Keeta Mainnet | `keeta:21378` | TypeScript SDK | Community |
+| Keeta Testnet | `keeta:1413829460` | TypeScript SDK | Community |
+| Concordium Mainnet | `ccd:9dd9ca4d19e9393877d2c44b70f89acb` | Native CCD (6 decimals) | Community |
+| Concordium Testnet | `ccd:4221332d34e1694168c2a0c0b3fd0f27` | Native CCD | Community |
 | Any EVM | `eip155:<chainId>` | Any EIP-3009 | Self-hosted or community |
 
 ### Why EIP-3009?
@@ -295,6 +306,9 @@ facilitator.register("eip155:43114", new ExactEvmScheme({
 | SVM (exact/spl) | Yes | Yes | Yes |
 | Stellar (exact/soroban) | Yes | No | No |
 | Aptos (exact/fungible) | Yes | No | No |
+| TON/TVM (exact/jetton) | Yes | No | Yes |
+| Keeta (exact) | Yes | No | No |
+| Concordium (exact) | Yes | No | No |
 
 ### HTTP Framework Integrations
 
