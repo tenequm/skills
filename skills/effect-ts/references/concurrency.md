@@ -40,6 +40,8 @@ const fiber = yield* Effect.forkChild(myEffect, {
 })
 ```
 
+> **`forkDetach` parents to the global scope**, so the fiber survives even `runtime.dispose()` on a `ManagedRuntime`. For a background fiber (a poller, a subscriber) that must die when its runtime is torn down, use `Effect.forkScoped` inside the runtime's scope instead — `forkDetach` there leaks the fiber past disposal.
+
 ## Joining and Interrupting
 
 ```typescript
@@ -295,3 +297,32 @@ const WorkerClientLive = MyRpcClient.layer.pipe(
 ```
 
 The low-level `Worker` / `WorkerRunner` modules exist but are platform primitives, not an ergonomic pool — prefer the RPC transport above.
+
+## Child Processes (`effect/unstable/process`)
+
+Define commands with `ChildProcess.make` and run them through the `ChildProcessSpawner` service. `ChildProcess.make` supports positional args, a template-literal form, and options (`cwd`, `env`, `extendEnv`); `ChildProcess.pipeTo` composes a shell-style pipeline between two command values. Provide the spawner from your platform (`NodeServices.layer` on Node).
+
+```typescript
+import { Effect, String } from "effect"
+import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process"
+
+const gitLog = Effect.gen(function*() {
+  const spawner = yield* ChildProcessSpawner.ChildProcessSpawner
+
+  // Collect the whole output as a string
+  const nodeVersion = yield* spawner.string(
+    ChildProcess.make("node", ["--version"])
+  ).pipe(Effect.map(String.trim))
+
+  // Line-oriented output, with a piped command: git log ... | head -n 5
+  const subjects = yield* spawner.lines(
+    ChildProcess.make("git", ["log", "--pretty=format:%s", "-n", "20"]).pipe(
+      ChildProcess.pipeTo(ChildProcess.make("head", ["-n", "5"]))
+    )
+  )
+
+  return { nodeVersion, subjects }
+})
+```
+
+Use `spawner.string` / `spawner.lines` to collect completed output; use `spawner.spawn` to get a `ChildProcessHandle` and stream stdout/stderr while the process is still running. On Node, provide `NodeServices.layer` (from `@effect/platform-node`) to satisfy the `ChildProcessSpawner` requirement.

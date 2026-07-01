@@ -2,8 +2,8 @@
 name: effect-ts
 description: "Comprehensive Effect-TS development guide for TypeScript, focused on Effect v4 (the recommended default) with full v3 (stable) support for existing codebases. Use when building, debugging, reviewing, or generating Effect code: typed errors, fibers, Context/Layers, Scope, Schedule, streams, Schema, observability, HTTP, Config, SQL, CLI, RPC, STM, and Effect AI. Includes exhaustive wrong-vs-correct API tables to prevent hallucinated Effect code. Triggers when code imports from 'effect', '@effect/platform', '@effect/ai', or '@effect/sql', or the user mentions Effect-TS, functional TypeScript, Context, Layer, or Schema from Effect."
 metadata:
-  version: "0.5.0"
-  upstream: "effect@4.0.0-beta.78"
+  version: "0.6.0"
+  upstream: "effect@4.0.0-beta.92"
   openclaw:
     homepage: https://github.com/tenequm/skills/tree/main/skills/effect-ts
     emoji: "🌀"
@@ -92,12 +92,12 @@ LLM outputs frequently contain incorrect Effect APIs. Verify every API against t
 | `yield* fiber` (Fiber as Effect) | `yield* Fiber.join(fiber)` (Fiber is no longer Effect) |
 | `Logger.Default` / `Logger.Live` | `Logger.layer` (v4 naming convention)                 |
 | `Schema.TaggedError`             | `Schema.TaggedErrorClass`                             |
-| `Schema.makeUnsafe(input)`       | `Schema.make(input)` (throws `SchemaError`); also `Schema.makeOption`, `Schema.makeEffect` |
+| `Schema.makeUnsafe(input)`       | `Schema.make(input)` (throws `SchemaError`); also instance methods `schema.makeOption(...)`, `schema.makeEffect(...)` |
 | `ParseResult` (from `"effect"`)  | `SchemaIssue` module + `SchemaError` class; narrow with `Schema.isSchemaError` |
 | `HttpApiEndpoint.get(n, p).pipe(HttpApiEndpoint.setPath(...), setPayload(...), setSuccess(...))` | `HttpApiEndpoint.get(n, p, { params, query, payload, success, error })` (object-option form) |
 | `Otlp.layer({ url, serviceName })` | `OtlpTracer.layer({ url, resource: { serviceName } })` + `OtlpSerialization.layerJson` + `FetchHttpClient.layer` |
 | `import { HttpApi } from "@effect/platform"` (v4) | `import { HttpApi } from "effect/unstable/httpapi"` |
-| HttpApi endpoint schema errors are typed errors by default | Since PR #2057 (2026-04-20) they default to **defects** unless transformed |
+| HttpApi endpoint schema errors are typed errors by default | In current v4 betas they default to **defects** unless transformed |
 
 **Read `references/llm-corrections.md` for the exhaustive corrections table.**
 
@@ -107,13 +107,18 @@ Read only the reference files relevant to your task:
 
 - Error modeling or typed failures → `references/error-modeling.md`
 - Services, DI, or Layer wiring → `references/dependency-injection.md`
+- Per-key dynamic layers (per-tenant resources, `LayerMap`) → `references/dependency-injection.md`
+- Bridging Effect into non-Effect frameworks (Hono/Express, `ManagedRuntime`) → `references/dependency-injection.md`
 - Retries, timeouts, or backoff → `references/retry-scheduling.md`
 - Fibers, forking, or parallel work → `references/concurrency.md`
 - Request batching, N+1 elimination, DataLoader pattern → `references/concurrency.md`
 - Multi-provider fallback (`ExecutionPlan`) → `references/effect-ai.md` / `references/retry-scheduling.md`
 - Streams, queues, or SSE → `references/streams.md`
+- Framing streams (NDJSON / MessagePack encode-decode) → `references/streams.md`
+- Running child processes / shelling out → `references/concurrency.md`
 - Resource lifecycle or cleanup → `references/resource-management.md`
 - Refreshable values (rotating credentials, polled config) → `references/resource-management.md`
+- Reference-counted shared resources (`RcRef`/`RcMap`) → `references/resource-management.md`
 - Schema validation or decoding → `references/schema.md`
 - Branded / nominal types (`Brand`) → `references/schema.md`
 - Logging, metrics, or tracing → `references/observability.md`
@@ -129,6 +134,7 @@ Read only the reference files relevant to your task:
 - Transactional state (STM, `Tx*`) → `references/stm.md`
 - Date/time handling → `references/datetime.md`
 - Immutable nested updates (optics) → `references/optics.md`
+- Graphs, dependency ordering, shortest paths, cycle detection → `references/graph.md`
 - Pattern matching (`Match`) → `references/core-patterns.md`
 - Pooling resources (`Pool`) → `references/resource-management.md`
 - Fiber sets, SubscriptionRef, worker threads → `references/concurrency.md`
