@@ -2,8 +2,8 @@
 name: x402
 description: "Build internet-native payments with the x402 open protocol - HTTP 402 Payment Required for on-chain micropayments with no accounts or API keys. Use when developing paid APIs, paywalled content, AI agent payment flows, or MCP tools that charge per call. Covers the TypeScript, Python, and Go SDKs across EVM, Solana, Stellar, and Aptos."
 metadata:
-  version: "0.9.0"
-  upstream: "@x402/core@2.14.0, @x402/evm@2.14.0, x402@2.12.0, github.com/x402-foundation/x402/go/v2@v2.14.0"
+  version: "0.10.0"
+  upstream: "@x402/core@2.17.0, @x402/evm@2.17.0, x402@2.14.0, github.com/x402-foundation/x402/go/v2@v2.17.0"
   openclaw:
     homepage: https://github.com/tenequm/skills/tree/main/skills/x402
     emoji: "💰"
@@ -223,24 +223,31 @@ registerExactSvmScheme(client, { signer: svmSigner });
 | Stable Testnet | `eip155:2201` | Testnet |
 | Arbitrum One | `eip155:42161` | Mainnet |
 | Arbitrum Sepolia | `eip155:421614` | Testnet |
+| XDC Network Mainnet | `eip155:50` | Mainnet (USDC) |
+| XDC Apothem Testnet | `eip155:51` | Testnet (USDC) |
+| Mezo Mainnet | `eip155:31612` | Mainnet (mUSD, 18 decimals, Permit2 + EIP-2612) |
 | Mezo Testnet | `eip155:31611` | Testnet (mUSD, Permit2 + EIP-2612) |
-| Avalanche | `eip155:43114` | Via community facilitators |
+| Avalanche | `eip155:43114` | Runtime registration only (no default asset; community facilitators) |
 | Radius Mainnet | `eip155:723487` | Mainnet (SBC default) |
 | Radius Testnet | `eip155:72344` | Testnet (SBC default) |
 | ADI Chain | `eip155:36900` | Mainnet (USDC.e default) |
 | HPP Mainnet | `eip155:190415` | Mainnet (Bridged USDC default) |
 | HPP Sepolia | `eip155:181228` | Testnet (Bridged USDC default) |
-| TON Mainnet | `tvm:-239` | Mainnet (jetton transfers; Python SDK) |
+| TON Mainnet | `tvm:-239` | Mainnet (jetton transfers; Python + TypeScript SDK) |
 | TON Testnet | `tvm:-3` | Testnet |
 | Hedera Mainnet | `hedera:mainnet` | Mainnet (HBAR + HTS tokens) |
 | Hedera Testnet | `hedera:testnet` | Testnet |
 | Algorand Mainnet | `algorand:wGHE2Pwdvd7S12BL5FaOP20EGYesN73ktiC1qzkkit8=` | Mainnet (USDC ASA) |
+| Keeta Mainnet | `keeta:21378` | Mainnet (TypeScript SDK) |
+| Keeta Testnet | `keeta:1413829460` | Testnet (TypeScript SDK) |
+| Concordium Mainnet | `ccd:9dd9ca4d19e9393877d2c44b70f89acb` | Mainnet (native CCD, 6 decimals; TypeScript SDK) |
+| Concordium Testnet | `ccd:4221332d34e1694168c2a0c0b3fd0f27` | Testnet (native CCD; TypeScript SDK) |
 
-Default facilitator (`https://x402.org/facilitator`) supports Base Sepolia, Solana Devnet, Stellar Testnet, and Aptos Testnet.
+Default facilitator (`https://x402.org/facilitator`) supports Base Sepolia, Solana Devnet, Stellar Testnet, Aptos Testnet, and Hedera Testnet.
 
 ## SDK Packages
 
-### TypeScript v2.14.0 ([npm](https://www.npmjs.com/org/x402), [GitHub](https://github.com/x402-foundation/x402/tree/main/typescript))
+### TypeScript v2.17.0 ([npm](https://www.npmjs.com/org/x402), [GitHub](https://github.com/x402-foundation/x402/tree/main/typescript))
 | Package | Purpose |
 |---------|---------|
 | `@x402/core` | Core types, client, server, facilitator |
@@ -250,6 +257,9 @@ Default facilitator (`https://x402.org/facilitator`) supports Base Sepolia, Sola
 | `@x402/aptos` | Aptos scheme (Fungible Asset transfers) |
 | `@x402/avm` | Algorand (AVM) scheme |
 | `@x402/hedera` | Hedera scheme (HBAR + HTS fungible-asset transfers) |
+| `@x402/tvm` | TON scheme (jetton transfers) |
+| `@x402/keeta` | Keeta scheme (exact) |
+| `@x402/concordium` | Concordium scheme (native CCD, exact) |
 | `@x402/express` | Express middleware |
 | `@x402/fastify` | Fastify middleware |
 | `@x402/hono` | Hono edge middleware |
@@ -260,7 +270,7 @@ Default facilitator (`https://x402.org/facilitator`) supports Base Sepolia, Sola
 | `@x402/mcp` | MCP client + server |
 | `@x402/extensions` | Bazaar, offer-receipt, payment-identifier, sign-in-with-x, gas sponsoring |
 
-### Python v2.12.0 ([PyPI](https://pypi.org/project/x402/), [GitHub](https://github.com/x402-foundation/x402/tree/main/python))
+### Python v2.14.0 ([PyPI](https://pypi.org/project/x402/), [GitHub](https://github.com/x402-foundation/x402/tree/main/python))
 ```bash
 pip install "x402[httpx]"      # Async HTTP client
 pip install "x402[requests]"   # Sync HTTP client
@@ -272,7 +282,7 @@ pip install "x402[extensions]" # Extensions (bazaar, gas sponsoring, etc.)
 pip install "x402[all]"        # Everything
 ```
 
-### Go v2.14.0 ([GitHub](https://github.com/x402-foundation/x402/tree/main/go))
+### Go v2.17.0 ([GitHub](https://github.com/x402-foundation/x402/tree/main/go))
 
 The Go module path carries a `/v2` suffix - the bare `.../x402/go` path no longer resolves tagged releases.
 

@@ -1,6 +1,8 @@
 # x402 Extensions Reference
 
-Extensions add optional functionality beyond core payment mechanics. Servers advertise them in `PaymentRequired.extensions`, clients echo them in `PaymentPayload.extensions`.
+Extensions add optional functionality beyond core payment mechanics. Servers advertise them in `PaymentRequired.extensions`, clients echo them in `PaymentPayload.extensions`. Client-echoed extension info is validated field-by-field against the server declaration; a mismatch is rejected with `extension_echo_mismatch`.
+
+**Dynamic info fields (2.16.0):** an extension can mark certain info fields as regenerated per `PaymentRequired` response (via a `dynamicInfoFields` capability) so they are excluded from the strict client-echo comparison, while all other fields stay strictly compared. Wired into offer-receipt (`["offers"]`) and sign-in-with-x (`["nonce", "issuedAt", "expirationTime"]`).
 
 Standard extension structure:
 ```json
@@ -220,7 +222,7 @@ id, err := paymentidentifier.ExtractPaymentIdentifier(payload, true) // validate
 
 ## Sign-In With X (Wallet Authentication)
 
-CAIP-122 wallet-based authentication. Clients prove wallet ownership by signing a challenge, allowing servers to skip payment for addresses that previously paid. TypeScript and Python (`x402.extensions.sign_in_with_x`, added Python v2.11.0).
+CAIP-122 wallet-based authentication. Clients prove wallet ownership by signing a challenge, allowing servers to skip payment for addresses that previously paid. TypeScript, Python (`x402.extensions.sign_in_with_x`, added Python v2.11.0), and Go (server + client, `go/v2/extensions/signinwithx`, added Go v2.16.0 - also covers undeployed EIP-6492 and SVM signers).
 
 ### Supported Chains
 
@@ -281,7 +283,7 @@ Go: `erc20approvalgassponsor.DeclareExtension()`
 
 ## Builder Code (On-Chain Attribution)
 
-The `builder-code` extension enables on-chain attribution tracking for x402 payments. Attribution is encoded as an ERC-8021 Schema 2 CBOR "builder code" appended to the settlement transaction calldata, so integrators and tooling can be credited for the payments they originate (app, service, and wallet parties can each attach a code). SDK helpers: TypeScript (`@x402/extensions/builder-code`) and Go (`go/v2/extensions/buildercode`, `DeclareBuilderCodeExtension` + client/server/facilitator + CBOR). Python helper pending. See `specs/extensions/builder_code.md`.
+The `builder-code` extension enables on-chain attribution tracking for x402 payments. Attribution is encoded as an ERC-8021 Schema 2 CBOR "builder code" appended to the settlement transaction calldata via the EVM `calldataSuffix`/`dataSuffix` plumbing, so integrators and tooling can be credited for the payments they originate (app, service, and wallet parties can each attach a code). The service-code field `s` accepts multiple codes (a string or an array / `[]string`), so layered clients (e.g. an MCP middleware) can attribute several participants on-chain. SDK helpers: TypeScript (`@x402/extensions/builder-code`) and Go (`go/v2/extensions/buildercode`, `DeclareBuilderCodeExtension` + client/server/facilitator + CBOR). Python helper pending. See `specs/extensions/builder_code.md`.
 
 ## HTTP Message Signatures (Agent Identity)
 
@@ -299,7 +301,7 @@ The `auth-hints` extension provides authentication hints for specific payment re
 |-----------|------------|-----|--------|
 | bazaar | Yes | Yes | Yes |
 | offer-receipt | Yes | No | No |
-| sign-in-with-x | Yes | No | Yes |
+| sign-in-with-x | Yes | Yes | Yes |
 | payment-identifier | Yes | Yes | Yes |
 | eip2612GasSponsoring | Yes | Yes | Yes |
 | erc20ApprovalGasSponsoring | Yes | Yes | Yes |
