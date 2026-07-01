@@ -7,6 +7,27 @@ and this skill adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.h
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-07-01
+
+### Added
+- Claude Code: `disallowed-tools` frontmatter field; `${CLAUDE_PROJECT_DIR}` substitution (v2.1.196+) and literal-`$` backslash escape; `disableBundledSkills` setting + env var; `/reload-skills` (v2.1.152+) and SessionStart `reloadSkills: true`; frontmatter keys `display-name`/`default-enabled`/`fallback` and case-insensitive key parsing; skills-dir plugins (`.claude-plugin/plugin.json`), symlinked-dir dedup, same-name override of bundled skills; `name`-is-display-label, nested qualified invocation (`/apps/web:deploy`), and malformed-frontmatter `--debug` behavior; `/context` post-budget Skills size.
+- ClawHub: per-file 10 MB cap; blocked-version triage via `clawhub scan --slug` / `scan download`; net-new `metadata.openclaw` fields (`nix`, `config`, `links`, `author`, `cliHelp`, `dependencies[]`, install `id`/`label`/`tap`); public audit status taxonomy (Pass/Review/Warn/Malicious/Pending/Error) and risk levels; more reason codes noted as a curated subset of ~26.
+- API: 30 MB upload cap + common-root requirement; claude.ai-vs-API network contrast; pointers to `pause_turn`, container reuse, Files-API download, prompt-cache break, non-ZDR. Spec `compatibility` 500-char cap; `allowed-tools` marked Experimental.
+- Troubleshooting footguns: over-1024-char description skipped at load; unquoted-YAML frontmatter breakage; `` !`cmd` `` executing inside doc code fences.
+
+### Changed
+- ClawHub reason codes: LLM verdict is `review.llm_review` (new `review.` tier), not `suspicious.llm_suspicious`; VirusTotal reframed as telemetry (no `vt_*` code); hard-block code `malicious.install_terminal_payload`; engine `v2.4.26`.
+- ClawHub slug rules corrected (`^[a-z0-9](?:(?!--)[a-z0-9-])*[a-z0-9]$`, length 3-96, reserved/protected-affix blocklist); "never reused" -> 30-day soft-delete reservation.
+- ClawHub CLI: canonical `clawhub skill publish`; removed `--clawscan-note`; "3 scanners" -> SkillSpector + VirusTotal + risk analysis, with static analysis internal-only.
+- Claude Code: setting `maxSkillDescriptionChars` -> `skillListingMaxDescChars`; `disable-model-invocation` also blocks subagent preload + scheduled tasks; bundled-skills list refreshed (`/code-review`, `/design-sync`, `/fewer-permission-prompts`; `/simplify` cleanup-only since v2.1.154).
+- Trimmed the SKILL.md description's keyword-dump tail (semantic matching, not keyword overlap).
+
+### Removed
+- ClawHub `download` install kind from the schema-field list (rejected by the parser; contradicted the skill's own install-specs section).
+
+### Fixed
+- Checklist validator command aligned to `uvx --from skills-ref agentskills validate`.
+
 ## [0.5.0] - 2026-06-05
 
 ### Added

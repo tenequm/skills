@@ -1,6 +1,6 @@
 # Publishing to ClawHub
 
-ClawHub ([clawhub.ai](https://clawhub.ai)) is a public registry for Agent Skills. It extends Anthropic's base skill spec with runtime metadata (`metadata.openclaw`), automatic moderation (3 scanners), and a CLI/API for publishing. This is the field guide for getting skills past moderation on the first try.
+ClawHub ([clawhub.ai](https://clawhub.ai)) is a public registry for Agent Skills. It extends Anthropic's base skill spec with runtime metadata (`metadata.openclaw`), an automatic moderation audit (SkillSpector + VirusTotal + risk analysis), and a CLI/API for publishing. This is the field guide for getting skills past moderation on the first try.
 
 Sources of truth: [skill-format.md](https://github.com/openclaw/clawhub/blob/main/docs/skill-format.md), [security-audits.md](https://github.com/openclaw/clawhub/blob/main/docs/security-audits.md), [moderation.md](https://github.com/openclaw/clawhub/blob/main/docs/moderation.md), [cli.md](https://github.com/openclaw/clawhub/blob/main/docs/cli.md).
 
@@ -11,7 +11,7 @@ Sources of truth: [skill-format.md](https://github.com/openclaw/clawhub/blob/mai
 | Frontmatter | `name`, `description`, optional `metadata: dict[str,str]` | `metadata.openclaw.*` runtime declarations |
 | Distribution | Manual (zip / file path) | Versioned registry, semver tags, search |
 | Trust | None enforced | 3-scanner moderation pipeline |
-| Slug | Local filename | Globally unique slug (URL-safe, never reused) |
+| Slug | Local filename | Globally unique slug (URL-safe; 30-day hold after delete) |
 | License | Author choice | All skills MIT-0 (auto-applied) |
 
 ## `metadata.openclaw` schema
@@ -58,17 +58,25 @@ Field reference:
 | `os` | `string[]` | OS filter (`darwin`, `linux`, etc.). |
 | `always` | `boolean` | If true, skill is always active. Use with caution - flagged for review. |
 | `skillKey` | `string` | Override invocation key (rarely needed). |
-| `install[]` | `array` | Auto-install hints (`brew`, `node`, `go`, `uv`, `download`). |
+| `install[]` | `array` | Auto-install hints (`brew`, `node`, `go`, `uv`). |
+| `install[].id/label/tap` | `string` | Optional per-spec id, display label, and Homebrew tap. |
+| `nix` | `object` | Nix plugin spec (see ClawHub README). |
+| `config` | `object` | Clawdbot config spec (`requiredEnv` / `stateDirs` / `example`). |
+| `links` | `object` | `{homepage, repository, documentation, changelog}` URLs. |
+| `author` | `string` | Author handle or name. |
+| `cliHelp` | `string` | CLI help text surfaced in the registry. |
+| `dependencies[]` | `array` | `{name, type, version?, url?, repository?}`; `type` in pip/npm/brew/go/cargo/apt/other. |
 
 **Critical rule**: required env vars go under `requires.env`; optional/integration env vars go under `envVars` with `required: false`. Putting optional vars in `requires.env` will make ClawHub gate the skill behind credentials it doesn't actually need; mixing them up flags as metadata mismatch.
 
 ## Slugs and display names
 
-- Slug regex: `^[a-z0-9][a-z0-9-]*$`. Lowercase, kebab-case.
+- Slug regex: `^[a-z0-9](?:(?!--)[a-z0-9-])*[a-z0-9]$` - lowercase kebab-case, 3-96 chars, must start and end with a letter or digit, no consecutive hyphens.
+- Reserved slugs (`official`, `clawhub`, `admin`, `api`, ...) and protected affixes (`openclaw-*`, `*-official`, `*-verified`, ...) are rejected to block route clashes and brand squatting.
 - Default slug = folder name. Override at publish with `--slug`.
 - Renaming: `clawhub skill rename <old> <new>` keeps the old slug as a redirect alias.
 - Display name is set at publish via `--name`. Convention in this repo: **display name == slug** (set automatically by `scripts/prepare_skill_release.py`).
-- Slugs are globally unique across all of ClawHub. If your folder name is taken, you'll need a `--slug` override.
+- Slugs are globally unique across all of ClawHub. An owner soft-delete reserves the slug for 30 days, after which it frees up; if your folder name is taken, you'll need a `--slug` override.
 
 ## Install specs
 
@@ -94,30 +102,36 @@ Supported kinds: `brew`, `node`, `go`, `uv`. Validation: no shell metacharacters
 
 ## Moderation pipeline
 
-Every publish triggers three scans. Each contributes a verdict; the worst wins.
+Every publish runs a moderation audit that combines three components; the worst signal wins.
 
-| Scanner | Reason code prefix | What it catches |
+| Component | Emits | What it catches |
 |---|---|---|
-| **VirusTotal** | `vt_*` | URL/file content reputation (known malware signatures, bad domains). |
-| **ClawScan** (LLM) | `llm_suspicious` | Context-aware semantic review. Flags metadata-vs-runtime mismatch, capability overreach, undeclared credentials, internal contradictions. |
-| **Static analysis** | specific codes (see below) | Pattern matching for risky literals. |
+| **SkillSpector** | agentic-risk findings | LLM-driven review of skill behavior and intent. |
+| **VirusTotal** | telemetry only (no reason code) | URL/file content reputation (known malware signatures, bad domains). |
+| **Risk analysis (ClawScan)** | `review.*` / `suspicious.*` / `malicious.*` reason codes | Context-aware semantic review. Flags metadata-vs-runtime mismatch, capability overreach, undeclared credentials, internal contradictions. |
 
-ClawScan's review dimensions: `Purpose & Capability`, `Instruction Scope`, `Install Mechanism`, `Credentials`, `Persistence & Privilege`. Each can be `ok` / `note` / `concern`. Its risk analysis uses the [OWASP Agentic Skills Top 10](https://owasp.org/www-project-agentic-skills-top-10/) as a lens (prompt injection, tool misuse, credential exposure, unsafe execution, context poisoning, excessive agency).
+Static analysis runs too, but its signals are **internal context for the review, not a standalone public verdict or install-blocking result**. The LLM review emits `review.llm_review` (a `review.` tier, distinct from `suspicious`). The overall verdict is derived from code prefixes: any `malicious.*` => malicious, any `suspicious.*` => suspicious, only `review.*` => a "Review" tier. Risk analysis uses the [OWASP Agentic Skills Top 10](https://owasp.org/www-project-agentic-skills-top-10/) as a lens (prompt injection, tool misuse, credential exposure, unsafe execution, context poisoning, excessive agency).
 
-To inspect: `curl -H "Authorization: Bearer <token>" https://clawhub.ai/api/v1/skills/<slug>` returns the `moderation` block with `verdict` (`clean` / `suspicious` / `malicious`), `reasonCodes[]`, `summary`, `engineVersion`.
+To inspect: `curl -H "Authorization: Bearer <token>" https://clawhub.ai/api/v1/skills/<slug>` returns the `moderation` block with `verdict` (`clean` / `suspicious` / `malicious`), `reasonCodes[]`, `summary`, and `engineVersion` (currently `v2.4.26`). Public audit status is one of `Pass` / `Review` / `Warn` / `Malicious` / `Pending` / `Error`, with a risk level of `Low` / `Medium` / `High`.
 
 ## Reason codes catalog
 
+The moderation engine defines ~26 reason codes (source of truth: [`convex/lib/moderationReasonCodes.ts`](https://github.com/openclaw/clawhub/blob/main/convex/lib/moderationReasonCodes.ts)). The table below is a curated subset of the ones authors hit most; grep the source enum for the full list.
+
 | Code | Trigger | Fix |
 |---|---|---|
-| `suspicious.llm_suspicious` | Metadata-runtime mismatch, capability overreach, contradictions | Declare every env / bin / config referenced in the body. Add `homepage`. Resolve flag contradictions (see below). |
+| `review.llm_review` | Metadata-runtime mismatch, capability overreach, contradictions (surfaces as the "Review" tier, not "suspicious") | Declare every env / bin / config referenced in the body. Add `homepage`. Resolve flag contradictions (see below). |
 | `suspicious.exposed_secret_literal` | Long hex (`0x[a-f0-9]{40,}`), JWT-shaped strings, base64 blobs | Replace with placeholders (`<USDC_MAINNET>`) + a single canonical address/key reference table. |
 | `suspicious.destructive_delete_command` | Literal `rm -rf` (even in pedagogical "don't do this" context) | Reword ("force-recursive removal") or break the literal with markup. |
 | `suspicious.potential_exfiltration` | Skill packages user data and sends it off-host | Document the destination model/endpoint and data-handling policy. May be intrinsic to design. |
 | `suspicious.generated_source_template_injection` | `${VAR}` placeholders in code blocks | Declare those env vars in `metadata.openclaw`. Often a metadata-mismatch echo. |
-| `suspicious.vt_suspicious` | URL or filename matched VT signature | Grep all URLs/filenames in the bundle; submit each to VT; replace the offender. |
+| `suspicious.dangerous_exec` / `suspicious.dynamic_code_execution` | Shelling out or eval-ing dynamically built code | Call fixed, auditable commands; avoid runtime code generation. |
+| `suspicious.obfuscated_code` | Base64/hex-encoded or minified payloads | Ship readable source; never bundle encoded blobs. |
+| `suspicious.install_untrusted_source` / `suspicious.credential_exposure_instructions` / `suspicious.prompt_injection_instructions` | Untrusted install source, instructions to expose credentials, or embedded injection text | Remove the instruction; declare install specs via `metadata.openclaw.install`. |
 
-**Hard-block** (auto-hides skill, places uploader in manual moderation): install instructions that tell users to paste obfuscated shell payloads (e.g., base64-decoded `curl | bash`). Never include these.
+Only `suspicious.env_credential_access` is externally self-clearable; the rest require a fixed re-publish.
+
+**Hard-block** codes (`malicious.install_terminal_payload`, `malicious.crypto_mining`, `malicious.known_blocked_signature`) auto-hide the skill and place the uploader in manual moderation. The most common is `malicious.install_terminal_payload`: install instructions that tell users to paste obfuscated shell payloads (e.g., base64-decoded `curl | bash`). Never include these.
 
 ## Capability tags (auto-derived)
 
@@ -159,7 +173,7 @@ Purchase or transaction-signing authority on its own no longer derives `crypto` 
 
 ## Publishing constraints
 
-- 50 MB total bundle size.
+- 50 MB total bundle size; 10 MB per-file cap.
 - Text-based files only (no binaries).
 - GitHub account must be ≥ 14 days old.
 - All publishes are MIT-0; no per-skill license overrides.
@@ -169,31 +183,33 @@ Purchase or transaction-signing authority on its own no longer derives `crypto` 
 
 ## CLI cheat-sheet
 
+The canonical publish command is `clawhub skill publish <path>` (bare `publish <path>` is a legacy alias). Its documented flags are `--version`, `--dry-run`, `--json`, `--owner`, and `--migrate-owner`; new skills default to `1.0.0` and changed skills auto-bump to the next patch. The older `--slug` / `--name` / `--changelog` / `--tags` flags are no longer in the documented CLI surface - run `clawhub skill publish --help` before relying on them (this repo's release pipeline still passes some via `scripts/publish_release.py`; verify against your installed CLI version).
+
 ```bash
-# Publish (requires existing slug for first-time + --version semver)
-clawhub publish ./skills/my-skill \
-  --slug my-skill \
-  --name my-skill \
-  --version 0.1.0 \
-  --changelog "Initial release." \
-  --clawscan-note "Network access is limited to the user-configured API." \
-  --tags latest
+# Publish (auto-versions; --dry-run to preview)
+clawhub skill publish ./skills/my-skill --dry-run
+clawhub skill publish ./skills/my-skill
+clawhub skill publish ./skills/my-skill --version 2.0.0
 
 # Inspect (owner-visible moderation diagnostics when logged in)
-clawhub inspect my-skill --json
+clawhub inspect @owner/my-skill --json
 
-# Soft-delete / restore (owner reversible)
+# Scan an existing version + download the stored report (works on blocked/hidden versions)
+clawhub scan --slug my-skill
+clawhub scan download my-skill --version 1.2.3   # report ZIP: clawscan.json, skillspector.json, static-analysis.json, virustotal.json
+
+# Soft-delete / restore (owner reversible; soft-delete holds the slug 30 days)
 clawhub delete my-skill
 clawhub undelete my-skill
 
 # Rename (preserves redirect from old slug)
 clawhub skill rename my-skill my-new-skill
 
-# Sync all changed local skills
-clawhub sync --bump patch --tags latest
+# Sync all changed local skills (one-way publish)
+clawhub sync --all --bump patch
 ```
 
-Use `--clawscan-note "<text>"` on publish to pre-explain behavior that may look unusual (network access, native host access, provider credentials). It gives ClawScan context and is stored on the published version.
+For a version blocked at moderation, `clawhub scan download <slug> --version <v>` retrieves the stored scan report so you can see exactly which reason codes fired before re-publishing a fix.
 
 Direct moderation API (most useful for debugging suspicious flags):
 

@@ -21,7 +21,7 @@ Two frontmatter fields control who can invoke a skill:
 
 ### disable-model-invocation: true
 
-Only the user can invoke via `/skill-name`. Claude cannot auto-trigger.
+Only the user can invoke via `/skill-name`. Claude cannot auto-trigger. It also blocks the skill from being preloaded into subagents and, as of v2.1.196, from running when a scheduled task fires with the skill as its prompt.
 
 Use for: deploy, commit, send-message - actions with side effects you want to control.
 
@@ -54,6 +54,14 @@ user-invocable: false
 | (default) | Yes | Yes | Always |
 | `disable-model-invocation: true` | Yes | No | Not loaded |
 | `user-invocable: false` | No | Yes | Always |
+
+### Additional frontmatter keys
+
+- `display-name` - label shown in listings, independent of the invocation name.
+- `default-enabled` - whether the skill is active by default.
+- `fallback` - fallback behavior for the skill.
+
+Frontmatter keys (and `metadata.*` keys) are parsed case-insensitively: kebab-case, snake_case, and camelCase all resolve to the same field.
 
 ## Subagent Execution
 
@@ -130,8 +138,11 @@ Skills support these substitution variables:
 | `$N` | Shorthand for `$ARGUMENTS[N]` |
 | `$name` | Named argument declared in the `arguments` frontmatter list (bound by position) |
 | `${CLAUDE_SESSION_ID}` | Current session ID |
-| `${CLAUDE_EFFORT}` | Current effort level: `low`, `medium`, `high`, `xhigh`, or `max` |
+| `${CLAUDE_EFFORT}` | Current effort level: `low`, `medium`, `high`, `xhigh`, or `max`. Ultracode is not a distinct level and reports as `xhigh` |
 | `${CLAUDE_SKILL_DIR}` | Directory containing the skill's SKILL.md |
+| `${CLAUDE_PROJECT_DIR}` | Project root (same path hooks/MCP servers receive). Requires v2.1.196+; works in the body and in `allowed-tools` |
+
+To include a literal `$` before a digit, `ARGUMENTS`, or a declared argument name (e.g. `$1.00` in prose), escape it with a backslash: `\$1.00`. A backslash before any other `$` is left unchanged.
 
 Example:
 
@@ -196,25 +207,36 @@ Priority order (higher wins on name conflicts):
 
 Enterprise overrides personal, and personal overrides project. Plugin skills use a `plugin-name:skill-name` namespace, so they never conflict with the other levels.
 
-**Custom commands are skills.** A file at `.claude/commands/deploy.md` and a skill at `.claude/skills/deploy/SKILL.md` both create `/deploy`. Existing `.claude/commands/` files keep working; if a skill and a command share a name, the skill takes precedence.
+**Custom commands are skills.** A file at `.claude/commands/deploy.md` and a skill at `.claude/skills/deploy/SKILL.md` both create `/deploy`. Existing `.claude/commands/` files keep working; if a skill and a command share a name, the skill takes precedence. A personal, project, or enterprise skill also **overrides a same-named bundled skill** - a `code-review` skill in your project's `.claude/skills/` replaces the bundled `/code-review`.
+
+**Command name vs. `name`.** The command you type after `/` is derived from the skill's directory, not its frontmatter `name`. Except for a plugin-root `SKILL.md`, `name` is only the display label shown in listings. A nested skill can be invoked explicitly by its qualified name, e.g. `/apps/web:deploy` runs the nested variant while `/deploy` runs the project-root one.
+
+**Symlinks and skills-dir plugins.** A `<skill-name>` entry can be a symlink to a directory elsewhere; Claude Code follows it and, if the same target is reachable from multiple locations, loads the skill once. Add a `.claude-plugin/plugin.json` to a skill folder and it loads as a plugin named `<name>@skills-dir`, letting it bundle agents, hooks, and MCP servers.
+
+**Malformed frontmatter.** If the YAML frontmatter is malformed, Claude Code loads the body with empty metadata - `/skill-name` still works but Claude has no `description` to match against for auto-triggering. Run with `--debug` to see the parse error.
 
 ### Automatic Discovery
 
 - Skills in subdirectory `.claude/skills/` are auto-discovered when editing files there
 - Skills from `--add-dir` directories are loaded and support live change detection
 - Monorepo support: `packages/frontend/.claude/skills/` discovered when editing in that package
+- Live change detection covers `SKILL.md` **text only**. For a skill folder that is also a plugin, changes to `hooks/`, `.mcp.json`, `agents/`, and `output-styles/` need `/reload-plugins`
+- `/reload-skills` (v2.1.152+) re-scans skill and command directories so skills added or changed on disk during the session become available without restarting. A `SessionStart` hook can return `reloadSkills: true` to hot-load skills it installs
 
 ## Bundled Skills
 
-Ships with Claude Code, available in every session:
+Ships with Claude Code, available in every session unless disabled with the `disableBundledSkills` setting (or the `CLAUDE_CODE_DISABLE_BUNDLED_SKILLS=1` env var):
 
 | Skill | Purpose |
 |-------|---------|
 | `/batch <instruction>` | Parallel large-scale codebase changes via worktrees |
 | `/claude-api` | Claude API/SDK reference for your project's language |
+| `/code-review [effort] [--fix] [--comment]` | Review the diff for correctness bugs plus reuse/simplify/efficiency cleanups |
 | `/debug [description]` | Enable debug logging, troubleshoot issues |
+| `/design-sync` | Sync design/context artifacts |
+| `/fewer-permission-prompts` | Scan transcripts and add a read-only allowlist to project settings |
 | `/loop [interval] <prompt>` | Run a prompt repeatedly on an interval |
-| `/simplify [focus]` | Review changed files for reuse, quality, efficiency |
+| `/simplify [focus]` | Review changed files for reuse, quality, efficiency. Since v2.1.154 it is cleanup-only - use `/code-review` to find correctness bugs |
 
 Three more bundled skills launch and verify your app (require Claude Code v2.1.145+):
 
@@ -245,6 +267,18 @@ allowed-tools: Read Grep Glob
 ```
 
 To block a skill from a tool, add a deny rule in permission settings instead.
+
+### Remove tools while a skill is active
+
+`disallowed-tools` removes the listed tools from Claude's available pool while the skill is active - use it for autonomous skills that should never call certain tools (e.g. `AskUserQuestion` in a background loop). The restriction clears when you send your next message. To block tools across all skills and prompts, use deny rules in permission settings.
+
+```yaml
+---
+name: background-loop
+description: Run unattended
+disallowed-tools: AskUserQuestion
+---
+```
 
 ### Restrict Claude's skill access
 
@@ -286,7 +320,9 @@ Skill descriptions are loaded into context at startup. The budget scales at **1%
 
 Run `/doctor` to see whether the budget is overflowing and which skills are affected.
 
-Raise the budget with the `skillListingBudgetFraction` setting (e.g. `0.02` = 2%) or the `SLASH_COMMAND_TOOL_CHAR_BUDGET` env var (fixed character count). Independently, each entry's combined `description` + `when_to_use` text is capped at **1,536 characters** in the listing (configurable via `maxSkillDescriptionChars`). Set low-priority skills to `"name-only"` in `skillOverrides` to free budget.
+Raise the budget with the `skillListingBudgetFraction` setting (e.g. `0.02` = 2%) or the `SLASH_COMMAND_TOOL_CHAR_BUDGET` env var (fixed character count). Independently, each entry's combined `description` + `when_to_use` text is capped at **1,536 characters** in the listing (configurable via `skillListingMaxDescChars`). Both settings require Claude Code v2.1.105+. Set low-priority skills to `"name-only"` in `skillOverrides` to free budget.
+
+As of v2.1.196, the Skills row in `/context` reports the listing size *after* the budget is applied, so it matches what the model actually receives.
 
 ## Extended Thinking
 
