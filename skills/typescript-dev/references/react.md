@@ -195,6 +195,7 @@ Manual memoization still applies when you need a **stable value as an effect dep
 
 ## Worth knowing (newer surface)
 
+- **Partial Pre-rendering (19.2, stable)**: pre-render the static shell of a page, then finish it at request time. New react-dom APIs `prerender` (produce a prelude + a resumable state) and `resume`/`resumeToPipeableStream`/`resumeAndPrerender` continue rendering where the prerender left off. This is a framework/SSR-layer feature - reach for it through your framework, not hand-wired in an SPA.
 - **`<ViewTransition>`** is **Canary/Experimental only** in 19.2 - do not ship it as a stable API.
 - **`cacheSignal`** (RSC) tells you when a `cache()` lifetime is over.
 - **`captureOwnerStack()`** (dev-only) returns the component owner stack for better debugging.

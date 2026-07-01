@@ -1,6 +1,6 @@
 # Biome
 
-Fast, unified linting, formatting, and import organization for JS/TS/JSX/CSS/GraphQL in a single binary. Biome **2.4** (latest `2.4.16`) does type-aware linting without the TypeScript compiler, GritQL plugins for custom rules, and domain-based rule grouping. Zero config by default, ~97% Prettier compatibility.
+Fast, unified linting, formatting, and import organization for JS/TS/JSX/CSS/GraphQL in a single binary. Biome **2.5** (latest `2.5.2`) does type-aware linting without the TypeScript compiler, GritQL plugins for custom rules, and domain-based rule grouping. Zero config by default, ~97% Prettier compatibility.
 
 ## Critical rules
 
@@ -59,13 +59,15 @@ pnpm biome init
   "formatter": { "enabled": true, "indentStyle": "space", "lineWidth": 100 },
   "linter": {
     "enabled": true,
-    "rules": { "recommended": true },
+    "rules": { "preset": "recommended" },
     "domains": { "react": "recommended" }
   },
   "javascript": { "formatter": { "quoteStyle": "double" } },
   "assist": { "enabled": true, "actions": { "source": { "organizeImports": "on" } } }
 }
 ```
+
+Biome 2.5 **deprecated `linter.rules.recommended`** in favor of `linter.rules.preset` (`"recommended"` or `"all"`); the boolean still works but emits a warning - run `biome migrate --write` to convert. The `domains` values (`"recommended"`/`"all"`/`"none"`) are unaffected.
 
 ### IDE setup
 
@@ -89,7 +91,10 @@ Zed uses the Biome extension natively. Note the spelling: Zed's inline-config ke
 ```bash
 pnpm biome ci .                                          # no writes, non-zero exit on errors
 pnpm biome ci --reporter=github .                        # GitHub Actions annotations
+pnpm biome ci --reporter=concise .                       # short one-line-per-diagnostic output
 ```
+
+`--reporter=concise` (Biome 2.5) prints one `file:line:col: rule: message` line per diagnostic - the recommended reporter when an AI coding agent reads the output, since it saves tokens versus the default rich format.
 
 ## Configuration details
 
@@ -213,9 +218,13 @@ biome check --changed .          # only VCS-changed files
 biome check --staged .           # only staged (good for pre-commit)
 biome lint --only=types .        # run just type-aware rules
 biome lint --enforce-assist .    # fail CI when assist actions remain unapplied
+biome check --watch .            # re-run on file changes (2.5; read-only, no --write/--fix)
 biome explain noFloatingPromises # explain a rule
 biome migrate --write            # after a version bump
+biome upgrade                    # 2.5: self-upgrade standalone (Homebrew/binary) installs
 ```
+
+Biome 2.5 also adds `formatter.delimiterSpacing` (pads `[ 1, 2 ]` / `{ a }` / `( x )` - an accessibility aid for dyslexia; behavior varies per language) and can now format/lint `.svg` files.
 
 ## Gotchas
 

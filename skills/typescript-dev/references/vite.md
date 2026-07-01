@@ -1,6 +1,6 @@
 # Vite 8
 
-Build tooling and dev server. Vite 8 (stable, latest `8.0.16`) ships **Rolldown** - a Rust-based bundler from the Vite team - as its single default bundler, replacing both esbuild and Rollup. It is ESM-only and requires Node.js 20.19+ / 22.12+.
+Build tooling and dev server. Vite 8 (stable, latest `8.1.2`) ships **Rolldown** - a Rust-based bundler from the Vite team - as its single default bundler, replacing both esbuild and Rollup. It is ESM-only and requires Node.js 20.19+ / 22.12+.
 
 ## Vite 8 essentials
 
@@ -9,6 +9,14 @@ Build tooling and dev server. Vite 8 (stable, latest `8.0.16`) ships **Rolldown*
 - **Default browser target** is `'baseline-widely-available'`, which in Vite 8 resolves to `['chrome111', 'edge111', 'firefox114', 'safari16.4']` (bumped from Vite 7's 107/107/104/16). Override with `build.target: 'es2022'` or an explicit list.
 - **Default minifiers changed:** JavaScript is minified by **Oxc** (`build.minify` default `'oxc'`), CSS by **Lightning CSS** (`build.cssMinify` default `'lightningcss'`). `build.minify: 'esbuild'` still works but is deprecated and requires installing `esbuild` yourself.
 - **Install grew ~15 MB** vs Vite 7 (Lightning CSS + the Rolldown binary are now regular dependencies).
+
+## New in Vite 8.1
+
+- **Wasm ESM integration (stable)** - import a `.wasm` file and call its exports directly: `import { add } from './add.wasm'`. No plugin needed.
+- **Experimental Bundled Dev Mode** (`experimental.bundledDev: true` or `--experimental-bundle`) - serves bundled files in dev instead of the classic unbundled server. Aimed at huge apps that suffer from module count (~15x faster startup in a 10k-component test); may not work with all third-party plugins yet.
+- **Experimental Chunk Import Map** (`build.chunkImportMap`) - uses an import map so a changed chunk's hash doesn't cascade new hashes to every importer, improving long-term cache hit rates. Does not compose with `experimental.renderBuiltUrl`.
+- **Lightning CSS as the future default** - Vite is working toward making Lightning CSS the default CSS transformer in the next major. Opt in early with `css: { transformer: 'lightningcss' }`.
+- `import.meta.glob` gained a `caseSensitive` option; `html.additionalAssetSources` lets asset discovery see custom HTML elements/attributes.
 
 ## Configuration
 
@@ -69,6 +77,8 @@ Or **new in Vite 8**, let Vite read tsconfig `paths` directly so you don't mirro
 resolve: { tsconfigPaths: true }
 ```
 
+Caveat: the native resolver does **not** follow tsconfig project references. In a solution-style setup (`tsconfig.json` -> `tsconfig.app.json` via `references`) where the `paths` live in the referenced file, `tsconfigPaths: true` silently fails to resolve `@/*` - fall back to an explicit `resolve.alias` there.
+
 ### Environment variables
 
 Files: `.env`, `.env.local`, `.env.[mode]`, `.env.[mode].local`. Only `VITE_`-prefixed vars are exposed to client code via `import.meta.env`; everything else stays server-side. Built-in constants: `import.meta.env.MODE`, `.DEV`, `.PROD`, `.SSR`, `.BASE_URL`. Type them in `src/vite-env.d.ts`:
@@ -122,9 +132,11 @@ Setting it to `true` disables the check entirely and is a DNS-rebinding risk - s
 | Symptom | Fix |
 |---------|-----|
 | Full reload instead of HMR | Ensure `@vitejs/plugin-react` is loaded and a file exports a single component |
-| HMR not connecting behind a proxy | Set `server.hmr.clientPort` (e.g. `443`) |
+| HMR not connecting behind a proxy | Set `server.ws.clientPort` (e.g. `443`) |
 | CSS not updating | Confirm `@tailwindcss/vite` is in plugins and `@import "tailwindcss";` is in your CSS entry |
 | Stale chunk after a build | Hard-refresh (`Cmd/Ctrl+Shift+R`) to bust the cached bundle |
+
+The WebSocket knobs (`protocol`/`host`/`port`/`path`/`clientPort`/`timeout`/`server`) moved from `server.hmr.*` to `server.ws.*`. The old `server.hmr.*` keys are deprecated but auto-synced, so existing configs keep working; write new ones under `server.ws`.
 
 ### File warmup
 

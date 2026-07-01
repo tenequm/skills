@@ -147,10 +147,14 @@ if (!result.success) {
 
 ## tsgo / TypeScript 7
 
-The native (Go) compiler ships as a preview: `npm i -D @typescript/native-preview`, run `npx tsgo` as a `tsc` drop-in (~10x faster type-checking). It is **not GA** - type-checking is near-complete but the language service and public API are still in progress. Don't target it for production builds yet; do try it for fast CI type-checks. TS 6.0's deprecations exist precisely to smooth this migration.
+The native (Go) compiler - "about 10 times faster than TypeScript 6.0" - is now at **Release Candidate** (`npm i -D typescript@rc`, `tsc` drop-in), with the team planning to "release TypeScript 7.0 within the next month." The type-checking logic is a methodical port of 6.0 and is "structurally identical," so results match; the remaining gap is a stable programmatic API (deferred to 7.1). Try it on real CI/editor workflows today.
+
+- **Side-by-side with 6.0:** 7.0 ships its own `tsc`; the compat package `@typescript/typescript6` provides a `tsc6` binary and re-exports the 6.0 API. Because tools like typescript-eslint import `typescript` directly, coexist via npm aliases: `"typescript": "npm:@typescript/typescript6@^6.0.0"` plus `"typescript-7": "npm:typescript@rc"`. Nightlies still publish as `@typescript/native-preview` (binary `tsgo`).
+- **Parallelism controls:** `--checkers` (default 4 type-check workers), `--builders` (parallel project-reference builds), and `--singleThreaded` (for debugging or resource-limited CI). Watch mode was rebuilt on a Go port of Parcel's file-watcher.
+- **7.0 hardens 6.0's deprecations into errors:** `target: es5`, `downlevelIteration`, `moduleResolution: node/node10/classic`, `module: amd/umd/systemjs/none`, and `baseUrl` are no longer supported; `esModuleInterop`/`allowSyntheticDefaultImports`/`alwaysStrict` cannot be `false`. Adopting 6.0's defaults now makes the 7.0 jump a no-op.
 
 ## Resources
 
 - TS 6.0 announcement: https://devblogs.microsoft.com/typescript/announcing-typescript-6-0/
-- tsgo / TS 7: https://github.com/microsoft/typescript-go
+- TS 7.0 RC: https://devblogs.microsoft.com/typescript/announcing-typescript-7-0-rc/ - tsgo / TS 7: https://github.com/microsoft/typescript-go
 - Release notes: https://www.typescriptlang.org/docs/handbook/release-notes/

@@ -7,6 +7,39 @@ and this skill adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.h
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-07-01
+
+### Changed
+- Refreshed version pins: vite 8.0.16->8.1.2, @vitejs/plugin-react 6.0.2->6.0.3,
+  tailwindcss 4.3.0->4.3.2, @biomejs/biome 2.4.16->2.5.2, vitest 4.1.8->4.1.9,
+  hono 4.12.25->4.12.27, shadcn CLI table 4.11.0->4.12.0 (metadata.upstream + Version targets + reference intros).
+- Biome: `linter.rules.recommended` is deprecated in favor of `linter.rules.preset` (Biome 2.5);
+  updated both canonical config examples (SKILL.md + biome.md) to `"preset": "recommended"` and noted `biome migrate`.
+- Vite: HMR WebSocket options moved from `server.hmr.*` to `server.ws.*`; corrected the HMR
+  troubleshooting entry to `server.ws.clientPort` and noted the deprecation/auto-sync.
+- TypeScript: reframed the tsgo/TS 7 section - TS 7.0 is now RC (~10x faster, targeted for stable
+  "within the next month"), with `@typescript/typescript6`/`tsc6` side-by-side install and
+  `--checkers`/`--builders`/`--singleThreaded` parallelism flags.
+
+### Added
+- Vite 8.1: WASM ESM integration (stable direct `.wasm` imports), experimental Bundled Dev Mode
+  (`experimental.bundledDev`) and Chunk Import Map (`build.chunkImportMap`), Lightning CSS being
+  evaluated as the next-major default CSS transformer.
+- React: Partial Pre-rendering (`prerender`/`resume` APIs, 19.2) added to the newer-surface list.
+- Biome: `--reporter=concise` (token-saving agent reporter), read-only `--watch` mode,
+  `formatter.delimiterSpacing`, and `biome upgrade`.
+- shadcn 4.12: chat-interface components + `@shadcn/react` headless package, `scroll-fade`/`shimmer`
+  utilities, and `add` inspection flags (`--dry-run`/`--diff`/`--view`).
+- Vite caveat: `resolve.tsconfigPaths: true` does not follow tsconfig project references (solution-style
+  configs) - use an explicit `resolve.alias` there.
+- Tailwind footgun: a utility referencing a token not mapped in `@theme`/`@theme inline` emits no CSS and no error.
+
+### Security
+- Bumped Hono pin to 4.12.27, covering two SSR advisories: `hono/jsx` cross-request context
+  disclosure (GHSA-hvrm-45r6-mjfj) and `hono/css` `cx()` XSS escaping bypass (GHSA-w62v-xxxg-mg59).
+
+Verified against: vite@8.1.2, @vitejs/plugin-react@6.0.3, tailwindcss@4.3.2, @biomejs/biome@2.5.2, vitest@4.1.9, hono@4.12.27
+
 ## [0.2.0] - 2026-06-09
 
 ### Added
