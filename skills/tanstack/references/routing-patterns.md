@@ -621,6 +621,42 @@ const router = createRouter({ routeTree, history: memoryHistory })
 | Excluded | `-helpers.tsx` | Not a route | Ignored by router, for colocation |
 | Group | `(auth)/login.tsx` | Directory ignored | Organizational only |
 
+## Route Lifecycle Callbacks & Remounting
+
+Routes expose transition hooks and control over when their component remounts.
+
+```tsx
+export const Route = createFileRoute('/posts/$postId')({
+  onEnter: (match) => analytics.view(match.params.postId),  // matched after not being matched previously
+  onStay: (match) => {},                                    // still matched across a navigation
+  onLeave: (match) => cleanup(match.params.postId),         // no longer matched
+
+  // By default a param change (/posts/1 -> /posts/2) reuses the component instance and just re-runs the loader.
+  // Return a different value to force a full remount (reset local state, re-run effects):
+  remountDeps: ({ params }) => params.postId,
+})
+```
+
+Use `remountDeps` when a route's component holds per-item local state that must reset on param change; omit it to keep the cheaper reuse-and-reload default.
+
+## View Transitions
+
+TanStack Router integrates the browser [View Transitions API](https://developer.mozilla.org/en-US/docs/Web/API/View_Transitions_API) for animated navigations. Enable per-navigation or globally.
+
+```tsx
+// Per navigation
+<Link to="/posts/$postId" params={{ postId: '1' }} viewTransition>Post</Link>
+navigate({ to: '/posts', viewTransition: true })
+
+// Globally for every navigation
+const router = createRouter({ routeTree, defaultViewTransition: true })
+
+// Scope named transitions with the object form (types via ViewTransitionOptions)
+<Link to="/posts" viewTransition={{ types: ['slide-left'] }}>Posts</Link>
+```
+
+Falls back to an instant navigation in browsers without `document.startViewTransition`; style the animation with the standard `::view-transition-*` CSS pseudo-elements.
+
 ## Best Practices
 
 1. **Prefer file-based routing for most projects.** It provides automatic code splitting, type-safe route generation, and eliminates manual route tree assembly. Use code-based routing only when runtime generation or non-standard tooling requires it.

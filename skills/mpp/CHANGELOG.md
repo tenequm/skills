@@ -7,6 +7,11 @@ and this skill adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.h
 
 ## [Unreleased]
 
+## [0.8.1] - 2026-07-01
+
+### Added
+- Request-handling gotcha: `close`/`topUp` management credentials are bodyless, so a custom request-body validator running before `mppx.session()` rejects them with a spurious 400 (mppx answers `204`). Exempt session-management credentials - gate on credential intent/action, not body presence.
+
 ## [0.8.0] - 2026-07-01
 
 ### Changed

@@ -2,7 +2,7 @@
 name: mpp
 description: "Build with MPP (Machine Payments Protocol) - the open protocol for machine-to-machine payments over HTTP 402. Use when developing paid APIs, payment-gated content, AI agent payment flows, MCP tool payments, pay-per-token streaming, or any service using HTTP 402 Payment Required. Covers the mppx TypeScript SDK with Hono/Express/Next.js/Elysia middleware, pympp Python SDK, and mpp Rust SDK. Supports Tempo stablecoins, Stripe cards, Lightning Bitcoin, and custom payment methods. Includes charge (one-time) and session (streaming pay-as-you-go) intents. Make sure to use this skill whenever the user mentions mpp, mppx, machine payments, HTTP 402 payments, Tempo payments, payment channels, pay-per-token, paid API endpoints, or payment-gated services."
 metadata:
-  version: "0.8.0"
+  version: "0.8.1"
   upstream: "mppx@0.8.1, pympp@0.9.0, mpp@0.10.4, @buildonspark/lightning-mpp-sdk@0.1.4, @stellar/mpp@0.7.0, mpp-card@0.1.8"
   openclaw:
     homepage: https://github.com/tenequm/skills/tree/main/skills/mpp
@@ -559,6 +559,8 @@ Pass `channelId` to `mppx.session()` so returning clients recover existing on-ch
 ### Request Handling
 
 **Session voucher POSTs have no body.** Mid-stream voucher POSTs carry only `Authorization: Payment` - no JSON body. If your middleware decides charge vs session based on `body.stream`, vouchers will hit the charge path. Check the **credential's intent** instead. As of mppx 0.4.9, the SDK skips route amount/currency/recipient validation for topUp and voucher credentials (the on-chain voucher signature is the real validation), so body-derived pricing mismatches no longer cause spurious 402 rejections.
+
+**`close`/`topUp` management credentials are also bodyless.** They arrive as POSTs with only `Authorization: Payment`. If you run your *own* request-body validation (e.g. a Zod schema on the tool payload) *before* handing the request to `mppx.session()`, it will reject these with a spurious **400** before mppx can answer them (mppx replies `204 No Content`). Exempt session-management credentials from your body validator - gate on the credential's intent/action, not on body presence.
 
 **Clone the request before reading the body.** `request.json()` consumes the Request body. If you parse the body first and then pass the original request to `mppx.session()` or `mppx.charge()`, the mppx handler gets an empty body and returns 402. Clone before reading.
 

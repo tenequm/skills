@@ -1,11 +1,13 @@
-# Lance v8 reference
+# Lance v9 reference
 
 Capability reference for **Lance** - the open columnar lakehouse format for multimodal AI -
-regrounded against the `lance-format/lance` repository at git tag **`v8.0.0-beta.14`**
-(commit `c188de59f`).
+regrounded against the `lance-format/lance` repository at git tag **`v9.0.0-beta.10`**
+(commit `e25b71e74`). v9 is the current development frontier; **v8.0.0 is the concurrent
+stabilizing release** (`v8.0.0-rc.3`, 2026-06-30, no final tag yet) - track the v8.0.0
+rc/final line if you need a stable pin instead of the v9 dev betas.
 
 Citations are `path:line` relative to the repo root. Build a permalink as
-`https://github.com/lance-format/lance/blob/v8.0.0-beta.14/<path>`. Line numbers drift
+`https://github.com/lance-format/lance/blob/v9.0.0-beta.10/<path>`. Line numbers drift
 between tags; treat them as approximate. The authoritative in-repo sources are the format
 spec under `docs/src/format/`, the user guide under `docs/src/guide/`, the protobuf schemas
 under `protos/`, and the Rust workspace under `rust/`.
@@ -29,7 +31,7 @@ this reference is still authoritative for the format underneath it.
 11. [Indexes](#11-indexes)
 12. [Distributed write and indexing](#12-distributed-write-and-indexing)
 13. [Object store](#13-object-store)
-14. [What changed (v7 -> v8)](#14-what-changed-v7---v8)
+14. [What changed (v7 -> v9)](#14-what-changed-v7---v9)
 15. [Capability matrix](#15-capability-matrix)
 16. [Source map](#16-source-map)
 
@@ -60,7 +62,7 @@ code. The format itself is the product - there is no server.
 
 ## 2. The crate workspace
 
-25 crate directories under `rust/`. `[workspace.package]`: `version = "8.0.0-beta.14"`,
+25 crate directories under `rust/`. `[workspace.package]`: `version = "9.0.0-beta.10"`,
 `edition = "2024"`, `rust-version = "1.91.0"`, `license = "Apache-2.0"`, `resolver = "3"`
 (`Cargo.toml:31-55`). `exclude = ["python", "java/lance-jni"]`.
 
@@ -98,12 +100,14 @@ path dependency rather than an explicit member.
 
 **Bindings.** Python: package `pylance` (`python/pyproject.toml`), built with maturin, imported
 as `lance`; the Rust extension crate is `pylance` (`[lib] name = "lance"`); supports Python
-3.9-3.14; runtime deps `pyarrow>=14`, `numpy>=1.22`, `lance-namespace>=0.8.5,<0.9`. Java: an
+**3.10-3.14** (3.9 dropped in v9, PR #7345, breaking; PyO3 abi3 floor raised to `abi3-py310`);
+runtime deps `pyarrow>=14`, `numpy>=1.22`, `lance-namespace>=0.8.5,<0.9`. Java: an
 SDK under `java/` (Maven `org.lance`), bridged to Rust by the `lance-jni` crate
 (`java/lance-jni/`, excluded from the Rust workspace). Notable workspace deps at this tag
 (`Cargo.toml`): `arrow 58.0.0`, `datafusion 53.0.0`, `opendal 0.57`, `jieba-rs 0.10`,
-`lance-namespace-reqwest-client 0.8.4`. The `lance-namespace`/`-impls` crates publish at
-the workspace version (`8.0.0-beta.14`); note the `[workspace.dependencies]` declaration
+`itertools 0.14` (0.13 -> 0.14 in v9), `lance-namespace-reqwest-client 0.8.6` (0.8.4 -> 0.8.6
+in v9). The `lance-namespace`/`-impls` crates publish at
+the workspace version (`9.0.0-beta.10`); note the `[workspace.dependencies]` declaration
 still pins `lance-namespace-datafusion` consumers to `=7.0.0-beta.9` even though that crate
 itself publishes at the workspace version.
 
@@ -136,10 +140,13 @@ enum order is `Legacy < 2.0 < 2.1 (#[default]) < Stable < 2.2 < Next < 2.3`, wit
 `Stable => 2.1` and `Next => 2.3`, and `is_unstable() = self >= Next`
 (`rust/lance-encoding/src/version.rs:21-46`). Two consequences that surprise readers: (1)
 **`next` now resolves to 2.3, not 2.2** - writing with `next` produces a 2.3 file; (2)
-because 2.2 sits *below* `Next` in the ladder, the code does **not** flag 2.2 as unstable,
-yet the docs version table (`docs/src/format/file/versioning.md:21-29`) still lists only 2.2
-and labels it unstable. 2.3 is currently a placeholder (6 refs vs 98 for 2.2 across
-`lance-encoding`) - 2.2 is the version actually carrying Map / Blob v2 / `VariablePackedStruct`.
+because 2.2 sits *below* `Next` in the ladder, the code does **not** flag 2.2 as unstable.
+As of v9 the docs version table (`docs/src/format/file/versioning.md:18-27`) agrees: it lists
+`2.3 (unstable)` ("Adds experimental encodings for upcoming features") and no longer labels
+2.2 unstable (2.2 now reads "Adds support for newer nested type/encoding capabilities
+(including map support) and 2.2-era storage features"). 2.3 remains a placeholder (6 refs vs
+98 for 2.2 across `lance-encoding`) - 2.2 is the version actually carrying Map / Blob v2 /
+`VariablePackedStruct`.
 `next` encodings can change and files written with them may become unreadable - "should only
 be used for experimentation and benchmarking" (`docs/src/format/file/versioning.md:8-11`).
 The default storage version became 2.1 in Lance 5.0.0 (`docs/src/guide/migration.md`); 2.2 is
@@ -186,8 +193,9 @@ Data types and layouts are orthogonal. The top-level `PageLayout` has four page 
   Data split into mini-blocks of a power-of-two value count, each <32KiB compressed; reading
   any value reads the whole block, so blocks are kept small. Rep/def levels are sliced into
   the blocks. A random-access metadata buffer (2 bytes/block) is loaded into the search cache
-  at init time. Default 4096 values/block (`LANCE_MINIBLOCK_MAX_VALUES`). 2.2 adds larger
-  chunks (>=64KB) via `has_large_chunk`.
+  at init time. Default 4096 values/block (`LANCE_MINIBLOCK_MAX_VALUES`), **tunable up to
+  32k** via that env var since v9 (PR #7356). 2.2 adds larger chunks (>=64KB) via
+  `has_large_chunk`.
 - **Full-zip** - for larger values (e.g. vector embeddings) above a 256-byte cutoff. Rep/def
   levels and compressed buffers are zipped into one buffer; a per-row repetition index gives
   random access. Requires *transparent* compression (individual values indexable after
@@ -249,6 +257,12 @@ Blob columns are read lazily as `BlobFile` handles - callers stream bytes on dem
 can mix inline bytes, an external URI, an external URI slice (`Blob.from_uri(uri,
 position=, size=)`), and null - enabling many payloads packed into one container file
 referenced by `(position, size)` slices.
+
+The inline-vs-dedicated cutoff is **per-column configurable** since v9 (PR #7269): field
+metadata `lance-encoding:blob-inline-size-threshold` / `lance-encoding:blob-dedicated-size-threshold`
+(Python `inline_size_threshold` / `dedicated_size_threshold`) decide when a value stays inline
+vs. moves out-of-line. Appends that specify a different threshold than the existing column are
+**rejected**, not silently ignored.
 
 ---
 
@@ -370,7 +384,11 @@ Schema changes are **metadata-only** wherever possible (`docs/src/guide/data_evo
   compaction + version cleanup. 2.2 supports nested sub-column removal.
 - **Rename / reorder** - change `name` or order; field IDs unchanged.
 - **Type change / cast** - may require rewriting that column to new data files (other columns
-  untouched); an index on the column is dropped on type change.
+  untouched). Since v9, `alter_columns` **fails fast** if the column has an index attached -
+  it no longer silently drops/invalidates the index; you must `drop_index()` first (PR #7158,
+  breaking: `Error::invalid_input("Cannot cast column(s) [...]: they have N index(es) attached
+  ... Drop the index(es) with drop_index() before altering")`). v9 also **allows Dict <->
+  value-type casts** via `alter_columns` (PR #7289).
 
 **Zero-copy data evolution.** Because each data file holds a distinct set of field IDs and a
 missing field reads as NULL, a writer can add and backfill a column by **appending new data
@@ -443,7 +461,8 @@ is set. `CleanupPolicy` knobs: `before_timestamp`, `before_version`, `delete_unv
 `error_if_tagged_old_versions` (default true), `clean_referenced_branches`,
 `delete_rate_limit` (max delete requests/sec, to avoid S3 throttling). A newer
 `Dataset::cleanup(policy)` API (new in v8, PR #7147) splits this into `explain()` (returns a
-`CleanupExplanation` of what would be removed - a dry run) and `execute()`.
+`CleanupExplanation` of what would be removed - a dry run) and `execute()`; v9 exposes both to
+**Python and Java** (PR #7248).
 
 ---
 
@@ -731,6 +750,18 @@ datasets, the IVF builder exposes `streaming_sample_rate`, `streaming_coreset_ra
 `num_partitions * streaming_sample_rate` vectors and keeps the total sampled set bounded
 (`rust/lance-index/src/vector/ivf/builder.rs:44-51`).
 
+**v9 vector changes.** `as_vector_index` was **removed from the public `Index` trait**
+(PR #7392) - downcast via `as_any()` instead. A new **hamming clustering** utility (PR #7379,
+`rust/lance-linalg` + `rust/lance`) does SIMD-accelerated (AVX-512/AVX2) pairwise Hamming
+distance over 64-bit binary hashes plus union-find grouping for near-duplicate detection:
+`pairwise_hamming_distance[_parallel]`, `UnionFind`, and `hamming_clustering_for_ivf_partition`
+/ `_for_sample` / `_for_range` / `_from_hashes` returning a `RecordBatchReader` of clusters.
+This is a clustering *utility* over binary vectors, distinct from the `Hamming` distance
+*metric* already listed above. Separately, `COUNT(*)` pushdown now works on **stable-row-id**
+datasets (PR #7360) - the `CountFromMaskExec` fast path no longer falls back to a full scan
+when stable row IDs are enabled. A vector-search correctness fix also accounts for the SQ
+offset in dot-distance (PR #7481).
+
 ### 11.2 Scalar indexes
 
 `docs/src/format/index/scalar/`. Results are **exact** (BTREE, BITMAP, LABEL_LIST) or
@@ -741,7 +772,7 @@ datasets, the IVF builder exposes `streaming_sample_rate`, `streaming_coreset_ra
 | BTREE | Range queries, sorted access, high-cardinality columns | Two-level: in-memory page lookup + on-disk sorted leaves, default 4096 rows/page |
 | BITMAP | Low-cardinality columns, fast set membership | One bitmap (serialized `RowAddrTreeMap`) per distinct value |
 | LABEL_LIST | Multi-value / tag columns | Built on a bitmap index; supports `array_has`/`_all`/`_any` |
-| NGRAM | Substring matching | Overlapping trigrams (ASCII-folded, lowercased); query `contains` |
+| NGRAM | Substring matching | Overlapping trigrams (ASCII-folded, lowercased); query `contains`. Since v9 also accelerates regex and infix `LIKE` (PR #7139) |
 | ZONEMAP | Scan pruning / predicate pushdown | Per-zone min/max/null stats (default 8192 rows/zone); a *primary skipping structure* |
 | BLOOM_FILTER | Probabilistic membership | Zone-based Split Block Bloom Filters (xxHash64; default 8192 items/zone, FPP 0.00057) |
 | FM_INDEX | Substring / prefix / regex search on raw bytes | Compressed BWT index over raw byte arrays; built on the Segmented Index architecture (see 11.5). New in v8 |
@@ -751,7 +782,10 @@ NGRAM, ZONEMAP, and BLOOM_FILTER are newer additions. A JSON scalar index wraps 
 index's details with a JSON path.
 
 **FM-Index** (new in v8, `docs/src/format/index/scalar/fmindex.md`,
-`protos/index.proto` `FMIndexIndexDetails`). The Ferragina-Manzini index is "a compressed
+`protos/index.proto:251` `FMIndexDetails` - **renamed from `FMIndexIndexDetails` in v9**,
+PR #7397, a **breaking change that makes existing FM indexes unreadable**; the rename also
+dropped the `get_plugin_name_from_details_name` `fmindex`->`fm` special-case). The
+Ferragina-Manzini index is "a compressed
 substring index based on the Burrows-Wheeler Transform (BWT)" that "enables efficient
 **arbitrary substring search**, **prefix match**, and **suffix/regular-expression search**
 directly on raw bytes" (`fmindex.md:3`) - unlike the NGRAM index (fixed trigrams) or FTS
@@ -786,10 +820,12 @@ Storage: `tokens.lance` (dictionary), `docs.lance` (doc metadata), `invert.lance
 **partitioned** - every partition is searched at query time and results combined.
 
 Tokenizer pipeline (`InvertedIndexParams`): a base tokenizer (`simple`, `whitespace`, `raw`,
-`ngram`, `icu`, `jieba/*` for Chinese, `lindera/*` for Japanese) followed by token filters
-(`RemoveLong`, `LowerCase`, `Stemmer`, `StopWords`, `AsciiFolding`). The `icu` tokenizer
+`ngram`, `icu`, `icu/split`, `jieba/*` for Chinese, `lindera/*` for Japanese) followed by
+token filters (`RemoveLong`, `LowerCase`, `Stemmer`, `StopWords`, `AsciiFolding`) - stop
+words can now be **mixed-language** (PR #7324). The `icu` tokenizer
 (PR #6956) does ICU4X dictionary-based Unicode word segmentation with **bundled segmenter
-data** - unlike jieba/lindera it needs no external language model
+data** - unlike jieba/lindera it needs no external language model; the v9 **`icu/split`**
+variant (PR #7474) applies ICU segmentation with simple-style delimiter splitting
 (`rust/lance-index/src/scalar/inverted/tokenizer.rs:390`, `docs/src/guide/tokenizer.md:1`). The
 default base tokenizer remains **`simple`** (`tokenizer.rs:187`); a PR making ICU the default
 (#6968) was reverted (#7006) because "ICU showed behavior differences that are too large for
@@ -869,7 +905,8 @@ committed without merging. **Vector model scope**: workers may share one trained
 *or* use **independent segment models** - "each worker trains the IVF/PQ model for its own
 `fragment_ids`. The resulting segments can be committed together as one logical index without
 sharing centroids or codebooks" (`distributed_indexing.md:124`, PR #7148). Distributed builds
-cover vector indexes, bitmap, segmented btree, segmented inverted (FTS), and zone map; the
+cover vector indexes, bitmap, segmented btree, segmented inverted (FTS), zone map, and
+**LabelList** (added in v9, PR #7223); the
 `filtered_read` proto serializes the `FilteredReadExec` scan operator for plan-then-execute
 distributed scans.
 
@@ -934,15 +971,18 @@ Disable globally with `LANCE_USE_VERSION_HINT=0`.
 
 ---
 
-## 14. What changed (v7 -> v8)
+## 14. What changed (v7 -> v9)
 
 The v7 tag line ran `v7.0.0-beta.1` through `v7.0.0-beta.17`, then `v7.0.0-rc.1` and
 `v7.0.0`. The v7.1 line opened at `v7.1.0-beta.1`, continued through `v7.1.0-beta.4` and
-`v7.1.0-rc.1`; the v7.2 line ran through `v7.2.0-beta.5`; then the **v8 line opened** and the
-crates now pin `8.0.0-beta.14`. This section keeps the full v7 history below (still useful
-context), the **v7.2.0-beta.5 -> v8.0.0-beta.9 delta** (the major-version boundary - the most
-important part for a v8 reader), and finally the **v8.0.0-beta.9 -> v8.0.0-beta.14 delta**
-(the current tag) at the very end.
+`v7.1.0-rc.1`; the v7.2 line ran through `v7.2.0-beta.5`; the **v8 line** ran through
+`v8.0.0-beta.19` and is now stabilizing (`v8.0.0-rc.3`, 2026-06-30, no final tag yet); and the
+**v9 line opened** (auto-bumped from a `breaking-change`-labeled PR) with the crates now
+pinning `9.0.0-beta.10`. This section keeps the full v7 history below (still useful context),
+the **v7.2.0-beta.5 -> v8.0.0-beta.9 delta** (the v7->v8 major boundary), the
+**v8.0.0-beta.9 -> v8.0.0-beta.14 delta**, and finally the **v8.0.0-beta.14 -> v9.0.0-beta.10
+delta** (the v8->v9 major boundary, the current tag - most important for a v9 reader) at the
+very end.
 
 **The v6 -> v7 breaking change.** `feat!: make dataset object store access base-aware`
 (PR #6647, commit `456198cd`), immediately followed by the automated bump to `7.0.0-beta.1`.
@@ -1123,7 +1163,7 @@ section 3 holds unchanged); `CommitConfig num_retries = 20`
 `ConditionalPutCommitHandler` routing; `rust-version 1.91.0`, `resolver 3`, edition 2024;
 MemWAL docs and system-index docs byte-identical; MemWAL still experimental.
 
-### The v8.0.0-beta.9 -> v8.0.0-beta.14 delta (current tag)
+### The v8.0.0-beta.9 -> v8.0.0-beta.14 delta
 
 31 commits, **two breaking changes** - both vector/RaBitQ. No new crate (still 25), no new
 transaction op (still 15), no file-format change.
@@ -1162,11 +1202,73 @@ Unchanged and reverified at `v8.0.0-beta.14`: 25 crates; 15 transaction ops; fil
 (`rust/lance-table/src/io/commit.rs:1550`); `rust-version 1.91.0`, `resolver 3`, edition 2024;
 feature-flag bits; `ConditionalPutCommitHandler` routing.
 
+### The v8.0.0-beta.14 -> v9.0.0-beta.10 delta (v8 -> v9 major boundary, current tag)
+
+129 commits. A **light major bump** - structurally v9 is nearly identical to v8. The major
+version was auto-triggered by `ci/check_breaking_changes.py` (GitHub `breaking-change`-label
+detection), fired by two PRs merged before the 2026-06-22 bump: the Python 3.9 drop (#7345)
+and the `alter_columns` fail-fast cast (#7158). The FMIndex rename (#7397) carries the label
+too but merged after the bump, so it rode the already-bumped 9.0.0 series rather than
+triggering it. **Three breaking changes:**
+
+- **`refactor!: rename FMIndexIndexDetails to FMIndexDetails`** (PR #7397) - proto message
+  `protos/index.proto:251` `FMIndexDetails {}` (was `FMIndexIndexDetails`); Rust type
+  `pb::FmIndexDetails`; the `get_plugin_name_from_details_name` `fmindex`->`fm` special-case
+  was deleted. Author's note: "This change would be a breaking change to any existing FM
+  indexes!" - existing FM indexes become unreadable. See section 11.2.
+- **Drop Python 3.9** (PR #7345) - `python/pyproject.toml` `requires-python = ">=3.10"`; the
+  `Python :: 3.9` classifier removed; PyO3 abi3 floor raised `abi3-py39` -> `abi3-py310`;
+  release wheels no longer built for 3.9. See section 2.
+- **`fix(dataset)!`: `alter_columns` cast fails fast with an attached index** (PR #7158) -
+  previously a cast silently dropped/invalidated the index; now it errors and you must
+  `drop_index()` first. See section 6.
+
+**Removal (Rust API, not conventional-`!`):** `as_vector_index` removed from the public
+`Index` trait (PR #7392) - callers downcast via `as_any()`. See section 11.1.
+
+**Net-new features:**
+
+- **Hamming clustering** (PR #7379) - SIMD near-duplicate detection over 64-bit binary
+  hashes (`pairwise_hamming_distance`, `UnionFind`, `hamming_clustering_for_ivf_partition`).
+  See section 11.1.
+- **COUNT(*) pushdown on stable-row-id datasets** (PR #7360) - the fast path no longer falls
+  back to a full scan when stable row IDs are enabled. See section 11.1.
+- **Per-column blob size thresholds** (PR #7269) - `lance-encoding:blob-inline-size-threshold`
+  / `...-dedicated-size-threshold`; appends with a different threshold are rejected. See
+  section 3.5.
+- **Tunable 32k miniblock chunks** via `LANCE_MINIBLOCK_MAX_VALUES` (PR #7356; default still
+  4096). See section 3.3.
+- **`icu/split` FTS tokenizer** (PR #7474) and **mixed-language stop words** (PR #7324). See
+  section 11.3.
+- **Distributed LabelList index builds** (PR #7223). See section 12.
+- **ngram index accelerates regex + infix LIKE** (PR #7139). See section 11.2.
+- `alter_columns` **Dict <-> value-type casts** (PR #7289, section 6); cleanup-explain
+  exposed to **Python and Java** (PR #7248, section 7); Python **fragment-reuse remap +
+  delete-by-offset** (PR #7438); v2 file writer/reader support **columns of unequal length**
+  (PR #7406); a `SpillStore` trait with local-disk impl (PR #7311); a versioned cache-codec
+  envelope (PR #7163).
+
+**Notable fixes:** compaction rejects `defer_index_remap` with stable row IDs (#7468);
+nested legacy blobs rejected in v2.2 and blob v2 supported in nested structs (#7278, #7281);
+`merge_insert` no longer drops matches when a leading payload column is all-null (#7251); SQ
+offset accounted for in dot distance (#7481); manifests >5 GB via size-aware copy (#7047);
+double percent-encoding in object-store paths resolved (#6643/#6695).
+
+**Dependency changes:** `lance-namespace-reqwest-client` 0.8.4 -> 0.8.6 (#7254); `itertools`
+0.13 -> 0.14 (#7424). The pylance runtime pin `lance-namespace>=0.8.5,<0.9` is unchanged.
+
+Unchanged and reverified at `v9.0.0-beta.10`: **25 crates**; **15 transaction ops**
+(`protos/transaction.proto` unchanged); file-format `version.rs` (`Next => 2.3`,
+`#[default] V2_1`, no 2.4); `CommitConfig num_retries = 20`
+(`rust/lance-table/src/io/commit.rs:1550`); `rust-version 1.91.0`, `resolver 3`, edition 2024;
+arrow 58 / datafusion 53 / opendal 0.57 / jieba-rs 0.10; feature-flag bits;
+`ConditionalPutCommitHandler` routing; MemWAL still experimental.
+
 ---
 
 ## 15. Capability matrix
 
-What Lance can and cannot do at `v8.0.0-beta.14`.
+What Lance can and cannot do at `v9.0.0-beta.10`.
 
 **Storage and format**
 
@@ -1205,7 +1307,9 @@ What Lance can and cannot do at `v8.0.0-beta.14`.
 | FM-Index substring / prefix / regex search on raw bytes | yes (segment-based) |
 | Full-text search - BM25, multilingual tokenizers, phrase queries | yes (Lance-native) |
 | Geo / RTree spatial index + geo UDFs | yes (`geo` feature) |
-| Distributed index builds (vector, bitmap, btree, FTS, zone map) | yes (no scheduler) |
+| Distributed index builds (vector, bitmap, btree, FTS, zone map, label-list) | yes (no scheduler) |
+| Hamming clustering / near-duplicate detection over binary hashes | yes (v9 utility) |
+| `COUNT(*)` pushdown | yes (fast path on stable-row-id datasets) |
 | SQL over datasets | via DataFusion (`LanceTableProvider`) |
 
 **Concurrency and ops**
@@ -1228,7 +1332,7 @@ dashboard.
 
 ## 16. Source map
 
-Where to look in `lance-format/lance` at `v8.0.0-beta.14`.
+Where to look in `lance-format/lance` at `v9.0.0-beta.10`.
 
 | Topic | Path |
 |-------|------|
@@ -1238,7 +1342,7 @@ Where to look in `lance-format/lance` at `v8.0.0-beta.14`.
 | Index spec | `docs/src/format/index/{index.md,vector/,scalar/,system/}` (scalar incl. `scalar/fmindex.md`) |
 | User guide | `docs/src/guide/{blob,data_evolution,data_types,json,object_store,read_and_write,performance,tags_and_branches,tokenizer,distributed_write,distributed_indexing,migration}.md` |
 | Integrations | `docs/src/integrations/{index,datafusion,pytorch,tensorflow}.md` |
-| Protobuf schemas | `protos/{file2,table,transaction,rowids,index,ann,filtered_read,table_identifier}.proto` |
+| Protobuf schemas | `protos/{file2,table,transaction,rowids,index,index_old,ann,filtered_read,table_identifier}.proto` (`index_old.proto` is a v9 forward-compat shim) |
 | Rust workspace | `rust/` (entry point `rust/lance/`) |
 | Commit / OCC | `rust/lance/src/io/commit.rs`, `rust/lance-table/src/io/commit.rs` |
 | MemWAL | `rust/lance/src/dataset/mem_wal/` |
