@@ -135,6 +135,17 @@ let frameCount = pcmBuffer.byteLength / bytesPerFrame
 
 Rule of thumb: if the source format is interleaved, compute frame count from the byte length of the block buffer divided by `mBytesPerFrame`, not from `frameLength`.
 
+## CFString Property Values Follow the Create Rule
+
+Reading a `CFString`-typed property (e.g. `kAudioDevicePropertyDeviceUID`, `kAudioObjectPropertyName`) with `AudioObjectGetPropertyData` returns an object with a **+1 retain count** - despite "Get" in the function name, the value follows the Create Rule and the caller owns it. Apple's `AudioHardware.h` states "*The caller is responsible for releasing the returned CFObject*". In Swift, take it with `takeRetainedValue()`, not `takeUnretainedValue()`; the latter leaks nothing but under-retains, so the string can be freed out from under you.
+
+```swift
+var cfName: Unmanaged<CFString>?
+var size = UInt32(MemoryLayout<Unmanaged<CFString>?>.size)
+let status = AudioObjectGetPropertyData(deviceID, &addr, 0, nil, &size, &cfName)
+let name = cfName?.takeRetainedValue() as String?  // Create Rule: retained
+```
+
 ## IO Proc Isolation and `assumeIsolated`
 
 The IO proc closure returned from `AudioHardwareCreateProcessTapWithAggregateDevice` / `makeIOProcBlock` runs on CoreAudio's **real-time thread**. It must stay `nonisolated` - do not make it actor-isolated or `@MainActor`. Allocation, locks, `Task {}`, and `AsyncStream.yield()` are all unsafe there.

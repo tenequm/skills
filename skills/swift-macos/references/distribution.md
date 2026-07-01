@@ -48,6 +48,10 @@ codesign --verify --deep --strict MyApp.app
 spctl --assess --type execute MyApp.app
 ```
 
+### Dev-loop gotcha: `SIGKILL (Code Signature Invalid)`
+
+If a running signed app is killed at idle right after a rebuild (e.g. a `make run` loop that replaces the `.app` under the running process), the crash is `SIGKILL` with `EXC_CRASH (Code Signature Invalid)` - not a bug in your code. macOS validates memory-mapped code pages against the on-disk signature lazily; overwriting the bundle invalidates the pages the kernel later faults in, so it terminates the process. Quit the old instance before replacing the bundle, or launch from a copied path.
+
 ## App Store Distribution
 
 ### Requirements
