@@ -349,33 +349,22 @@ const { refetch } = useInfiniteQuery({ /* ... */ });
 refetch();
 ```
 
-### Refetch Only First Page
+### Limiting Stored Pages with `maxPages`
+
+**v5 removed `refetchPage`** (the v4 way to refetch only some pages) in favor of `maxPages`, which caps how many pages are stored *and* refetched. This bounds memory and keeps invalidation refetches cheap - refetching every accumulated page was the problem `refetchPage` tried to work around.
 
 ```tsx
-queryClient.invalidateQueries({
+useInfiniteQuery({
   queryKey: ['posts'],
-  refetchPage: (page, index) => index === 0,
+  queryFn: ({ pageParam }) => fetchPosts(pageParam),
+  initialPageParam: 0,
+  getNextPageParam: (lastPage) => lastPage.nextCursor,
+  getPreviousPageParam: (firstPage) => firstPage.previousCursor, // required if maxPages drops from both ends
+  maxPages: 3, // keep at most 3 pages; fetching a 4th drops the oldest
 });
 ```
 
-### Refetch Specific Pages
-
-```tsx
-// Refetch first 3 pages
-queryClient.invalidateQueries({
-  queryKey: ['posts'],
-  refetchPage: (page, index) => index < 3,
-});
-
-// Refetch based on page content
-queryClient.invalidateQueries({
-  queryKey: ['posts'],
-  refetchPage: (page, index) => {
-    // Refetch if page has a specific item
-    return page.posts.some(post => post.id === targetId);
-  },
-});
-```
+On invalidation the query refetches only the currently-stored pages (at most `maxPages`), sequentially from the first. Omit `maxPages` (default `undefined`) to keep every page.
 
 ## Transforming Data
 
@@ -598,16 +587,13 @@ See the Streamed Queries section in the main SKILL.md for the full `streamedQuer
 
 ### Duplicate Data After Invalidation
 
-When invalidating an infinite query, it refetches all pages. To avoid duplicates.
+When invalidating an infinite query, it refetches all stored pages. To avoid duplicates or excessive refetching:
 
 **SSR note:** v5.90.3 fixed unhandled promise rejections during dehydration/rehydration of pending infinite queries. Ensure you're on v5.90.3+ if using SSR with infinite queries.
 
 ```tsx
-// Option 1: Use refetchPage to only refetch specific pages
-queryClient.invalidateQueries({
-  queryKey: ['posts'],
-  refetchPage: (page, index) => index === 0, // Only refetch first page
-});
+// Option 1: Cap stored/refetched pages with maxPages (replaces v4 refetchPage)
+useInfiniteQuery({ queryKey: ['posts'], /* ... */, maxPages: 3 });
 
 // Option 2: Reset to first page
 queryClient.resetQueries({ queryKey: ['posts'] });
