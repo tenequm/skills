@@ -2,7 +2,7 @@
 name: mpp
 description: "Build with MPP (Machine Payments Protocol) - the open protocol for machine-to-machine payments over HTTP 402. Use when developing paid APIs, payment-gated content, AI agent payment flows, MCP tool payments, pay-per-token streaming, or any service using HTTP 402 Payment Required. Covers the mppx TypeScript SDK with Hono/Express/Next.js/Elysia middleware, pympp Python SDK, and mpp Rust SDK. Supports Tempo stablecoins, Stripe cards, Lightning Bitcoin, and custom payment methods. Includes charge (one-time) and session (streaming pay-as-you-go) intents. Make sure to use this skill whenever the user mentions mpp, mppx, machine payments, HTTP 402 payments, Tempo payments, payment channels, pay-per-token, paid API endpoints, or payment-gated services."
 metadata:
-  version: "0.8.1"
+  version: "0.8.2"
   upstream: "mppx@0.8.1, pympp@0.9.0, mpp@0.10.4, @buildonspark/lightning-mpp-sdk@0.1.4, @stellar/mpp@0.7.0, mpp-card@0.1.8"
   openclaw:
     homepage: https://github.com/tenequm/skills/tree/main/skills/mpp
@@ -331,6 +331,19 @@ The MCP subpaths moved to `mppx/mcp/server` and `mppx/mcp/client` in mppx 0.8.0;
 
 See `references/transports.md` for the full MCP encoding (challenge in error.data.challenges, credential in _meta).
 
+## Agent Tool Boundaries
+
+MPP payment authority is not the same as product write authority. When a paid
+agent tool can both read data and change external state, split those privileges
+explicitly.
+
+TweetClaw is a concrete OpenClaw example: `MPP_SIGNING_KEY` enables read-only
+pay-per-use X/Twitter API access, while posting, DMs, monitors, private reads,
+and other account-backed workflows require the user's Xquik API key plus
+OpenClaw approval. Use the same pattern for your own paid agent tools: one
+credential for payment, separate product credentials for account scope, and an
+approval gate before visible, recurring, private, or write actions.
+
 ## Privy Server Wallets
 
 Use [Privy](https://docs.privy.io) server wallets as MPP signers for agentic payment flows. The pattern: create a custom viem `Account` via `toAccount()` that delegates `signMessage`, `signTransaction`, and `signTypedData` to Privy's API (`@privy-io/node`), then pass it to `tempo({ account })`. Tempo's custom serializer requires using `signSecp256k1` (raw hash signing) for transactions instead of Privy's higher-level `signTransaction`.
@@ -621,6 +634,7 @@ These are field reports, not documented guarantees - verify against your own ver
 - Tempo docs: https://docs.tempo.xyz
 - Privy MPP guide: https://docs.privy.io (search "MPP" or see agentic wallets recipes)
 - x402 interop/migration: the `mppx/x402` subpath runs x402 "exact" flows alongside MPP on one endpoint - https://mpp.dev/guides/upgrade-x402
+- TweetClaw OpenClaw plugin: https://github.com/Xquik-dev/tweetclaw
 - Docs MCP server (for agents building on MPP): `claude mcp add --transport http mpp https://mpp.dev/api/mcp` (tools `list_pages`/`read_page`/`search_docs`/`search_source`); install this skill's upstream via `npx skills add tempoxyz/mpp -g`
 - Services MCP (agent-facing discovery of the curated directory): https://mpp.dev/mcp/services
 - LLM docs: https://mpp.dev/llms-full.txt
