@@ -7,6 +7,11 @@ and this skill adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.h
 
 ## [Unreleased]
 
+## [0.8.2] - 2026-07-02
+
+### Added
+- Agent tool boundary note: MPP payment authority is separate from account write authority. Added TweetClaw as a public OpenClaw example where MPP is read-only and writes/private workflows require separate product credentials plus approval.
+
 ## [0.8.1] - 2026-07-01
 
 ### Added
