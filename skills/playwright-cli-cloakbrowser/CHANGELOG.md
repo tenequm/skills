@@ -7,6 +7,18 @@ and this skill adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.h
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-07-02
+
+### Added
+
+- "Remote Manager on a Linux VM over SSH" section: Docker install, localhost-bound run with a restart policy, SSH tunnel as the auth boundary, VM sizing.
+- Notes surfaced by live end-to-end testing: port-8080 conflict fallback, the `.playwright-cli/` scratch dir written to cwd, and the implicit `default` session created by `attach`.
+
+### Changed
+
+- Merged `references/local-setup.md` into SKILL.md (single file; setup content is small enough to inline).
+- Accuracy fixes from a live test run: the Docker image bundles the CloakBrowser binary (no slow first-launch download); non-`--raw` output wraps in markdown header blocks that vary by command (not always a snapshot block); `--raw` eval values are JSON-serialized.
+
 ## [0.1.0] - 2026-07-02
 
 ### Added
