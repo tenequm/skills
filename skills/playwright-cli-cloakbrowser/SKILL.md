@@ -2,8 +2,8 @@
 name: playwright-cli-cloakbrowser
 description: Drive CloakBrowser Manager stealth profiles with @playwright/cli over CDP. Use for browser automation that needs a persistent logged-in session, anti-detect fingerprints, or to pass Cloudflare - attach reuses the profile's cookies and stealth where a fresh browser does not.
 metadata:
-  version: "0.2.0"
-  upstream: "@playwright/cli@0.1.14"
+  version: "0.3.0"
+  upstream: "@playwright/cli@0.1.15"
 allowed-tools: Bash(playwright-cli:*) Bash(curl:*) Bash(docker:*)
 ---
 
@@ -28,6 +28,7 @@ playwright-cli attach --cdp=http://localhost:8080/api/profiles/<profile-id>/cdp
 # then drive normally
 playwright-cli goto https://example.com
 playwright-cli snapshot                       # a11y tree with refs (e3, e15, ...)
+playwright-cli snapshot --depth=6             # bound the tree on huge pages
 playwright-cli click e15
 playwright-cli --raw eval "document.title"    # --raw = return value only (JSON-serialized), no snapshot noise
 playwright-cli detach                         # leave the browser running for next time
@@ -35,13 +36,18 @@ playwright-cli detach                         # leave the browser running for ne
 
 - The profile must be **running** first - click Launch in the Manager GUI, or `curl -X POST http://localhost:8080/api/profiles/<profile-id>/launch`.
 - `--cdp=<url>` and `--cdp <url>` both work.
-- `attach` creates an implicit session named `default` and prints a `--s=default` hint - that flag is only needed when juggling multiple sessions; plain commands use the default session.
+- `attach` creates an implicit session named `default` and prints a `--s=default` hint - that flag is only needed when juggling multiple sessions; plain commands use the default session. `-s=<name>` opens a second isolated session on the **same** CDP (e.g. `-s=probe` for in-page fetch checks while `default` drives the page).
 - playwright-cli writes a `.playwright-cli/` scratch dir (snapshot `.yml` files, console logs) into the cwd - run from a scratch directory or gitignore it.
 - **Never `close` / `close-all` / `kill-all`** on an attached stealth profile - that can stop the shared browser and its session. Use **`detach`** to leave it running.
 
 ## Logging into a site
 
 The profile persists cookies, localStorage, and cache across restarts. To establish a login: open the Manager GUI at `http://localhost:8080`, view the running profile in the built-in noVNC viewer, and sign in there once. playwright-cli then drives the same session logged-in - the VNC view and the CDP connection share one browser.
+
+**Importing an existing login** (two limits worth knowing):
+
+- Anti-automation sites (Google, Facebook) may **flag the CDP-driven login and not persist a durable session** even though the form submits. Bypass: import a real-browser session as Playwright storage-state (`playwright-cli state-save`/`state-load`, or capture with `npx playwright codegen --save-storage=auth.json <url>`) instead of logging in through VNC.
+- A session is often **IP-bound**: a cookie/state minted at your real location, replayed from a profile whose proxy egress is a different geo, gets forced back to login + 2FA. Transfer only works when the profile's proxy geo matches where the session was created.
 
 ## Gotchas (all observed in practice)
 
@@ -51,6 +57,25 @@ The profile persists cookies, localStorage, and cache across restarts. To establ
 4. **Heavy detail pages are slow through a profile proxy** and can timeout or desync. Read what you need from the list/results page when possible; treat opening detail pages as best-effort.
 5. **Cookie/consent overlays** block clicks ("element covered"). Dismiss via JS: `playwright-cli eval "document.querySelector('#onetrust-accept-btn-handler')?.click()"`.
 6. **Use `--raw`** whenever scraping or piping - without it output is wrapped in markdown header blocks (`### Result`, `### Page`, `### Snapshot` - varies by command), which mangles piping. Even with `--raw`, eval values come back JSON-serialized (strings quoted).
+7. **"Logged in" can be false.** A CDP-attached context may render a login form (geo often defaults to US). Verify auth with an `eval` render check - `playwright-cli --raw eval "!!document.querySelector('[href*=logout], [aria-label*=account]')"` - **not** `cookie-get`, which can read the automation's own blank page and false-negative.
+8. **`goto` may throw `TimeoutError`** on heavy JS sites (it waits on `domcontentloaded`) yet a follow-up `snapshot`/`eval` still returns usable content - a nav timeout is not fatal, retry the read. (Extends gotcha 4.)
+9. **`click "<CSS selector>"` often fails to match** even when the element exists. Prefer snapshot `eN` refs, or click via JS: `playwright-cli eval "document.querySelector('...')?.click()"`.
+10. **To wait, poll - do not `sleep`.** Loop on in-page state via `eval` (`document.readyState`, element presence) with a bounded max; cap any Cloudflare "Just a moment..." wait explicitly, it is otherwise unbounded.
+11. **Browsing a logged-in session can log you out mid-run** - anti-automation defenses fire on real activity. Treat a mid-run logout as a site defense, not a tool bug; re-establish the session and slow down.
+
+## Patterns for logged-in & JS-heavy sites
+
+- **Reverse-engineer the site's own API.** From the logged-in context, call same-origin authenticated endpoints directly - far more robust than DOM scraping:
+  ```bash
+  playwright-cli -s=probe --raw eval "(async()=>await (await fetch('/api/whatever',{headers:{'X-Requested-With':'XMLHttpRequest'}})).json())()"
+  ```
+  Discover the endpoints by monkeypatching fetch first: `eval "window.__u=[];const f=fetch;window.fetch=(...a)=>{window.__u.push(a[0]?.toString?.()||a[0]);return f(...a)}"`, exercise the page, then read `window.__u`.
+- **Use CDP-level network inspection when in-page hooks fall short.** A page reload wipes an injected fetch/XHR hook, and service-worker / iframe traffic is invisible to a main-context hook. Use `playwright-cli requests` then `playwright-cli --raw response-body <id>` to capture what the page actually fetched.
+- **Lazy-loaded lists: scroll-until-count, not fixed sleeps.** Loop: scroll, poll the item count, stop on no-growth OR target OR max-rounds. For content inside a scrollable element, scroll **that element's** `scrollHeight`, not the window:
+  ```bash
+  playwright-cli --raw eval "(async()=>{let p=0;for(let i=0;i<30;i++){scrollTo(0,document.body.scrollHeight);await new Promise(r=>setTimeout(r,700));const n=document.querySelectorAll('[data-card]').length;if(n===p)break;p=n}return p})()"
+  ```
+- **Retry hard blocks with a fresh exit IP.** On 403/429/503/empty content, retry once against a fresh context so a **rotating** proxy picks a new exit IP (only helps if the profile's proxy rotates).
 
 ## Minimal working pattern
 
@@ -127,6 +152,6 @@ If you must expose the Manager directly instead (no tunnel), set `AUTH_TOKEN` an
 
 ## Notes
 
-- Egress IP is whatever the profile's proxy is set to (or the Docker host's IP with no proxy). Sites see that location for geo, currency, and language - configure the profile's proxy, timezone, and locale together in the Manager.
+- Egress IP is whatever the profile's proxy is set to (or the Docker host's IP with no proxy). Sites see that location for geo, currency, and language - configure the profile's proxy, timezone, and locale together in the Manager. To force English on a geoip'd EU marketplace, a `&language=` URL param is not enough; override the header (`route`/`run-code` with `Accept-Language: en-GB,en;q=0.9`).
 - One profile = one persistent identity. Use separate profiles for separate accounts; that is the point of the Manager.
 - [CloakBrowser](https://github.com/CloakHQ/CloakBrowser) is the stealth Chromium engine; [cloakbrowser.dev](https://cloakbrowser.dev) is the project site. The Manager GUI is MIT; the CloakBrowser binary has its own license.

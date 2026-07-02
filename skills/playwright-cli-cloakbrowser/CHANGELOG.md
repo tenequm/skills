@@ -7,6 +7,21 @@ and this skill adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.h
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-07-02
+
+### Added
+
+- "Patterns for logged-in & JS-heavy sites" section: reverse-engineering same-origin APIs via eval-fetch, CDP-level network inspection (`requests`/`response-body`), scroll-until-count for lazy lists, and fresh-context retry for hard blocks.
+- Importing-a-login guidance: storage-state transfer as the bypass for flagged CDP-driven logins, and the IP-bound-session limit (proxy geo must match where the session was minted).
+- Gotchas for false "logged-in" state, non-fatal `goto` timeouts, unreliable CSS-selector clicks, eval-poll-instead-of-sleep waits, and mid-run anti-automation logout.
+- `snapshot --depth`, parallel `-s=<name>` sessions, and an `Accept-Language` geo-override note.
+
+### Changed
+
+- Pin `@playwright/cli` 0.1.14 -> 0.1.15 (`screenshot --hires` added upstream; command catalog still deferred to the bundled skill).
+
+Verified against: @playwright/cli@0.1.15
+
 ## [0.2.0] - 2026-07-02
 
 ### Added
