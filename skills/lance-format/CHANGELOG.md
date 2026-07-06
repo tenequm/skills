@@ -7,6 +7,46 @@ and this skill adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.h
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-07-06
+
+### Changed
+- Re-grounded against upstream tag `v9.0.0-beta.10` -> `v9.0.0-beta.16` (commit
+  `78a814b6b`); bumped workspace version pin, permalink base, and citation tag.
+  58-commit range, 1 breaking change. All structural invariants reverified
+  unchanged: 25 crates, arrow 58, datafusion 53, opendal 0.57, jieba-rs 0.10,
+  itertools 0.14, lance-namespace-reqwest-client 0.8.6, rust 1.91.0, resolver 3,
+  edition 2024, version enum (`Next => 2.3`, default `V2_1`), 15 transaction ops,
+  `CommitConfig num_retries = 20`.
+- SKILL.md: `v8.0.0` FINAL shipped 2026-07-01 (was "rc.3, no final tag yet") -
+  use `v8.0.0` as the stable pin.
+- Section 3.5: blob read APIs reworked in the docs (PR #7530, #7558) - `read_blobs`
+  (full payloads, batched through the scheduler) is now the primary path,
+  `take_blobs` reserved for streaming/seeking, `scanner(blob_handling="all_binary")`
+  for Arrow binary columns. Added Blob v2 auto-tiering defaults (<16 KiB inline /
+  mid-size shared `.blob` sidecar / >2 MiB dedicated) and the new
+  `lance-encoding:blob-pack-file-size-threshold` field-metadata key (PR #7322).
+- Section 13: per-base `storage_options` scoping via `base_<id>.<key>` keys, with
+  `initial_bases` id assignment and `base_store_params` precedence (PR #7608).
+
+### Added
+- Section 14: new `v9.0.0-beta.10 -> v9.0.0-beta.16 delta` subsection.
+- Section 11.2: ZoneMap min/max read without a scan (`zonemap_value_range`, PR #7463);
+  BTREE + ZONEMAP scalar indices now accept `large_string`/`LargeUtf8` (PR #7525).
+- Section 6: schema evolution now allows adding all-null `Map` columns (PR #7462);
+  multi-base merge-insert with target-base routing (PR #7610).
+- Section 10: prefiltered LSM vector + FTS search across base/flushed/in-memory
+  mem-wal sources (PR #7138).
+- DirectoryNamespace now implements `update_table` / `delete_from_table` (PR #6923)
+  and `alter_transaction` (PR #6974).
+
+### Changed (breaking, upstream)
+- FTS / inverted indexes now default to on-disk **format v2** (PR #7512, 9.0.0
+  migration note) - `LANCE_FTS_FORMAT_VERSION` no longer controls new indexes; pass
+  `format_version=1` for older-reader compatibility. Existing v1 indexes stay
+  queryable and are maintained as v1 (append/optimize/mem-wal flush). Section 11.3.
+
+Verified against: lance-format/lance@v9.0.0-beta.16
+
 ## [0.8.0] - 2026-07-01
 
 ### Changed

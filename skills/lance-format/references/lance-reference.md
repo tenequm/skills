@@ -1,13 +1,12 @@
 # Lance v9 reference
 
 Capability reference for **Lance** - the open columnar lakehouse format for multimodal AI -
-regrounded against the `lance-format/lance` repository at git tag **`v9.0.0-beta.10`**
-(commit `e25b71e74`). v9 is the current development frontier; **v8.0.0 is the concurrent
-stabilizing release** (`v8.0.0-rc.3`, 2026-06-30, no final tag yet) - track the v8.0.0
-rc/final line if you need a stable pin instead of the v9 dev betas.
+regrounded against the `lance-format/lance` repository at git tag **`v9.0.0-beta.16`**
+(commit `78a814b6b`). v9 is the current development frontier; **`v8.0.0` final shipped
+2026-07-01** - track `v8.0.0` if you need a stable pin instead of the v9 dev betas.
 
 Citations are `path:line` relative to the repo root. Build a permalink as
-`https://github.com/lance-format/lance/blob/v9.0.0-beta.10/<path>`. Line numbers drift
+`https://github.com/lance-format/lance/blob/v9.0.0-beta.16/<path>`. Line numbers drift
 between tags; treat them as approximate. The authoritative in-repo sources are the format
 spec under `docs/src/format/`, the user guide under `docs/src/guide/`, the protobuf schemas
 under `protos/`, and the Rust workspace under `rust/`.
@@ -62,7 +61,7 @@ code. The format itself is the product - there is no server.
 
 ## 2. The crate workspace
 
-25 crate directories under `rust/`. `[workspace.package]`: `version = "9.0.0-beta.10"`,
+25 crate directories under `rust/`. `[workspace.package]`: `version = "9.0.0-beta.16"`,
 `edition = "2024"`, `rust-version = "1.91.0"`, `license = "Apache-2.0"`, `resolver = "3"`
 (`Cargo.toml:31-55`). `exclude = ["python", "java/lance-jni"]`.
 
@@ -107,7 +106,7 @@ SDK under `java/` (Maven `org.lance`), bridged to Rust by the `lance-jni` crate
 (`Cargo.toml`): `arrow 58.0.0`, `datafusion 53.0.0`, `opendal 0.57`, `jieba-rs 0.10`,
 `itertools 0.14` (0.13 -> 0.14 in v9), `lance-namespace-reqwest-client 0.8.6` (0.8.4 -> 0.8.6
 in v9). The `lance-namespace`/`-impls` crates publish at
-the workspace version (`9.0.0-beta.10`); note the `[workspace.dependencies]` declaration
+the workspace version (`9.0.0-beta.16`); note the `[workspace.dependencies]` declaration
 still pins `lance-namespace-datafusion` consumers to `=7.0.0-beta.9` even though that crate
 itself publishes at the workspace version.
 
@@ -251,18 +250,31 @@ empty; `size==0 && position!=0` = null. Recommended only when one IOP per value 
 
 **Blob v2** (`lance.blob.v2` extension type) is the path for file format >=2.2; for >=2.2 the
 legacy `lance-encoding:blob` metadata is rejected on write (`docs/src/guide/blob.md:45-52`).
-Blob columns are read lazily as `BlobFile` handles - callers stream bytes on demand
-(`with blob as f: f.read()`). `take_blobs` takes exactly one of `ids` (logical row-id),
-`indices` (positional within a snapshot), or `addresses` (physical, debug). A blob v2 column
-can mix inline bytes, an external URI, an external URI slice (`Blob.from_uri(uri,
-position=, size=)`), and null - enabling many payloads packed into one container file
-referenced by `(position, size)` slices.
 
-The inline-vs-dedicated cutoff is **per-column configurable** since v9 (PR #7269): field
-metadata `lance-encoding:blob-inline-size-threshold` / `lance-encoding:blob-dedicated-size-threshold`
-(Python `inline_size_threshold` / `dedicated_size_threshold`) decide when a value stays inline
-vs. moves out-of-line. Appends that specify a different threshold than the existing column are
-**rejected**, not silently ignored.
+**Three read paths** (`docs/src/guide/blob.md:6-7,177-185`, reworked in the v9 beta line):
+`read_blobs` is now the **primary** API - "For data loaders and batch processing that need
+complete byte payloads, use `read_blobs`" - it returns `List[Tuple[int, bytes]]`
+(`(row_address, payload)`) and "plans and executes batched blob reads through Lance's
+scheduler." `take_blobs` returns lazy `BlobFile` handles for streaming/seeking/partial reads
+(`with blob as f: f.read()`) - "Do not wrap `take_blobs` in your own thread pool just to call
+`read()` ... Use `read_blobs` instead." `scanner(..., blob_handling="all_binary")` reads blob
+columns as Arrow binary columns in a scan / `pyarrow.Table`. Both `read_blobs` and `take_blobs`
+take **exactly one** of `ids` (logical row-id), `indices` (positional within a snapshot), or
+`addresses` (physical, debug). A blob v2 column can mix inline bytes, an external URI, an
+external URI slice (`Blob.from_uri(uri, position=, size=)`), and null - enabling many payloads
+packed into one container file referenced by `(position, size)` slices.
+
+**Auto-tiering.** Blob v2 tiers payloads by size (`docs/src/guide/blob.md:354`): "by default it
+keeps payloads under 16 KiB inline, packs mid-sized payloads into shared `.blob` sidecars, and
+gives payloads over 2 MiB their own dedicated `.blob` file." The blob column avoids the
+row-rewrite write amplification that inline binary incurs on compaction/update. The cutoffs are
+**per-column configurable** (PR #7269): field metadata `lance-encoding:blob-inline-size-threshold`
+/ `lance-encoding:blob-dedicated-size-threshold` (Python `inline_size_threshold` /
+`dedicated_size_threshold`), plus `lance-encoding:blob-pack-file-size-threshold`
+(`rust/lance-arrow/src/lib.rs:69`; Python `blob_pack_file_size_threshold` on `write_dataset`,
+PR #7322) which caps how large a shared packed `.blob` file grows before a new one starts.
+Appends that specify a different threshold than the existing column are **rejected**, not
+silently ignored.
 
 ---
 
@@ -378,7 +390,9 @@ Schema changes are **metadata-only** wherever possible (`docs/src/guide/data_evo
 
 - **Add column** - assign a new field ID, update the schema. Schema-only add is very fast.
   File format <=2.1 cannot add sub-columns under an existing struct; 2.2 can extend nested
-  struct fields (including structs nested in lists).
+  struct fields (including structs nested in lists). Since v9, adding an **all-null `Map`
+  column** is allowed (PR #7462; previously rejected because Arrow's non-null `entries`/`key`
+  child failed the nullable check).
 - **Drop column** - remove the field from the schema; metadata-only, does not delete data on
   disk; reversible while old versions are retained. Physical removal happens only after
   compaction + version cleanup. 2.2 supports nested sub-column removal.
@@ -628,7 +642,9 @@ block, never fail).
 The in-memory MemTable can carry a **Lance-native HNSW vector index** (`MemIndexConfig::hnsw`,
 new in v7 - PR #6795). HNSW is self-contained (no centroids/codebook needed); only the
 distance metric is inherited from the base index. Also supported as MemTable indexes: BTree
-scalar and FTS.
+scalar and FTS. Since v9, **prefiltered LSM vector and full-text search** is supported across
+all three source tiers (base, flushed generations, in-memory memtable), threading a prefilter
+through the Python and Java bindings (PR #7138).
 
 ### Fencing and GC
 
@@ -779,7 +795,11 @@ offset in dot-distance (PR #7481).
 | RTREE | 2D spatial pruning | See 11.4 |
 
 NGRAM, ZONEMAP, and BLOOM_FILTER are newer additions. A JSON scalar index wraps another
-index's details with a JSON path.
+index's details with a JSON path. Since v9, **BTREE and ZONEMAP accept `large_string`
+(`LargeUtf8`) columns** (PR #7525), not just `Utf8`. A ZoneMap index also exposes a column's
+global **min/max without a scan** via `zonemap_value_range(column)` (`DatasetIndexExt`;
+`ZoneMapIndex::value_range` / `value_range_over(segments)`, PR #7463) - cheap stats and a
+range-pruning planning input.
 
 **FM-Index** (new in v8, `docs/src/format/index/scalar/fmindex.md`,
 `protos/index.proto:251` `FMIndexDetails` - **renamed from `FMIndexIndexDetails` in v9**,
@@ -818,6 +838,16 @@ ngram tokenizer, is noted as adapted from Tantivy, but the FTS engine is Lance's
 Storage: `tokens.lance` (dictionary), `docs.lance` (doc metadata), `invert.lance`
 (compressed posting lists, optional positions), `metadata.lance`. An FTS index may be
 **partitioned** - every partition is searched at query time and results combined.
+
+**On-disk format version (v9, breaking).** Newly created FTS / inverted indexes now default to
+**format v2** (PR #7512, `docs/src/guide/migration.md:9-30`): "Newly created FTS / inverted
+indexes now default to format v2 instead of v1. The `LANCE_FTS_FORMAT_VERSION` environment
+variable no longer controls the format used for newly created indexes ... pass the index
+creation parameter `format_version` explicitly." Pass `format_version=1` (accepts `1`/`2`/`"v1"`
+/`"v2"`, `create_scalar_index("text", "INVERTED", format_version=1)`) when older Lance readers
+must read the index - "older Lance readers may not be able to read them" otherwise. Existing v1
+indexes stay queryable and are **maintained as v1**: "append, incremental indexing, optimize,
+and mem-wal maintained-index flush ... continue preserving the v1 format."
 
 Tokenizer pipeline (`InvertedIndexParams`): a base tokenizer (`simple`, `whitespace`, `raw`,
 `ngram`, `icu`, `icu/split`, `jieba/*` for Chinese, `lindera/*` for Japanese) followed by
@@ -964,6 +994,15 @@ Per-backend highlights:
 for the primary store, `Some(base_id)` for an additional base. Caching/instrumentation
 wrappers are applied per `store_prefix` and propagate to all base stores.
 
+**Per-base `storage_options` (v9, PR #7608).** For multi-base datasets you can scope a storage
+option to one base with a `base_<id>.<key>` key (`docs/src/guide/object_store.md:44-70`): "A
+storage option key of the form `base_<id>.<key>` applies `<key>` only to the base path with
+that manifest id. Every base inherits the unscoped options; base-scoped entries add to or
+override them." Base ids are assigned when bases are registered (`initial_bases` ids "assigned
+sequentially starting at 1"); keys that don't match the pattern exactly (e.g. `base_url`) are
+treated as regular options. Precedence: an exact per-base parameter map (`base_store_params`,
+keyed by base-path URI) beats a `base_<id>.<key>` scoped key.
+
 `latest_version_hint.json` (`{"version": N}` under `_versions/`) gives fast latest-version
 lookup on stores where listing is not lexicographically ordered (S3 Express, local FS); it is
 purely an optimization, always safe to delete, and skipped where listing is already ordered.
@@ -976,13 +1015,13 @@ Disable globally with `LANCE_USE_VERSION_HINT=0`.
 The v7 tag line ran `v7.0.0-beta.1` through `v7.0.0-beta.17`, then `v7.0.0-rc.1` and
 `v7.0.0`. The v7.1 line opened at `v7.1.0-beta.1`, continued through `v7.1.0-beta.4` and
 `v7.1.0-rc.1`; the v7.2 line ran through `v7.2.0-beta.5`; the **v8 line** ran through
-`v8.0.0-beta.19` and is now stabilizing (`v8.0.0-rc.3`, 2026-06-30, no final tag yet); and the
-**v9 line opened** (auto-bumped from a `breaking-change`-labeled PR) with the crates now
-pinning `9.0.0-beta.10`. This section keeps the full v7 history below (still useful context),
-the **v7.2.0-beta.5 -> v8.0.0-beta.9 delta** (the v7->v8 major boundary), the
-**v8.0.0-beta.9 -> v8.0.0-beta.14 delta**, and finally the **v8.0.0-beta.14 -> v9.0.0-beta.10
-delta** (the v8->v9 major boundary, the current tag - most important for a v9 reader) at the
-very end.
+`v8.0.0-beta.19` to `v8.0.0` final (2026-07-01); and the **v9 line opened** (auto-bumped from
+a `breaking-change`-labeled PR) with the crates now pinning `9.0.0-beta.16`. This section keeps
+the full v7 history below (still useful context), the **v7.2.0-beta.5 -> v8.0.0-beta.9 delta**
+(the v7->v8 major boundary), the **v8.0.0-beta.9 -> v8.0.0-beta.14 delta**, the
+**v8.0.0-beta.14 -> v9.0.0-beta.10 delta** (the v8->v9 major boundary), and finally the
+**v9.0.0-beta.10 -> v9.0.0-beta.16 delta** (the current tag - most important for a v9 reader)
+at the very end.
 
 **The v6 -> v7 breaking change.** `feat!: make dataset object store access base-aware`
 (PR #6647, commit `456198cd`), immediately followed by the automated bump to `7.0.0-beta.1`.
@@ -1264,11 +1303,57 @@ Unchanged and reverified at `v9.0.0-beta.10`: **25 crates**; **15 transaction op
 arrow 58 / datafusion 53 / opendal 0.57 / jieba-rs 0.10; feature-flag bits;
 `ConditionalPutCommitHandler` routing; MemWAL still experimental.
 
+### The v9.0.0-beta.10 -> v9.0.0-beta.16 delta (current tag)
+
+58 commits. **One breaking change**; no new crate (still 25), no new transaction op (still 15),
+no file-format change, no dependency-pin change. **`v8.0.0` final also shipped** in this window
+(tag `v8.0.0`, commit `15f2ff594`, 2026-07-01) - use it as the stable pin (section intro).
+
+**Breaking change:**
+
+- **`feat(fts)!: make v2 the default index format`** (PR #7512) - newly created FTS / inverted
+  indexes default to on-disk **format v2**; `LANCE_FTS_FORMAT_VERSION` no longer controls new
+  indexes; pass `format_version=1` for older-reader compatibility. Existing v1 indexes stay
+  queryable and are maintained as v1. See section 11.3.
+
+**Net-new features:**
+
+- **Blob read-API rework** (PR #7530, #7558) - `read_blobs` is now the primary full-payload
+  API, `take_blobs` is for streaming/seeking, `scanner(blob_handling="all_binary")` reads blobs
+  as Arrow binary; documented auto-tiering defaults (16 KiB inline / 2 MiB dedicated) and a new
+  `lance-encoding:blob-pack-file-size-threshold` field key (PR #7322). `dataset.update()` now
+  works on blob-encoded columns (PR #7579). See section 3.5.
+- **Per-base `storage_options`** via `base_<id>.<key>` keys (PR #7608); **multi-base
+  merge-insert** with target-base routing (`MergeInsertBuilder::target_bases`, round-robin new
+  fragments, `DataFile.base_id` stamped; PR #7610). See sections 13 and 6.
+- **ZoneMap `value_range`** min/max without a scan (PR #7463); **BTREE + ZONEMAP accept
+  `LargeUtf8`** (PR #7525). See section 11.2.
+- **Prefiltered LSM vector + FTS search** across base/flushed/in-memory sources (PR #7138). See
+  section 10.
+- **Schema evolution allows all-null `Map` columns** (PR #7462). See section 6.
+- **DirectoryNamespace** now implements `update_table` / `delete_from_table` (PR #6923) and
+  `alter_transaction` (PR #6974) - previously `not_supported`.
+- Compaction `RowAddrRemap` structure to avoid remap HashMap OOM (PR #7237); single-flight
+  scalar-index opens (PR #7464); session-cached manifest reuse on open (PR #7576).
+
+**Notable fixes:** `DataReplacement` commits preserve `DataFile.base_id` on multi-base datasets
+(#7609); blob descriptor views kept opaque - the reader no longer recurses into `position`/
+`size` child fields (#7618); stable row-id index tolerates sparse/overlapping chunks (#7480);
+ngram posting-list writes chunked by byte size to avoid i32 offset overflow (#7607); scheduler
+deadlock on same-priority chunks fixed (#7588).
+
+Unchanged and reverified at `v9.0.0-beta.16`: **25 crates**; **15 transaction ops**
+(`protos/transaction.proto` unchanged); file-format `version.rs` (`Next => 2.3`,
+`#[default] V2_1`, no 2.4); `CommitConfig num_retries = 20`; `rust-version 1.91.0`,
+`resolver 3`, edition 2024; arrow 58 / datafusion 53 / opendal 0.57 / jieba-rs 0.10 /
+itertools 0.14 / lance-namespace-reqwest-client 0.8.6; pylance `lance-namespace>=0.8.5,<0.9`;
+feature-flag bits; `ConditionalPutCommitHandler` routing; MemWAL still experimental.
+
 ---
 
 ## 15. Capability matrix
 
-What Lance can and cannot do at `v9.0.0-beta.10`.
+What Lance can and cannot do at `v9.0.0-beta.16`.
 
 **Storage and format**
 
@@ -1332,7 +1417,7 @@ dashboard.
 
 ## 16. Source map
 
-Where to look in `lance-format/lance` at `v9.0.0-beta.10`.
+Where to look in `lance-format/lance` at `v9.0.0-beta.16`.
 
 | Topic | Path |
 |-------|------|

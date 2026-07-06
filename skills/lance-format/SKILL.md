@@ -2,8 +2,8 @@
 name: lance-format
 description: Reference for Lance v9 - the open columnar lakehouse format for multimodal AI - and its Rust crate workspace (`lance`, `lance-table`, `lance-file`, `lance-encoding`, `lance-index`, `lance-io`, `lance-namespace`, and more). Use when building directly on the Lance crates - creating or reading `.lance` datasets, manifests, fragments, deletion files, the 2.x file format and structural encodings, vector / scalar / full-text / FM-Index / geo indexes, MemWAL streaming writes, optimistic-concurrency commits and commit handlers, schema evolution, versioning, time-travel, tags, branches, stable row IDs, namespaces, or object-store config. Triggers on lance crate, .lance file, lance dataset, lance file format, structural encoding, IVF_PQ, IVF_HNSW, IVF_RQ, RaBitQ, FM-Index, lance FTS, zonemap, MemWAL, OCC retry, lance schema evolution, lance namespace, pylance. This is the Lance format and engine (the `lance-format/lance` repo), not LanceDB the database product - but also the right reference for what LanceDB builds on.
 metadata:
-  version: "0.8.0"
-  upstream: "lance-format/lance@v9.0.0-beta.10"
+  version: "0.9.0"
+  upstream: "lance-format/lance@v9.0.0-beta.16"
   openclaw:
     homepage: https://github.com/tenequm/skills/tree/main/skills/lance-format
     emoji: "🗄️"
@@ -17,11 +17,10 @@ specs: a **file format**, a **table format**, **index formats**, **catalog specs
 **namespace client spec**. The Rust workspace at `lance-format/lance` implements all of them
 plus Python (`pylance`) and Java bindings.
 
-This skill tracks **`v9.0.0-beta.10`** (the `lance-format/lance` git tag), the current
+This skill tracks **`v9.0.0-beta.16`** (the `lance-format/lance` git tag), the current
 development frontier. Pin against tags, not `main` - Lance ships beta
-tags every few days and `next`-format encodings can change. **v8.0.0 is the concurrent
-stabilizing release** (`v8.0.0-rc.3`, 2026-06-30; no final tag yet at time of writing) - if
-you need a stable pin rather than the v9 dev betas, track the v8.0.0 rc/final line, whose
+tags every few days and `next`-format encodings can change. **`v8.0.0` final shipped
+2026-07-01** - if you need a stable pin rather than the v9 dev betas, track `v8.0.0`, whose
 format and API are the frozen predecessor of what this reference describes.
 
 The deep reference is `references/lance-reference.md`. Load it for any concrete schema, parameter,
@@ -67,7 +66,7 @@ beneath it. Full table with descriptions and citations in `references/lance-refe
 | `lance-namespace` / `-impls` / `-datafusion` | Namespace trait, Directory/REST impls, DataFusion catalog bridge |
 | `lance-arrow`, `lance-tools`, `fsst`, `lance-bitpacking`, ... | Arrow extensions, CLI, compression sub-crates |
 
-All share `version = "9.0.0-beta.10"` except `lance-arrow-scalar`, which is pinned at
+All share `version = "9.0.0-beta.16"` except `lance-arrow-scalar`, which is pinned at
 `58.0.0` to track Arrow. Workspace: edition 2024, `rust-version = 1.91.0`,
 `resolver = "3"`; notable deps arrow 58, datafusion 53, opendal 0.57, jieba-rs 0.10,
 `lance-namespace-reqwest-client` 0.8.6, itertools 0.14. Python bindings now require
@@ -107,7 +106,10 @@ has an index attached - you must `drop_index()` first instead of relying on the 
 drop/invalidate (#7158). A third breaking change rode the already-bumped series: the FM-Index
 proto message was **renamed `FMIndexIndexDetails` -> `FMIndexDetails`** (#7397), which makes
 existing FM indexes unreadable. One public Rust-API removal: **`as_vector_index` is gone from
-the `Index` trait** (#7392) - downcast via `as_any()`.
+the `Index` trait** (#7392) - downcast via `as_any()`. A fourth breaking change landed later
+in the v9 beta line: **FTS / inverted indexes now default to on-disk format v2** (#7512) -
+`LANCE_FTS_FORMAT_VERSION` no longer controls new indexes, pass `format_version=1` if older
+Lance readers must read them (existing v1 indexes stay queryable, section 11.3).
 
 Net-new in v9: a **hamming clustering** utility for near-duplicate detection (SIMD union-find
 over 64-bit binary hashes, #7379); **COUNT(*) pushdown** now works on stable-row-id datasets
@@ -132,7 +134,7 @@ carries forward.
 
 ## Navigating the reference
 
-`references/lance-reference.md` is the full v9 reference, regrounded against the `v9.0.0-beta.10`
+`references/lance-reference.md` is the full v9 reference, regrounded against the `v9.0.0-beta.16`
 source. Load the section for your task:
 
 1. **What Lance is** - the lakehouse spec stack
@@ -160,10 +162,10 @@ source. Load the section for your task:
 ## Maintenance
 
 Citations in `references/lance-reference.md` are `path:line` relative to the `lance-format/lance` repo;
-build a permalink as `https://github.com/lance-format/lance/blob/v9.0.0-beta.10/<path>`.
+build a permalink as `https://github.com/lance-format/lance/blob/v9.0.0-beta.16/<path>`.
 
 To refresh: `git -C ~/pjv/lance-format/lance fetch --tags`, check out the newest `v9*` tag
 (or the v8.0.0 rc/final line for a stable pin), re-read the format spec under
 `docs/src/format/` and the user guide under `docs/src/guide/`, re-verify the crate workspace,
-and bump `metadata.upstream` plus every `v9.0.0-beta.10` reference. Line numbers in citations
+and bump `metadata.upstream` plus every `v9.0.0-beta.16` reference. Line numbers in citations
 drift between tags - treat them as approximate.
