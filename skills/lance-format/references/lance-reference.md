@@ -2,11 +2,12 @@
 
 Capability reference for **Lance** - the open columnar lakehouse format for multimodal AI -
 regrounded against the `lance-format/lance` repository at git tag **`v9.0.0-beta.16`**
-(commit `78a814b6b`). v9 is the current development frontier; **`v8.0.0` final shipped
+and bumped to **`v9.0.0-beta.18`** (36 additive commits, no breaking changes - delta in
+section 14). v9 is the current development frontier; **`v8.0.0` final shipped
 2026-07-01** - track `v8.0.0` if you need a stable pin instead of the v9 dev betas.
 
 Citations are `path:line` relative to the repo root. Build a permalink as
-`https://github.com/lance-format/lance/blob/v9.0.0-beta.16/<path>`. Line numbers drift
+`https://github.com/lance-format/lance/blob/v9.0.0-beta.18/<path>`. Line numbers drift
 between tags; treat them as approximate. The authoritative in-repo sources are the format
 spec under `docs/src/format/`, the user guide under `docs/src/guide/`, the protobuf schemas
 under `protos/`, and the Rust workspace under `rust/`.
@@ -61,7 +62,7 @@ code. The format itself is the product - there is no server.
 
 ## 2. The crate workspace
 
-25 crate directories under `rust/`. `[workspace.package]`: `version = "9.0.0-beta.16"`,
+25 crate directories under `rust/`. `[workspace.package]`: `version = "9.0.0-beta.18"`,
 `edition = "2024"`, `rust-version = "1.91.0"`, `license = "Apache-2.0"`, `resolver = "3"`
 (`Cargo.toml:31-55`). `exclude = ["python", "java/lance-jni"]`.
 
@@ -106,7 +107,7 @@ SDK under `java/` (Maven `org.lance`), bridged to Rust by the `lance-jni` crate
 (`Cargo.toml`): `arrow 58.0.0`, `datafusion 53.0.0`, `opendal 0.57`, `jieba-rs 0.10`,
 `itertools 0.14` (0.13 -> 0.14 in v9), `lance-namespace-reqwest-client 0.8.6` (0.8.4 -> 0.8.6
 in v9). The `lance-namespace`/`-impls` crates publish at
-the workspace version (`9.0.0-beta.16`); note the `[workspace.dependencies]` declaration
+the workspace version (`9.0.0-beta.18`); note the `[workspace.dependencies]` declaration
 still pins `lance-namespace-datafusion` consumers to `=7.0.0-beta.9` even though that crate
 itself publishes at the workspace version.
 
@@ -1016,12 +1017,12 @@ The v7 tag line ran `v7.0.0-beta.1` through `v7.0.0-beta.17`, then `v7.0.0-rc.1`
 `v7.0.0`. The v7.1 line opened at `v7.1.0-beta.1`, continued through `v7.1.0-beta.4` and
 `v7.1.0-rc.1`; the v7.2 line ran through `v7.2.0-beta.5`; the **v8 line** ran through
 `v8.0.0-beta.19` to `v8.0.0` final (2026-07-01); and the **v9 line opened** (auto-bumped from
-a `breaking-change`-labeled PR) with the crates now pinning `9.0.0-beta.16`. This section keeps
+a `breaking-change`-labeled PR) with the crates now pinning `9.0.0-beta.18`. This section keeps
 the full v7 history below (still useful context), the **v7.2.0-beta.5 -> v8.0.0-beta.9 delta**
 (the v7->v8 major boundary), the **v8.0.0-beta.9 -> v8.0.0-beta.14 delta**, the
 **v8.0.0-beta.14 -> v9.0.0-beta.10 delta** (the v8->v9 major boundary), and finally the
-**v9.0.0-beta.10 -> v9.0.0-beta.16 delta** (the current tag - most important for a v9 reader)
-at the very end.
+**v9.0.0-beta.10 -> v9.0.0-beta.16 delta**, and the **v9.0.0-beta.16 -> v9.0.0-beta.18
+delta** (the current tag - most important for a v9 reader) at the very end.
 
 **The v6 -> v7 breaking change.** `feat!: make dataset object store access base-aware`
 (PR #6647, commit `456198cd`), immediately followed by the automated bump to `7.0.0-beta.1`.
@@ -1303,7 +1304,7 @@ Unchanged and reverified at `v9.0.0-beta.10`: **25 crates**; **15 transaction op
 arrow 58 / datafusion 53 / opendal 0.57 / jieba-rs 0.10; feature-flag bits;
 `ConditionalPutCommitHandler` routing; MemWAL still experimental.
 
-### The v9.0.0-beta.10 -> v9.0.0-beta.16 delta (current tag)
+### The v9.0.0-beta.10 -> v9.0.0-beta.16 delta
 
 58 commits. **One breaking change**; no new crate (still 25), no new transaction op (still 15),
 no file-format change, no dependency-pin change. **`v8.0.0` final also shipped** in this window
@@ -1342,18 +1343,44 @@ no file-format change, no dependency-pin change. **`v8.0.0` final also shipped**
 ngram posting-list writes chunked by byte size to avoid i32 offset overflow (#7607); scheduler
 deadlock on same-priority chunks fixed (#7588).
 
-Unchanged and reverified at `v9.0.0-beta.16`: **25 crates**; **15 transaction ops**
+Unchanged and reverified at `v9.0.0-beta.18`: **25 crates**; **15 transaction ops**
 (`protos/transaction.proto` unchanged); file-format `version.rs` (`Next => 2.3`,
 `#[default] V2_1`, no 2.4); `CommitConfig num_retries = 20`; `rust-version 1.91.0`,
 `resolver 3`, edition 2024; arrow 58 / datafusion 53 / opendal 0.57 / jieba-rs 0.10 /
 itertools 0.14 / lance-namespace-reqwest-client 0.8.6; pylance `lance-namespace>=0.8.5,<0.9`;
 feature-flag bits; `ConditionalPutCommitHandler` routing; MemWAL still experimental.
 
+### The v9.0.0-beta.16 -> v9.0.0-beta.18 delta (current tag)
+
+36 commits. **No breaking changes**; no new crate (still 25), no new transaction op
+(`rust/lance/src/dataset/transaction.rs` untouched), no file-format change. Mostly fixes
+plus three additive features:
+
+- **pylance prewarm gains segment selection** (#7677) - warm only chosen index segments.
+- **Object-store metrics published via the `metrics` crate** (#7533).
+- **RLE v2 run-length widths** (#7376), with width selection by encoded size (#7636).
+
+**Docs:** the performance guide gained a **Fragment Sizing** section (#6606); cleanup and
+automatic-cleanup documentation added to the read-and-write guide (#6546); a new
+`guide/observability.md` page; MemWAL format spec updated (#7655). All reproduced in this
+skill's `references/docs/` mirror.
+
+**Notable fixes:** FTS list columns indexed as row documents (#7656); fuzzy
+`max_expansions` enforced globally across index partitions instead of per-partition; FTS
+tail-partition merge split by the worker memory budget and a `num_tokens`-only DocSet
+cached on `LazyDocSet` (#7600); MemWAL writer fenced on WAL persistence failure (#7547)
+and slice-aware memtable flush-threshold size estimate; Arrow-JSON -> Lance-JSON
+conversion fixed across the merge/update, single-fragment-create, and merge-insert
+full-fragment-rewrite paths (`take` now returns Arrow JSON, #7470/#7471);
+`object_store::Error::NotFound` mapped to `Error::NotFound` instead of a generic IO
+error; PQ `num_bits` respected for numpy codebooks (#7586); hang fixed in
+`train_streaming_coreset_ivf_model` (#7676).
+
 ---
 
 ## 15. Capability matrix
 
-What Lance can and cannot do at `v9.0.0-beta.16`.
+What Lance can and cannot do at `v9.0.0-beta.18`.
 
 **Storage and format**
 
@@ -1417,7 +1444,7 @@ dashboard.
 
 ## 16. Source map
 
-Where to look in `lance-format/lance` at `v9.0.0-beta.16`.
+Where to look in `lance-format/lance` at `v9.0.0-beta.18`.
 
 | Topic | Path |
 |-------|------|

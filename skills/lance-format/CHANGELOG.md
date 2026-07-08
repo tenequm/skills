@@ -7,6 +7,40 @@ and this skill adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.h
 
 ## [Unreleased]
 
+## [0.10.0] - 2026-07-08
+
+### Added
+- `references/docs/` - a verbatim mirror of the official docs (`docs/src` at the tracked
+  tag): all 14 guides, 4 quickstarts, the complete format spec tree (file / table / index,
+  including the 4 index-lifecycle SVG diagrams), and `integrations/datafusion.md` -
+  48 files, unedited. Ends doc cherry-picking: every official page is now directly
+  loadable from the skill.
+- `references/performance.md` - all official performance guidance combined in one
+  document (the full performance guide incl. the new Fragment Sizing section, the FTS
+  quickstart performance tips, JSON performance considerations, and the
+  CreateIndex-compatibility passage from the transaction spec), followed by a
+  field-verified Part B: benchmark-backed remote-storage practices (commit count as the
+  cost unit, append vs merge_insert, index-fold batching, `fast_search` recall rule,
+  cleanup gating, manifest-not-scan metadata questions, narrow-column materialization,
+  version-gated v7/v8/v9 behavior, benchmarking traps). Part B's governing rule: leave
+  store knobs at defaults and optimize by minimizing remote calls.
+- SKILL.md: full routing file map for the docs mirror, a "Performance questions" section,
+  and a three-layer reference navigation intro.
+- Section 14: new `v9.0.0-beta.16 -> v9.0.0-beta.18 delta` subsection (36 commits, no
+  breaking changes; pylance prewarm segment selection #7677, object-store metrics #7533,
+  RLE v2 widths #7376, FTS/MemWAL/JSON fixes).
+
+### Changed
+- Re-grounded against upstream tag `v9.0.0-beta.16` -> `v9.0.0-beta.18`; bumped workspace
+  version pin, permalink base, and citation tag. Copied doc files verified identical
+  between the tags except `guide/performance.md` (+31 lines, Fragment Sizing),
+  `guide/read_and_write.md` (cleanup + auto-cleanup docs), and the new
+  `guide/observability.md`.
+- Maintenance instructions now cover refreshing the docs mirror and performance.md at
+  each version bump.
+
+Verified against: lance-format/lance@v9.0.0-beta.18
+
 ## [0.9.0] - 2026-07-06
 
 ### Changed

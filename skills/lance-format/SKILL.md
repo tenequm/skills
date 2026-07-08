@@ -2,8 +2,8 @@
 name: lance-format
 description: Reference for Lance v9 - the open columnar lakehouse format for multimodal AI - and its Rust crate workspace (`lance`, `lance-table`, `lance-file`, `lance-encoding`, `lance-index`, `lance-io`, `lance-namespace`, and more). Use when building directly on the Lance crates - creating or reading `.lance` datasets, manifests, fragments, deletion files, the 2.x file format and structural encodings, vector / scalar / full-text / FM-Index / geo indexes, MemWAL streaming writes, optimistic-concurrency commits and commit handlers, schema evolution, versioning, time-travel, tags, branches, stable row IDs, namespaces, or object-store config. Triggers on lance crate, .lance file, lance dataset, lance file format, structural encoding, IVF_PQ, IVF_HNSW, IVF_RQ, RaBitQ, FM-Index, lance FTS, zonemap, MemWAL, OCC retry, lance schema evolution, lance namespace, pylance. This is the Lance format and engine (the `lance-format/lance` repo), not LanceDB the database product - but also the right reference for what LanceDB builds on.
 metadata:
-  version: "0.9.0"
-  upstream: "lance-format/lance@v9.0.0-beta.16"
+  version: "0.10.0"
+  upstream: "lance-format/lance@v9.0.0-beta.18"
   openclaw:
     homepage: https://github.com/tenequm/skills/tree/main/skills/lance-format
     emoji: "🗄️"
@@ -17,15 +17,24 @@ specs: a **file format**, a **table format**, **index formats**, **catalog specs
 **namespace client spec**. The Rust workspace at `lance-format/lance` implements all of them
 plus Python (`pylance`) and Java bindings.
 
-This skill tracks **`v9.0.0-beta.16`** (the `lance-format/lance` git tag), the current
+This skill tracks **`v9.0.0-beta.18`** (the `lance-format/lance` git tag), the current
 development frontier. Pin against tags, not `main` - Lance ships beta
 tags every few days and `next`-format encodings can change. **`v8.0.0` final shipped
 2026-07-01** - if you need a stable pin rather than the v9 dev betas, track `v8.0.0`, whose
 format and API are the frozen predecessor of what this reference describes.
 
-The deep reference is `references/lance-reference.md`. Load it for any concrete schema, parameter,
-proto, or constraint. This file is the orientation: read it first, then jump into the
-reference section you need.
+Three layers of reference, load what the task needs:
+
+- `references/lance-reference.md` - the distilled deep reference. Any concrete schema,
+  parameter, proto, or constraint.
+- `references/performance.md` - ALL official performance guidance combined, plus
+  field-verified remote-storage practices. Load for any performance, tuning, maintenance-cost,
+  or "why is this slow" question.
+- `references/docs/` - a **verbatim mirror of the official docs** (`docs/src` at the tracked
+  tag): every guide, quickstart, and format spec, unedited. Load when you need the full
+  official text. Complete file map below.
+
+This file is the orientation: read it first, then jump into what you need.
 
 ## Lance vs LanceDB
 
@@ -66,7 +75,7 @@ beneath it. Full table with descriptions and citations in `references/lance-refe
 | `lance-namespace` / `-impls` / `-datafusion` | Namespace trait, Directory/REST impls, DataFusion catalog bridge |
 | `lance-arrow`, `lance-tools`, `fsst`, `lance-bitpacking`, ... | Arrow extensions, CLI, compression sub-crates |
 
-All share `version = "9.0.0-beta.16"` except `lance-arrow-scalar`, which is pinned at
+All share `version = "9.0.0-beta.18"` except `lance-arrow-scalar`, which is pinned at
 `58.0.0` to track Arrow. Workspace: edition 2024, `rust-version = 1.91.0`,
 `resolver = "3"`; notable deps arrow 58, datafusion 53, opendal 0.57, jieba-rs 0.10,
 `lance-namespace-reqwest-client` 0.8.6, itertools 0.14. Python bindings now require
@@ -134,8 +143,9 @@ carries forward.
 
 ## Navigating the reference
 
-`references/lance-reference.md` is the full v9 reference, regrounded against the `v9.0.0-beta.16`
-source. Load the section for your task:
+`references/lance-reference.md` is the full v9 reference, regrounded against the
+`v9.0.0-beta.16` source and bumped to `v9.0.0-beta.18` (36 additive commits, no breaking
+changes - delta in its section 14). Load the section for your task:
 
 1. **What Lance is** - the lakehouse spec stack
 2. **Crate workspace** - all 25 crates, what each does, the public entry point
@@ -159,13 +169,105 @@ source. Load the section for your task:
 15. **Capability matrix** - what Lance can and cannot do
 16. **Source map** - where each spec and proto lives in the repo
 
+## Performance questions
+
+For anything performance-shaped - slow scans or searches, remote/object-storage cost,
+index maintenance cost, memory sizing, version bloat, benchmarking - load
+`references/performance.md` first. Part A collects every official performance
+recommendation in one place; Part B is field-verified practice from running Lance against
+S3-compatible storage, whose governing rule is: **leave the store knobs
+(`LANCE_IO_THREADS`, `LANCE_AIMD_*`, timeouts, compression metadata) at their defaults and
+optimize by minimizing remote calls** - fewer commits, fewer scans, fewer round trips.
+
+## Official docs mirror - file map
+
+`references/docs/` mirrors `docs/src` of `lance-format/lance` at the tracked tag, verbatim.
+Every file below is directly readable; pick by topic.
+
+### Guides (`references/docs/guide/`)
+
+| File | Covers |
+|------|--------|
+| `read_and_write.md` | CRUD, `merge_insert` semantics, `cleanup_old_versions` + automatic cleanup |
+| `performance.md` | The official performance guide (also embedded in `references/performance.md`) |
+| `object_store.md` | URI schemes, credentials, `storage_options` per backend (S3/GCS/Azure/...) |
+| `distributed_write.md` | Two-phase distributed writes - fragments on workers, single commit |
+| `distributed_indexing.md` | Segment-based distributed index builds, merge, finalize |
+| `json.md` | JSON columns, `json_get_*` / `json_extract`, JSON scalar index |
+| `tokenizer.md` | FTS tokenizer configuration - language, stemming, jieba/lindera/icu |
+| `data_types.md` | Arrow type coverage, FixedSizeList vectors, JSON, blob |
+| `data_evolution.md` | Zero-copy add/drop/alter columns, backfills |
+| `blob.md` | Blob columns - storing and reading large binary |
+| `arrays.md` | ML extension arrays (bfloat16, image types) |
+| `tags_and_branches.md` | Managing tags and branches |
+| `migration.md` | Migration guides across Lance versions |
+| `observability.md` | Logging, trace events, object-store metrics |
+
+### Quickstarts (`references/docs/quickstart/`)
+
+| File | Covers |
+|------|--------|
+| `index.md` | First dataset - core table operations end to end |
+| `vector-search.md` | ANN index tutorial - build, tune, filtered search |
+| `full-text-search.md` | FTS tutorial incl. index maintenance + performance tips |
+| `versioning.md` | Time travel, restore, cleanup basics |
+
+### Format specs (`references/docs/format/`)
+
+| File | Covers |
+|------|--------|
+| `index.md` | The spec-stack overview |
+| `file/index.md` | File-format container spec |
+| `file/encoding.md` | Structural encodings and compression strategy |
+| `file/versioning.md` | File-format versions (2.0 / 2.1 / 2.2 / 2.3) |
+| `table/index.md` | Table-format overview |
+| `table/layout.md` | Dataset directory layout |
+| `table/schema.md` | Schema and field-metadata spec |
+| `table/transaction.md` | Commit protocol, transaction ops, **conflict-resolution matrix** |
+| `table/versioning.md` | Manifest versioning and feature flags |
+| `table/row_id_lineage.md` | Stable row IDs, lineage, change-data-feed columns |
+| `table/branch_tag.md` | Branch and tag spec |
+| `table/mem_wal.md` | MemWAL / streaming-write spec (experimental) |
+
+### Index specs (`references/docs/format/index/`)
+
+| File | Covers |
+|------|--------|
+| `index.md` | Index lifecycle - creation, fragment coverage, compaction interplay (with diagrams) |
+| `vector/index.md` | Vector indices - IVF / PQ / SQ / RQ / HNSW concepts and storage layout |
+| `scalar/fts.md` | Inverted (FTS) index - tokenizers, posting lists, memory/disk costs |
+| `scalar/fmindex.md` | FM-Index - substring / regex search over raw bytes |
+| `scalar/ngram.md` | N-gram index - `contains()` and LIKE acceleration |
+| `scalar/btree.md` | BTree - range queries, sorted access |
+| `scalar/bitmap.md` | Bitmap - low-cardinality equality |
+| `scalar/bloom_filter.md` | Bloom filter index |
+| `scalar/label_list.md` | Label-list index for `array_has_any/all` |
+| `scalar/zonemap.md` | Zone maps - per-zone min/max/null-count stats |
+| `scalar/rtree.md` | R-Tree geospatial index |
+| `system/frag_reuse.md` | Fragment Reuse Index - compaction without index remap |
+| `system/mem_wal.md` | MemWAL system index entry |
+
+### Integrations (`references/docs/integrations/`)
+
+| File | Covers |
+|------|--------|
+| `datafusion.md` | SQL over Lance via DataFusion, incl. JSON functions |
+
 ## Maintenance
 
 Citations in `references/lance-reference.md` are `path:line` relative to the `lance-format/lance` repo;
-build a permalink as `https://github.com/lance-format/lance/blob/v9.0.0-beta.16/<path>`.
+build a permalink as `https://github.com/lance-format/lance/blob/v9.0.0-beta.18/<path>`.
 
 To refresh: `git -C ~/pjv/lance-format/lance fetch --tags`, check out the newest `v9*` tag
-(or the v8.0.0 rc/final line for a stable pin), re-read the format spec under
-`docs/src/format/` and the user guide under `docs/src/guide/`, re-verify the crate workspace,
-and bump `metadata.upstream` plus every `v9.0.0-beta.16` reference. Line numbers in citations
-drift between tags - treat them as approximate.
+(or the v8.0.0 rc/final line for a stable pin), then:
+
+1. Re-copy the docs mirror: the `.md` files of `docs/src/{guide,quickstart}`,
+   `docs/src/format` (plus the `format/index/*.svg` diagrams), and
+   `docs/src/integrations/datafusion.md` into `references/docs/`, preserving the tree.
+   Update this file's file map if docs were added or removed.
+2. Rebuild Part A of `references/performance.md` from the new `guide/performance.md` and
+   the other perf sections it cites. Part B (field-verified practices) is
+   experience-derived - only edit it with new *measured* results, never speculation.
+3. Re-verify the crate workspace and re-read the format spec for `references/lance-reference.md`,
+   then bump `metadata.upstream` plus every current-tag version reference. Line numbers in
+   citations drift between tags - treat them as approximate.
