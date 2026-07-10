@@ -255,6 +255,14 @@ Two failure modes seen in the wild when wiring up OAuth providers (Better-Auth, 
 1. **Collapsed audience**: serving REST + MCP from the same audience defeats RFC 8707's resource-bound model. Use distinct `resource` URIs per protected surface.
 2. **Opaque vs JWT compatibility**: some providers (Better-Auth, in particular) issue **opaque** access tokens when the `resource` parameter is absent from the token request. Many MCP middlewares assume JWTs and fail validation (e.g. `verifyAccessToken(jwksUrl)` throws → 401). Either require the `resource` parameter at the AS, or accept the introspection path.
 
+### Token Endpoint Failures Masquerade as "Re-authorize" (ops gotcha)
+
+A server-side 500 on the OAuth token endpoint surfaces in MCP clients as a misleading "requires re-authorization" / "token expired" - and stays latent until tokens happen to need refresh. A classic cause is a schema-ahead deploy: code queries a column whose migration never ran, so every token-endpoint request 500s. Monitor the token endpoint distinctly from the MCP endpoint, and gate deploys on pending migrations.
+
+### v2 SDK Auth Helpers (2.0.0-beta.3)
+
+`@modelcontextprotocol/server` ships runtime-neutral helpers for web-standard `fetch(request)` hosts (Cloudflare Workers, Deno, Bun, Hono): `requireBearerAuth` gates requests via an `OAuthTokenVerifier`, and `oauthMetadataResponse` serves the RFC 9728 Protected Resource Metadata and RFC 8414 Authorization Server metadata documents ([PR #2420](https://github.com/modelcontextprotocol/typescript-sdk/pull/2420), [PR #2422](https://github.com/modelcontextprotocol/typescript-sdk/pull/2422)). The insecure-issuer escape hatch is an explicit `dangerouslyAllowInsecureIssuerUrl` option, no longer an env read.
+
 ## Scope Management
 
 ### Progressive Scope Model
@@ -289,3 +297,7 @@ Servers decide what scopes to include:
 - Bundling unrelated privileges to preempt future prompts
 - Silent scope semantic changes without versioning
 - Treating claimed scopes as sufficient without server-side authorization logic
+
+### 2026-07-28 RC Auth Hardening
+
+The upcoming revision adds four auth SEPs: clients declare their OIDC `application_type` during Dynamic Client Registration (SEP-837); OIDC-flavored refresh-token guidance (SEP-2207); **scope accumulation during step-up** is specified (SEP-2350 - directly affects the progressive scope model above); and the `.well-known` discovery-suffix behavior is clarified (SEP-2351). See the [RC announcement](https://blog.modelcontextprotocol.io/posts/2026-07-28-release-candidate/).

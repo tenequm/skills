@@ -105,8 +105,12 @@ Breaking changes: removing/renaming fields, changing types, altering semantics, 
 | Goose | Yes | - | - |
 | Postman | Yes | - | - |
 | MCPJam | Yes | - | - |
+| Microsoft 365 Copilot | Yes | - | - |
+| Cursor | Yes | - | - |
+| Archestra.AI | Yes | - | Yes |
+| PostHog Code | Yes | - | - |
 
-Enterprise-Managed Authorization reached **Stable** (2026-06-18); OAuth Client Credentials remains Draft. Client adoption of auth extensions is still limited - check [ext-auth](https://github.com/modelcontextprotocol/ext-auth) for latest status.
+Enterprise-Managed Authorization reached **Stable** (2026-06-18); Archestra.AI is the first client shipping it. OAuth Client Credentials remains Draft with no client adoption yet - check the official [client matrix](https://modelcontextprotocol.io/extensions/client-matrix) and [ext-auth](https://github.com/modelcontextprotocol/ext-auth) for latest status.
 
 ## Authorization Extensions
 

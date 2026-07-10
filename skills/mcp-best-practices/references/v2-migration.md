@@ -1,6 +1,6 @@
 # V2 Migration Guide
 
-Comprehensive guide for migrating from `@modelcontextprotocol/sdk` v1 to v2. v2 is **beta-published on npm** (`2.0.0-beta.1`, npm `latest`, published 2026-06-30); v1.x remains recommended for production until v2 stable. Stable v2 is targeted to ship alongside the finalized spec revision on **2026-07-28**; the API is settling but can still change before then.
+Comprehensive guide for migrating from `@modelcontextprotocol/sdk` v1 to v2. v2 is **beta-published on npm** (`2.0.0-beta.3`, published 2026-07-09; the `latest` dist-tag points at the beta, so a plain `npm install` resolves to the prerelease); v1.x remains recommended for production until v2 stable. Stable v2 ships alongside the final spec revision on **2026-07-28**; the API is settling but can still change before then. Canonical v2 docs (tutorial, troubleshooting, generated API reference): [ts.sdk.modelcontextprotocol.io/v2](https://ts.sdk.modelcontextprotocol.io/v2/).
 
 ## Table of Contents
 - [Package Split](#package-split)
@@ -26,7 +26,7 @@ v1 ships as a single package. v2 splits into focused packages:
 | - | `@modelcontextprotocol/express` | Express middleware + DNS rebinding protection |
 | - | `@modelcontextprotocol/hono` | Hono middleware |
 | - | `@modelcontextprotocol/fastify` | Fastify middleware (added 2.0.0-alpha.1, [PR #1536](https://github.com/modelcontextprotocol/typescript-sdk/pull/1536)) |
-| - | `@modelcontextprotocol/server-legacy` | Frozen v1 SSE transport + OAuth Authorization Server helpers, for v1->v2 migration (added 2.0.0-alpha.3, [PR #2206](https://github.com/modelcontextprotocol/typescript-sdk/pull/2206)) |
+| - | `@modelcontextprotocol/server-legacy` | Frozen v1 SSE transport + OAuth Authorization Server helpers, for v1->v2 migration (added 2.0.0-alpha.3, [PR #2206](https://github.com/modelcontextprotocol/typescript-sdk/pull/2206)). Deprecated upstream ("use StreamableHTTP and a dedicated OAuth server in production"); frozen at `2.0.0-beta.2` |
 | - | `@modelcontextprotocol/codemod` | CLI codemod for the mechanical migration: `npx @modelcontextprotocol/codemod@beta v1-to-v2 .` |
 
 ## Import Changes
@@ -61,13 +61,13 @@ import { Client } from "@modelcontextprotocol/client";
 
 | Requirement | v1 | v2 |
 |-------------|----|----|
-| Module system | CJS + ESM | **ESM only** |
-| Node.js | 16+ | **20+** |
+| Module system | CJS + ESM | **ESM-first; CJS builds restored in 2.0.0-beta.2** ([PR #2405](https://github.com/modelcontextprotocol/typescript-sdk/pull/2405): every package emits `.mjs`/`.d.mts` and `.cjs`/`.d.cts` with a `require` exports condition) |
+| Node.js | 16+ | **20+** (Bun and Deno also supported) |
 | Schema library | Zod v3 or v4 (since v1.23) | Any [Standard Schema](https://standardschema.dev) library (Zod v4, Valibot, ArkType) - `zod` is no longer a peer dependency ([PR #1824](https://github.com/modelcontextprotocol/typescript-sdk/pull/1824)). For raw JSON Schema, use the `fromJsonSchema` adapter. |
 
 ### ESM Migration
 
-If your project uses CommonJS, you need to switch to ESM:
+ESM remains the primary target; since beta.2, CommonJS consumers can `require()` the packages directly. To switch a project to ESM:
 
 ```json
 // package.json
@@ -319,9 +319,22 @@ v2 entered beta on 2026-06-30. Beta signals a settling (not frozen) API with sup
 - **`createMcpHandler` is now web-standards-only**, returning `{ fetch, close, notify, bus }`. The duck-typed `.node(req, res)` face is gone - wrap once with `toNodeHandler(handler)` from `@modelcontextprotocol/node` for Express/Node.
 - **`serveStdio(factory, options?)`** (`@modelcontextprotocol/server/stdio`) is the new stdio entry point; `ServerOptions.eraSupport` was removed (migrate `new McpServer(info, { eraSupport })` + `connect()` to `serveStdio(() => new McpServer(info))`).
 - **Default JSON Schema validator is now `Ajv2020`** (true 2020-12) instead of draft-07 - `$defs`, `prefixItems`, `unevaluatedProperties`, `dependentRequired` are now enforced.
-- **`CallToolResult.content` is required at the wire boundary** - a handler result without `content` is rejected with `-32602`. `CallToolResult.structuredContent` is widened to `unknown` (a deliberate source-level break for typed consumers).
+- **`CallToolResult.content` is required at the wire boundary** - a handler result without `content` is rejected with `-32602`. Softened in beta.3 ([PR #2456](https://github.com/modelcontextprotocol/typescript-sdk/pull/2456)): a legacy-era result without `content` is normalized to `content: []` instead of failing validation; 2026-era wire schemas stay strict. `CallToolResult.structuredContent` is widened to `unknown` (a deliberate source-level break for typed consumers).
 - **Protocol error codes renumbered**: `HeaderMismatch -32020`, `MissingRequiredClientCapability -32021`, `UnsupportedProtocolVersion -32022`; unknown-URI `resources/read` answers `-32602` with a typed `ResourceNotFoundError` (`data.uri`).
 - **TypeScript >= 6.0 consumers must set `"types": ["node"]`** in tsconfig or the `.d.mts` declarations fail under `skipLibCheck: false` ([PR #2394](https://github.com/modelcontextprotocol/typescript-sdk/pull/2394)).
+
+## Beta.1 -> Beta.3 Changes (2026-07-02 / 2026-07-09)
+
+beta.2 and beta.3 shipped for all v2 packages except `server-legacy` (frozen at beta.2, deprecated):
+
+- **CommonJS builds** ([PR #2405](https://github.com/modelcontextprotocol/typescript-sdk/pull/2405), beta.2) - see Runtime Requirements above.
+- **Post-dispatch `-32021` (`MissingRequiredClientCapability`) now returns HTTP 400** instead of riding HTTP 200 ([PR #2399](https://github.com/modelcontextprotocol/typescript-sdk/pull/2399), beta.2).
+- **Non-JSON POSTs rejected with `415 Unsupported Media Type`** - Content-Type is parsed, not substring-matched; new exported `isJsonContentType(header)` helper. Custom transports composing `classifyInboundRequest`/`PerRequestHTTPServerTransport` must apply it themselves ([PR #2441](https://github.com/modelcontextprotocol/typescript-sdk/pull/2441), beta.3).
+- **`inputRequired.elicit()` accepts a Standard Schema** (e.g. a Zod object) for `requestedSchema`; inexpressible shapes (nested objects, `.regex()`, exclusive bounds, literal unions) reject before anything is sent ([PR #2369](https://github.com/modelcontextprotocol/typescript-sdk/pull/2369), beta.3).
+- **SDK error classes brand-match across separately bundled SDK copies** (`Symbol.hasInstance` + a registry symbol), plus static `X.isInstance(value)` guards; `connect()` against an auth-gated server now rejects with the original `UnauthorizedError` instead of a wrapped `SdkError` ([PR #2384](https://github.com/modelcontextprotocol/typescript-sdk/pull/2384), beta.3).
+- **Streamable HTTP client session hygiene**: no session ID attached to `initialize` POSTs; `mcp-session-id` captured only from a successful initialize response; rotation only via 404 + re-initialize ([PR #2469](https://github.com/modelcontextprotocol/typescript-sdk/pull/2469), beta.3).
+- **Runtime-neutral auth helpers in `@modelcontextprotocol/server`**: `requireBearerAuth` for web-standard `fetch(request)` hosts (Cloudflare Workers, Deno, Bun, Hono) and `oauthMetadataResponse` serving the RFC 9728 / RFC 8414 metadata documents; the insecure-issuer escape hatch is now an explicit `dangerouslyAllowInsecureIssuerUrl` option ([PR #2420](https://github.com/modelcontextprotocol/typescript-sdk/pull/2420), [PR #2422](https://github.com/modelcontextprotocol/typescript-sdk/pull/2422), beta.3).
+- Fixes: version negotiation no longer drops pre-set transport handlers (PR #2455); CJS `validators/ajv` subpath crash fixed (PR #2431); legacy content-less `CallToolResult` tolerance (PR #2456, above).
 
 ## Migration Checklist
 
@@ -360,4 +373,4 @@ v2 entered beta on 2026-06-30. Beta signals a settling (not frozen) API with sup
 
 ### Timeline
 
-v1.x gets 6 months of support after v2 stable ships. v2 stable is targeted for **2026-07-28** alongside the finalized spec revision; only pre-releases exist today (`2.0.0-beta.1`), so v1 remains the production choice. No rush to migrate, but write new code with v2 patterns in mind - and the `@modelcontextprotocol/codemod` `v1-to-v2` codemod handles the mechanical parts.
+v1.x gets 6 months of support after v2 stable ships. v2 stable ships **2026-07-28** alongside the final spec revision; only pre-releases exist today (`2.0.0-beta.3`), so v1 remains the production choice. No rush to migrate, but write new code with v2 patterns in mind - and the `@modelcontextprotocol/codemod` `v1-to-v2` codemod handles the mechanical parts.

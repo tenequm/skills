@@ -7,6 +7,7 @@ Complete Zod-to-JSON-Schema conversion rules, known breakage, outputSchema, and 
 - [What Works](#what-works)
 - [What Breaks](#what-breaks)
 - [outputSchema and structuredContent](#outputschema-and-structuredcontent)
+- [Non-Text Content Types](#non-text-content-types)
 - [Tool Design Patterns](#tool-design-patterns)
 
 ## Zod Schema Conversion
@@ -245,6 +246,27 @@ const outputSchema = z.object({ id: z.string(), name: z.string() }).passthrough(
 
 **Default rule for upstream pass-through**: When an `outputSchema` (or a nested response object) forwards data straight from an upstream API, default it to `.passthrough()`. Upstream payloads routinely carry fields you didn't model, and a strict outer schema turns every one into a client-side AJV rejection. Reserve the `.parse()`-strip path (FIX 1) for response schemas where you deliberately want to drop upstream fields before they reach the client. `inputSchema` is the opposite - keep it strict so the LLM can't pass unmodeled arguments.
 
+## Non-Text Content Types
+
+`content` blocks are not text-only. Spec 2025-11-25 defines `text`, `image`, `audio`, `resource_link`, and embedded `resource` blocks; all support optional annotations (`audience`, `priority`, `lastModified`). Resource links returned by tools are not guaranteed to appear in `resources/list`.
+
+```typescript
+return {
+  content: [
+    { type: "image", data: base64Jpeg, mimeType: "image/jpeg" },
+    { type: "text", text: JSON.stringify({ width, height, url }) },
+    { type: "resource_link", uri: "docs://guide", name: "Guide", mimeType: "text/markdown" },
+  ],
+};
+```
+
+### Image-Returning Tools
+
+Don't inline full-resolution base64 by default - it blows client result caps (see SKILL.md "Result-Size Budgets"). But don't return only a bare URL either: pure-MCP clients without a shell have no primitive that turns an arbitrary image URL into vision. The pattern that serves both:
+
+1. **`ImageContent` block with a server-downscaled preview** (~1024px JPEG) - vision-capable clients see the image directly.
+2. **Text block with metadata plus a URL to the untouched original** - the universal deliverable for clients whose size caps drop the image block.
+
 ## Tool Design Patterns
 
 ### Outcome-Oriented Tools
@@ -312,6 +334,16 @@ z.object({
 // Response includes:
 // { results: [...], has_more: true, next_offset: 20, total_count: 142 }
 ```
+
+### Result-Size Budgets and Truncation
+
+Clients silently truncate large results (SKILL.md "Result-Size Budgets" has the per-client caps). Enforce your own cap server-side:
+
+- **One backstop wrapper at the tool-registration chokepoint** guarantees the invariant even when an individual renderer overruns; keep the cap values in one constants module.
+- **Two-tier trimming**: prefer smart trims at item boundaries with an explicit "N omitted - pass cursor=..." hint; hard-truncate with a uniform footer (link to the full output) only as a fallback.
+- **Never cut JSON mid-body**: on overflow return a `{truncated: true, download_url, size_chars}` envelope instead of invalid JSON.
+- **Skip `isError` results entirely** - truncation must never mangle payment/auth challenges or error payloads clients parse programmatically.
+- **Budgets are per-connection, not per-call**: accept them as connection query params (`?max_chars=`, alongside `?tools=` filtering) instead of adding override args to every tool schema.
 
 ### No-Parameter Tools
 

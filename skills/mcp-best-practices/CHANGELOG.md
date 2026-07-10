@@ -2,10 +2,39 @@
 
 All notable changes to this skill will be documented in this file.
 
-The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/2.0.0/),
 and this skill adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+
+## [0.8.0] - 2026-07-10
+
+### Added
+- Spec-normative 405 rule for Streamable HTTP GET: a server not offering an SSE stream MUST return 405 Method Not Allowed. Hand-rolled stateless servers answering GET with an empty 200 send official-SDK clients into reconnect storms; the official TS client special-cases 405 as the benign no-stream signal, while any other non-OK status (including 406) throws. Also: stateless transport instances are single-use.
+- "Result-size budgets": per-client caps table (Claude Code 25k tokens default via `MAX_MCP_OUTPUT_TOKENS`, per-tool `_meta["anthropic/maxResultSizeChars"]` up to 500k chars; Codex 10,000-byte default truncation, configurable via `tool_output_token_limit`; Gemini CLI 40,000-char default head/tail truncation), output-cap enforcement pattern (single backstop wrapper at the registration chokepoint, item-boundary trimming with cursor hint, JSON overflow envelope, never truncate `isError` results), and connection-level configuration via URL query params (`?tools=`, `?max_chars=`).
+- 2025-11-25 tool-surface fields previously unmentioned: `icons` metadata (SEP-973), `execution.taskSupport` (`"forbidden"`/`"optional"`/`"required"`), and the `listChanged` capability + `notifications/tools/list_changed` paired with the dynamic tool loading advice.
+- Non-text tool-result content types (`image`, `audio`, `resource_link`, embedded `resource`) with content annotations (`audience`, `priority`, `lastModified`), plus the image-returning tool pattern: downscaled `ImageContent` preview + text metadata + URL to the untouched original; never inline full-res base64.
+- Forgiving input recovery principle in error handling: recover unambiguous inputs (URL vs bare handle, common param aliases) instead of erroring; reserve `isError` for genuine ambiguity with an actionable hint.
+- OAuth ops gotcha: a server-side 500 on the token endpoint surfaces to MCP clients as a misleading "requires re-authorization" and stays latent until token refresh - monitor the token endpoint distinctly, gate deploys on pending migrations.
+- RC deltas missing from the draft-direction list: SSE resumability/`Last-Event-ID` removed (SEP-2575); server-initiated requests only while processing a client request, now required (SEP-2260); `notifications/elicitation/complete` and `elicitationId` removed; sampling `includeContext` values deprecated (SEP-2596); auth hardening SEPs 837 (`application_type` at DCR), 2207 (refresh-token guidance), 2350 (scope accumulation during step-up), 2351 (`.well-known` suffix).
+- v2-migration: "Beta.1 -> Beta.3 Changes" section - CJS builds restored (PR #2405), 415 for non-JSON POSTs + `isJsonContentType()` (PR #2441), HTTP 400 for post-dispatch -32021 (PR #2399), cross-bundle `instanceof` brands + `X.isInstance()` (PR #2384), session-ID hygiene on initialize (PR #2469), `inputRequired.elicit()` accepts Standard Schema/Zod (PR #2369), runtime-neutral `requireBearerAuth` + `oauthMetadataResponse` for web-standard hosts (PRs #2420/#2422), server-legacy deprecated and frozen at beta.2.
+- Pointers: canonical SDK docs site (ts.sdk.modelcontextprotocol.io, /v2/), MCP Inspector/debugging guides, client-best-practices doc (progressive tool discovery, code mode/PTC), conformance suite + SDK tiers, Server Card WG (`.well-known/mcp.json`).
+
+### Changed
+- v2 pin beta.1 -> beta.3 (beta.2 2026-07-02, beta.3 2026-07-09); noted the npm `latest` dist-tag resolves to the beta, so a plain `npm install` gets the prerelease.
+- v2 is no longer ESM-only: beta.2 ships CommonJS builds alongside ESM; runtime support documented as Node.js 20+/Bun/Deno.
+- Softened the beta.1 "`CallToolResult.content` required at the wire boundary" claim: beta.3 normalizes legacy content-less results to `content: []` (2026-era wire schemas stay strict).
+- Next spec reframed from unstamped draft to locked Release Candidate (locked 2026-05-21; final publishes 2026-07-28); section renamed "Spec 2026-07-28 RC Direction".
+- MCP Apps client matrix expanded: Microsoft 365 Copilot, Cursor, Archestra.AI, PostHog Code; Archestra.AI is the first client with Enterprise-Managed Authorization.
+- Tool naming rules attributed as spec SHOULD, not hard requirements.
+
+### Fixed
+- Corrected the stateless-transport GET gotcha (refuted against SDK source): `WebStandardStreamableHTTPServerTransport` returns 406 only when the Accept header lacks `text/event-stream`; a conforming GET opens a hanging 200 SSE stream (it never returns 405 for GET).
+- Dead link `spec.modelcontextprotocol.io` (SSL failure) replaced with `modelcontextprotocol.io/specification/latest`.
+- Dead IETF datatracker link for `draft-payment-transport-mcp` replaced with the self-published draft at paymentauth.org; added companion `-32043` "payment verification failed" code.
+- SEP-2140 citation updated: issue closed 2026-01-23 in favor of spec PR #2145.
+
+Verified against: @modelcontextprotocol/server@2.0.0-beta.3
 
 ## [0.7.0] - 2026-07-01
 
