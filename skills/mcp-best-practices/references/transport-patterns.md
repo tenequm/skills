@@ -80,7 +80,8 @@ const transport = new WebStandardStreamableHTTPServerTransport({
 
 ### Operational Gotchas
 
-- **Client SSE-opening GET is rejected with 406.** A stateless transport (`sessionIdGenerator: undefined`, `enableJsonResponse: true`) has no notification stream, so when `StreamableHTTPClientTransport` sends `GET /mcp` to open one, the server returns `406 Not Acceptable`. Some clients' error handling then tears down the whole connection. If you must support such clients, either run stateful or return a benign empty SSE/`405` your client tolerates.
+- **Answer GET with an explicit 405 when you don't offer a stream.** Spec (2025-11-25): "The server MUST either return `Content-Type: text/event-stream` in response to this HTTP GET, or else return HTTP 405 Method Not Allowed." The official TS client special-cases 405 as the expected no-stream signal (`streamableHttp.ts`: `if (response.status === 405) { return; }` - silent, no retry); any other non-OK response, **including 406, throws**. A hand-rolled stateless server that answers GET with an empty `200` (or closes it instantly) sends official-SDK clients into a reconnect storm (hundreds of requests within minutes). The SDK transport won't do this for you: `WebStandardStreamableHTTPServerTransport` never returns 405 for GET - with a conforming `Accept` header it opens a (hanging) SSE stream even in stateless mode, and returns 406 only when the `Accept` header lacks `text/event-stream`. If your route only handles POST (the common stateless layout), return 405 for GET yourself.
+- **A stateless transport instance is single-use.** Reusing it across requests throws `Stateless transport cannot be reused across requests` - create server + transport per request (the canonical pattern).
 - **Only parse the body on POST.** Route GET and DELETE straight to the transport - calling `JSON.parse` (or a body-parsing middleware) on a bodyless GET/DELETE throws and 500s the request before the transport sees it.
 
 ### K8s Specifics
@@ -117,6 +118,8 @@ Servers MAY support SSE resumability:
 4. Server replays events from that ID forward
 
 The official `everything` server uses `InMemoryEventStore` for this. Production deployments need persistent event stores.
+
+> **RC note**: the 2026-07-28 spec removes SSE resumability entirely - `Last-Event-ID` and SSE event IDs leave Streamable HTTP (SEP-2575); clients MUST re-issue an interrupted request as a new request with a new ID. Don't invest in new persistent event stores for replay.
 
 ### Session Termination
 

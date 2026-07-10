@@ -21,14 +21,14 @@ MCP has two distinct error reporting mechanisms. Choosing the wrong one makes th
 
 **The rule** (SEP-1303, merged into spec 2025-11-25): If the LLM could self-correct by seeing the error message, it MUST be a Tool Execution Error. Protocol errors are for structural problems the LLM can't fix.
 
-### SEP-2140 Extension (open proposal)
+### SEP-2140 Extension (proposal; issue closed in favor of spec PR #2145)
 
 Extends SEP-1303 to cover three more cases that should also be Tool Execution Errors:
 1. **Tool resolution failures** - unknown tool name (currently protocol error)
 2. **Tool unavailability** - disabled/policy-restricted tool
 3. **Output validation failures** - structuredContent doesn't match outputSchema
 
-Source: [modelcontextprotocol#2140](https://github.com/modelcontextprotocol/modelcontextprotocol/issues/2140)
+Source: [modelcontextprotocol#2140](https://github.com/modelcontextprotocol/modelcontextprotocol/issues/2140), closed 2026-01-23 in favor of [PR #2145](https://github.com/modelcontextprotocol/modelcontextprotocol/pull/2145)
 
 ## Tool Execution Errors
 
@@ -98,6 +98,10 @@ return {
 2. **Include context** - current date, limits, valid options
 3. **Be actionable** - tell the LLM what to do differently
 4. **Never return stack traces** - they waste tokens and leak internals
+
+### Forgiving Input Recovery
+
+If an argument's intent is unambiguous, recover it instead of returning an error: accept a full URL where a bare handle is expected (and vice versa), map common aliases (`image_url`/`media_url`/`src`/`href` -> `url`), coerce obvious scalar/array mismatches. Agents routinely vary surface forms, and every avoidable `isError` costs a round-trip. Reserve errors for genuine ambiguity - and then follow the principles above with an actionable hint.
 
 ## Protocol Errors
 
@@ -183,7 +187,7 @@ For MCP servers gated by payment protocols (x402, MPP), errors need to carry pay
 
 ### Payment Required `-32042` (IETF pattern)
 
-`-32042` is the JSON-RPC error code reserved for "Payment Required" in the IETF draft [`draft-payment-transport-mcp-00`](https://datatracker.ietf.org/doc/draft-payment-transport-mcp/). Unlike most McpError codes, the McpServer wire path preserves `-32042`'s `error.data` end-to-end, so it can carry payment challenges. Some payment libraries (e.g. `mppx`) deliberately use `-32042` for this reason. If you need standards alignment with the IETF draft and your client supports it, prefer `-32042`. The broader ecosystem still relies on the `isError: true` pattern below for cross-client compatibility today.
+`-32042` is the JSON-RPC error code reserved for "Payment Required" in the Internet-Draft [`draft-payment-transport-mcp-00`](https://paymentauth.org/draft-payment-transport-mcp-00.html) (self-published 2026-07-03; not on the IETF datatracker). The draft also reserves `-32043` for "payment verification failed". Unlike most McpError codes, the McpServer wire path preserves `-32042`'s `error.data` end-to-end, so it can carry payment challenges. Some payment libraries (e.g. `mppx`) deliberately use `-32042` for this reason. If you need standards alignment with the IETF draft and your client supports it, prefer `-32042`. The broader ecosystem still relies on the `isError: true` pattern below for cross-client compatibility today.
 
 ### x402 Payment Required (isError pattern)
 

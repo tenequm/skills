@@ -289,6 +289,12 @@ If you don't need conversation-integrated UI, a regular web app is simpler.
 | Goose | Yes |
 | Postman | Yes |
 | MCPJam | Yes |
+| Microsoft 365 Copilot | Yes |
+| Cursor | Yes |
+| Archestra.AI | Yes |
+| PostHog Code | Yes |
+
+Current list: [official client matrix](https://modelcontextprotocol.io/extensions/client-matrix).
 
 ### Framework Templates
 
