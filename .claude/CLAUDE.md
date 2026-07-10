@@ -53,7 +53,7 @@ metadata:
 
 ### Per-skill `CHANGELOG.md`
 
-Path: `skills/<name>/CHANGELOG.md`. Format: [Keep a Changelog v1.1.0](https://keepachangelog.com/en/1.1.0/).
+Path: `skills/<name>/CHANGELOG.md`. Format: [Keep a Changelog v2.0.0](https://keepachangelog.com/en/2.0.0/).
 
 - Standard sections only (Added / Changed / Deprecated / Removed / Fixed / Security); omit empty ones.
 - Version heading: `## [x.y.z] - YYYY-MM-DD`.

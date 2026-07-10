@@ -54,6 +54,12 @@ CLAUDE_CODE_FIELDS = {
 # Anthropic's `metadata: dict[str, str]` contract.
 CLAWHUB_NESTED_METADATA_KEYS = {"openclaw", "clawdbot", "clawdis"}
 
+# Claude Code dynamic-injection trigger: `!` at line start or after whitespace,
+# directly touching a backtick. The loader is not markdown-aware, so a doc
+# example inside a code fence or inline code span still executes at skill load.
+INLINE_INJECTION_RE = re.compile(r"(?:^|(?<=[ \t]))!(?=`)")
+FENCE_LINE_RE = re.compile(r"^\s*(`{3,}|~{3,})(.*)$")
+
 
 @dataclass
 class LintIssue:
@@ -93,6 +99,76 @@ def expect_string(value: Any, field: str, issues: list[LintIssue], path: Path) -
         issues.append(LintIssue(path, f"`{field}` must be a string."))
         return None
     return value
+
+
+def inline_code_spans(line: str) -> list[tuple[int, int]]:
+    """CommonMark-ish code spans: a run of N backticks closed by the next run of exactly N."""
+    spans: list[tuple[int, int]] = []
+    runs = [(m.start(), m.end()) for m in re.finditer(r"`+", line)]
+    i = 0
+    while i < len(runs):
+        open_start, open_end = runs[i]
+        length = open_end - open_start
+        closer = next(
+            (j for j in range(i + 1, len(runs)) if runs[j][1] - runs[j][0] == length), None
+        )
+        if closer is None:
+            i += 1
+            continue
+        spans.append((open_end, runs[closer][0]))
+        i = closer + 1
+    return spans
+
+
+def lint_dynamic_injection(skill_md: Path, issues: list[LintIssue]) -> None:
+    """Flag dynamic-injection doc examples that would execute when the skill loads.
+
+    Bare top-level directives are intentional (e.g. injecting git state); matches
+    inside a code fence or inline code span are always doc examples, and the
+    Claude Code loader executes those too - a broken placeholder command makes
+    the whole skill fail to load.
+    """
+    text = skill_md.read_text(encoding="utf-8")
+    match = FRONTMATTER_RE.match(text)
+    body_start_line = text[: match.end()].count("\n") if match else 0
+    lines = text.splitlines()[body_start_line:]
+
+    fence: tuple[str, int, bool] | None = None  # (char, run length, is executable `!` block)
+    for offset, line in enumerate(lines):
+        line_no = body_start_line + offset + 1
+        fence_match = FENCE_LINE_RE.match(line)
+        if fence_match:
+            run, info = fence_match.group(1), fence_match.group(2).strip()
+            if fence is None:
+                fence = (run[0], len(run), info.startswith("!"))
+                continue
+            if run[0] == fence[0] and len(run) >= fence[1] and not info:
+                fence = None
+                continue
+            if run[0] == "`" and info.startswith("!"):
+                issues.append(
+                    LintIssue(
+                        skill_md,
+                        f"line {line_no}: executable ```! block example nested inside a code "
+                        "fence still runs at skill load. Move it to references/.",
+                    )
+                )
+                continue
+        if fence is not None and fence[2]:
+            continue  # intentional executable block; its content runs by design
+        for inline_match in INLINE_INJECTION_RE.finditer(line):
+            in_span = any(
+                start <= inline_match.start() < end for start, end in inline_code_spans(line)
+            )
+            if fence is not None or in_span:
+                issues.append(
+                    LintIssue(
+                        skill_md,
+                        f"line {line_no}: dynamic-injection doc example executes at skill load "
+                        "(the loader ignores code fences/spans). Move it to references/ or "
+                        "break the !-backtick adjacency.",
+                    )
+                )
 
 
 def lint_skill(skill_md: Path) -> LintResult:
@@ -205,6 +281,8 @@ def lint_skill(skill_md: Path) -> LintResult:
 
     if body is None or not body:
         issues.append(LintIssue(skill_md, "skill body must not be empty."))
+    else:
+        lint_dynamic_injection(skill_md, issues)
 
     line_count = len(skill_md.read_text(encoding="utf-8").splitlines())
     if line_count > MAX_SKILL_LINES:
