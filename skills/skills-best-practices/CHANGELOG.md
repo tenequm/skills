@@ -7,6 +7,15 @@ and this skill adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.h
 
 ## [Unreleased]
 
+## [0.6.1] - 2026-07-10
+
+### Fixed
+- SKILL.md itself committed the footgun it documents: the troubleshooting row and Security bullet contained a live inline-injection literal (whitespace, then `!` touching a backticked placeholder command), which the Claude Code loader executed at load and errored on. Both rewritten to keep the `!` and backtick from touching.
+
+### Changed
+- Security guidance: replaced the zero-width-space suggestion (invisible, non-ASCII) with wrapping the `!` in its own code span; clarified that `references/` files are safe because they are read with the Read tool, never preprocessed.
+- references/claude-code-features.md: added an explicit "documenting this syntax is itself a footgun" warning covering inline and fenced forms.
+
 ## [0.6.0] - 2026-07-01
 
 ### Added

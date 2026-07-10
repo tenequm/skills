@@ -2,7 +2,7 @@
 name: skills-best-practices
 description: Build high-quality Agent Skills for Claude following official Anthropic best practices. Covers SKILL.md structure, frontmatter, description writing, progressive disclosure, testing, patterns, troubleshooting, and distribution across all surfaces (Claude.ai, Claude Code, API, Agent SDK). Use when creating a skill, reviewing skill quality, debugging why a skill won't trigger, structuring skill directories, or writing skill descriptions.
 metadata:
-  version: "0.6.0"
+  version: "0.6.1"
   openclaw:
     homepage: https://github.com/tenequm/skills/tree/main/skills/skills-best-practices
     emoji: "📐"
@@ -320,7 +320,7 @@ Exit 0 means valid. It checks `SKILL.md` format and enforces the spec's strict f
 | "Invalid skill name" | Spaces or capitals | Use kebab-case: `my-skill-name` |
 | Whole skill silently skipped at load | Description exceeds 1024 chars | Trim it - the loader rejects the file, not just the description |
 | Frontmatter fails to parse | `Triggers:` (colon-space) or straight `"quotes"` inside an unquoted `description` value | Quote the whole value or remove the colon/quotes |
-| A doc example runs a shell command | Literal `` !`cmd` `` in skill content executes even inside a code fence | Move the example to `references/` or break the literal (see Security) |
+| A doc example runs a shell command | A `!` directly touching a backticked command executes on load, even inside a code fence | Move the example to `references/` or break the `!`-backtick adjacency (see Security) |
 
 ## Distribution
 
@@ -349,7 +349,7 @@ Further API details when you need them: a `pause_turn` stop reason signals a lon
 - No XML angle brackets in frontmatter (injection risk)
 - Audit all bundled scripts and resources before using third-party skills
 - Be cautious of skills that fetch from external URLs
-- **Documenting the `` !`command` `` injection syntax?** The Claude Code loader executes it even inside a markdown code fence - it cannot tell a doc example from a directive. Keep such examples in `references/` or break the literal (e.g. add a zero-width space) so a meta-skill about skills doesn't run shell commands on load
+- **Documenting the dynamic-injection syntax (a `!` prefix on a backticked command)?** The Claude Code loader executes it even inside a markdown code fence or inline code span - it cannot tell a doc example from a directive. Keep such examples in `references/` files, which are read with the Read tool and never preprocessed, or keep the `!` and the backtick from touching (wrap the `!` in its own code span, as this bullet does) so a meta-skill about skills doesn't run shell commands on load
 
 ## Additional References
 
