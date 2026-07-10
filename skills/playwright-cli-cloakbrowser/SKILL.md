@@ -2,7 +2,7 @@
 name: playwright-cli-cloakbrowser
 description: Drive CloakBrowser Manager stealth profiles with @playwright/cli over CDP. Use for browser automation that needs a persistent logged-in session, anti-detect fingerprints, or to pass Cloudflare - attach reuses the profile's cookies and stealth where a fresh browser does not.
 metadata:
-  version: "0.3.0"
+  version: "0.3.1"
   upstream: "@playwright/cli@0.1.15"
 allowed-tools: Bash(playwright-cli:*) Bash(curl:*) Bash(docker:*)
 ---

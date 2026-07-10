@@ -2,7 +2,7 @@
 name: grafana-foundation-sdk
 description: Build Grafana dashboards as code with the grafana-foundation-sdk typed builders (TypeScript or Go). Use when creating, modifying, or generating Grafana dashboard JSON programmatically, converting hand-written dashboard JSON to typed code, building monitoring dashboards, or working with Prometheus/Loki queries in dashboards.
 metadata:
-  version: "0.2.0"
+  version: "0.2.1"
   upstream: "@grafana/grafana-foundation-sdk@0.0.16, github.com/grafana/grafana-foundation-sdk/go@0.0.16"
 ---
 
