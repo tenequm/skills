@@ -36,6 +36,11 @@ and this skill adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.h
 
 Verified against: @modelcontextprotocol/server@2.0.0-beta.3
 
+## [0.7.1] - 2026-07-10
+
+### Changed
+- CHANGELOG preamble pinned to Keep a Changelog 2.0.0 (format unchanged; KaC 2.0.0 keeps existing changelogs valid).
+
 ## [0.7.0] - 2026-07-01
 
 ### Added

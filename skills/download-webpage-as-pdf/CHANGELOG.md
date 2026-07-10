@@ -1,8 +1,13 @@
 # Changelog
 
-All notable changes to this skill are documented here. Format follows [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/).
+All notable changes to this skill are documented here. Format follows [Keep a Changelog 2.0.0](https://keepachangelog.com/en/2.0.0/).
 
 ## [Unreleased]
+
+## [0.1.4] - 2026-07-10
+
+### Changed
+- CHANGELOG preamble pinned to Keep a Changelog 2.0.0 (format unchanged; KaC 2.0.0 keeps existing changelogs valid).
 
 ## [0.1.3] - 2026-05-08
 

@@ -2,7 +2,7 @@
 name: x402
 description: "Build internet-native payments with the x402 open protocol - HTTP 402 Payment Required for on-chain micropayments with no accounts or API keys. Use when developing paid APIs, paywalled content, AI agent payment flows, or MCP tools that charge per call. Covers the TypeScript, Python, and Go SDKs across EVM, Solana, Stellar, and Aptos."
 metadata:
-  version: "0.10.0"
+  version: "0.10.1"
   upstream: "@x402/core@2.17.0, @x402/evm@2.17.0, x402@2.14.0, github.com/x402-foundation/x402/go/v2@v2.17.0"
   openclaw:
     homepage: https://github.com/tenequm/skills/tree/main/skills/x402

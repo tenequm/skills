@@ -1,15 +1,24 @@
 ---
 name: polish
-description: Pre-release code review - runs lint/type checks, then launches 4 parallel review agents (cleanliness, design, efficiency, side-effect gating) to analyze the diff, synthesizes a unified report, and fixes with approval. Use before committing, pushing, or releasing changes. Triggers on "review code", "check before commit", "cleanup before release", "review changes", "is this ready to ship", "polish before release", "simplify".
+description: Pre-release code review - runs lint/type checks, launches parallel review agents (cleanliness, design, efficiency, side-effect gating) on the diff, validates findings, and fixes with approval. Use before committing, pushing, or releasing changes.
 metadata:
-  version: "2.3.0"
+  version: "2.4.0"
 disable-model-invocation: true
+argument-hint: "[base-ref]"
+allowed-tools: "Bash(git diff *), Bash(git show *), Bash(git status *), Bash(git rev-parse *), Bash(git log *)"
 ---
 
 # Pre-Release Polish
 
-Current branch: !`git rev-parse --abbrev-ref HEAD`
-Uncommitted changes: !`git diff --stat 2>/dev/null | tail -1`
+Repository state:
+
+```!
+git rev-parse --abbrev-ref HEAD
+git status --short
+git diff --stat 2>/dev/null | tail -1
+```
+
+Base ref argument (optional): $ARGUMENTS
 
 ## Rules
 
@@ -37,8 +46,12 @@ If no validation command is found in CLAUDE.md, ask the user what to run.
 
 Determine what changed:
 1. Check for uncommitted changes: `git diff` + `git diff --cached`
-2. If no uncommitted changes, diff against main: `git diff main...HEAD`
-3. If no changes at all, report "nothing to review" and stop
+2. Check for untracked (`??`) files in `git status --short`. Include new untracked source files in the review. A staged change that references an untracked file (a new module, benchmark target, or test) is itself a finding: if the change lands without the file, fresh checkouts and CI break on the missing reference
+3. If a base ref was passed as an argument, diff against it: `git diff <base-ref>...HEAD`
+4. If no uncommitted changes and no base ref, diff against main: `git diff main...HEAD`. If the work under review was already committed this session, scope the review to those session commits rather than the whole branch
+5. If no changes at all, report "nothing to review" and stop
+
+Exclude lockfiles and generated files from the review (`Cargo.lock`, `pnpm-lock.yaml`, `package-lock.json`, `*.snap`, generated bindings) - they are outputs, not authored code.
 
 Read every changed file fully. Understand what each change does and why.
 
@@ -46,7 +59,13 @@ When a change relocates or rewrites an existing code path (a moved file, a handl
 
 ## Phase 3: Parallel Review
 
-Use the Agent tool to launch all four agents concurrently in a single message. Pass each agent the full diff and the list of changed files so it has the complete context.
+Write the diff to a scratchpad file. Use the Agent tool to launch all four agents concurrently in a single message. Pass each agent the diff file path and the list of changed files so it has the complete context - do not inline a large diff into four prompts.
+
+Enrich each agent's prompt with:
+- Relevant project constraints from CLAUDE.md (performance assumptions, logging conventions, platform quirks) so findings are domain-correct
+- Known-intentional patterns in the diff that would otherwise be flagged (e.g. a deliberate `console.log` in a test-skip path matching project convention) so agents don't return known false positives
+
+**Small-diff fast path**: if the diff is tiny (roughly under 50 changed lines), skip the agent fan-out and review all four lenses below directly yourself, reading every changed line in full. All later phases still apply.
 
 ### Agent 1: Cleanliness
 
@@ -54,6 +73,7 @@ Fast, mechanical, high-confidence. Looks for junk that should be removed.
 
 - **Debug leftovers**: `console.log`, `console.debug`, `console.warn` added during development; temporary debug variables, hardcoded test values. NOT structured logger calls (`logger.info`, `logger.error`, `c.var.logger`)
 - **AI slop**: comments explaining obvious code ("// increment counter", "// return the result") - flag each such comment individually, even if the code it describes is also flagged under another category; JSDoc on internal/private functions that aren't part of a public API; verbose docstrings on simple helpers; `TODO`/`FIXME`/`HACK` markers left by Claude (not by the user); unnecessary type annotations where the language infers correctly; emoji in code or comments (unless the project uses them)
+- **Non-ASCII punctuation**: em-dashes, smart quotes, or other unicode punctuation introduced in changed lines (unless the project uses them). Plain-text grep over a diff can miss multi-byte characters - scan the changed files byte-aware, e.g. `rg -n '[\x{2010}-\x{2015}\x{2018}-\x{201F}]'`
 - **Dead code**: unreferenced functions, variables, types; commented-out code blocks (git has history); unused function parameters (unless required by interface/callback signature)
 - **Unused imports**: imports added but never referenced, imports left behind after refactoring (linter catches most - verify edge cases)
 - **Hardcoded values**: magic numbers or strings that should be in constants; URLs, prices, limits that belong in config. NOT obvious constants like `0`, `1`, `true`, HTTP status codes
@@ -108,6 +128,7 @@ For each finding:
 - **Debug leftovers** - confirm the flagged line is actually a debug artifact, not structured logging (`logger.*`, `c.var.logger.*`)
 - **Efficiency / design claims** - read the surrounding context to confirm the pattern matches. Drop speculative findings that don't hold up with full context
 - **Side-effect gating / behavior-drift claims** - confirm by reading the actual control flow: the side-effect line, the gate line, and the path between (including downstream handlers and middleware order). Validate a relocation regression against *the code it replaced*, not against sibling paths that may share the same flaw. Never drop one as "a behavior decision" or "out of scope" - if it holds up it is the highest-severity finding
+- **Rewritten or moved paths** - when a finding lands on rewritten/relocated code, check whether the flaw already existed at HEAD (or in the pre-move version). If it did, keep it but report it as pre-existing-carried-through, not a new regression. Separately flag any test coverage deleted with the old path and not replaced
 
 Only findings that survive validation proceed to the report.
 
@@ -134,16 +155,28 @@ Synthesize validated findings into a single deduplicated report. If multiple age
 1. `path/to/file.ts:30-45` - sequential awaits on independent API calls, use Promise.all
 2. ...
 
+### Observations (non-blocking)
+1. `path/to/file.ts:88` - flock fallback catches all lock errors, not just unsupported-filesystem ones - a behavior note, not a defect; your call
+
+### Dropped after validation
+1. `path/to/view.py:12` - per-mousemove getBoundingClientRect - the element is CSS-fixed, so the rect is cached and there is no layout flush
+
 **Total: X issues across Y categories**
+
+**Recommendation:** fix correctness #1, cleanliness #1-2, efficiency #1; skip design #2 (marginal).
 
 **Awaiting approval before proceeding with fixes.**
 ```
 
-List **Correctness** first, and always - including at `(0 issues)`, since a zero there is a real signal that side-effect ordering was checked. It must never be batch-approved alongside cosmetic items.
+List **Correctness** first, and always - including at `(0 issues)`, since a zero there is a real signal that side-effect ordering was checked. A correctness zero must state what was traced - which side-effects were inventoried and which gates cover them - not just the count. It must never be batch-approved alongside cosmetic items.
 
-If zero issues found, report "Clean - no issues found" and stop.
+**Observations** are validated behavior notes that aren't defects - the user's call, never blocking. **Dropped after validation** lists agent findings Phase 4 dismissed, with the reason - it substantiates the counts. Omit either section when empty.
 
-The report MUST end with the line "**Awaiting approval before proceeding with fixes.**" (or "Clean - no issues found"). Do not proceed to Phase 6 until the user explicitly approves.
+End the report with a per-finding **Recommendation** line: which findings you'd fix and which you'd skip, so the user can approve by reference.
+
+If zero issues found, report "Clean - no issues found", substantiate the correctness zero (what was traced and why it's clean), and offer next actions - e.g. commit as-is, or leave for the user's own review - then stop.
+
+The report MUST end with the line "**Awaiting approval before proceeding with fixes.**" (or the clean-case report above). Do not proceed to Phase 6 until the user explicitly approves.
 
 ## Phase 6: Fix and Verify
 
@@ -152,3 +185,4 @@ After user approves:
 2. Re-run the project's validation command
 3. If new errors appear, fix them
 4. Show summary: what was fixed, final check status
+5. If the reviewed work was already committed, ask whether the fixes should amend those commits or land as a new commit - default to a new commit

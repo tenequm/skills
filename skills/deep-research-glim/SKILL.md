@@ -2,7 +2,7 @@
 name: deep-research-glim
 description: Conducts deep, multi-angle research using glim MCP tools and parallel subagents. Use for deep research, competitive landscape analysis, strategic intelligence, or /deep-research-glim [topic]. Triggers - deep research, deep dive on, competitive landscape, strategic intelligence, multi-source synthesis.
 metadata:
-  version: "0.2.4"
+  version: "0.2.5"
   openclaw:
     homepage: https://github.com/tenequm/skills/tree/main/skills/deep-research-glim
     emoji: "🔭"

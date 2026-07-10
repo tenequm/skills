@@ -114,6 +114,8 @@ Each `` !`command` `` executes immediately, output replaces the placeholder. Cla
 
 The inline form is recognized only when `!` is at the start of a line or immediately after whitespace. If `!` follows another character (e.g. `` KEY=!`cmd` ``), the placeholder is left as literal text and the command does not run.
 
+**Documenting this syntax is itself a footgun.** The preprocessor is not markdown-aware: a literal example written in a SKILL.md or command file executes at load time even inside a code fence or inline code span, and a placeholder command that fails (e.g. a bare `cmd`) makes the whole skill error on load. Put live examples only in `references/` files - they are read with the Read tool and never preprocessed, which is why this file can show them - or break the trigger by keeping the `!` from directly touching the backtick (wrap the `!` in its own code span). Assume the fenced block form below carries the same hazard when nested inside a documentation fence.
+
 For multi-line commands, use a fenced code block opened with ` ```! ` instead of the inline form:
 
 ````markdown
