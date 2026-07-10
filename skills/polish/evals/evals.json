@@ -14,7 +14,7 @@
         "Report flags the unused processLegacy function as dead code",
         "Report flags the commented-out code block as dead code",
         "Report explicitly stops and waits for user approval before making fixes",
-        "All three review agents (Cleanliness, Design, Efficiency) are launched in parallel"
+        "All four review agents (Cleanliness, Design, Efficiency, Side-Effect Gating) are launched in parallel"
       ]
     },
     {
