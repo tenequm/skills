@@ -821,3 +821,43 @@ gh pr ready [<number> | <url> | <branch>] [flags]
 ```
 
 ---
+
+## Gotchas
+
+### Review threads and resolved state require GraphQL
+
+`gh pr view` cannot show review threads or whether they are resolved, and thread IDs exist only in GraphQL. To count unresolved threads:
+
+```bash
+gh api graphql -f query='
+  query($owner:String!, $repo:String!, $pr:Int!) {
+    repository(owner:$owner, name:$repo) {
+      pullRequest(number:$pr) {
+        reviewThreads(first:100) { nodes { id isResolved } }
+      }
+    }
+  }' -F owner=OWNER -F repo=REPO -F pr=123 \
+  --jq '[.data.repository.pullRequest.reviewThreads.nodes[] | select(.isResolved | not)] | length'
+```
+
+### `gh pr checks` can surface stale check runs
+
+A cancelled or superseded run from an earlier push may still show as failing (often with a `0s` duration) even after a green re-run. Confirm against the latest run for the head SHA before declaring CI broken.
+
+CI triage loop that works:
+
+```bash
+gh pr checks                              # find the failing check
+gh run view --log-failed --job <job-id>   # read only the failing job's log
+gh run rerun <run-id> --failed            # retry just the failed jobs
+```
+
+`gh run watch --exit-status` exits non-zero only when the run *concludes* failed - exit 0 means the run succeeded.
+
+### `gh pr revert`
+
+Reverts a merged pull request, opening a new PR with the reverting commit:
+
+```bash
+gh pr revert 123 --repo OWNER/REPO
+```

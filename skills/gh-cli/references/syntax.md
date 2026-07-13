@@ -58,20 +58,27 @@ gh search repos "query" --json forkCount
 
 ## Negative Qualifiers
 
-When using negative search qualifiers (prefixed with `-`), you need special syntax to prevent the shell from interpreting the hyphen as a flag.
-
-### Unix/Linux/Mac
-
-Use `--` to mark the end of flags:
+A negative qualifier (prefixed with `-`) inside a quoted query is fine as long as the query does not **begin** with the hyphen:
 
 ```bash
-# ✅ Correct
-gh search issues -- "bug report -label:wontfix"
-gh search repos -- "typescript -topic:deprecated"
-gh search code -- "TODO -filename:test"
-
-# ❌ Wrong - shell interprets -label as a flag
+# ✅ Works without `--` - query starts with a word
 gh search issues "bug report -label:wontfix"
+
+# ❌ Fails - query starts with a hyphen, parsed as a flag
+gh search issues "-label:wontfix bug"
+# unknown shorthand flag: 'l' in -label:wontfix bug
+```
+
+### Use `--`, and put flags before it
+
+`--` marks the end of flags, so a query starting with a hyphen is read as positional. **Everything after `--` is positional** - trailing flags are silently swallowed into the query string:
+
+```bash
+# ✅ Correct - flags precede `--`
+gh search issues --limit 5 -- "-label:wontfix bug"
+
+# ❌ Wrong - `--limit 5` becomes search text; returns the default 30 results
+gh search issues -- "-label:wontfix bug" --limit 5
 ```
 
 ### PowerShell
@@ -165,15 +172,14 @@ gh search repos "bug NOT wontfix"
 
 ### Wildcards
 
-Limited wildcard support:
+GitHub code search has **no `*` wildcard** - an asterisk is matched as a literal character. `gh search code "function*"` returns files containing the literal token `function*` (e.g. JS generator declarations), not every word starting with "function".
 
 ```bash
-# ✅ Wildcards work in some contexts
+# ❌ Not a wildcard - matches the literal string "function*"
 gh search code "function*" --language=typescript
-gh search repos "react-*" in:name
 
-# ❌ Wildcards don't work everywhere
-gh search repos "created:>2024-*"  # Doesn't work with dates
+# ✅ Scope with flags instead
+gh search code "function" --language=typescript --filename hooks.ts
 ```
 
 ## JSON Output Quirks
@@ -212,15 +218,23 @@ gh api repos/owner/repo/contents/path | jq -r '.content'
 
 ### Base64 encoding
 
-File contents from the API are base64-encoded:
+The Contents API returns file content base64-encoded. There is **no `base64decode` template function** in `gh` - `--template '{{.content | base64decode}}'` fails with `template: :1: function "base64decode" not defined`. The full function list is in `gh help formatting`.
 
 ```bash
-# ✅ Correct - decode with base64 -d
-gh api repos/owner/repo/contents/file.ts | jq -r '.content' | base64 -d
+# ✅ Best - purpose-built command, no decoding needed
+gh repo read-file file.ts --repo owner/repo
 
-# ❌ Wrong - outputs base64 gibberish
-gh api repos/owner/repo/contents/file.ts | jq -r '.content'
+# ✅ Ask the API for raw bytes
+gh api repos/owner/repo/contents/file.ts -H "Accept: application/vnd.github.raw"
+
+# ✅ Or decode the JSON response yourself
+gh api repos/owner/repo/contents/file.ts --jq '.content' | base64 -d
+
+# ❌ Wrong - no such template function
+gh api repos/owner/repo/contents/file.ts --template '{{.content | base64decode}}'
 ```
+
+The Contents API only inlines files up to **1MB**; past that, `.content` comes back empty. `gh repo read-file` falls back to raw fetching automatically, which is why it is the safer default.
 
 ### Recursive tree flag
 
@@ -298,14 +312,21 @@ gh auth login
 
 ### Rate limiting
 
-```bash
-# Check rate limit status
-gh api rate_limit
+Rate limits are **per-resource**, and search is far tighter than the core budget most people quote:
 
-# Authenticated requests have higher limits
-# Unauthenticated: 60 requests/hour
-# Authenticated: 5000 requests/hour
+| Resource | Unauthenticated | Authenticated |
+|----------|-----------------|---------------|
+| `core` (`gh api`, `gh repo view`, `gh repo read-file`) | 60/hr | 5000/hr |
+| `search` (repos, issues, prs, commits) | 10/min | 30/min |
+| `code_search` | n/a | 10/min |
+| `graphql` | n/a | 5000/hr |
+
+```bash
+# Check every resource's live limit and remaining budget
+gh api rate_limit --jq '.resources | map_values({limit, remaining})'
 ```
+
+A search-heavy loop exhausts the 30/min search budget long before it dents the 5000/hr core budget. Search also caps at **1000 total results** per query regardless of `--limit`.
 
 ## Quoting Rules
 
@@ -420,15 +441,18 @@ gh auth login
 
 ### Always test field names
 
-Before using in scripts, test the field name:
+Run the command with a bare `--json` to list the valid fields. Note it writes the list to **stderr** and exits non-zero, so piping it to `jq` yields nothing:
 
 ```bash
-# Check available fields
-gh repo view owner/repo --json | jq keys
+# ✅ Correct - prints the available field list
+gh repo view owner/repo --json
+gh search repos "query" --json
 
-# Check search result fields
-gh search repos "query" --json | jq '.[0] | keys'
+# ❌ Wrong - stdout is empty, jq prints nothing
+gh repo view owner/repo --json | jq keys
 ```
+
+An empty JSON result from `--json` usually means the command errored on an unknown field rather than matching nothing. Re-run it bare to see the error.
 
 ### Use --help
 

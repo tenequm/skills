@@ -13,9 +13,11 @@ gh search repos --sort stars --order desc --limit 20
 # Most forked repos
 gh search repos --sort forks --order desc
 
-# Most watched repos
+# Most help-wanted issues (NOT a watchers sort - there is none)
 gh search repos --sort help-wanted-issues --order desc
 ```
+
+`gh search repos --sort` accepts only `{forks|help-wanted-issues|stars|updated}`. Watcher counts are available per-repo via `gh repo view OWNER/REPO --json watchers`, but you cannot sort search results by them.
 
 ### By language
 
@@ -78,7 +80,7 @@ gh search repos "stars:>500 forks:<50"
 
 ### By file presence
 
-Use the `--filename` flag (not an in-query `filename:` qualifier) and `--extension`/`--match` to scope. Code search has no sorting flags.
+Use `--filename`, `--extension`, and `--match` to scope. Code search has no sorting flags. (The `--filename` flag and an in-query `filename:` qualifier are equivalent - `gh` translates the flag into the qualifier - so either form works.)
 
 ```bash
 # Find repos by file presence (e.g., has Dockerfile)
@@ -158,10 +160,14 @@ gh search code "config" --owner=vercel
 
 ### By recency
 
+**Code search has no date filter.** `created:` is not a code-search qualifier - it is matched as literal file text, so `gh search code "React hooks" "created:>2024-01-01"` returns files that literally contain that string (this very page has been a top hit for it). To find recent code, discover recently-pushed repos first, then scope code search to them:
+
 ```bash
-# Find recent code examples
-gh search code "React hooks" "created:>2024-01-01"
-gh search code "Solana program" "created:>2024-06-01" --language=rust
+# 1. Find recently active repos
+gh search repos "topic:react pushed:>2026-06-01" --json fullName --jq '.[].fullName'
+
+# 2. Search code within one
+gh search code "useEffect" --repo=<one-of-the-above>
 ```
 
 ## Combining Filters

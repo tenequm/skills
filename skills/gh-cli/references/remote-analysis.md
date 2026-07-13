@@ -4,21 +4,52 @@ Fetch files and analyze repositories without cloning them locally.
 
 ## Fetch Files Without Cloning
 
-### Get directory listing
+### Preferred: `gh repo read-file` / `gh repo read-dir`
+
+These preview commands are purpose-built for reading a repo without cloning. They print raw content (no base64 step), accept `--ref` for any branch/tag/commit, and transparently handle files past the Contents API's 1MB inline limit.
 
 ```bash
-gh api repos/OWNER/REPO/contents/PATH
+# Read a file from the default branch
+gh repo read-file path/file.ts --repo OWNER/REPO
+
+# From a specific branch, tag, or commit
+gh repo read-file path/file.ts --repo OWNER/REPO --ref v1.2.0
+
+# Save straight to disk
+gh repo read-file path/file.ts --repo OWNER/REPO --output ./file.ts
+
+# List a directory
+gh repo read-dir PATH --repo OWNER/REPO
+gh repo read-dir PATH --repo OWNER/REPO --json name,size,type --jq '.[] | select(.type=="file") | .name'
 ```
 
-Returns JSON array with file/directory metadata.
+`read-dir` JSON fields: `gitSHA, gitType, mode, modeOctal, name, nameRaw, path, pathRaw, size, submodule, type`.
 
-### Fetch file content
+### Fallback: the Contents API
 
 ```bash
-gh api repos/OWNER/REPO/contents/path/file.ts | jq -r '.content' | base64 -d
+# Raw bytes via Accept header
+gh api repos/OWNER/REPO/contents/path/file.ts -H "Accept: application/vnd.github.raw"
+
+# Or decode the base64 JSON response
+gh api repos/OWNER/REPO/contents/path/file.ts --jq '.content' | base64 -d
 ```
 
-The API returns base64-encoded content, so decode it with `base64 -d`.
+There is no `base64decode` template function - `--template '{{.content | base64decode}}'` errors out. See `gh help formatting` for the functions that do exist.
+
+### Cache repeated fetches
+
+When iterating over the same files, cache responses so you do not re-spend the 5000/hr core budget:
+
+```bash
+gh api repos/OWNER/REPO/contents/PATH --cache 1h
+```
+
+Use `--slurp` with `--paginate` to collect all pages into a single JSON array:
+
+```bash
+gh api --paginate --slurp repos/OWNER/REPO/commits
+```
 
 ### Get entire file tree recursively
 

@@ -2,8 +2,8 @@
 name: gh-cli
 description: GitHub CLI for remote repository analysis, file fetching, codebase comparison, and discovering trending code/repos. Use when analyzing repos without cloning, comparing codebases, or searching for popular GitHub projects.
 metadata:
-  version: "1.2.1"
-  upstream: "gh@2.95.0"
+  version: "1.3.0"
+  upstream: "gh@2.96.0"
   openclaw:
     homepage: https://github.com/tenequm/skills/tree/main/skills/gh-cli
     emoji: "🐙"
@@ -40,14 +40,33 @@ Remote repository operations, codebase comparison, and code discovery without cl
 ### Fetch a file remotely
 
 ```bash
-gh api repos/OWNER/REPO/contents/path/file.ts --template '{{.content | base64decode}}'
+gh repo read-file path/file.ts --repo OWNER/REPO
+```
+
+`gh repo read-file` (preview) is the preferred path: it prints raw content, takes `--ref` for any branch/tag/commit, and handles files above the Contents API's 1MB inline limit. Fall back to `gh api` where the command is unavailable:
+
+```bash
+gh api repos/OWNER/REPO/contents/path/file.ts -H "Accept: application/vnd.github.raw"
+```
+
+There is **no `base64decode` template function** - `--template '{{.content | base64decode}}'` fails with `function "base64decode" not defined`. To decode the default JSON response, pipe it:
+
+```bash
+gh api repos/OWNER/REPO/contents/path/file.ts --jq '.content' | base64 -d
 ```
 
 ### Get directory listing
 
 ```bash
+gh repo read-dir PATH --repo OWNER/REPO
+
+# Or via the API
 gh api repos/OWNER/REPO/contents/PATH
 ```
+
+### Pin the repo in scripted workflows
+
+`gh` infers the repository from the current working directory. In agent or CI workflows - where a `cd` may persist - always pass `--repo OWNER/REPO` so a stray cwd cannot silently retarget the command.
 
 ### Search code
 
@@ -70,8 +89,8 @@ Systematic workflow for comparing repositories to identify similarities and diff
 ### Step 1: Fetch directory structures
 
 ```bash
-gh api repos/OWNER-A/REPO-A/contents/PATH
-gh api repos/OWNER-B/REPO-B/contents/PATH
+gh repo read-dir PATH --repo OWNER-A/REPO-A
+gh repo read-dir PATH --repo OWNER-B/REPO-B
 ```
 
 If comparing a monorepo package, specify the path (e.g., `packages/explorerkit-idls`).
@@ -79,8 +98,8 @@ If comparing a monorepo package, specify the path (e.g., `packages/explorerkit-i
 ### Step 2: Compare file lists
 
 ```bash
-gh api repos/OWNER-A/REPO-A/contents/PATH -q '.[].name'
-gh api repos/OWNER-B/REPO-B/contents/PATH -q '.[].name'
+gh repo read-dir PATH --repo OWNER-A/REPO-A --json name --jq '.[].name'
+gh repo read-dir PATH --repo OWNER-B/REPO-B --json name --jq '.[].name'
 ```
 
 Compare the output of each command to identify files unique to each repo and common files.
@@ -90,16 +109,18 @@ Compare the output of each command to identify files unique to each repo and com
 Compare package dependencies:
 
 ```bash
-gh api repos/OWNER-A/REPO-A/contents/package.json --template '{{.content | base64decode}}'
-gh api repos/OWNER-B/REPO-B/contents/package.json --template '{{.content | base64decode}}'
+gh repo read-file package.json --repo OWNER-A/REPO-A
+gh repo read-file package.json --repo OWNER-B/REPO-B
 ```
 
 Compare main entry points:
 
 ```bash
-gh api repos/OWNER-A/REPO-A/contents/src/index.ts --template '{{.content | base64decode}}'
-gh api repos/OWNER-B/REPO-B/contents/src/index.ts --template '{{.content | base64decode}}'
+gh repo read-file src/index.ts --repo OWNER-A/REPO-A
+gh repo read-file src/index.ts --repo OWNER-B/REPO-B
 ```
+
+Add `--cache 1h` to `gh api` calls when iterating on the same files repeatedly, to avoid re-spending rate limit.
 
 ### Step 4: Analyze differences
 
@@ -177,6 +198,16 @@ gh search issues --label=bug --state=open
 gh search issues --assignee=@me --state=open
 ```
 
+### Search rate limits
+
+Search runs on a much tighter budget than the 5000/hr core API - check with `gh api rate_limit`:
+
+| Resource | Limit (authenticated) |
+|----------|----------------------|
+| `core` (incl. `gh api`, `gh repo read-file`) | 5000/hr |
+| `search` (repos, issues, prs, commits) | 30/min |
+| `code_search` | 10/min |
+
 For advanced search syntax, see [references/search.md](references/search.md).
 
 ## Special Syntax
@@ -202,13 +233,40 @@ gh search repos "query" --json stargazersCount,forksCount
 
 ### Excluding search results
 
-When using negative qualifiers (like `-label:bug`), use `--` to prevent the hyphen from being interpreted as a flag:
+A negative qualifier inside a quoted query (`"bug -label:wontfix"`) works as-is. `--` is only required when the query *starts* with a hyphen, which the shell would otherwise read as a flag.
+
+**Put every flag before `--`.** Everything after `--` is positional, so trailing flags get swallowed into the query string:
 
 ```bash
-gh search issues -- "query -label:bug"
+# ✅ Correct - flags first
+gh search issues --limit 5 -- "-label:wontfix bug"
+
+# ❌ Wrong - --limit 5 becomes part of the search query, silently returning 30 results
+gh search issues -- "-label:wontfix bug" --limit 5
 ```
 
 For more syntax gotchas, see [references/syntax.md](references/syntax.md).
+
+## Preview Commands
+
+Recent `gh` releases added preview commands relevant to remote analysis and discovery. They are subject to change without notice.
+
+```bash
+# Read a repo without cloning (see Quick Operations above)
+gh repo read-file PATH --repo OWNER/REPO
+gh repo read-dir PATH --repo OWNER/REPO
+
+# GitHub Discussions - often where design rationale lives
+gh discussion list --repo OWNER/REPO
+gh discussion view <number> --repo OWNER/REPO
+
+# Agent skills on GitHub
+gh skill search <query>
+gh skill install <skill>
+
+# Revert a merged PR
+gh pr revert <number> --repo OWNER/REPO
+```
 
 ## Advanced Workflows
 
@@ -229,7 +287,7 @@ For detailed documentation on specific workflows:
 - [releases.md](references/releases.md) - Release management
 
 **Setup & Configuration:**
-- [getting_started.md](references/getting_started.md) - Installation and auth
+- [getting_started.md](references/getting_started.md) - `gh auth setup-git` credential helper
 - [other.md](references/other.md) - Environment variables, aliases, config
 - [extensions.md](references/extensions.md) - CLI extensions
 

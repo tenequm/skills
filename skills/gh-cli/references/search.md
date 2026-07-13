@@ -370,3 +370,42 @@ $ gh --% search issues -- "my search query -label:bug"
 See the following for more information:
 
 ---
+
+## Gotchas
+
+### `gh search prs` has no `mergedAt` field
+
+The `search prs` field set is much narrower than `pr view`'s. `mergedAt` does not exist and hard-errors with `Unknown JSON field: "mergedAt"`. Use `closedAt` - a merged PR always has it set.
+
+```bash
+# ✅ Correct
+gh search prs "is:merged" --json closedAt,title --limit 5
+
+# ❌ Errors
+gh search prs "is:merged" --json mergedAt
+```
+
+Run any command with a bare `--json` to print its valid field list.
+
+### Write queries as keywords + qualifiers, not sentences
+
+GitHub search is not semantic. A natural-language sentence returns near-nothing; use keywords plus qualifiers.
+
+```bash
+# ✅ Correct
+gh search repos "rate limiting middleware language:go stars:>500"
+
+# ❌ Returns almost nothing
+gh search repos "what is the best go library for rate limiting middleware"
+```
+
+The search *type* (code vs repos vs issues) is never part of the query string - it is the subcommand.
+
+### Date-scoped listing without paginating everything
+
+`gh pr list` and `gh issue list` accept `--search` with qualifiers, which is the practical way to do incremental scans:
+
+```bash
+gh pr list --repo OWNER/REPO --search "updated:>2026-07-01" --state all
+gh issue list --repo OWNER/REPO --search "updated:>2026-07-01 label:bug"
+```

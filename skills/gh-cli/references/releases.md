@@ -252,3 +252,38 @@ gh release verify v1.2.3 --format json
   - See also
 
 ---
+
+## Gotchas
+
+### Downloading needs no auth on public repos
+
+Since gh 2.96.0, `gh release download` works against public repositories without authentication, matching `gh extension install`. A token is still used when present.
+
+```bash
+gh release download v2.96.0 --repo cli/cli
+```
+
+### There is no upsert, and exit codes are coarse
+
+`gh release create` has **no `--clobber`** (only `gh release upload` does), and exit code 1 covers everything - not found, already exists, transient API error alike. So the common `gh release view TAG || gh release create TAG` guard is unreliable.
+
+Idempotent pattern - try create, fall back to edit:
+
+```bash
+gh release create "$TAG" --title "$TITLE" --notes "$NOTES" \
+  || gh release edit "$TAG" --title "$TITLE" --notes "$NOTES"
+
+gh release upload "$TAG" ./dist/* --clobber
+```
+
+### Draft orphans and immutable releases
+
+If `gh release create TAG ./files` fails partway through uploading assets, it can leave a **draft release behind** and roll back partially. On repos with immutable releases enabled, the all-in-one create can fail outright while uploading its auto-generated `digests.txt`.
+
+The robust sequence is draft -> upload -> publish:
+
+```bash
+gh release create "$TAG" --draft --title "$TITLE" --notes "$NOTES"
+gh release upload "$TAG" ./dist/* --clobber
+gh release edit "$TAG" --draft=false
+```
