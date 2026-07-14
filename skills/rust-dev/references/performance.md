@@ -83,8 +83,17 @@ To catch performance regressions automatically, run benchmarks in CI. **CodSpeed
 Before micro-optimizing, the changes that actually move the needle in typical Rust apps:
 
 - **Allocations.** Needless `.clone()` on a hot path, or building a `Vec` without `Vec::with_capacity` when the size is known, are the most common real costs. A profiler will point you straight at them.
+- **`into_iter()` instead of `.iter()` when you are transforming a collection you own.** Iterating by reference keeps every source element alive until the whole transform finishes, so peak memory holds both representations at once. `into_iter()` lets each source element drop as it is consumed. On a large decode this is a one-word change that can halve the peak.
 - **Data parallelism.** For CPU-bound work over a collection, `rayon` turns `.iter()` into `.par_iter()` and uses every core - often the biggest win for the least code.
 - **Avoid premature `Arc`/`Box`/`dyn`.** Indirection has a cost; reach for it when the design needs it, not preemptively.
 - **Async is for I/O concurrency, not speed.** If your workload is CPU-bound, async adds overhead without benefit - use threads or `rayon`.
 
 And the discipline that ties it together: a change is only an optimization if a benchmark or profiler says so. Otherwise it is just added complexity.
+
+## Memory: high RSS is usually not a leak
+
+When resident memory looks too high, the folk-wisdom fix is to swap the global allocator to `jemalloc` or `mimalloc`. Measure before you believe it - that swap is as likely to make things worse, and it does nothing about the actual cause.
+
+Most "excess" RSS is memory the process already freed but the allocator has **retained** rather than returned to the OS. It is available for reuse and it is not a leak; it just looks alarming in a process monitor. Confirm which you have before acting - a heap profiler (`dhat`) shows *live* bytes, and the gap between live bytes and RSS is retention and fragmentation, not leakage.
+
+If that gap is where your memory went, the lever is **the transient peak, not the allocator**: an allocator only holds regions that some earlier spike forced it to acquire. Cutting the spike (stream instead of buffering, `into_iter()` instead of `.iter()`, process in batches) means the regions are never claimed in the first place. Reach for an allocator swap only with a measurement in hand showing it helps *your* workload on *your* platform - and re-measure after, because the intuitive result is not guaranteed.

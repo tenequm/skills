@@ -1,9 +1,9 @@
 ---
 name: rust-dev
-description: Practical day-1 guide to building applications in Rust well. Covers the mental model (ownership, errors as values, traits-not-interfaces), day-1 decisions (String vs &str, Box vs Rc vs Arc, dyn vs impl Trait, anyhow vs thiserror), idioms to internalize early, anti-patterns to avoid, and a tight crate shortlist (tokio, serde, anyhow, clap, reqwest, tracing, axum, sqlx). Use when starting a new Rust project, learning Rust coming from Python/JS/Go/Java/C++, deciding on types and lifetimes, choosing crates, structuring modules, configuring Cargo.toml/clippy/rustfmt, writing tests, benchmarking, profiling, or speeding up builds, or whenever the user mentions Rust, cargo, ownership, borrow checker, lifetimes, traits, async Rust, testing, or "writing this in Rust".
+description: Practical day-1 guide to building applications in Rust well. Covers the mental model (ownership, errors as values, traits-not-interfaces), day-1 decisions (String vs &str, Box vs Rc vs Arc, dyn vs impl Trait, anyhow vs thiserror), idioms to internalize early, anti-patterns to avoid, and a tight crate shortlist (tokio, serde, anyhow, clap, reqwest, tracing, axum, sqlx). Use when starting a new Rust project, learning Rust coming from Python/JS/Go/Java/C++, deciding on types and lifetimes, choosing crates, structuring modules, configuring Cargo.toml/clippy/rustfmt, writing tests, benchmarking, profiling, speeding up builds, or releasing and distributing a binary, or whenever the user mentions Rust, cargo, ownership, borrow checker, lifetimes, traits, async Rust, testing, or "writing this in Rust".
 metadata:
-  version: "0.3.1"
-  upstream: "rust@1.95.0, axum@0.8.9, reqwest@0.13.3, sqlx@0.9.0, jiff@0.2.24"
+  version: "0.4.0"
+  upstream: "rust@1.95.0, axum@0.8.9, reqwest@0.13.3, sqlx@0.9.0, jiff@0.2.24, kache@0.9.0, dist@0.32.0, release-plz@0.5"
 ---
 
 # Rust Development - Day 1
@@ -236,6 +236,7 @@ These are the mistakes that show up in every newcomer's code review. Avoid them.
 5. **Brute-force `.clone()` until it compiles.** Sometimes cloning is right, but if you are scattering `.clone()` to silence the borrow checker, the design is wrong. Step back and ask the 3 questions about who owns what.
 6. **Trying to inherit via `Deref`**. `Deref` is for smart-pointer-like wrappers, not for OOP-style "extends". Use composition.
 7. **Reaching for `unsafe`.** App developers should essentially never need it. `unsafe` does not turn off the borrow checker; it lets you do five specific things (deref raw pointers, call unsafe functions, access mutable statics, implement unsafe traits, access union fields) with the contract that you have manually verified the invariants.
+8. **Reading untrusted input with `.lines()` or `read_line`.** These allocate without bound. std's own docs warn that "it is possible for an attacker to continuously send bytes without ever sending a newline or EOF" - so a hostile or malformed peer can drive your process out of memory. Bound the read with `Read::take(n)`, and use `BufRead::skip_until` (stable since 1.83) to discard an over-long line. `for line in reader.lines()` is the first thing every tutorial teaches and almost none mention this.
 
 ## What to Defer
 
@@ -363,5 +364,6 @@ Detailed material lives in `references/`. Read each when you hit the topic.
 - **async-basics.md** - `tokio`, `#[tokio::main]`, `.await`, `Send`/`Sync`, common pitfalls (blocking in async, `MutexGuard` across `.await`)
 - **crate-shortlist.md** - minimal usage example for each of the 8 crates above
 - **testing.md** - what to test and what to skip, pragmatic test organization, keeping the suite fast, the minimal high-value tool kit
-- **dev-environment.md** - the fast build loop, build caching (sccache, rust-cache), platform-aware linker guidance, file watchers
+- **dev-environment.md** - the fast build loop, build caching (kache setup and its quirks, sccache, rust-cache), platform-aware linker guidance, CI, file watchers
+- **releasing.md** - shipping a binary: `dist` vs a hand-rolled `release-plz` + `cargo-zigbuild` pipeline, `[profile.dist]`, cross-compiling every target from one runner, fanning out to binstall/Homebrew/Nix, and guarding what the published crate contains
 - **performance.md** - profiling before optimizing, benchmarking with criterion/divan, the real runtime wins

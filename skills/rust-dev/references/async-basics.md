@@ -135,6 +135,22 @@ do_async_thing(&mut g).await;       // holding the lock across await is OK
 
 `tokio::sync::Mutex` is slower than `std::sync::Mutex`. Default to `std::sync::Mutex` and scope your locks tightly. Reach for `tokio::sync::Mutex` only when you genuinely need to hold a lock across awaits.
 
+**Two different problems wear the same name.** Holding a `std::sync::MutexGuard` across `.await` is a *compile error* (the future stops being `Send`) - that one is not a judgment call, just fix it. Holding a `tokio::sync::Mutex` across `.await` compiles fine, and whether it is wrong is a *design* question. "Never hold a lock across an await" is repeated as though it settled both, and it does not.
+
+The clearest case where holding it is exactly right is **single-flight**: guarding an expensive one-time load (a model, a connection pool, a parsed index) so that N concurrent cold-start callers coalesce into one load instead of N.
+
+```rust
+use tokio::sync::Mutex;
+
+// Concurrent first-callers all block here; exactly one does the load.
+let mut slot = cache.lock().await;
+if slot.is_none() {
+    *slot = Some(expensive_load().await);   // lock held across .await, deliberately
+}
+```
+
+Drop the lock and each caller kicks off its own `expensive_load()`. Judge it by the numbers, not the slogan: an uncontended `tokio::sync::Mutex` acquire is tens to hundreds of nanoseconds, so if the work it guards is milliseconds long, the warm-path cost is noise and the coalescing is the whole point. If the warm path is genuinely hot, keep the load gate but serve warm reads without the lock (an `arc_swap::ArcSwapOption` read plus a `Mutex<()>` held only during the load).
+
 ## Don't Block the Runtime
 
 Async runtimes assume tasks yield quickly. CPU-bound work (parsing big files, encoding video, expensive computations) starves other tasks. Two escapes:
@@ -260,6 +276,7 @@ pub trait Greeter {
 5. **`select!` arms with side effects**: when one arm completes, the others are dropped (cancelled). Make sure that is safe for the operations involved.
 6. **Forgetting that `async fn` returns immediately**: until you `.await` or `spawn`, no work happens.
 7. **One giant `tokio::main` task with no concurrency**: if your `main` is awaiting things sequentially, you may not need async at all. Async pays off when you have concurrent I/O.
+8. **Assuming `impl Stream` means the body streams.** The signature promises an incremental *type*, not incremental *behavior* - a function returning `impl Stream` can happily read an entire file into a `String`, parse every record into a `Vec`, and only then yield item one. Nothing in the type system catches that. If a stream exists to bound memory, check that its body never materializes the whole input; the same trap hides inside `async_stream::stream!` blocks, where a plain `std::fs` call also blocks a runtime thread for the whole operation.
 
 ## What to Defer
 
