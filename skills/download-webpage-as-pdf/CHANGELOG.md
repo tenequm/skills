@@ -4,6 +4,13 @@ All notable changes to this skill are documented here. Format follows [Keep a Ch
 
 ## [Unreleased]
 
+## [0.1.5] - 2026-07-22
+
+### Added
+
+- skill-card.md release record following NVIDIA's skill-card format
+- metadata.openclaw block (emoji, homepage) for ClawHub display
+
 ## [0.1.4] - 2026-07-10
 
 ### Changed

@@ -53,6 +53,36 @@ CLAUDE_CODE_FIELDS = {
 # docs/skill-format.md). Other metadata values must remain strings to satisfy
 # Anthropic's `metadata: dict[str, str]` contract.
 CLAWHUB_NESTED_METADATA_KEYS = {"openclaw", "clawdbot", "clawdis"}
+# Official `metadata.openclaw` field reference (ClawHub docs/skill-format.md).
+OPENCLAW_METADATA_FIELDS = {
+    "always",
+    "config",
+    "emoji",
+    "envVars",
+    "homepage",
+    "install",
+    "nix",
+    "os",
+    "primaryEnv",
+    "requires",
+    "skillKey",
+}
+HOMEPAGE_BASE = "https://github.com/tenequm/skills/tree/main/skills/"
+# NVIDIA skill-card minimum template (docs.nvidia.com/skills/skill-cards).
+SKILL_CARD_SECTIONS = (
+    "Description",
+    "Owner",
+    "License/Terms of Use",
+    "Use Case",
+    "Deployment Geography for Use",
+    "Requirements / Dependencies",
+    "Known Risks and Mitigations",
+    "References",
+    "Skill Output",
+    "Skill Version",
+    "Ethical Considerations",
+)
+SKILL_CARD_HEADING_RE = re.compile(r"^#{1,3}\s+(.+?)\s*$", re.MULTILINE)
 
 # Claude Code dynamic-injection trigger: `!` at line start or after whitespace,
 # directly touching a backtick. The loader is not markdown-aware, so a doc
@@ -171,6 +201,77 @@ def lint_dynamic_injection(skill_md: Path, issues: list[LintIssue]) -> None:
                 )
 
 
+def lint_openclaw_metadata(
+    openclaw: Any, skill_dir: str, skill_md: Path, issues: list[LintIssue]
+) -> None:
+    if openclaw is None:
+        issues.append(
+            LintIssue(skill_md, "missing required repo policy block `metadata.openclaw`.")
+        )
+        return
+    if not isinstance(openclaw, dict):
+        return  # already reported by the nested-metadata-key check
+
+    unknown = sorted(set(openclaw) - OPENCLAW_METADATA_FIELDS)
+    if unknown:
+        issues.append(
+            LintIssue(
+                skill_md,
+                "`metadata.openclaw` has fields outside the ClawHub spec: "
+                + ", ".join(f"`{field}`" for field in unknown),
+            )
+        )
+
+    homepage = openclaw.get("homepage")
+    expected_homepage = HOMEPAGE_BASE + skill_dir
+    if not isinstance(homepage, str) or homepage != expected_homepage:
+        issues.append(
+            LintIssue(skill_md, f"`metadata.openclaw.homepage` must be `{expected_homepage}`.")
+        )
+
+    emoji = openclaw.get("emoji")
+    if not isinstance(emoji, str) or not emoji.strip():
+        issues.append(LintIssue(skill_md, "`metadata.openclaw.emoji` must be a non-empty string."))
+
+
+def lint_skill_card(card_path: Path, version: str | None, issues: list[LintIssue]) -> None:
+    skill_md = card_path.parent / "SKILL.md"
+    if not card_path.exists():
+        issues.append(
+            LintIssue(
+                skill_md,
+                "missing required `skill-card.md` (NVIDIA skill-card release record).",
+            )
+        )
+        return
+
+    text = card_path.read_text(encoding="utf-8")
+    headings = {match.group(1).strip() for match in SKILL_CARD_HEADING_RE.finditer(text)}
+    missing = [section for section in SKILL_CARD_SECTIONS if section not in headings]
+    if missing:
+        issues.append(
+            LintIssue(
+                card_path,
+                "missing required NVIDIA skill-card sections: "
+                + ", ".join(f"`{section}`" for section in missing),
+            )
+        )
+
+    if version is not None:
+        version_match = re.search(
+            r"^#{2,3}\s+Skill Version\s*\n+(.*?)(?=^#{1,3}\s|\Z)",
+            text,
+            re.MULTILINE | re.DOTALL,
+        )
+        if version_match and version.strip() not in version_match.group(1):
+            issues.append(
+                LintIssue(
+                    card_path,
+                    f"`Skill Version` section must state the frontmatter version `{version}`.",
+                )
+            )
+
+
 def lint_skill(skill_md: Path) -> LintResult:
     issues: list[LintIssue] = []
     warnings: list[LintIssue] = []
@@ -267,6 +368,12 @@ def lint_skill(skill_md: Path) -> LintResult:
             )
         elif not isinstance(version, str) or not version.strip():
             issues.append(LintIssue(skill_md, "`metadata.version` must be a non-empty string."))
+        lint_openclaw_metadata(metadata.get("openclaw"), skill_dir, skill_md, issues)
+        lint_skill_card(
+            skill_md.parent / "skill-card.md",
+            version if isinstance(version, str) else None,
+            issues,
+        )
 
     allowed_fields = STANDARD_FIELDS | OPENCLAW_EXTENSION_FIELDS | CLAUDE_CODE_FIELDS
     unknown_fields = sorted(set(frontmatter) - allowed_fields)

@@ -2,7 +2,7 @@
 name: gh-cli
 description: GitHub CLI for remote repository analysis, file fetching, codebase comparison, and discovering trending code/repos. Use when analyzing repos without cloning, comparing codebases, or searching for popular GitHub projects.
 metadata:
-  version: "1.3.0"
+  version: "1.3.1"
   upstream: "gh@2.96.0"
   openclaw:
     homepage: https://github.com/tenequm/skills/tree/main/skills/gh-cli
@@ -11,6 +11,11 @@ metadata:
     requires:
       bins:
         - gh
+    install:
+      - kind: brew
+        formula: gh
+        bins:
+          - gh
     envVars:
       - name: GH_TOKEN
         required: false

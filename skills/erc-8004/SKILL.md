@@ -2,7 +2,7 @@
 name: erc-8004
 description: Build with ERC-8004 Trustless Agents - on-chain agent identity, reputation, validation, and discovery on EVM chains. Use when registering AI agents on-chain, building agent reputation systems, searching/discovering agents, working with the Agent0 SDK (agent0-sdk), or implementing the ERC-8004 standard. Triggers on ERC-8004, Agent0, agent identity, agent registry, agent reputation, trustless agents, agent discovery.
 metadata:
-  version: "0.2.1"
+  version: "0.2.2"
   openclaw:
     homepage: https://github.com/tenequm/skills/tree/main/skills/erc-8004
     emoji: "🤝"
@@ -17,9 +17,6 @@ metadata:
       - name: PINATA_JWT
         required: false
         description: JWT for IPFS pinning via Pinata.
-      - name: FILECOIN_PRIVATE_KEY
-        required: false
-        description: Optional Filecoin signer for archival pinning.
 ---
 
 # ERC-8004: Trustless Agents

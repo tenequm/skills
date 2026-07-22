@@ -2,7 +2,7 @@
 name: mpp
 description: "Build with MPP (Machine Payments Protocol) - the open protocol for machine-to-machine payments over HTTP 402. Use when developing paid APIs, payment-gated content, AI agent payment flows, MCP tool payments, pay-per-token streaming, or any service using HTTP 402 Payment Required. Covers the mppx TypeScript SDK with Hono/Express/Next.js/Elysia middleware, pympp Python SDK, and mpp Rust SDK. Supports Tempo stablecoins, Stripe cards, Lightning Bitcoin, and custom payment methods. Includes charge (one-time) and session (streaming pay-as-you-go) intents. Make sure to use this skill whenever the user mentions mpp, mppx, machine payments, HTTP 402 payments, Tempo payments, payment channels, pay-per-token, paid API endpoints, or payment-gated services."
 metadata:
-  version: "0.8.2"
+  version: "0.8.3"
   upstream: "mppx@0.8.1, pympp@0.9.0, mpp@0.10.4, @buildonspark/lightning-mpp-sdk@0.1.4, @stellar/mpp@0.7.0, mpp-card@0.1.8"
   openclaw:
     homepage: https://github.com/tenequm/skills/tree/main/skills/mpp
@@ -14,13 +14,40 @@ metadata:
         description: BIP-39 mnemonic for client wallet (testnet/regtest only).
       - name: MPP_SECRET_KEY
         required: false
-        description: Server-side MPP signing secret.
-      - name: server_secret
+        description: Server-side MPP signing secret (HMAC-binds challenge IDs).
+      - name: MPP_REALM
         required: false
-        description: Alias for MPP_SECRET_KEY in some examples.
-      - name: TEMPO_RPC_URL
+        description: Stable realm identifier for mppscan attribution.
+      - name: MPPX_RPC_URL
         required: false
-        description: Tempo chain RPC endpoint override.
+        description: Tempo RPC endpoint override for the mppx CLI.
+      - name: RPC_URL
+        required: false
+        description: Generic RPC endpoint override (mppx CLI fallback).
+      - name: STRIPE_SECRET_KEY
+        required: false
+        description: Stripe API secret key for the Stripe payment method.
+      - name: STRIPE_API_KEY
+        required: false
+        description: Alias for the Stripe API secret key in some examples.
+      - name: STRIPE_PROFILE_ID
+        required: false
+        description: Stripe crypto profile ID for on-chain deposit flows.
+      - name: STRIPE_NETWORK_ID
+        required: false
+        description: Stripe network identifier for SPT settlement.
+      - name: PRIVY_APP_ID
+        required: false
+        description: Privy App ID for Privy server-wallet signers.
+      - name: PRIVY_APP_SECRET
+        required: false
+        description: Privy App Secret for Privy server-wallet signers.
+      - name: OPENAI_API_KEY
+        required: false
+        description: Upstream OpenAI key when gating OpenAI via the payments proxy.
+      - name: ANTHROPIC_API_KEY
+        required: false
+        description: Upstream Anthropic key when gating Anthropic via the payments proxy.
 ---
 
 # MPP - Machine Payments Protocol

@@ -8,7 +8,10 @@ description: >
   README", "write docs for this repo", "check my README", or anything about README
   quality or structure.
 metadata:
-  version: "0.1.1"
+  version: "0.1.2"
+  openclaw:
+    homepage: https://github.com/tenequm/skills/tree/main/skills/standard-readme
+    emoji: "📖"
 ---
 
 # Standard Readme

@@ -2,8 +2,23 @@
 name: playwright-cli-cloakbrowser
 description: Drive CloakBrowser Manager stealth profiles with @playwright/cli over CDP. Use for browser automation that needs a persistent logged-in session, anti-detect fingerprints, or to pass Cloudflare - attach reuses the profile's cookies and stealth where a fresh browser does not.
 metadata:
-  version: "0.3.1"
+  version: "0.3.2"
   upstream: "@playwright/cli@0.1.15"
+  openclaw:
+    homepage: https://github.com/tenequm/skills/tree/main/skills/playwright-cli-cloakbrowser
+    emoji: "🎭"
+    requires:
+      bins:
+        - playwright-cli
+    install:
+      - kind: node
+        package: "@playwright/cli"
+        bins:
+          - playwright-cli
+    envVars:
+      - name: AUTH_TOKEN
+        required: false
+        description: Optional bearer token protecting the CloakBrowser Manager API
 allowed-tools: Bash(playwright-cli:*) Bash(curl:*) Bash(docker:*)
 ---
 

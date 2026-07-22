@@ -2,7 +2,14 @@
 name: go-dev
 description: Opinionated Go development setup with golangci-lint v2 + gofumpt + gotestsum + golang-migrate + just. Use when creating new Go projects, setting up linting/formatting/testing, configuring CI/CD pipelines, writing Justfiles, or migrating from Makefile-only workflows. Triggers on "go project", "go mod init", "golangci-lint", "gofumpt", "gotestsum", "go test setup", "justfile go", "go migration", "go ci pipeline", "go lint setup", "go fmt", "go coverage".
 metadata:
-  version: "0.2.1"
+  version: "0.2.2"
+  openclaw:
+    homepage: https://github.com/tenequm/skills/tree/main/skills/go-dev
+    emoji: "🐹"
+    envVars:
+      - name: DATABASE_URL
+        required: false
+        description: Connection string used by the Justfile migration recipes (golang-migrate)
 ---
 
 # Go Development Stack

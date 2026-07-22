@@ -7,6 +7,16 @@ and this skill adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.h
 
 ## [Unreleased]
 
+## [1.3.1] - 2026-07-22
+
+### Added
+
+- skill-card.md release record following NVIDIA's skill-card format
+
+### Changed
+
+- metadata.openclaw audited against the official ClawHub spec
+
 ## [1.3.0] - 2026-07-13
 
 ### Added

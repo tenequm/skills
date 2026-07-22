@@ -7,6 +7,12 @@ and this skill adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.h
 
 ## [Unreleased]
 
+## [0.11.1] - 2026-07-22
+
+### Added
+
+- skill-card.md release record following NVIDIA's skill-card format
+
 ## [0.11.0] - 2026-07-22
 
 ### Changed

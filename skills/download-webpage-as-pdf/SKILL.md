@@ -2,8 +2,23 @@
 name: download-webpage-as-pdf
 description: Save a live webpage as a high-fidelity PDF that preserves the original layout AND every image (including lazy-loaded ones) using the agent-browser CLI. Use this whenever the user asks to "download this page as PDF", "save this article", "archive this URL", "fetch this page for reference", or otherwise wants a local PDF of a web page that looks like the browser version. Especially important on modern JS-heavy sites (engineering blogs, Next.js sites, anything with IntersectionObserver lazy loading) where naive `chrome --headless --print-to-pdf` or a bare `agent-browser pdf` produces blank rectangles or broken-image placeholders. Trigger this skill even when the user does not name the tool - any request to capture a webpage's full visual content as a PDF on disk should pull this in. For reader-mode/article-only output (no nav, no footer, no manual trimming) prefer percollate instead - see "When NOT to use this".
 metadata:
-  version: "0.1.4"
+  version: "0.1.5"
   upstream: "agent-browser@0.26.0"
+  openclaw:
+    homepage: https://github.com/tenequm/skills/tree/main/skills/download-webpage-as-pdf
+    emoji: "📄"
+    requires:
+      bins:
+        - agent-browser
+    install:
+      - kind: node
+        package: agent-browser
+        bins:
+          - agent-browser
+    envVars:
+      - name: AGENT_BROWSER_HEADED
+        required: false
+        description: Set to "false" (the recipe default) to force headless capture regardless of the host agent-browser config
 ---
 
 # Download a webpage as a PDF (agent-browser recipe)

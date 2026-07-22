@@ -2,8 +2,15 @@
 name: mcp-best-practices
 description: Build, secure, and optimize production MCP servers with the TypeScript SDK (spec 2025-11-25, SDK v1.29 / v2 beta). Use when building or reviewing MCP servers or tools - covering transports, tool and schema design, error handling, security and OAuth, performance, known SDK bugs, content vs structuredContent delivery, v2 migration, MCP Apps, extensions, and the Registry.
 metadata:
-  version: "0.8.0"
+  version: "0.8.1"
   upstream: "@modelcontextprotocol/sdk@1.29.0, @modelcontextprotocol/server@2.0.0-beta.3, @modelcontextprotocol/ext-apps@1.7.4"
+  openclaw:
+    homepage: https://github.com/tenequm/skills/tree/main/skills/mcp-best-practices
+    emoji: "🔌"
+    envVars:
+      - name: MAX_MCP_OUTPUT_TOKENS
+        required: false
+        description: Claude Code client-side cap on MCP tool result size, referenced in the result-size budget guidance
 ---
 
 # MCP Best Practices

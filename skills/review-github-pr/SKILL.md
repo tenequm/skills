@@ -2,7 +2,7 @@
 name: review-github-pr
 description: GitHub PR code review - fetches the diff, runs automated checks, launches 3 parallel review agents (correctness, convention compliance, efficiency) to analyze changes, validates findings against actual code, and drafts a GitHub review. Use when reviewing pull requests. Triggers on "review this PR", "review PR #123", "review github.com/owner/repo/pull/N", "check this pull request", "review changes in PR", "give feedback on this PR", "PR review", "look at this pull request".
 metadata:
-  version: "0.3.0"
+  version: "0.3.1"
   openclaw:
     homepage: https://github.com/tenequm/skills/tree/main/skills/review-github-pr
     emoji: "🔍"
@@ -11,6 +11,11 @@ metadata:
       bins:
         - gh
         - git
+    install:
+      - kind: brew
+        formula: gh
+        bins:
+          - gh
     envVars:
       - name: GH_TOKEN
         required: false

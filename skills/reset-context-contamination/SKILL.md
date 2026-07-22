@@ -2,7 +2,10 @@
 name: reset-context-contamination
 description: Discard the accumulated drafts and framings from this thread and re-derive the task from a clean problem statement.
 metadata:
-  version: "0.1.0"
+  version: "0.1.1"
+  openclaw:
+    homepage: https://github.com/tenequm/skills/tree/main/skills/reset-context-contamination
+    emoji: "🧹"
 ---
 
 This thread's history has become the problem - prior drafts and framings are anchoring every new attempt. Reset.

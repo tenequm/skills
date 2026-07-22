@@ -2,16 +2,22 @@
 name: foundry-solidity
 description: Build and test Solidity smart contracts with Foundry toolkit. Use when developing Ethereum contracts, writing Forge tests, deploying with scripts, or debugging with Cast/Anvil. Triggers on Foundry commands (forge, cast, anvil), Solidity testing, smart contract development, or files like foundry.toml, *.t.sol, *.s.sol.
 metadata:
-  version: "0.2.2"
+  version: "0.2.3"
   openclaw:
     homepage: https://github.com/tenequm/skills/tree/main/skills/foundry-solidity
     emoji: "⚒️"
     primaryEnv: PRIVATE_KEY
     requires:
-      bins:
+      anyBins:
         - forge
         - cast
-        - anvil
+    install:
+      - kind: brew
+        formula: foundry
+        bins:
+          - forge
+          - cast
+          - anvil
     envVars:
       - name: PRIVATE_KEY
         required: false
