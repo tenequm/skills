@@ -1,6 +1,6 @@
 # Lance performance - combined reference
 
-All official performance guidance from the Lance docs (`lance-format/lance@v9.0.0-beta.18`,
+All official performance guidance from the Lance docs (`lance-format/lance@v9.1.0-beta.8`,
 `docs/src/`) collected in one place (Part A, verbatim with sources noted), followed by
 field-verified practices from running Lance against remote object storage (Part B).
 
@@ -103,6 +103,14 @@ debugging query performance.
 | `lance::execution` | `indices_loaded`    | The number of indices loaded by the plan                       |
 | `lance::execution` | `parts_loaded`      | The number of index partitions loaded by the plan              |
 | `lance::execution` | `index_comparisons` | The number of comparisons performed inside the various indices |
+
+### OpenTelemetry metrics (v9.1)
+
+Beyond the trace events above, Lance can export metrics through the `metrics` crate facade
+(Rust `metrics` feature). The `pylance` wheels are built with the `metrics` feature enabled:
+install the OpenTelemetry extra (`pip install "pylance[otel]"`) and call
+`instrument_lance_metrics`, which registers Lance's metrics as observable instruments on your
+OpenTelemetry `MeterProvider` (`docs/guide/observability.md`, PR #7537).
 
 ## Threading Model
 

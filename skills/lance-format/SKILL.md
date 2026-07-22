@@ -2,8 +2,8 @@
 name: lance-format
 description: Reference for Lance v9 - the open columnar lakehouse format for multimodal AI - and its Rust crate workspace (`lance`, `lance-table`, `lance-file`, `lance-encoding`, `lance-index`, `lance-io`, `lance-namespace`, and more). Use when building directly on the Lance crates - creating or reading `.lance` datasets, manifests, fragments, deletion files, the 2.x file format and structural encodings, vector / scalar / full-text / FM-Index / geo indexes, MemWAL streaming writes, optimistic-concurrency commits and commit handlers, schema evolution, versioning, time-travel, tags, branches, stable row IDs, namespaces, or object-store config. Triggers on lance crate, .lance file, lance dataset, lance file format, structural encoding, IVF_PQ, IVF_HNSW, IVF_RQ, RaBitQ, FM-Index, lance FTS, zonemap, MemWAL, OCC retry, lance schema evolution, lance namespace, pylance. This is the Lance format and engine (the `lance-format/lance` repo), not LanceDB the database product - but also the right reference for what LanceDB builds on.
 metadata:
-  version: "0.10.1"
-  upstream: "lance-format/lance@v9.0.0-beta.18"
+  version: "0.11.0"
+  upstream: "lance-format/lance@v9.1.0-beta.8"
   openclaw:
     homepage: https://github.com/tenequm/skills/tree/main/skills/lance-format
     emoji: "🗄️"
@@ -17,11 +17,13 @@ specs: a **file format**, a **table format**, **index formats**, **catalog specs
 **namespace client spec**. The Rust workspace at `lance-format/lance` implements all of them
 plus Python (`pylance`) and Java bindings.
 
-This skill tracks **`v9.0.0-beta.18`** (the `lance-format/lance` git tag), the current
+This skill tracks **`v9.1.0-beta.8`** (the `lance-format/lance` git tag), the current
 development frontier. Pin against tags, not `main` - Lance ships beta
-tags every few days and `next`-format encodings can change. **`v8.0.0` final shipped
-2026-07-01** - if you need a stable pin rather than the v9 dev betas, track `v8.0.0`, whose
-format and API are the frozen predecessor of what this reference describes.
+tags every few days and `next`-format encodings can change. v9.0.0 never got a final tag; the
+line reached **`v9.0.0-rc.2`** (2026-07-21) while `main` advanced to the `9.1.0-beta.*` dev
+series. **`v8.0.0` final shipped 2026-07-01** - if you need a stable pin rather than the v9
+dev betas, track `v8.0.0` (the last final), whose format and API are the frozen predecessor of
+what this reference describes.
 
 Three layers of reference, load what the task needs:
 
@@ -54,7 +56,7 @@ Lance, so this skill remains the authority for the format itself.
 
 ## The crate workspace
 
-25 crate directories under `rust/`. `lance` is the public entry point; the rest are layers
+26 crate directories under `rust/`. `lance` is the public entry point; the rest are layers
 beneath it. Full table with descriptions and citations in `references/lance-reference.md` section 2.
 
 | Crate | Role |
@@ -64,6 +66,7 @@ beneath it. Full table with descriptions and citations in `references/lance-refe
 | `lance-file` | File format - file reader/writer |
 | `lance-encoding` | Structural encodings, compression (internal, not for external use) |
 | `lance-index` | Scalar / vector / FTS / system indexes |
+| `lance-index-core` | Shared index primitives extracted from `lance-index` (new in v9.1, PR #7713) |
 | `lance-io` | Object store, I/O schedulers |
 | `lance-core` | Shared `Error`/`Result`, cache, datatypes |
 | `lance-datafusion` | DataFusion glue (exec, expr, planner, UDFs) |
@@ -75,11 +78,13 @@ beneath it. Full table with descriptions and citations in `references/lance-refe
 | `lance-namespace` / `-impls` / `-datafusion` | Namespace trait, Directory/REST impls, DataFusion catalog bridge |
 | `lance-arrow`, `lance-tools`, `fsst`, `lance-bitpacking`, ... | Arrow extensions, CLI, compression sub-crates |
 
-All share `version = "9.0.0-beta.18"` except `lance-arrow-scalar`, which is pinned at
-`58.0.0` to track Arrow. Workspace: edition 2024, `rust-version = 1.91.0`,
-`resolver = "3"`; notable deps arrow 58, datafusion 53, opendal 0.57, jieba-rs 0.10,
-`lance-namespace-reqwest-client` 0.8.6, itertools 0.14. Python bindings now require
-**Python 3.10+** (3.9 dropped in v9, PR #7345).
+All share `version = "9.1.0-beta.8"` except `lance-arrow-scalar`, which is pinned at
+`58.0.0` to track Arrow. Workspace: edition 2024, `rust-version = 1.91.0` (MSRV; the pinned
+build toolchain in `rust-toolchain.toml` moved to 1.97.0 in v9.1, PR #7712),
+`resolver = "3"`; notable deps arrow 58, datafusion 54 (bumped from 53 in v9.1, PR #7793),
+opendal 0.57, jieba-rs 0.10, `lance-namespace-reqwest-client` 0.8.6, itertools 0.14. Python
+bindings require **Python 3.10+** (3.9 dropped in v9, PR #7345; 3.14 support added in v9.1,
+PR #7728).
 
 ## File format versions
 
@@ -93,22 +98,53 @@ dataset).
 | `2.0` | stable | Removed row groups; null support for lists/FSL/primitives |
 | `2.1` | **current default** (`stable`) | Adaptive structural encodings; better integer/string compression; nulls in struct fields; better nested random access. Default since Lance 5.0.0 |
 | `2.2` | unstable | Map type, Blob v2, `VariablePackedStruct`, larger mini-blocks. Required for Map and Blob v2; the real experimental frontier - encodings may still change |
-| `2.3` | unstable (`next`) | The current `next` alias target (`V2_3` in the enum). Scaffolding only - no distinct encodings yet (6 refs vs 98 for 2.2 in `lance-encoding`); the docs version table still lists only 2.2 |
+| `2.3` | unstable (`next`) | The current `next` alias target (`V2_3` in the enum). **No longer scaffolding** - as of v9.1 it ships **sparse structural pages** (`lance-encoding:structural-encoding=sparse`, PR #7889); `V2_3` references in `lance-encoding` jumped 6 -> 59. The docs version table now names it "sparse structural pages and other experimental encodings" |
 
 `stable` resolves to the default (2.1); `next` now resolves to **2.3** (not 2.2) in the
 running Lance release - pin an explicit number for deterministic behavior. In the version
-ladder 2.2 sits *below* `next`, so the code does not flag 2.2 as unstable. As of v9 the docs
-version table (`docs/src/format/file/versioning.md`) lists **2.3** as the unstable row and no
-longer labels 2.2 unstable (it now reads "2.2-era storage features") - code and docs finally
-agree that 2.3 is the unstable frontier, though 2.2 still carries the concrete experimental
-encodings (Map, Blob v2, `VariablePackedStruct`).
+ladder 2.2 sits *below* `next`, so the code does not flag 2.2 as unstable. The docs version
+table (`docs/src/format/file/versioning.md`) lists **2.3** as the unstable row and no longer
+labels 2.2 unstable - and 2.3 now carries its own concrete experimental encoding (sparse
+pages), on top of the 2.2-era features (Map, Blob v2, `VariablePackedStruct`).
 
 ## What's new in v9
 
-The v8 -> v9 boundary is a **light major bump**: structurally v9 is nearly identical to v8
-(same **25 crates**, **15 transaction ops**, file-format enum with `next => 2.3` and default
-2.1, `CommitConfig.num_retries` still **20**, arrow 58 / datafusion 53 / opendal 0.57 /
-jieba 0.10 unchanged). The major version was auto-triggered by Lance's `breaking-change`-label
+### v9.0 -> v9.1 (the current frontier)
+
+The 9.1 dev line branched off `main` when `v9.0.0-rc.1` was cut for stabilization - an
+automatic release-train bump, not a breaking change. Structural deltas from beta.18:
+**26 crates** (new `lance-index-core`, #7713), **16 transaction ops** (new `DataOverlay`,
+below), **datafusion 53 -> 54** (#7793), and the build toolchain moved to Rust 1.97.0 (#7712;
+MSRV `rust-version` unchanged at 1.91.0). `CommitConfig.num_retries` still **20**, file-format
+enum still `next => 2.3` / default 2.1.
+
+One breaking-labeled PR in the window: **FTS/inverted-index creation takes a `block_size`
+param** (compressed posting blocks; 128 or 256, default 128, 512 rejected, #7466). `block_size=256`
+and the new **code-analyzer tokenizer** (#7681) require FTS on-disk **format v3** (#7866) -
+readers must support v3 before such an index exists.
+
+Net-new in 9.1:
+- **Data Overlay Files** - attach new values for a subset of `(row offset, field)` cells to a
+  fragment **without rewriting its base data files** (the upstream answer to cheap cell-level
+  updates). New `DataOverlay` transaction op, feature flag 64, spec
+  `references/docs/format/table/data_overlay_file.md`. Still **unstable**: env-gated by
+  `LANCE_ENABLE_UNSTABLE_DATA_OVERLAY_FILES`, and release builds refuse overlay datasets
+  (#7535, #7536).
+- **Sparse structural pages** - the first real 2.3 encoding; represent flat/nested Arrow
+  structure as slot-domain mappings instead of dense rep/def events (#7889).
+- **Exact `IS NULL`** from zonemap and bloom-filter indexes via a new `null_bitmap` (was
+  inexact / `AtMost`); **nested-field FTS** (index leaf fields like `data.text`, #7686);
+  FTS impact-skip / MAXSCORE top-k / bulk-conjunction paths (#7602, #7603, #7624).
+- **OpenTelemetry metrics** for Python (`instrument_lance_metrics`, `pylance[otel]`, #7537);
+  AWS creds via `AssumeRoleWithWebIdentity` to avoid role chaining (#7757); Python 3.14
+  support (#7728). Full delta in `references/lance-reference.md` section 14.
+
+### v8 -> v9
+
+The v8 -> v9 boundary is a **light major bump**: structurally v9.0 was nearly identical to v8
+(same 25 crates, 15 transaction ops at that point, file-format enum with `next => 2.3` and
+default 2.1, `CommitConfig.num_retries` **20**, arrow 58 / datafusion 53 / opendal 0.57 /
+jieba 0.10). The major version was auto-triggered by Lance's `breaking-change`-label
 detector (`ci/check_breaking_changes.py`), fired by two PRs: **Python 3.9 was dropped**
 (minimum now 3.10, #7345) and **`alter_columns` now fails fast** when you cast a column that
 has an index attached - you must `drop_index()` first instead of relying on the old silent
@@ -144,11 +180,11 @@ carries forward.
 ## Navigating the reference
 
 `references/lance-reference.md` is the full v9 reference, regrounded against the
-`v9.0.0-beta.16` source and bumped to `v9.0.0-beta.18` (36 additive commits, no breaking
-changes - delta in its section 14). Load the section for your task:
+`v9.1.0-beta.8` source (127 commits from `v9.0.0-beta.18`, 1 breaking change - delta in its
+section 14). Load the section for your task:
 
 1. **What Lance is** - the lakehouse spec stack
-2. **Crate workspace** - all 25 crates, what each does, the public entry point
+2. **Crate workspace** - all 26 crates, what each does, the public entry point
 3. **File format** - versions, container layout, structural encoding (mini-block / full-zip /
    constant / blob page types), compression schemes, blob encoding
 4. **Data types** - Arrow type coverage, FixedSizeList for vectors, JSON (JSONB), blob, ML
@@ -158,7 +194,7 @@ changes - delta in its section 14). Load the section for your task:
 6. **Schema evolution** - field IDs, zero-copy column add/drop/alter, why old rows read NULL
 7. **Versioning, tags, branches** - manifest versions, time travel, tag pinning, branches
 8. **Row IDs** - row address vs stable row ID, lineage, change-data-feed columns
-9. **Transactions and concurrency** - the 15 transaction ops, OCC retry/rebase, commit
+9. **Transactions and concurrency** - the 16 transaction ops, OCC retry/rebase, commit
    handlers (conditional-put, DynamoDB), conflict resolution matrix
 10. **MemWAL** - shards, MemTable/WAL/flush, the appender/tailer/flusher model, fencing
 11. **Indexes** - vector (IVF/HNSW/PQ/SQ/RQ, multi-bit RQ), scalar (btree/bitmap/bloom/
@@ -221,6 +257,7 @@ Every file below is directly readable; pick by topic.
 | `file/encoding.md` | Structural encodings and compression strategy |
 | `file/versioning.md` | File-format versions (2.0 / 2.1 / 2.2 / 2.3) |
 | `table/index.md` | Table-format overview |
+| `table/data_overlay_file.md` | Data Overlay Files - cell-level `(offset, field)` updates without base-file rewrite (feature flag 64, unstable) |
 | `table/layout.md` | Dataset directory layout |
 | `table/schema.md` | Schema and field-metadata spec |
 | `table/transaction.md` | Commit protocol, transaction ops, **conflict-resolution matrix** |
@@ -256,7 +293,7 @@ Every file below is directly readable; pick by topic.
 ## Maintenance
 
 Citations in `references/lance-reference.md` are `path:line` relative to the `lance-format/lance` repo;
-build a permalink as `https://github.com/lance-format/lance/blob/v9.0.0-beta.18/<path>`.
+build a permalink as `https://github.com/lance-format/lance/blob/v9.1.0-beta.8/<path>`.
 
 To refresh: `git -C ~/pjv/lance-format/lance fetch --tags`, check out the newest `v9*` tag
 (or the v8.0.0 rc/final line for a stable pin), then:

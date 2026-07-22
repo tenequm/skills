@@ -7,6 +7,44 @@ and this skill adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.h
 
 ## [Unreleased]
 
+## [0.11.0] - 2026-07-22
+
+### Changed
+- Re-grounded against upstream tag `v9.0.0-beta.18` -> `v9.1.0-beta.8` (127-commit range,
+  1 breaking-labeled PR); bumped workspace version pin, permalink base, and citation tag.
+  Copied the changed doc-mirror subset (12 files + 1 new) from the new tag.
+- **Crate workspace 25 -> 26**: new `lance-index-core` crate (PR #7713).
+- **Transaction ops 15 -> 16**: new `DataOverlay` operation (env-gated unstable; release
+  builds refuse overlay datasets), sections 9.1 + 5.5.
+- **datafusion 53 -> 54** (PR #7793); geodatafusion 0.4 -> 0.5. Build toolchain (not MSRV)
+  1.91 -> 1.97 (#7712); MSRV `rust-version` unchanged at 1.91.0. Python min still 3.10
+  (3.14 support added, #7728).
+- File-format 2.3 is **no longer scaffolding-only**: sparse structural pages shipped
+  (PR #7889, `sparse.rs`); `lance-encoding:structural-encoding=sparse` selects it (requires
+  2.3). Corrected the "6 refs vs 98, no distinct encodings" claim (now 59 vs 97).
+
+### Added
+- Section 5.5: **Data Overlay Files** - cell-level `(row offset, field)` updates without
+  rewriting base data files; new `DataOverlay` transaction op, feature flag 64, spec
+  `data_overlay_file.md` (unstable, `LANCE_ENABLE_UNSTABLE_DATA_OVERLAY_FILES`) (PR #7535/#7536).
+- Section 3.1: sparse structural pages / `sparse` encoding (Lance 2.3, PR #7889).
+- Section 11.2: zonemap + bloom-filter indexes now carry a `null_bitmap` -> **exact IS NULL**.
+- Section 11.3: FTS configurable posting `block_size` (128/256, 256 experimental, format-v3
+  gate) (PR #7466); FTS code-analyzer tokenizer (PR #7681); nested-field FTS (PR #7686);
+  bulk MAXSCORE / impact-skip / conjunction paths (#7602/#7603/#7624).
+- OpenTelemetry metrics for Python (`instrument_lance_metrics`, `pylance[otel]`, PR #7537),
+  noted in `performance.md`.
+- Section 14: new `v9.0.0-beta.18 -> v9.1.0-beta.8 delta` subsection.
+- `references/docs/format/table/data_overlay_file.md` mirrored; SKILL.md format-specs file map
+  gains its row.
+
+### Changed (breaking, upstream)
+- **FTS/inverted-index creation takes a `block_size` param** (compressed posting blocks;
+  128/256, default 128; 512 rejected). `block_size=256` and the code analyzer require FTS
+  on-disk **format v3** (PR #7466, #7866). Section 11.3.
+
+Verified against: lance-format/lance@v9.1.0-beta.8
+
 ## [0.10.1] - 2026-07-10
 
 ### Changed

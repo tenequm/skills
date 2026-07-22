@@ -1,13 +1,15 @@
 # Lance v9 reference
 
 Capability reference for **Lance** - the open columnar lakehouse format for multimodal AI -
-regrounded against the `lance-format/lance` repository at git tag **`v9.0.0-beta.16`**
-and bumped to **`v9.0.0-beta.18`** (36 additive commits, no breaking changes - delta in
-section 14). v9 is the current development frontier; **`v8.0.0` final shipped
-2026-07-01** - track `v8.0.0` if you need a stable pin instead of the v9 dev betas.
+regrounded against the `lance-format/lance` repository at git tag **`v9.1.0-beta.8`**
+(127 commits from `v9.0.0-beta.18`, 1 breaking change - delta in
+section 14). v9 is the current development frontier; v9.0.0 never got a final tag (it reached
+`v9.0.0-rc.2`, 2026-07-21) while `main` moved to the `9.1.0-beta.*` line. **`v8.0.0` final
+shipped 2026-07-01** - track `v8.0.0` (the last final) if you need a stable pin instead of the
+v9 dev betas.
 
 Citations are `path:line` relative to the repo root. Build a permalink as
-`https://github.com/lance-format/lance/blob/v9.0.0-beta.18/<path>`. Line numbers drift
+`https://github.com/lance-format/lance/blob/v9.1.0-beta.8/<path>`. Line numbers drift
 between tags; treat them as approximate. The authoritative in-repo sources are the format
 spec under `docs/src/format/`, the user guide under `docs/src/guide/`, the protobuf schemas
 under `protos/`, and the Rust workspace under `rust/`.
@@ -62,9 +64,10 @@ code. The format itself is the product - there is no server.
 
 ## 2. The crate workspace
 
-25 crate directories under `rust/`. `[workspace.package]`: `version = "9.0.0-beta.18"`,
-`edition = "2024"`, `rust-version = "1.91.0"`, `license = "Apache-2.0"`, `resolver = "3"`
-(`Cargo.toml:31-55`). `exclude = ["python", "java/lance-jni"]`.
+26 crate directories under `rust/`. `[workspace.package]`: `version = "9.1.0-beta.8"`,
+`edition = "2024"`, `rust-version = "1.91.0"` (MSRV; the pinned build toolchain in
+`rust-toolchain.toml` is `1.97.0` as of v9.1, PR #7712), `license = "Apache-2.0"`,
+`resolver = "3"` (`Cargo.toml:31-55`). `exclude = ["python", "java/lance-jni"]`.
 
 | Crate dir | Published name | Purpose |
 |-----------|----------------|---------|
@@ -73,6 +76,7 @@ code. The format itself is the product - there is no server.
 | `lance-file` | `lance-file` | File format: file reader/writer, `LanceEncodingsIo`, MAGIC bytes |
 | `lance-encoding` | `lance-encoding` | Structural encodings, compression. Internal - not for external use |
 | `lance-index` | `lance-index` | Secondary indexes: scalar, vector, FTS, system |
+| `lance-index-core` | `lance-index-core` | Shared index primitives extracted from `lance-index`. New in v9.1 (PR #7713) so lighter consumers can depend on core index types without the full index crate |
 | `lance-io` | `lance-io` | Object store, I/O schedulers, local FS, FFI |
 | `lance-core` | `lance-core` | Shared `Error`/`Result`, `cache`, `datatypes`, `traits`, `utils` |
 | `lance-datafusion` | `lance-datafusion` | DataFusion glue: `exec`, `expr`, `planner`, `projection`, UDFs |
@@ -95,7 +99,7 @@ code. The format itself is the product - there is no server.
 | `arrow-stats` | `lance-arrow-stats` | Statistics accumulator (min, max, null_count, nan_count) |
 
 `rust/examples` (`lance-examples`) holds non-published example binaries. The workspace
-`members` array lists 25 paths; `rust/lance-datafusion` is part of the workspace as a
+`members` array lists 26 paths; `rust/lance-datafusion` is part of the workspace as a
 path dependency rather than an explicit member.
 
 **Bindings.** Python: package `pylance` (`python/pyproject.toml`), built with maturin, imported
@@ -104,10 +108,11 @@ as `lance`; the Rust extension crate is `pylance` (`[lib] name = "lance"`); supp
 runtime deps `pyarrow>=14`, `numpy>=1.22`, `lance-namespace>=0.8.5,<0.9`. Java: an
 SDK under `java/` (Maven `org.lance`), bridged to Rust by the `lance-jni` crate
 (`java/lance-jni/`, excluded from the Rust workspace). Notable workspace deps at this tag
-(`Cargo.toml`): `arrow 58.0.0`, `datafusion 53.0.0`, `opendal 0.57`, `jieba-rs 0.10`,
+(`Cargo.toml`): `arrow 58.0.0`, `datafusion 54.0.0` (53 -> 54 in v9.1, PR #7793),
+`geodatafusion 0.5.0` (0.4 -> 0.5 in v9.1), `opendal 0.57`, `jieba-rs 0.10`,
 `itertools 0.14` (0.13 -> 0.14 in v9), `lance-namespace-reqwest-client 0.8.6` (0.8.4 -> 0.8.6
 in v9). The `lance-namespace`/`-impls` crates publish at
-the workspace version (`9.0.0-beta.18`); note the `[workspace.dependencies]` declaration
+the workspace version (`9.1.0-beta.8`); note the `[workspace.dependencies]` declaration
 still pins `lance-namespace-datafusion` consumers to `=7.0.0-beta.9` even though that crate
 itself publishes at the workspace version.
 
@@ -133,7 +138,7 @@ The footer stores `u16` major and `u16` minor (`protos/file2.proto:90-91`).
 | `2.0` | 0.16.0 | stable | Removed row groups; null support for lists, fixed-size lists, primitives |
 | `2.1` | 0.38.1 | **current default** | Adaptive structural encodings; better integer/string compression; nulls in struct fields; better nested random access |
 | `2.2` | - | unstable | Map type, Blob v2, `VariablePackedStruct`, larger mini-blocks; encodings may still change. The real experimental frontier |
-| `2.3` | - | unstable (`next`) | The current `next` alias target. Scaffolding only - present in the enum but with no distinct encoding behavior yet |
+| `2.3` | - | unstable (`next`) | The current `next` alias target. Ships **sparse structural pages** (v9.1, PR #7889) - the first 2.3-specific encoding; selected via `lance-encoding:structural-encoding=sparse` |
 
 `stable` resolves to the default (2.1); `next` resolves to the latest unstable version. The
 enum order is `Legacy < 2.0 < 2.1 (#[default]) < Stable < 2.2 < Next < 2.3`, with
@@ -142,11 +147,15 @@ enum order is `Legacy < 2.0 < 2.1 (#[default]) < Stable < 2.2 < Next < 2.3`, wit
 **`next` now resolves to 2.3, not 2.2** - writing with `next` produces a 2.3 file; (2)
 because 2.2 sits *below* `Next` in the ladder, the code does **not** flag 2.2 as unstable.
 As of v9 the docs version table (`docs/src/format/file/versioning.md:18-27`) agrees: it lists
-`2.3 (unstable)` ("Adds experimental encodings for upcoming features") and no longer labels
-2.2 unstable (2.2 now reads "Adds support for newer nested type/encoding capabilities
-(including map support) and 2.2-era storage features"). 2.3 remains a placeholder (6 refs vs
-98 for 2.2 across `lance-encoding`) - 2.2 is the version actually carrying Map / Blob v2 /
-`VariablePackedStruct`.
+`2.3 (unstable)` and no longer labels 2.2 unstable (2.2 now reads "Adds support for newer
+nested type/encoding capabilities (including map support) and 2.2-era storage features"). As
+of v9.1 the 2.3 row reads **"Adds sparse structural pages and other experimental encodings"**
+- 2.3 is no longer a placeholder: `V2_3` references in `lance-encoding` jumped 6 -> 59 with the
+sparse-page encoding (`rust/lance-encoding/src/encodings/logical/primitive/sparse.rs`, PR
+#7889). **Sparse pages** represent flat or nested Arrow structure directly as slot-domain
+mappings instead of dense repetition/definition events (`docs/src/format/file/encoding.md:330`);
+`structural-encoding` now accepts `miniblock`, `fullzip`, or `sparse` (`sparse` requires 2.3).
+2.2 still carries Map / Blob v2 / `VariablePackedStruct`.
 `next` encodings can change and files written with them may become unreadable - "should only
 be used for experimentation and benchmarking" (`docs/src/format/file/versioning.md:8-11`).
 The default storage version became 2.1 in Lance 5.0.0 (`docs/src/guide/migration.md`); 2.2 is
@@ -377,6 +386,23 @@ Two formats: **Arrow IPC** (`.arrow`, a flat `Int32Array` of offsets - sparse de
 `_deletions/{fragment_id}-{read_version}-{id}.{ext}`. Gated by `FLAG_DELETION_FILES`. Deletes
 avoid invalidating indexes; accumulating deletions slow scans until compacted.
 
+### 5.5 Data overlay files (unstable, v9.1)
+
+Overlay files supply **new values for a subset of `(row offset, field)` cells within a
+fragment without rewriting the fragment's base data files** (`docs/src/format/table/data_overlay_file.md`)
+- the cheap-cell-update counterpart to soft-delete's cheap-row-removal. Written and committed
+via the new `DataOverlay` transaction op (section 9.1); a reader resolves each cell by taking
+the highest-`committed_version` overlay that covers it, falling back to the base data file.
+Overlays interact with indexes: for each overlay whose `committed_version` exceeds an index
+segment's `dataset_version`, the covered rows are excluded from index results (they carry
+updated values the index has not seen).
+
+Gated by **feature flag 64** (`FLAG_UNSTABLE_DATA_OVERLAY_FILES`,
+`rust/lance-table/src/feature_flags.rs:32`). This is **not a released feature**: writes require
+`LANCE_ENABLE_UNSTABLE_DATA_OVERLAY_FILES`, and in release builds the flag is treated as
+unknown so a release reader/writer **refuses** an overlay dataset rather than silently ignoring
+an overlay. Compaction can fold fragments over an overlay-count limit (PR #7772).
+
 ---
 
 ## 6. Schema evolution
@@ -525,12 +551,17 @@ is written to `_transactions/{read_version}-{uuid}.txn` first, then the manifest
 conflict-free commit is 1 read IOP + 2 write IOPs.
 
 The `Transaction` message carries `read_version`, `uuid`, optional `tag`, a
-`transaction_properties` string map, and a `oneof operation` - **15 operation types**
+`transaction_properties` string map, and a `oneof operation` - **16 operation types**
 (`protos/transaction.proto`):
 
-`Append`, `Delete`, `Overwrite`, `CreateIndex`, `Rewrite`, `Merge`, `Restore`,
-`ReserveFragments`, `Update`, `Project`, `UpdateConfig`, `DataReplacement`,
+`Append`, `Delete`, `Overwrite`, `CreateIndex`, `Rewrite`, `DataReplacement`, `DataOverlay`,
+`Merge`, `Restore`, `ReserveFragments`, `Update`, `Project`, `UpdateConfig`,
 `UpdateMemWalState`, `Clone`, `UpdateBases`.
+
+`DataOverlay` is new in v9.1 (PR #7535/#7536): it attaches overlay files supplying new values
+for a subset of `(row offset, field)` cells without rewriting a fragment's base data files
+(section 5). It is **unstable** - env-gated by `LANCE_ENABLE_UNSTABLE_DATA_OVERLAY_FILES`, and
+release builds refuse overlay datasets (feature flag 64 treated as unknown).
 
 Notable semantics: `Rewrite` reorganizes data without semantic change (compaction) and
 changes row addresses; `Merge` adds columns and is "overly general" / high-conflict (prefer
@@ -782,7 +813,8 @@ offset in dot-distance (PR #7481).
 ### 11.2 Scalar indexes
 
 `docs/src/format/index/scalar/`. Results are **exact** (BTREE, BITMAP, LABEL_LIST) or
-**inexact / AtMost** (BLOOM_FILTER, NGRAM, ZONEMAP, RTREE).
+**inexact / AtMost** (BLOOM_FILTER, NGRAM, ZONEMAP, RTREE) - except that ZONEMAP and
+BLOOM_FILTER now answer **`IS NULL` exactly** (see the `null_bitmap` note below).
 
 | Index | For | Structure |
 |-------|-----|-----------|
@@ -801,6 +833,12 @@ index's details with a JSON path. Since v9, **BTREE and ZONEMAP accept `large_st
 global **min/max without a scan** via `zonemap_value_range(column)` (`DatasetIndexExt`;
 `ZoneMapIndex::value_range` / `value_range_over(segments)`, PR #7463) - cheap stats and a
 range-pruning planning input.
+
+As of v9.1, both **ZONEMAP and BLOOM_FILTER carry a `null_bitmap`** (a serialized
+`RowAddrTreeMap` of null rows) that upgrades **`IS NULL` from inexact to Exact** - "since
+finding NULLs is a common query pattern, the index also maintains a bitmap of null rows which
+allows it to return exact results for IS NULL queries" (`docs/src/format/index/scalar/bloom_filter.md`,
+`.../zonemap.md`). Other predicates on these indexes stay inexact/`AtMost`.
 
 **FM-Index** (new in v8, `docs/src/format/index/scalar/fmindex.md`,
 `protos/index.proto:251` `FMIndexDetails` - **renamed from `FMIndexIndexDetails` in v9**,
@@ -850,8 +888,24 @@ must read the index - "older Lance readers may not be able to read them" otherwi
 indexes stay queryable and are **maintained as v1**: "append, incremental indexing, optimize,
 and mem-wal maintained-index flush ... continue preserving the v1 format."
 
+**Configurable posting `block_size` (v9.1, breaking, PR #7466).** FTS index creation takes a
+`block_size` param - documents per compressed posting block, "must be 128 or 256" (default
+128; missing values in older indexes read as 128; unsupported values like 512 are rejected by
+`validate_format_version_block_size`, `rust/lance-index/src/scalar/inverted/builder.rs:229`).
+"`256` is experimental and may introduce breaking changes." Both `block_size=256` and the new
+**code analyzer** require FTS on-disk **format v3** (the capability gate moved to v3, PR #7866):
+"The code analyzer and `block_size=256` require format v3, so readers must support v3 before an
+index using either option is created" (`docs/src/guide/migration.md`).
+
+**Nested-field FTS (v9.1, PR #7686).** FTS can now index leaf fields inside nested columns
+(e.g. `data.text`), not just top-level string columns. Query-side bulk paths were added too:
+impact-skip data for posting lists (#7602), a bulk MAXSCORE top-k path for disjunctions
+(#7603), and a bulk conjunction path for AND / phrase queries (#7624).
+
 Tokenizer pipeline (`InvertedIndexParams`): a base tokenizer (`simple`, `whitespace`, `raw`,
-`ngram`, `icu`, `icu/split`, `jieba/*` for Chinese, `lindera/*` for Japanese) followed by
+`ngram`, `icu`, `icu/split`, `code` (the v9.1 code analyzer / `CodeLexTokenizer` +
+`WordDelimiterFilter`, PR #7681 - splits identifiers like `getUserName`/`snake_case`),
+`jieba/*` for Chinese, `lindera/*` for Japanese) followed by
 token filters (`RemoveLong`, `LowerCase`, `Stemmer`, `StopWords`, `AsciiFolding`) - stop
 words can now be **mixed-language** (PR #7324). The `icu` tokenizer
 (PR #6956) does ICU4X dictionary-based Unicode word segmentation with **bundled segmenter
@@ -1016,13 +1070,16 @@ Disable globally with `LANCE_USE_VERSION_HINT=0`.
 The v7 tag line ran `v7.0.0-beta.1` through `v7.0.0-beta.17`, then `v7.0.0-rc.1` and
 `v7.0.0`. The v7.1 line opened at `v7.1.0-beta.1`, continued through `v7.1.0-beta.4` and
 `v7.1.0-rc.1`; the v7.2 line ran through `v7.2.0-beta.5`; the **v8 line** ran through
-`v8.0.0-beta.19` to `v8.0.0` final (2026-07-01); and the **v9 line opened** (auto-bumped from
-a `breaking-change`-labeled PR) with the crates now pinning `9.0.0-beta.18`. This section keeps
+`v8.0.0-beta.19` to `v8.0.0` final (2026-07-01); the **v9 line opened** (auto-bumped from
+a `breaking-change`-labeled PR) and ran to `v9.0.0-rc.2` (2026-07-21, no final tag); and the
+**v9.1 line opened** at `9.1.0-beta.0` when `v9.0.0-rc.1` was cut, now pinning
+`9.1.0-beta.8`. This section keeps
 the full v7 history below (still useful context), the **v7.2.0-beta.5 -> v8.0.0-beta.9 delta**
 (the v7->v8 major boundary), the **v8.0.0-beta.9 -> v8.0.0-beta.14 delta**, the
-**v8.0.0-beta.14 -> v9.0.0-beta.10 delta** (the v8->v9 major boundary), and finally the
-**v9.0.0-beta.10 -> v9.0.0-beta.16 delta**, and the **v9.0.0-beta.16 -> v9.0.0-beta.18
-delta** (the current tag - most important for a v9 reader) at the very end.
+**v8.0.0-beta.14 -> v9.0.0-beta.10 delta** (the v8->v9 major boundary), the
+**v9.0.0-beta.10 -> v9.0.0-beta.16 delta**, the **v9.0.0-beta.16 -> v9.0.0-beta.18 delta**,
+and finally the **v9.0.0-beta.18 -> v9.1.0-beta.8 delta** (the current tag - most important
+for a v9 reader) at the very end.
 
 **The v6 -> v7 breaking change.** `feat!: make dataset object store access base-aware`
 (PR #6647, commit `456198cd`), immediately followed by the automated bump to `7.0.0-beta.1`.
@@ -1376,11 +1433,56 @@ full-fragment-rewrite paths (`take` now returns Arrow JSON, #7470/#7471);
 error; PQ `num_bits` respected for numpy codebooks (#7586); hang fixed in
 `train_streaming_coreset_ivf_model` (#7676).
 
+### The v9.0.0-beta.18 -> v9.1.0-beta.8 delta (current tag)
+
+127 commits straddling the tail of the 9.0.0 beta line (through `rc.2`) and the new 9.1.0 dev
+line. The 9.1.0 minor bump is **automatic release-train cadence**, not a breaking change: when
+`v9.0.0-rc.1` was cut, `main` advanced to `9.1.0-beta.0`. **One breaking-labeled PR** in the
+window: FTS `block_size` (#7466, below). Structural changes reverified at `v9.1.0-beta.8`:
+**26 crates** (new `lance-index-core`, #7713); **16 transaction ops** (new `DataOverlay`);
+**datafusion 53 -> 54** (#7793), geodatafusion 0.4 -> 0.5, build toolchain 1.91 -> 1.97 (#7712,
+MSRV `rust-version` unchanged at 1.91.0). Unchanged: arrow 58, opendal 0.57, jieba 0.10,
+`lance-namespace-reqwest-client` 0.8.6, itertools 0.14, edition 2024, resolver 3,
+`lance-arrow-scalar =58.0.0`; `CommitConfig num_retries = 20`; file-format `version.rs`
+(`Next => 2.3`, `#[default] V2_1`); Python min 3.10 (3.14 added, #7728).
+
+**Breaking (labeled):**
+- **FTS configurable posting `block_size`** (#7466) - `InvertedIndexParams` gains `block_size`
+  (128/256, default 128, 512 rejected). `block_size=256` and the code analyzer require FTS
+  on-disk **format v3** (#7866). Sections 11.3.
+
+**Additive features:**
+- **Data Overlay Files** (#7535 write path, #7536 read path, #7540 Python commit op) - the new
+  16th transaction op `DataOverlay`, feature flag 64, spec `data_overlay_file.md`. Cell-level
+  `(offset, field)` updates without rewriting base data files; **unstable**, env-gated by
+  `LANCE_ENABLE_UNSTABLE_DATA_OVERLAY_FILES` (release builds refuse overlay datasets).
+  Compaction folds fragments over an overlay-count limit (#7772). Section 5.5.
+- **Sparse structural pages** (#7889) - first real 2.3 encoding; `structural-encoding=sparse`.
+  Section 3.1.
+- **Exact `IS NULL`** for ZONEMAP and BLOOM_FILTER via a new `null_bitmap`. Section 11.2.
+- **Nested-field FTS** (#7686) index leaf fields like `data.text`; code-analyzer tokenizer
+  (#7681); impact-skip / bulk MAXSCORE top-k / bulk conjunction FTS paths (#7602/#7603/#7624);
+  read inverted-index params without opening the segment (#7816). Section 11.3.
+- **OpenTelemetry metrics for Python** (`instrument_lance_metrics`, `pylance[otel]`, #7537);
+  zone-map seeds written into data-file footers during append (#7427).
+- **AWS creds via `AssumeRoleWithWebIdentity`** to avoid role chaining (#7757); batch/list
+  blob reads (#7864, #7664) and a bulk packed-blob writer (#7743); MemWAL flush-interval
+  ticker (#7894) and Python/Java shard delete (#7649, #7688); wider hamming hashes and
+  multi-segment hamming clustering (#7767, #7758); RLE child-buffer zstd compression (#7663);
+  cached file-metadata APIs on `FileFragment` (#7820); `TableProvider` write inputs for
+  `merge_insert`/`insert` (#7368); runtime SIMD dispatch for pre-Haswell x86_64 from-source
+  builds (#6630).
+
+**Other:** writes now reject system column names (#7797). The TensorFlow integration moved
+from built-in to an external `lance-tensorflow` package, and the image array decoder/encoder
+is now Pillow-only (not vendored in this skill's docs mirror - integrations mirror is
+`datafusion.md` only).
+
 ---
 
 ## 15. Capability matrix
 
-What Lance can and cannot do at `v9.0.0-beta.18`.
+What Lance can and cannot do at `v9.1.0-beta.8`.
 
 **Storage and format**
 
@@ -1391,7 +1493,8 @@ What Lance can and cannot do at `v9.0.0-beta.18`.
 | In-memory store (`memory://`, `shared-memory://`) | yes |
 | Multi-base storage (hot/cold, multi-region, shallow clone) | yes (`FLAG_BASE_PATHS`) |
 | File format 2.1 (default), 2.0, legacy 0.1 (read-only) | yes |
-| File format 2.2 (Map type, Blob v2) | yes, but `next` / unstable |
+| File format 2.2 (Map type, Blob v2) | yes, but unstable |
+| File format 2.3 sparse structural pages (`structural-encoding=sparse`) | yes, but `next` / unstable |
 | Concurrent writes on plain `s3://` | yes (native conditional PUT) |
 | Concurrent writes - GCS / Azure / local | yes |
 
@@ -1404,6 +1507,7 @@ What Lance can and cannot do at `v9.0.0-beta.18`.
 | JSON type (JSONB), JSON path filtering and indexing | yes |
 | Blob v2 - large binary, lazy `BlobFile` streaming, external URIs | yes (2.2) |
 | Zero-copy add/drop/rename column (metadata-only) | yes |
+| Cell-level updates without base-file rewrite (data overlay files) | yes, but unstable (env-gated `LANCE_ENABLE_UNSTABLE_DATA_OVERLAY_FILES`; release builds refuse) |
 | Type change / cast | yes (rewrites that column; drops its index) |
 | Time travel, tags, branches | yes |
 | Stable row IDs (must be enabled at creation) | yes (opt-in) |
@@ -1444,7 +1548,7 @@ dashboard.
 
 ## 16. Source map
 
-Where to look in `lance-format/lance` at `v9.0.0-beta.18`.
+Where to look in `lance-format/lance` at `v9.1.0-beta.8`.
 
 | Topic | Path |
 |-------|------|
