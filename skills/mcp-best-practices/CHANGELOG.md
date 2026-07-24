@@ -7,6 +7,11 @@ and this skill adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.h
 
 ## [Unreleased]
 
+## [0.8.2] - 2026-07-24
+
+### Added
+- RFC 9207 `iss` client-interop footgun (SKILL.md Auth bullet + `references/security-auth.md` subsection): advertising `authorization_response_iss_parameter_supported: true` (Better-Auth's `@better-auth/oauth-provider` does by default, [PR #7669](https://github.com/better-auth/better-auth/pull/7669)) makes rmcp >= 1.8.0 ([rust-sdk PR #896](https://github.com/modelcontextprotocol/rust-sdk/pull/896)) set `require_issuer = true`; Codex 0.143-0.145 drops the callback `iss` ([openai/codex#33354](https://github.com/openai/codex/issues/33354)) and hard-fails login on a spec-correct server. Server-side mitigation: advertise the flag as `false` while still sending `iss`; plus the general "absorb client bugs server-side" principle.
+
 ## [0.8.1] - 2026-07-22
 
 ### Added

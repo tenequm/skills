@@ -70,7 +70,7 @@ Other properties: Reference-only skill; it executes nothing itself. Includes ref
 
 ## Skill Version
 
-0.8.1
+0.8.2
 
 ## Ethical Considerations
 

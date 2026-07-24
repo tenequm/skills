@@ -2,7 +2,7 @@
 name: mcp-best-practices
 description: Build, secure, and optimize production MCP servers with the TypeScript SDK (spec 2025-11-25, SDK v1.29 / v2 beta). Use when building or reviewing MCP servers or tools - covering transports, tool and schema design, error handling, security and OAuth, performance, known SDK bugs, content vs structuredContent delivery, v2 migration, MCP Apps, extensions, and the Registry.
 metadata:
-  version: "0.8.1"
+  version: "0.8.2"
   upstream: "@modelcontextprotocol/sdk@1.29.0, @modelcontextprotocol/server@2.0.0-beta.3, @modelcontextprotocol/ext-apps@1.7.4"
   openclaw:
     homepage: https://github.com/tenequm/skills/tree/main/skills/mcp-best-practices
@@ -389,6 +389,7 @@ MCP normatively requires **OAuth 2.1** ([draft-ietf-oauth-v2-1-13](https://datat
 - **Validate audience** - reject tokens not issued for your server (passthrough is forbidden)
 - **PKCE `S256`**, **short-lived tokens**, **minimal scopes** (elevate via `WWW-Authenticate` challenges)
 - Use a tested validation library (Keycloak, Auth0, ...) - don't roll your own; never log Authorization headers/tokens/secrets
+- **RFC 9207 `iss` interop footgun**: advertising `authorization_response_iss_parameter_supported: true` (Better-Auth's oauth-provider does by default) makes strict clients (rmcp >= 1.8.0, e.g. Codex 0.143-0.145) MUST-validate the callback `iss` - and a client that drops `iss` ([openai/codex#33354](https://github.com/openai/codex/issues/33354)) then hard-fails login on a spec-correct server. Absorb it server-side: advertise the flag as `false` while still sending `iss`. See `references/security-auth.md`.
 
 > For full security attack/mitigation patterns and auth implementation details: see `references/security-auth.md`
 

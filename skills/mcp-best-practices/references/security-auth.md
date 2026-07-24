@@ -259,6 +259,30 @@ Two failure modes seen in the wild when wiring up OAuth providers (Better-Auth, 
 
 A server-side 500 on the OAuth token endpoint surfaces in MCP clients as a misleading "requires re-authorization" / "token expired" - and stays latent until tokens happen to need refresh. A classic cause is a schema-ahead deploy: code queries a column whose migration never ran, so every token-endpoint request 500s. Monitor the token endpoint distinctly from the MCP endpoint, and gate deploys on pending migrations.
 
+### RFC 9207 `iss` and the `authorization_response_iss_parameter_supported` Advertisement (client-interop footgun)
+
+[RFC 9207](https://datatracker.ietf.org/doc/html/rfc9207) adds an `iss` query parameter to the authorization *response* (the browser redirect carrying `code` + `state`), so a client can confirm which AS issued the code. An AS signals support by advertising `authorization_response_iss_parameter_supported: true` in its RFC 8414 metadata. That flag is a **contract**: a strict client that reads it MUST require and validate `iss` on every callback and reject the flow when `iss` is missing or mismatched.
+
+This becomes a footgun when a strict-but-buggy client demands the param and then can't parse it - the server is spec-correct and still fails login:
+
+- **rmcp (Rust MCP SDK) >= 1.8.0** sets `require_issuer = true` whenever the server advertises the flag ([rust-sdk PR #896](https://github.com/modelcontextprotocol/rust-sdk/pull/896)).
+- **Codex 0.143.0 - 0.145.0** (bundles rmcp 1.8.0) drops `iss` when parsing the callback (`parse_oauth_callback` hits the catch-all arm), then calls the issuer-less `handle_callback`, so `require_issuer` fires: `Authorization server response missing required issuer: expected <issuer>`. The server does send a matching `iss`; the client discards it before validating. Regression tracked in [openai/codex#33354](https://github.com/openai/codex/issues/33354) (works on <= 0.142.5 / rmcp 1.7.0). A companion symptom - a startup `invalid_grant: invalid refresh token` - is a red herring: refresh simply falls back to full re-auth, which then hits the `iss` wall.
+- **Better-Auth's `@better-auth/oauth-provider`** ([PR #7669](https://github.com/better-auth/better-auth/pull/7669)) both emits `iss` on the redirect **and** advertises the flag, so every Better-Auth-backed MCP server trips this class of client out of the box (reproduced across unrelated Better-Auth deployments, not one server's misconfig).
+
+**Server-side mitigation (fix it for the client; don't make users downgrade):** post-process the AS metadata to advertise `authorization_response_iss_parameter_supported: false` while **still sending the real `iss` on the redirect**. rmcp then stops setting `require_issuer`, so a client that drops `iss` no longer errors, and spec-compliant clients still receive the `iss` they can validate - they just no longer treat it as mandatory. Harmless to compliant clients (mcp-remote, Claude.ai web). Treat it as a temporary shim keyed to the client bug and revert once the client ships its fix.
+
+```typescript
+// well-known AS-metadata handler: keep sending `iss` on the redirect,
+// but stop advertising it as required so strict-but-buggy clients don't hard-fail.
+const metadata = await upstreamAuthServerMetadata();   // your OAuth provider's RFC 8414 doc
+return Response.json({
+  ...metadata,
+  authorization_response_iss_parameter_supported: false,
+});
+```
+
+The general principle this case establishes: **absorb client bugs server-side whenever you can, so clients and users work unchanged.** A client-side workaround (downgrade, manual config) is a last-resort mention, never your shipped fix.
+
 ### v2 SDK Auth Helpers (2.0.0-beta.3)
 
 `@modelcontextprotocol/server` ships runtime-neutral helpers for web-standard `fetch(request)` hosts (Cloudflare Workers, Deno, Bun, Hono): `requireBearerAuth` gates requests via an `OAuthTokenVerifier`, and `oauthMetadataResponse` serves the RFC 9728 Protected Resource Metadata and RFC 8414 Authorization Server metadata documents ([PR #2420](https://github.com/modelcontextprotocol/typescript-sdk/pull/2420), [PR #2422](https://github.com/modelcontextprotocol/typescript-sdk/pull/2422)). The insecure-issuer escape hatch is an explicit `dangerouslyAllowInsecureIssuerUrl` option, no longer an env read.
