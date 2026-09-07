@@ -2,7 +2,7 @@
 name: okf-project-knowledge-base
 description: Maintain durable project knowledge as Git-native OKF v0.2 bundles - one Markdown concept per file with YAML frontmatter, provenance sources, trust tiers, and a progressive-disclosure index. Use when recording a decision, finding, or rule that must outlive the session ("document this decision", "add this to the knowledge base", "why did we choose X"), when a repo contains a bundle (a directory whose index.md declares okf_version, canonically docs/knowledge/), when setting up durable knowledge capture in a project, or when reviewing completed work for knowledge worth preserving. Not for session state, scratchpads, or agent operating instructions.
 metadata:
-  version: "0.1.1"
+  version: "0.1.2"
   categories: "agents, knowledge"
   topics: "okf, knowledge-base, agent-memory, provenance, documentation"
   openclaw:
@@ -40,12 +40,19 @@ below; it never loosens them.
 
 ## Three fences
 
-1. **Durability fence (knowledge vs memory).** Knowledge is what stays true
-   when the code or situation changes: why a decision was taken, what an
-   investigation established, what a rule protects against. Current state -
-   counts, hashes, in-flight work, "where we left off" - is memory and never
-   enters the bundle. A number belongs in a concept only when the number IS
-   the finding.
+Route by what the information is about, never by how you discovered it. A
+finding about a tool this project depends on is project knowledge even when
+a session-local tool surfaced it; the admission test is whether it is true
+and useful in a fresh clone, to a reader who never used this session's tools.
+
+1. **Durability fence (knowledge vs state).** State - counts, versions,
+   hashes, in-flight work, "where we left off" - never enters the bundle;
+   it lives in its authoritative source (ledger, git, the tracker for work
+   items). A number belongs in a concept only when the number IS the
+   finding. Eventual mutability is NOT state: the test is what invalidates
+   it - the next commit or session means state; an upstream release or
+   vendor decision means knowledge, captured with `stale_after` to absorb
+   the decay.
 2. **Publicity fence.** Write every concept as if the repository goes public
    tomorrow: no secrets, no personal or sensitive data, no host-local context
    (absolute paths, machine names, internal hostnames). This holds even in
