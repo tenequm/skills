@@ -4,6 +4,13 @@ All notable changes to this skill are documented in this file, following [Keep a
 
 ## [Unreleased]
 
+## [0.3.1] - 2026-09-09
+
+### Changed
+
+- Shortened the frontmatter description to 234 characters (was 266) so it stays under the
+  250-character budget; triggers are unchanged.
+
 ## [0.3.0] - 2026-09-09
 
 Restructured so each agent kind carries complete, self-contained guidance, and moved "Per kind"

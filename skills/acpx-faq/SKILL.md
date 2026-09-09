@@ -1,8 +1,8 @@
 ---
 name: acpx-faq
-description: Run coding agents (codex, claude, Antigravity/agy) headlessly through the acpx ACP CLI without losing prompts. Use before launching or prompting an acpx subagent, and when an acpx command fails, a session cannot be found, a prompt seems lost, or an agent reports the wrong state.
+description: Run coding agents (codex, claude, Antigravity/agy) headlessly through the acpx ACP CLI. Use before launching or prompting an acpx subagent, and when an acpx command fails, a session is not found, or a prompt seems lost.
 metadata:
-  version: "0.1.0"
+  version: "0.1.1"
   categories: "agents, operations"
   topics: "acpx, acp, agent-orchestration, troubleshooting, headless-agents"
   upstream: "acpx@0.15.1"

@@ -4,6 +4,13 @@ All notable changes to this skill are documented in this file, following [Keep a
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-09-09
+
+### Changed
+
+- Shortened the frontmatter description to 219 characters (was 279) so it stays under the
+  250-character budget; triggers are unchanged.
+
 ## [0.1.0] - 2026-09-09
 
 ### Added
