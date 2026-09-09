@@ -7,6 +7,51 @@ and this skill adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.h
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-09-09
+
+### Added
+
+- references/ownership-and-types.md: the two Book-chapter-8 collections gaps the skill was silent on - `HashMap` with the `entry` API (`or_insert`, `or_insert_with`, `or_default`, and why `contains_key` + `insert` hashes twice), and the fact that a string cannot be indexed. `s[0]` does not compile because a byte offset is not a character offset; `.chars()`, `.char_indices()`, and byte-range slicing are what you actually want, and a range that lands mid-character panics.
+- SKILL.md "From Python or JavaScript": integer overflow behaves differently per profile. Debug "includes checks for integer overflow that cause your program to _panic_ at runtime"; `--release` drops them and performs "_two's complement wrapping_" - so a passing test suite can still wrap in production. Plus a pointer to the string-indexing material above.
+- references/async-basics.md: a "Threads First, Async Second" section. The skill sent CPU-bound work to threads (`performance.md`: "use threads or `rayon`") and then only ever showed tokio. Covers `thread::spawn` and its `'static` bound, `thread::scope` for borrowing stack data without `Arc`, `std::sync::mpsc`, and the classic hang where the original `tx` is never dropped so the receiver loop never ends.
+- SKILL.md Project Structure: items are private by default, including to a parent module. `mod config;` makes a module exist without making anything in it reachable - the source of the most common early "why can't I call this" error - with `pub` vs `pub(crate)` and why `pub(crate)` is what makes the `unreachable_pub` lint useful.
+- references/testing.md: what a doc comment actually looks like, since the file already told you to keep doctests for public-API examples without showing one. `///` vs `//!`, the `# ` hidden-line trick that lets an example use `?` without showing the boilerplate, and `no_run` vs `ignore`.
+- references/traits-and-generics.md: a "Closures and the `Fn` Traits" section. The file taught iterator chains built entirely out of closures while naming `Fn`/`FnMut`/`FnOnce` only in a passing anti-pattern. Covers which trait a closure gets (decided by what it does with its captures, not how it is written), that the three nest, and that `move` and `FnOnce` are unrelated.
+- references/crate-shortlist.md (clap): two CLI footguns that only appear once real users touch the binary. A positional argument beginning with `-` is parsed as a flag unless `--` precedes it; and Rust ignores SIGPIPE at startup - std's own comment reads "we set SIGPIPE to ignore when the program starts up in order to prevent this problem" - so `mytool | head -5` fails instead of exiting quietly. Includes the stable `libc::signal` fix and notes `-Zon-broken-pipe` is nightly-only.
+- references/async-basics.md: handling SIGTERM, not just Ctrl-C. Nearly every shutdown snippet awaits `tokio::signal::ctrl_c()`, which is SIGINT only, so a service is hard-killed on every container or systemd stop while Ctrl-C keeps working locally. Plus the two follow-on traps: `with_graceful_shutdown` waits for all connections, so one long-lived stream holds shutdown open forever, and `/proc/<pid>/status` `SigCgt` tells you what the shipped binary actually catches.
+- references/dev-environment.md: mold's own August 2026 benchmark now quantifies the Linux linker choice - it "links 4.9x faster than LLVM lld and 1.9x faster than wild at the median".
+- references/dev-environment.md: the Cargo Book's "Optimizing Build Performance" chapter (added in Rust 1.92), which is the canonical first-party version of most of this page, along with its fuller debug-info recipe - `[profile.dev.package."*"] debug = false` plus an opt-in `[profile.debugging]` - rather than the `line-tables-only` one-liner alone.
+- references/dev-environment.md: Cargo's first-party `unused_dependencies` lint, noted as covering the same ground as `cargo machete` but unusable on stable, since "Cargo's linting system is unstable and can only be used on nightly toolchains".
+- references/dev-environment.md: kache 0.17/0.18 surface - `[cache.volumes]` volume-local shards (what keeps a restore zero-copy when checkout and store live on different volumes), read-only remotes for untrusted CI as a supply-chain boundary, and `explain_miss` alongside `why-miss` in the diagnosis list.
+- references/error-handling.md: a "Wrap at the Boundary, Not Before It" section. `anyhow::Error` is a one-way door, and wrapping a typed error upstream of a retry loop or a status mapping silently destroys the classification that code needed - the retry loop then treats a permanent failure exactly like a retryable one.
+- references/crate-shortlist.md: three reqwest 0.13 changes the notes omitted, all of which alter the dependency tree rather than the API - the rustls crypto provider "defaults to aws-lc instead of _ring_", the rustls roots features were dropped for `rustls-platform-verifier`, and native-tls now includes ALPN.
+- references/crate-shortlist.md: sqlx 0.9's per-crate `sqlx.toml`, and the packaging regression that "`cargo install --locked sqlx-cli` will no longer work".
+- references/crate-shortlist.md (axum): scope a tower layer to the routes it exists for. A `.layer()` on the root `Router` runs on every route, so a rate limiter meant for one expensive endpoint also throttles static assets and health checks, and the first page load exhausts the bucket.
+- references/testing.md: never assert a negative wall-clock property. It is not a flaky test that a looser threshold fixes - nothing guarantees the thread is scheduled at all on a loaded runner - so assert the thing you meant (the backend was not hit, the value came from the cache) or control the clock.
+- references/testing.md: `cargo nextest bench` now runs benchmark targets through the same runner.
+- references/releasing.md: verify the plain `cargo install <crate>` path in a clean container. Teams that ship via Homebrew, Nix, or binstall never exercise the compile-from-crates.io path, so a packaging break can survive several releases.
+
+### Changed
+
+- SKILL.md: the `.gitignore` section claimed committing `Cargo.lock` is "the recommended default for every crate type, libraries included". The Cargo FAQ no longer frames it that way - "whether you do is dependent on the needs of your package" - so the claim now cites the guide's actual wording ("When in doubt, check `Cargo.lock` into the version control system") and keeps the recommendation without overstating its source.
+- references/dev-environment.md: the CI recipe now pins `actions-rust-lang/setup-rust-toolchain@v2` and drops `-- -D warnings` from the clippy step. v2.0.0 stopped exporting `RUSTFLAGS="-D warnings"` and sets cargo's `build.warnings` instead (its `build-warnings` input defaults to `deny`), because a `RUSTFLAGS` export silently overrides any `target.*.rustflags` the project set. The `@v1` form and why lint flags must follow `--` are kept for anyone still pinned there.
+- references/dev-environment.md: replaced the mold quote. The current README contains no mention of macOS at all, so "mold's own source says outright that 'mold does not support macOS'" was no longer sourceable; the substance is now carried by mold's self-description as a replacement for "existing Unix linkers" plus its ELF-only architecture list.
+- references/crate-shortlist.md: sqlx 0.9.0's release date corrected to 2026-05-21 (crates.io publish and release commit), not 2026-05-06.
+- SKILL.md + references/crate-shortlist.md: three "as of May 2026" date stamps re-stamped to September 2026 after re-verifying the facts behind them - rustfmt's `imports_granularity` and `group_imports` are still nightly-only (tracking issues #4991 and #5083), and jiff is still 0.2.35 pre-1.0 with its 1.0 issue open.
+- SKILL.md: dropped the "Rust 1.89.0" attribution on `uninlined_format_args` moving to `clippy::pedantic`. Clippy's own CHANGELOG lists the same PR under both 1.89 and 1.90, so the entry now says "the 1.89/1.90 cycle" rather than asserting a version upstream is inconsistent about.
+- SKILL.md: the Reference Docs list re-describes ownership-and-types, traits-and-generics, async-basics, and error-handling to match what those files now contain, so the router still points at the right file.
+
+### Fixed
+
+- references/dev-environment.md: the kache quirks table said "`local_max_size` defaults to **50GiB**" and told you to raise the cap. Since 0.17.0 the default is "5% of the volume that holds the store, rounded to the nearest GiB, then clamped to 5GiB..=100GiB", with 50GiB only as a probe-failure fallback - so the old advice was wrong on a small disk and on a large one, and the fix is to check what you got rather than assume a number.
+- references/project-shape.md: "Cargo ships a lint (`missing_lints_inheritance`) specifically because so many people assume otherwise" implied a safety net a stable-toolchain reader does not have. The lint exists, but Cargo's whole lint system is nightly-only, so on stable nothing warns about a member that omits `[lints] workspace = true`.
+
+### Security
+
+- references/dev-environment.md: the toolchain-currency argument now includes Rust 1.98.1 (2026-09-03), a one-line point release fixing "a miscompilation in generating vtables" - 1.98.0 could emit a vtable with a null pointer where a function pointer belonged, which is undefined behavior in code that compiled cleanly. No new RustSec advisory since the last refresh touches any crate this skill names.
+
+Verified against: rust@1.98.1, reqwest@0.13.5, kache@0.18.0, release-plz-action@0.5.135
+
 ## [0.5.1] - 2026-09-09
 
 ### Changed

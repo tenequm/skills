@@ -2,6 +2,39 @@
 
 Rust's async is cooperative: `.await` is an explicit yield point. There is no built-in runtime; you pick one. In 2026, that runtime is `tokio` for almost every application. (If a tutorial hands you `async-std`, stop: it has been discontinued, carries a RustSec advisory for that reason, and its own site still shows no notice. `smol` is the named replacement.) This file covers what you need to write async Rust well from day 1, and the small set of pitfalls that cause most async bugs.
 
+## Threads First, Async Second
+
+Before any of this: **async is for I/O concurrency, not for speed.** If your work is CPU-bound - parsing, hashing, image processing, simulation - you want threads, and the standard library already gives you everything you need. Reaching for `tokio` because you want to "use all the cores" is the wrong tool.
+
+```rust
+use std::thread;
+use std::sync::mpsc;
+
+// Detached-ish: a handle you join to get the result back
+let h = thread::spawn(|| expensive(1));   // must be 'static - move owned data in
+let a = h.join().unwrap();                // Result: Err means the thread panicked
+
+// Scoped threads: borrow from the stack, guaranteed joined at the end of the scope
+let data = vec![1, 2, 3];
+thread::scope(|s| {
+    s.spawn(|| println!("{:?}", &data));   // &data borrow is fine here
+    s.spawn(|| println!("{}", data.len()));
+});                                        // both joined before this line returns
+
+// Message passing: the idiomatic way to get results out
+let (tx, rx) = mpsc::channel();
+for id in 0..4 {
+    let tx = tx.clone();
+    thread::spawn(move || tx.send(work(id)).unwrap());
+}
+drop(tx);                                  // the last sender must drop or rx never ends
+for result in rx { }                       // iterates until every sender is gone
+```
+
+`thread::scope` is the one worth remembering: it is what lets a thread borrow local data instead of forcing you to `Arc`-wrap everything, because the scope cannot exit until every thread inside it has finished. That `drop(tx)` is the classic hang - a receiver loop ends when all senders are dropped, and the original `tx` you cloned from is a sender.
+
+For data parallelism over a collection, do not hand-roll any of this: `rayon`'s `.par_iter()` is one word and covers most of it (see `performance.md`).
+
 ## Mental Model
 
 An `async fn` does not run when called. It returns a `Future`, which is a state machine. A runtime (`tokio`) drives futures by polling them; when a poll hits a point that needs to wait (network I/O, timer, channel receive), the future returns "not ready" and the runtime parks it until the underlying event fires.
@@ -218,6 +251,24 @@ match timeout(Duration::from_secs(5), slow_op()).await {
     Err(_) => { /* timed out */ }
 }
 ```
+
+### Handle SIGTERM, not just Ctrl-C
+
+Almost every shutdown snippet online awaits `tokio::signal::ctrl_c()` and stops there. That is SIGINT only. Docker, Kubernetes, and systemd all stop a process with **SIGTERM** first and SIGKILL after a grace period - so a `ctrl_c()`-only service is hard-killed on every ordinary deploy, mid-request, and you will never see it locally because Ctrl-C in your terminal works perfectly.
+
+```rust
+use tokio::signal::unix::{signal, SignalKind};
+
+async fn shutdown_signal() {
+    let mut term = signal(SignalKind::terminate()).expect("install SIGTERM handler");
+    tokio::select! {
+        _ = tokio::signal::ctrl_c() => {}
+        _ = term.recv() => {}
+    }
+}
+```
+
+Two things that bite after you fix that. A server's `with_graceful_shutdown` waits for **all** connections to close, so one long-lived streaming connection (SSE, a websocket, a follow-style tail) holds shutdown open forever - cancel that stream's own token as well, and put a bounded `timeout` around the drain as a backstop. And check that the handler is actually installed in the shipped artifact: on Linux, `grep SigCgt /proc/<pid>/status` tells you which signals the process is catching, which is how you find out that the binary in the container is not the one you tested.
 
 ## Channels (`tokio::sync`)
 

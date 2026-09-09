@@ -120,6 +120,24 @@ The `#[from]` attribute generates the `From` impl that `?` needs to convert from
 
 **Do not return `Box<dyn std::error::Error>` from a public library API.** It forces callers to downcast to inspect the error. Define the enum.
 
+## Wrap at the Boundary, Not Before It
+
+The corollary of the split above, and the one that costs real debugging time: **`anyhow::Error` is a one-way door.** Once a typed error is wrapped, the variant is still in there but nothing downstream can `match` on it without a `downcast_ref`, and code that needed to branch on the failure silently stops branching.
+
+This shows up most often in retry loops and error-to-status mapping:
+
+```rust
+// BAD: the helper is generic over anyhow::Result, so by the time the retry
+// loop sees a failure the typed variant is already gone - it cannot tell a
+// retryable conflict from a permanent bad-request, and retries both.
+async fn with_retry<T>(f: impl Fn() -> anyhow::Result<T>) -> anyhow::Result<T>
+
+// GOOD: stay typed as long as something still needs to classify.
+async fn with_retry<T, E: IsRetryable>(f: impl Fn() -> Result<T, E>) -> Result<T, E>
+```
+
+The rule: convert to `anyhow::Error` at the point where the only remaining job is to report the failure - a request handler, `main`, a log line. Anywhere above that, if a caller has to *decide* something from the error, keep the type. `.context(...)` is free to add on the way; it enriches without erasing.
+
 ## Combining `anyhow` and `thiserror`
 
 The standard pattern in a project that has both library and binary crates:

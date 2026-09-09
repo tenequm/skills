@@ -68,7 +68,7 @@ dbg_macro = "warn"
 workspace = true
 ```
 
-That second block is the trap. `workspace.lints` is **not** implicitly inherited, and a member that omits `[lints] workspace = true` is silently unlinted - it compiles clean while the rest of the workspace is under `-D warnings`. Cargo ships a lint (`missing_lints_inheritance`) specifically because so many people assume otherwise. When you add a new member, this is the line you will forget.
+That second block is the trap. `workspace.lints` is **not** implicitly inherited, and a member that omits `[lints] workspace = true` is silently unlinted - it compiles clean while the rest of the workspace is under `-D warnings`. Cargo does have a `missing_lints_inheritance` lint for exactly this, but do not count on it: "Cargo's linting system is unstable and can only be used on nightly toolchains", so on stable nothing warns you at all. When you add a new member, this is the line you will forget, and the only thing that catches it is you.
 
 ## Feature flags
 

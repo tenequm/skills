@@ -156,6 +156,34 @@ enum Cmd {
 }
 ```
 
+**Two footguns that only show up once real users touch the binary.**
+
+A positional argument beginning with `-` is parsed as a flag, so any command that forwards user-supplied text needs `--` in front of it. The failure rate is low enough to survive testing and high enough to hit production - a prompt, a search query, or a filename that happens to start with a dash:
+
+```rust
+// Shelling out to your own (or any) CLI with text you did not write:
+// without the "--", a query like "- why does this fail" is read as flags.
+std::process::Command::new("mytool")
+    .arg("search")
+    .arg("--")
+    .arg(user_query);
+```
+
+On the receiving side, clap already stops parsing at `--`, so a positional declared with `#[arg(trailing_var_arg = true)]` or simply documented as "put `--` first" is what makes your own tool safe to call that way.
+
+And **Rust ignores SIGPIPE at startup**, which the standard library says plainly: "we set SIGPIPE to ignore when the program starts up in order to prevent this problem." The consequence is that `mytool | head -5` does not exit quietly when `head` closes the pipe - your writes start returning `EPIPE`, and the panic or error surfaces from wherever you happened to be printing. Every Unix CLI a user pipes into `head`, `less`, or `grep -q` hits this. On stable, restore the default at the top of `main`:
+
+```rust
+// Cargo.toml: libc = "0.2"
+fn main() {
+    // SAFETY: restoring the OS default disposition before any threads exist.
+    unsafe { libc::signal(libc::SIGPIPE, libc::SIG_DFL) };
+    // ... clap parsing, the rest of main
+}
+```
+
+(The nightly-only `-Zon-broken-pipe` flag does the same thing without `libc`; there is no stable flag equivalent yet.)
+
 ## `reqwest`
 
 HTTP client. Async by default; the `blocking` feature gives a sync API.
@@ -190,6 +218,8 @@ async fn main() -> anyhow::Result<()> {
 ```
 
 **0.13 notes** (if you find a 0.12 tutorial): `rustls` is now the default TLS backend (was `native-tls`), and the `rustls-tls` feature is renamed to `rustls`; `query` and `form` are now opt-in crate features. The `json` example above is unaffected.
+
+Three more 0.13 changes that alter what you actually link, not just what you type. The rustls crypto provider "defaults to aws-lc instead of _ring_" - a different native dependency in your tree, and `rustls-no-provider` exists if you need to choose another. The rustls roots features were removed in favour of `rustls-platform-verifier`, so certificate validation now goes through the OS trust store by default rather than a bundled root set. And `native-tls` now includes ALPN, with `native-tls-no-alpn` to turn it back off.
 
 For tiny sync tools where you do not want a tokio dep, `ureq` is the lightweight alternative.
 
@@ -278,6 +308,19 @@ async fn main() -> anyhow::Result<()> {
 
 Path params, query params, JSON body, state, middleware all extract via the `FromRequest`/`FromRequestParts` traits. The axum docs are excellent.
 
+**Scope middleware to the routes it exists for.** A `.layer(...)` attached to the whole `Router` runs on every route, which is fine for tracing and wrong for almost anything with a budget. A rate limiter meant to protect one expensive endpoint, hung on the root router, puts your static assets and health checks in the same bucket - and the first page load exhausts it. Layer the sub-router instead, and merge:
+
+```rust
+let expensive = Router::new()
+    .route("/search", get(search))
+    .layer(RateLimitLayer::new(5, Duration::from_secs(1)));
+
+let app = Router::new()
+    .route("/health", get(health))       // no rate limit
+    .merge(expensive)
+    .layer(TraceLayer::new_for_http());  // this one genuinely is global
+```
+
 **0.8 breaking changes** (if you find a 0.7 tutorial): path captures use `/{id}` and `/{*rest}` instead of `/:id` and `/*rest`; `Option<T>` extractors require the new `OptionalFromRequestParts` trait; `Host` extractor moved to `axum-extra`; WebSocket `Message` uses `Bytes`/`Utf8Bytes` instead of `Vec<u8>`/`String`. MSRV is 1.80 (raised in 0.8.9).
 
 ## `sqlx`
@@ -314,14 +357,16 @@ For multi-crate workspaces, run `cargo sqlx prepare --workspace` to produce a si
 
 Migrations: `sqlx migrate add init`, write SQL, `sqlx migrate run`.
 
-**0.9 notes** (0.9.0 released 2026-05-06): the repository moved to the `transact-rs` GitHub org, and MSRV is now 1.94. The runtime `query()`/`query_as()` functions now take `impl SqlSafeStr` - wrap a dynamically built query string in `AssertSqlSafe(...)`. The `query_as!` macro shown above is unaffected (it takes a string literal). Older 0.8 tutorials otherwise still apply.
+**0.9 notes** (0.9.0 released 2026-05-21): the repository moved to the `transact-rs` GitHub org, and MSRV is now 1.94. The runtime `query()`/`query_as()` functions now take `impl SqlSafeStr` - wrap a dynamically built query string in `AssertSqlSafe(...)`. The `query_as!` macro shown above is unaffected (it takes a string literal). Older 0.8 tutorials otherwise still apply.
+
+0.9 also added a per-crate `sqlx.toml`, which is where migration and macro settings now live instead of scattered environment variables. One packaging regression to know before you copy a CI recipe: upstream states "`cargo install --locked sqlx-cli` will no longer work", so install the CLI without `--locked`.
 
 ## `chrono` (and `jiff`)
 
-Dates and times. As of Jan 2026 the chrono maintainer announced soft-deprecation and recommends `jiff` (BurntSushi) for new code. Reality in May 2026:
+Dates and times. As of Jan 2026 the chrono maintainer announced soft-deprecation and recommends `jiff` (BurntSushi) for new code. Reality in September 2026:
 
 - `chrono` 0.4 is still production-safe and integrates cleanly with `serde`, `sqlx`, `serde_json`, and the rest of the ecosystem. Note the deprecation notice lives in the maintainer's issue thread, not in chrono's README, so the crate page looks entirely healthy.
-- `jiff` is the recommended successor, but still pre-1.0 (latest 0.2.x), and its author says plainly: "I don't currently have a timeline for a Jiff 1.0 release." Migration across the ecosystem is partial rather than done - kube-rs and k8s-openapi have landed, while the arrow-rs and jj-vcs changes are still open PRs.
+- `jiff` is the recommended successor, but still pre-1.0 (0.2.35 as of September 2026, with the 1.0 tracking issue open), and its author says plainly: "I don't currently have a timeline for a Jiff 1.0 release." Migration across the ecosystem is partial rather than done - kube-rs and k8s-openapi have landed, while the arrow-rs and jj-vcs changes are still open PRs.
 - Two things that lower the risk of picking `jiff` now: `jiff-sqlx` tracks sqlx 0.9, and `jiff-chrono-conversions` gives you `ToJiff`/`ToChrono` traits so a codebase can hold both during a migration. jiff also commits to critical bug fixes on 0.2 for a year after 1.0 ships.
 
 Pick `chrono` if you need ecosystem integration today. Pick `jiff` for new code that can tolerate pre-1.0 churn and where you want correct timezone-aware arithmetic out of the box.
