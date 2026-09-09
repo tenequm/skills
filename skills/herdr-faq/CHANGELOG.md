@@ -4,6 +4,40 @@ All notable changes to this skill are documented in this file, following [Keep a
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-09-09
+
+Restructured so each agent kind carries complete, self-contained guidance, and moved "Per kind"
+ahead of the shared sections - it is now the default entry point after the invariants. Driven by
+a session that lost a full comparison run to agy failures the skill named as symptoms but never
+gave a recipe for.
+
+### Added
+
+- agy: a complete pre-flight and launch recipe. The trust dialog is unanswerable from the CLI
+  side (`send-keys enter` no-ops against it, `--dangerously-skip-permissions` is
+  classifier-blocked), so `~/.gemini/trustedFolders.json` must carry the exact cwd before
+  `agent start`; trust is per path unless a parent holds `TRUST_PARENT`.
+- agy: `not a valid artifact path` explained - `ArtifactMetadata` on a `write_to_file`
+  reclassifies it as an artifact confined to `~/.gemini/antigravity-cli/brain/<session-id>/`;
+  pre-create the output file so the agent takes `Edit`.
+- agy: agents sharing a directory read each other's output and a prior run's results and
+  reproduce them; one directory per agent, and `md5` reruns before believing an agreement.
+- agy: read the startup banner, not the status - `(Google AI Pro)` means entitlement reaches
+  Code Assist, while a bare address or `Eligibility check failed: UNAVAILABLE (code 503)` is an
+  agent that will never run however healthy it looks.
+- One tab per agent for fleets, in both the agy recipe and Launch: repeated splits starve the
+  TUI of columns, which stops rendering, swallows input, and hides state from detection.
+- codex and claude: runnable launch-to-first-prompt blocks in their own sections.
+
+### Changed
+
+- "Per kind" moved to the top, directly after the invariants; Launch, Shapes, Drive and
+  Failures are now the shared reference the per-kind recipes point into.
+- claude's folder-trust pre-seed, its dialog-key warning, its `idle` semantics, the grey
+  composer-suggestion trap and the `CLAUDE_CONFIG_DIR` skills note all moved into its section.
+- `agent_not_ready` now states explicitly that agy's trust dialog is *not* detected and reads
+  as `idle`.
+
 ## [0.2.0] - 2026-09-08
 
 Restructured from an error-code index into a composition-time reference, after forensics on

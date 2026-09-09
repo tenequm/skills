@@ -2,7 +2,7 @@
 name: herdr-faq
 description: Launch and drive coding agents (codex, claude, agy) through the Herdr CLI reliably. Use before starting or prompting a subagent via herdr agent/pane commands, and when any herdr command fails or an agent seems stuck, silently lost a prompt, or reports a wrong state.
 metadata:
-  version: "0.2.0"
+  version: "0.3.0"
   categories: "agents, operations"
   topics: "herdr, troubleshooting, agent-orchestration, terminal-multiplexer"
   upstream: "herdr@0.9.0"
@@ -17,6 +17,11 @@ Launch and drive coding agents through [Herdr](https://herdr.dev) (>= 0.9.0) wit
 prompts. Command semantics: `herdr --skill` (the binary ships its own current doc and is the
 tiebreaker for any dispute with this file). This file covers only what goes wrong and the
 recipes that avoid it.
+
+Read the Invariants, then go straight to your agent's section in **Per kind** - each one is a
+complete launch-to-first-prompt recipe. Everything after that is shared reference: Launch for
+pane and name mechanics, Shapes for composing commands, Drive for the turn loop, Failures for
+triage.
 
 ## Invariants
 
@@ -38,7 +43,123 @@ recipes that avoid it.
    into a shell command. `sleep N; herdr ...` polling is banned - use one backgrounded
    `prompt`, or wait on a file.
 
+## Per kind
+
+Each section is self-contained: flags, pre-flight, launch, dialog handling, and the quirks
+that bite while the agent runs. Shared mechanics are in Launch and Shapes.
+
+### codex
+
+```bash
+P=$(herdr pane split --current --direction right --cwd "$D" --no-focus | jq -r .result.pane.pane_id)
+herdr agent start cx1 --kind codex --pane "$P" --timeout 90000 -- --approve-for-me --no-alt-screen
+herdr agent read cx1 --source detection --lines 40        # ALWAYS, before the first prompt
+herdr agent prompt cx1 "Carry out $D/brief.md." --wait --timeout 1800000 &
+```
+
+Never `--full-auto`: removed in 0.15x, it surfaces as a bare `timeout` and can leave the pane
+wedged in startup-pending. Both the trust-directory dialog and the startup update dialog are
+detected, so an untrusted dir fails fast with `agent_not_ready` rather than eating the first
+prompt - answer with `send-keys`, then `wait --until idle done`. The one-time
+post-`integration install` hooks-review gate is NOT detected (WONTFIX); answer it once per
+machine. Session ref binds at the first prompt for a fresh start, but an explicit
+`-- resume <id>` is persisted at launch.
+
+### claude (alias `claude-code`)
+
+```bash
+# Pre-trust first - the folder-trust dialog IS detected, so an untrusted dir fails the start.
+# Trust is INHERITED: a new directory under an already-trusted parent needs nothing at all.
+CFG=/tmp/agentcfg; mkdir -p "$CFG"                        # isolated from your real config
+printf '{"projects":{"%s":{"hasTrustDialogAccepted":true}}}' "$D" > "$CFG/.claude.json"
+
+P=$(herdr pane split --current --cwd "$D" --no-focus --env CLAUDE_CONFIG_DIR="$CFG" \
+    | jq -r .result.pane.pane_id)
+herdr agent start cl1 --kind claude --pane "$P" --timeout 90000 -- --model "$M"
+herdr agent read cl1 --source detection --lines 40        # ALWAYS, before the first prompt
+herdr agent prompt cl1 "Carry out $D/brief.md." --wait --timeout 1800000 &
+```
+
+- **If you do hit a dialog, the safe key differs per dialog.** The folder-trust dialog puts
+  the cursor on `No, exit`, so a bare `enter` kills the agent - send `down enter`. Its
+  Bash-permission dialog puts the cursor on `1. Yes`.
+- **`idle` lies in a specific way here.** A turn that spawns background *shells* ends and
+  reports `idle` while they run; background *agents* and background *MCP tasks* keep it
+  `working`, and a background MCP task can hold `idle` for its whole 3-10 minute life.
+- **Grey "next prompt suggestion" text in the composer reads as real unsubmitted text** in a
+  plain read - disambiguate with `--format ansi` (the suggestion carries the dim attribute
+  `ESC[2m`).
+- Session ref binds at launch. A Claude Code UI update can break detection
+  (`herdr server update-agent-manifests`). Native-launcher installs run under a version-string
+  process herdr cannot identify: launch via `HERDR_AGENT=claude exec <path>`, then
+  `agent rename`.
+- Under a different `CLAUDE_CONFIG_DIR` the agent loads its **own** skills. Confirm it has
+  this skill current *before its first turn* - a running session has already snapshotted the
+  old text and cannot be fixed in place.
+
+### agy (aliases `antigravity`, `antigravity-cli`)
+
+Thinnest detection of the three: no idle rule at all, so every agy `idle` is a guess
+(invariant 2). Nothing in the pre-flight is recoverable once the agent is up.
+
+```bash
+D=/abs/dir/for/this/agent                   # ONE dir per agent, holding only its brief+input
+mkdir -p "$D"; : > "$D/report.md"           # pre-create the output file
+
+python3 - "$D" <<'PY'                       # pre-trust; the dialog is unanswerable (below)
+import json, pathlib, sys
+p = pathlib.Path.home() / ".gemini/trustedFolders.json"
+d = json.loads(p.read_text()) if p.exists() else {}
+d[sys.argv[1]] = "TRUST_FOLDER"             # "TRUST_PARENT" on a parent covers its children
+p.write_text(json.dumps(d, indent=2) + "\n")
+PY
+
+P=$(herdr tab create --workspace "$WS" --cwd "$D" --label ag1 --no-focus \
+    | jq -r .result.root_pane.pane_id)      # one TAB per agent, never N panes in one tab
+herdr agent start ag1 --kind agy --pane "$P" --timeout 120000 \
+  -- --model gemini-3.7-flash-medium --effort medium --mode accept-edits
+herdr agent read ag1 --source detection --lines 15   # read the banner, not the status
+herdr agent prompt ag1 "Carry out $D/brief.md. Write your report to $D/report.md." \
+  --wait --timeout 1800000 &                # then poll for the file, not the state
+```
+
+- **The trust dialog is unanswerable from this side.** `agent start` returns `idle`, the
+  screen holds `Do you trust the contents of this project?`, and `send-keys enter` no-ops
+  against it - repeatedly, silently, exit 0. `--dangerously-skip-permissions` is blocked by
+  the driving harness's classifier before it ever reaches herdr (invariant 5). Only the
+  config entry works, and only if written *before* `agent start`. Trust is per exact path: a
+  fresh subdirectory needs its own entry unless a parent carries `TRUST_PARENT`.
+- **One tab per agent.** Four agy panes in one tab leaves ~29 columns: the TUI stops
+  rendering, input races swallow prompts outright, and detection sees only the pane's own
+  rows, so the state you read is wrong too.
+- **Read the startup banner before blaming herdr.** `<account> (Google AI Pro)` means
+  entitlement is reaching Code Assist. A bare address, or `Eligibility check failed:
+  UNAVAILABLE (code 503)`, means the agent is dead on arrival however healthy its status
+  looks - re-auth, do not re-prompt. A silent drop to free tier also changes the data terms
+  on everything you send it.
+- **`not a valid artifact path` is agy-internal, not your filesystem.** `ArtifactMetadata`
+  attached to a `write_to_file` reclassifies the write as an artifact, confined to
+  `~/.gemini/antigravity-cli/brain/<session-id>/`. It self-recovers by dropping the metadata
+  and retrying as `Edit`; pre-creating the file empty skips the round trip.
+- **agy reads sibling files unprompted.** Agents sharing a directory read each other's output
+  and a prior run's results, then reproduce them. Own directory each, and `md5` any rerun
+  before believing an agreement number - byte-identical multi-KB prose is copying, not
+  consensus.
+- **Premature `done`** lasts up to ~50s mid-turn while the pane visibly streams (grok shares
+  this bug), so wait on the report file, never a settled state. A first prompt can be
+  swallowed entirely with `agent_prompt_stalled` and no trace in the composer; re-prompt, do
+  not `send-keys`. No session ref until the first prompt. Integration install target is
+  `antigravity-cli`; config dir `~/.gemini/config` must exist (or
+  `ANTIGRAVITY_CLI_CONFIG_DIR`).
+
+Integrations for all three are session-restore only - they never improve state detection - and
+their hooks silently no-op without `python3` on PATH. `integration status` cannot see a
+codex-side disabled hook (WONTFIX); verify `agent_session` is present after the first codex
+turn instead.
+
 ## Launch
+
+Shared mechanics; kind-specific flags and pre-flight are in Per kind.
 
 ```bash
 test "${HERDR_ENV:-}" = 1                       # never drive herdr from outside a pane
@@ -46,34 +167,18 @@ test "${HERDR_ENV:-}" = 1                       # never drive herdr from outside
 P=$(herdr pane split --current --direction right --cwd "$PWD" --no-focus | jq -r .result.pane.pane_id)
 test -n "$P"                                    # empty $P => misleading downstream errors
 herdr pane process-info --pane "$P"             # must be a bare shell at its prompt
-
-herdr agent start worker --kind codex --pane "$P" --timeout 90000 -- --approve-for-me --no-alt-screen
-
-# ALWAYS read before the first prompt (invariant 2), and branch on what it returns.
-herdr agent read worker --source detection --lines 40
 ```
 
-If that read shows a dialog, answer it deliberately - never blind-fire a key. **The safe key
-differs per dialog**: claude's folder-trust dialog puts the cursor on `No, exit` (a bare
-`enter` kills the agent), while its Bash-permission dialog puts it on `1. Yes`. Then:
+For a fleet, give each agent its own **tab** instead (`herdr tab create --workspace "$WS"
+--cwd "$D" --no-focus | jq -r .result.root_pane.pane_id`): repeated splits leave each pane
+narrow, and a TUI below its minimum width stops rendering, swallows input, and hides its own
+state from detection.
+
+Always `agent read --source detection` before the first prompt (invariant 2) and branch on
+what it returns - never blind-fire a key at a dialog. After answering one:
 
 ```bash
-herdr agent send-keys worker down enter
 herdr agent wait worker --until idle done --timeout 60000   # NOT a bare wait - see Drive
-```
-
-### Never hit the claude trust dialog again
-
-The dialog appears only when the cwd has no trusted ancestor. Trust is **inherited**: a brand
-new directory under an already-trusted parent starts clean, and claude records the child
-automatically. Two reliable fixes:
-
-```bash
-# (a) keep agent working dirs under a tree you have already trusted once, or
-# (b) pre-seed trust for an arbitrary path, isolated from your real config:
-CFG=/tmp/agentcfg; mkdir -p "$CFG"
-printf '{"projects":{"%s":{"hasTrustDialogAccepted":true}}}' "$D" > "$CFG/.claude.json"
-herdr pane split --current --cwd "$D" --no-focus --env CLAUDE_CONFIG_DIR="$CFG"
 ```
 
 Rules: capture every ID from JSON, never predict. Names `[a-z][a-z0-9_-]{0,31}`, namespaced
@@ -81,10 +186,6 @@ Rules: capture every ID from JSON, never predict. Names `[a-z][a-z0-9_-]{0,31}`,
 `agent rename <pane> <name>`. Fleets get their own workspace, `--no-focus` everywhere. After a
 killed `agent start`, run `herdr agent get <name>` once to free the name reservation
 (reconciliation is lazy - it can take a minute or two).
-
-When you drive an agent under a **different `CLAUDE_CONFIG_DIR`**, it loads its own skills.
-Confirm it has this skill current *before its first turn* - a running session has already
-snapshotted the old text and cannot be fixed in place.
 
 ## Shapes
 
@@ -163,9 +264,7 @@ herdr pane process-info --pane "$P" && herdr pane close "$P"
   keystrokes. Pass file paths anyway when the text is a brief: it also keeps the content out
   of the shell command, where the driving harness's classifier can block on it.
 - Output: `--source recent-unwrapped` for transcript, `detection` for the last screen,
-  `visible` for what is on screen now. Grey "next prompt suggestion" text in a claude composer
-  reads as real unsubmitted text in a plain read - disambiguate with `--format ansi` (the
-  suggestion carries the dim attribute `ESC[2m`).
+  `visible` for what is on screen now.
 - Queue follow-ups behind a working agent freely; `agent prompt` refuses blocked agents
   (`agent_blocked`) before writing anything. But do not attach `--wait` to a queued follow-up:
   it can be satisfied by the turn already running.
@@ -202,9 +301,10 @@ Triage first:
 name is bound (documented contract). Read, answer via send-keys, wait on `--until idle done`,
 prompt. A blocked launch never times out: `launch_pending` stays true and `rename` returns
 `agent_launch_pending` until the dialog is answered or the process exits. Both codex's
-trust-directory dialog and its startup update dialog are detected; claude's folder-trust
-dialog is caught too, by the generic blocked-form rule. Codex's one-time post-`integration
-install` hooks-review gate is NOT detected (WONTFIX) - answer it once per machine.
+trust-directory dialog and its startup update dialog are detected, and claude's folder-trust
+dialog is caught by the generic blocked-form rule - **agy's trust dialog is not**, and reads
+as `idle` instead. Codex's one-time post-`integration install` hooks-review gate is NOT
+detected (WONTFIX) - answer it once per machine.
 
 **`timeout` (start)** - invariant 3; read the pane. `command not found` in a non-login shell:
 set `[terminal] shell_mode = "login"`, recreate the pane. Under `--remote`, panes inherit the
@@ -272,35 +372,6 @@ out-of-view pane; tty truncation of long `send-text`; a first turn going straigh
 own rows (fallback 24), so a tall dialog in a short pane is partly invisible;
 `pane wait-output` matches the echoed command itself - never use it for readiness;
 `agent focus` can return ok without moving the viewport in 0.9.0 - use `tab focus` instead.
-
-## Per kind
-
-**codex** - `-- --approve-for-me --no-alt-screen` (never `--full-auto`: removed in 0.15x,
-surfaces as a bare timeout and can leave the pane wedged in startup-pending). Trust dialog and
-startup update dialog are both detected; an untrusted dir fails fast with `agent_not_ready`.
-Session ref binds at the first prompt for a fresh start, but an explicit `-- resume <id>` is
-persisted at launch.
-
-**claude** (alias `claude-code`) - `-- --model <m>`. The folder-trust dialog **is** detected
-(`agent_not_ready`), so pre-trust the dir (see Launch) rather than recovering. Session ref
-binds at launch. A turn with background shells ends and reports `idle` while they run;
-background *agents* and background *MCP tasks* keep it `working`, and a background MCP task can
-hold `idle` for its whole 3-10 minute life. A Claude Code UI update can still break detection
-(`herdr server update-agent-manifests`). Native-launcher installs run under a version-string
-process herdr cannot identify: launch via `HERDR_AGENT=claude exec <path>`, then rename.
-
-**agy** (aliases `antigravity`, `antigravity-cli`) - thinnest detection: no idle rule at all,
-the trust dialog reads idle, and premature `done` mid-turn lasts up to ~50s while the pane
-visibly streams (grok shares this bug). Never trust a single settled state - verify by screen
-read or sentinel. A first prompt can be swallowed entirely with `agent_prompt_stalled` and no
-trace in the composer; re-prompting works. No session ref until the first prompt. Integration
-install target is `antigravity-cli`; config dir `~/.gemini/config` must exist (or
-`ANTIGRAVITY_CLI_CONFIG_DIR`).
-
-Integrations for all three are session-restore only - they never improve state detection - and
-their hooks silently no-op without `python3` on PATH. `integration status` cannot see a
-codex-side disabled hook (WONTFIX); verify `agent_session` is present after the first codex
-turn instead.
 
 ## Multiple machines (0.9.0)
 
