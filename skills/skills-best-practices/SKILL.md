@@ -2,7 +2,7 @@
 name: skills-best-practices
 description: Opinionated best practices for building Agent Skills - SKILL.md structure, frontmatter, description writing, progressive disclosure, testing, distribution. Use when creating or reviewing a skill, or debugging why one will not trigger.
 metadata:
-  version: "0.8.2"
+  version: "0.9.0"
   categories: "agents, knowledge"
   topics: "agent-skills, skill-authoring, prompt-design, spec, best-practices"
   openclaw:
@@ -65,7 +65,7 @@ When a skill does split, information loads in three levels:
 
 | Level | When Loaded | Token Cost | Content |
 |-------|------------|------------|---------|
-| **1: Metadata** | Always (startup) | ~100 tokens | `name` + `description` from frontmatter |
+| **1: Metadata** | Always (startup) | ~`chars / 4 + 25` - see [Length](#length) | `name` + `description` from frontmatter |
 | **2: Instructions** | When skill triggers | <5k tokens (recommended) | SKILL.md body |
 | **3: Resources** | As needed | Effectively unlimited | Bundled files, scripts |
 
@@ -93,11 +93,28 @@ The description is the **single most important field** - it determines when your
 
 - Write in **third person** ("Processes files..." - first or second person breaks discovery)
 - Include **WHAT** it does + **WHEN** to use it
-- Max 1024 characters, no XML angle brackets
+- No XML angle brackets; see [Length](#length) for the size target
 - Be slightly "pushy" - Claude tends to **undertrigger** rather than overtrigger
 - Include specific trigger phrases users would naturally say, plus file types where relevant
 - Write natural prose, not keyword dumps - matching is semantic, so a long "Triggers on X, Y, Z..." list adds little over a clear sentence
 - If the skill depends on an MCP server, name it ("...via MCP. Requires Linear MCP server connected.")
+
+### Length
+
+**Target 250 characters. The spec's 1024 is a ceiling, not a budget.** The description is the
+only part of a skill that costs tokens on every turn of every session, whether or not the skill
+ever fires. Past ~250 chars you are diluting the trigger, not sharpening it: descriptions are
+dispatch signals, not summaries.
+
+Compressing an over-long description, in the order that usually pays:
+
+- **Cut stack enumerations restated in prose.** Listing the stack once is enough; restating it as
+  "covers the frontend ... and the backend ..." is pure padding
+- **Cut selling points.** "Includes exhaustive API tables" describes the body, not when to fire
+- **Collapse trigger lists.** One clear clause beats three quoted phrases plus four "when" clauses -
+  matching is semantic, so near-duplicate triggers add nothing
+- **Keep exclusions and disambiguations.** "Not for session state", "not the LanceDB product" run
+  30-40 chars and are the only thing preventing wrong-skill dispatch
 
 ### Good vs Bad
 
@@ -126,7 +143,9 @@ description: Advanced data analysis for CSV files. Use for statistical
 
 ### Manually-Invoked Skills
 
-A skill with `disable-model-invocation: true` never auto-triggers - its description shows only in the `/` menu, so trigger phrases do nothing for it. Write a plain one-line summary and skip the trigger-tuning.
+`disable-model-invocation: true` stops a skill from auto-triggering - its description shows only in the `/` menu, so trigger phrases do nothing for it, and it is skipped for subagent preload and scheduled tasks too.
+
+**Don't reach for it by default.** Users ask for a workflow in prose ("polish this before committing") far more often than they type `/name`, and the flag turns those requests into a hand-rolled, degraded version of the skill. Reserve it for genuinely destructive one-shots. When it is set, write a plain one-line summary and skip the trigger-tuning.
 
 ## Frontmatter Reference
 
@@ -148,7 +167,7 @@ The spec also defines optional `license`, `compatibility`, and `metadata` fields
 | `argument-hint` | Autocomplete hint, e.g. `[issue-number]` |
 | `when_to_use` | Extra trigger context, appended to `description` in the skill listing |
 | `arguments` | Named positional arguments for `$name` substitution (space-separated string or list) |
-| `disable-model-invocation` | `true` = only user can invoke (for deploy, commit) |
+| `disable-model-invocation` | `true` = only user can invoke; also blocks subagent preload and scheduled tasks. Rarely worth it - see [Manually-Invoked Skills](#manually-invoked-skills) |
 | `user-invocable` | `false` = hidden from `/` menu (background knowledge) |
 | `allowed-tools` | Pre-approves tools (no permission prompt) for the current turn; space-separated, e.g. `Read Grep Glob`. In the spec allowlist but tagged **(Experimental)** |
 | `disallowed-tools` | Removes tools from Claude's pool while the skill is active; clears on your next message |
@@ -186,6 +205,10 @@ Claude Code preprocesses SKILL.md at load: an exclamation mark immediately touch
 - A fence opened with `!` right after the backticks is the multi-line form and is equally live
 - `references/` files are read with the Read tool and never preprocessed - the only safe home for live examples. In a SKILL.md, break the `!`-to-backtick adjacency instead (wrap the `!` in its own code span, as this section does)
 - `"disableSkillShellExecution": true` in settings disables execution for user/project/plugin skills
+- **In a skill you publish, prefer prose over an `!` block.** Dynamic injection is host-specific: on
+  other surfaces the block arrives as literal text, and it drags `allowed-tools` along purely to
+  suppress its own permission prompts. Instructing the agent to run the command costs one tool call
+  and works everywhere
 
 ### Undocumented Behavior
 
@@ -206,32 +229,22 @@ Claude Code preprocesses SKILL.md at load: an exclamation mark immediately touch
 
 ### Be Concise
 
-Claude is smart. Only add context it doesn't already have:
+The agent is smart. Only add context it doesn't already have - a skill that explains what a PDF is,
+or lists four libraries before picking one, spends tokens telling the agent things it knows:
 
 ```markdown
-# GOOD (~50 tokens)
-## Extract PDF text
-Use pdfplumber for text extraction:
-```python
-import pdfplumber
-with pdfplumber.open("file.pdf") as pdf:
-    text = pdf.pages[0].extract_text()
-```
-
-# BAD (~150 tokens)
-## Extract PDF text
-PDF files are a common file format containing text and images.
-To extract text, you need a library. There are many available...
+# BAD:  "PDF files are a common format containing text and images. To extract
+#        text you need a library. There are many available..."
+# GOOD: "Use pdfplumber for text extraction."
 ```
 
 ### Avoid Too Many Options
 
-Don't present multiple approaches unless necessary. Give one default with an escape hatch:
+Give one default with an escape hatch, not a menu:
 
 ```markdown
-# BAD: "Use pypdf, or pdfplumber, or PyMuPDF, or pdf2image..."
-# GOOD: "Use pdfplumber for text extraction. For scanned PDFs needing
-#        OCR, use pdf2image with pytesseract instead."
+# BAD:  "Use pypdf, or pdfplumber, or PyMuPDF, or pdf2image..."
+# GOOD: "Use pdfplumber. For scanned PDFs needing OCR, use pdf2image with pytesseract."
 ```
 
 ### Set Degrees of Freedom
@@ -278,48 +291,14 @@ For reference files >100 lines, include a **table of contents** at the top. Watc
 
 ## Patterns
 
-### Sequential Workflow
+### Common Workflow Shapes
 
-```markdown
-## Step 1: Analyze input
-Run: `python scripts/analyze.py input.pdf`
+Name the shape explicitly in the body rather than assuming the agent infers it:
 
-## Step 2: Validate
-Run: `python scripts/validate.py fields.json`
-Fix any errors before continuing.
-
-## Step 3: Execute
-Run: `python scripts/process.py input.pdf fields.json output.pdf`
-```
-
-### Conditional Workflow (Decision Tree)
-
-```markdown
-## Workflow Decision Tree
-**Creating new content?** -> Follow "Creation workflow"
-**Editing existing content?** -> Follow "Editing workflow"
-**Reviewing content?** -> Follow "Review workflow"
-```
-
-### Feedback Loop
-
-```markdown
-1. Make edits
-2. Validate: `python scripts/validate.py`
-3. If validation fails -> fix issues -> go to step 2
-4. Only proceed when validation passes
-```
-
-### Checklist Pattern (for complex tasks)
-
-```markdown
-Copy this checklist and track progress:
-- [ ] Step 1: Analyze input
-- [ ] Step 2: Create plan
-- [ ] Step 3: Validate plan
-- [ ] Step 4: Execute
-- [ ] Step 5: Verify output
-```
+- **Sequential**: numbered steps, each naming the exact command to run
+- **Decision tree**: route on task type up front ("Creating new content? -> Creation workflow")
+- **Feedback loop**: validate, fix, re-validate - and state that the loop exits only on a pass
+- **Checklist**: for long tasks, have the agent copy a checklist and tick items as it goes
 
 ### Single-File Skill Embedded in a CLI
 
@@ -406,7 +385,7 @@ Calibrate to scope: for a project-local or single-user skill, skip the triggerin
 | "Could not find SKILL.md" | Wrong filename | Must be exactly `SKILL.md` (case-sensitive) |
 | "Invalid skill name" | Spaces or capitals | Use kebab-case: `my-skill-name` |
 | Whole skill silently skipped at load | Description exceeds 1024 chars | Trim it - the loader rejects the file, not just the description |
-| Frontmatter fails to parse | `Triggers:` (colon-space) or straight `"quotes"` inside an unquoted `description` value | Quote the whole value or remove the colon/quotes |
+| Frontmatter fails to parse | An unquoted `description` is a plain YAML scalar, so any colon-space (`Triggers: `, `Use when: `) or straight `"quotes"` inside it breaks parsing | Rewrite the colon as ` - `, or quote the whole value |
 | A doc example runs a shell command | A `!` directly touching a backticked command executes on load, even inside a code fence | Move the example to `references/` or break the `!`-backtick adjacency (see [Dynamic-Injection Footgun](#dynamic-injection-footgun)) |
 
 ## Distribution

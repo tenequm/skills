@@ -7,6 +7,26 @@ and this skill adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.h
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-09-09
+
+### Added
+- A `Length` subsection under Writing the Description - target 250 chars, with the compression
+  order that actually pays (cut restated stack enumerations and selling points, collapse trigger
+  lists, keep exclusions and disambiguations).
+- Guidance to prefer prose over an `!` block in a published skill: dynamic injection is
+  host-specific, arrives elsewhere as literal text, and drags `allowed-tools` along to suppress
+  its own prompts.
+
+### Changed
+- Level 1 metadata cost was a flat "~100 tokens"; it is a function of description length,
+  roughly `chars / 4 + 25`.
+- `disable-model-invocation` now carries a "don't reach for it by default" warning - it blocks
+  the prose invocation path users actually use, plus subagent preload and scheduled tasks.
+- The frontmatter parse-failure row generalized from `Triggers:` to any colon-space in a plain
+  YAML scalar, with ` - ` given as the rewrite.
+- The four generic workflow templates condensed to a four-bullet list, and the Be Concise
+  example shortened (it also nested a fence inside a fence of the same type).
+
 ## [0.8.2] - 2026-09-09
 
 ### Changed

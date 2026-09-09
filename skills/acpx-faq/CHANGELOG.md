@@ -4,6 +4,30 @@ All notable changes to this skill are documented in this file, following [Keep a
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-09-09
+
+### Added
+
+- The mechanism behind the permission finding: the claude adapter spawns its binary with
+  `--allow-dangerously-skip-permissions --setting-sources=project,local`, so no permission
+  request ever reaches acpx's policy layer. `--deny-all` is not ignored, it is unreachable -
+  and the same flag list independently explains why user-scope settings are excluded.
+- agy auth guidance: `security.auth.selectedType: "oauth-personal"` is the subscription path
+  and the intended default, there is no tier setting and no `agy` auth subcommand, and
+  re-running with `ACPX_AUTH_OAUTH_PERSONAL=1` is non-destructive and needs no browser while
+  the token is valid. Entitlement problems are server-side; do not "fix" them with an API key.
+- agy verification prompts must ask for a bare reply and have their whole log read - agy
+  routes answers into brain artifact files, so a `tail` cannot distinguish "no tools" from
+  "answered elsewhere".
+
+### Changed
+
+- Rewrote the MCP section around stdio as the normal case. An era mismatch (MCP 2026-07-28
+  retired the `initialize` handshake; dual-era clients probe stdio with `server/discover` and
+  fall back) is now described generically: a conforming legacy server answers with an error,
+  one that aborts kills the pipe. agy probes, the codex and claude adapters do not. Removed
+  the transport-specific setup recipe.
+
 ## [0.1.2] - 2026-09-09
 
 ### Added

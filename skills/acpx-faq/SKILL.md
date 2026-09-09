@@ -2,7 +2,7 @@
 name: acpx-faq
 description: Run coding agents (codex, claude, Antigravity/agy) headlessly through the acpx ACP CLI. Use before launching or prompting an acpx subagent, and when an acpx command fails, a session is not found, or a prompt seems lost.
 metadata:
-  version: "0.1.2"
+  version: "0.2.0"
   categories: "agents, operations"
   topics: "acpx, acp, agent-orchestration, troubleshooting, headless-agents"
   upstream: "acpx@0.15.1"
@@ -32,8 +32,10 @@ launch-to-result recipe. After that: Sessions, Completion, MCP, Limits, Failures
    git root. No match exits **4**. Create first with `sessions ensure --name <n>`.
 3. **`status` is not a turn signal.** It reports the queue-owner process, not the turn, and
    keeps saying `running` after the turn has ended. Never gate automation on it.
-4. **Permission flags only gate requests the adapter chooses to raise.** Neither the codex nor
-   the claude adapter asks before writing files, so `--deny-all` does not stop writes.
+4. **Permission flags only gate requests the adapter chooses to raise.** The claude adapter
+   spawns its binary with `--allow-dangerously-skip-permissions --setting-sources=project,local`,
+   so it never raises an ACP permission request and there is nothing for acpx to deny; codex
+   writes through its terminal capability. `--deny-all` is not ignored, it is unreachable.
    Isolation comes from the `--cwd` you hand it, never from a flag.
 5. **`[done] end_turn` and exit 0 are not proof of success.** A content-filter kill, an MCP
    load failure, or a truncated turn all end that way. Read the stream, or require the agent
@@ -70,11 +72,19 @@ acpx --agent ~/.local/lib/antigravity-acp/agy_acp_server.par \
   `~/.gemini` and every later run needs nothing.
 - **Never pass a positional agent with `--agent`** - exit **2**,
   `Do not combine positional agent with --agent override`.
-- **Check the tier before sending anything private.** The `oauth-personal` path can report
-  `currentTier: {'id': 'free-tier'}`, whose terms permit human review of submitted prompts and
-  code for up to 18 months. Run with `--verbose` and grep `loadCodeAssist response` to see it.
+- **This lane is subscription-backed. Leave the auth alone.**
+  `~/.gemini/settings.json` -> `security.auth.selectedType: "oauth-personal"` is the Google
+  subscription path and the intended default; there is no tier setting, and `agy` has no auth
+  subcommand at all. Re-running with `ACPX_AUTH_OAUTH_PERSONAL=1` is non-destructive and needs
+  no browser while the token is valid. If entitlement ever looks wrong it is a server-side
+  lookup, with no client-side lever - do not "fix" it by switching to `gemini-api-key` or a
+  GCP project, which are separate billing arrangements rather than fixes.
+- **Ask an agy verification prompt for a bare reply, and read the whole log.** agy will route
+  an answer into a brain artifact file instead of the stream, so a `tail` shows you an
+  `AbsolutePath` and nothing else and you cannot tell "no tools" from "answered elsewhere".
+  Add "Do not create any files" and capture the full output.
 - **agy hides MCP failures inside a successful-looking turn.** A failed server appears as
-  inline text - `MCP load failed for pond: ... expect initialized request, but received: ...
+  inline text - `MCP load failed for <name>: ... expect initialized request, but received: ...
   "server/discover"` - in a stream that still ends `[done] end_turn` with exit 0. Grep the
   output for `MCP load failed`, do not trust the exit code.
 - The CLI (`agy`) and this ACP server keep **separate state under the same home**: two
@@ -213,61 +223,49 @@ Error: Invalid mcpServers in /path/to/config.json: expected array
 
 ```jsonc
 // WRONG - the Claude Code / standard shape
-{ "mcpServers": { "pond": { "command": "pond", "args": ["mcp"] } } }
+{ "mcpServers": { "example": { "command": "example", "args": ["mcp"] } } }
 
 // RIGHT - an array, each entry carrying its own name
-{ "mcpServers": [ { "name": "pond", "type": "http", "url": "http://127.0.0.1:9797/mcp" } ] }
+{ "mcpServers": [ { "name": "example", "type": "stdio", "command": "example", "args": ["mcp"] } ] }
 ```
 
-### Worked recipe: giving agy a server it does not already have
+### stdio is the normal case
 
-The case that keeps getting re-derived. A stdio server that works for Claude Code usually
-cannot be reused as-is, because agy's MCP client sends `server/discover` before `initialized`
-and a compliant stdio server rejects that (`expect initialized request`). Serve it over HTTP -
-and note the **same server needs two different config shapes** depending on how you reach it.
+Most MCP servers are stdio, and acpx passes them straight through - one entry, nothing to run:
 
-```bash
-# 1. Serve over HTTP, wait for the route. A 406 here is the normal MCP handshake reply,
-#    not an error - anything but 000 means it is up.
-nohup pond serve --transport http --host 127.0.0.1 --port 9797 > /tmp/pond-serve.log 2>&1 &
-until curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:9797/mcp | grep -qv 000; do sleep 1; done
-
-# 2. Two files, two shapes, one server:
-#    ~/.gemini/config/mcp_config.json   plain `agy` CLI   OBJECT map keyed by name
-#      {"mcpServers": {"pond": {"serverUrl": "http://127.0.0.1:9797/mcp"}}}
-#    ~/.gemini/acpx-mcp.json            acpx runs         ARRAY of named servers
-#      {"mcpServers": [{"name": "pond", "type": "http", "url": "http://127.0.0.1:9797/mcp"}]}
-
-# 3. Verify before dispatching real work - one exec that calls the tool and reports.
-acpx --agent ~/.local/lib/antigravity-acp/agy_acp_server.par --cwd "$D" \
-     --model gemini-3.7-flash-medium --mcp-config ~/.gemini/acpx-mcp.json \
-     --approve-all --timeout 220 \
-     exec 'Call pond_search with query "x" and limit 2, then reply with only the number of
-           sessions returned. If you have no pond tool at all, reply NONE.'
-
-# 4. Fan out, one directory per agent (agy reads sibling files unprompted).
-for n in 1 2 3; do
-  acpx --agent ~/.local/lib/antigravity-acp/agy_acp_server.par --cwd "$B/a$n" \
-       --model gemini-3.7-flash-medium --mcp-config ~/.gemini/acpx-mcp.json \
-       --approve-all --timeout 2400 \
-       exec 'Read ./brief.md in this directory and execute it exactly as written. Use the
-             pond MCP tools for all searching. Reply with only the path you wrote.' \
-    > "/tmp/a$n.log" 2>&1 &
-done
+```jsonc
+{ "mcpServers": [ { "name": "example", "type": "stdio", "command": "example", "args": ["mcp"] } ] }
 ```
 
-Keep a **dedicated** config file for acpx rather than reusing the CLI's. `--mcp-config`
-replaces the whole set, so pointing acpx at a config that still holds a stdio entry hands the
-agent the exact handshake it cannot complete.
+**If a stdio server dies only under agy, it is an MCP era mismatch, not an acpx fault.** Since
+MCP 2026-07-28 (SEP-2575) the `initialize`/`initialized` handshake is retired, and a dual-era
+client is told to probe stdio with `server/discover` first and fall back to `initialize` when
+the answer is not a modern one. A conforming legacy server replies with an error and the
+fallback happens; one that *aborts* on the unexpected request kills the pipe instead, leaving
+the client nothing to fall back from:
+
+```
+MCP load failed for <name>: Error: failed to start stdio MCP server
+Caused by: expect initialized request, but received: ... method: "server/discover"
+: connection closed: calling "initialize": client is closing: EOF
+```
+
+agy probes; the codex and claude adapters do not, which is the only reason the same config
+works for them. The fix belongs in the server (answer an error rather than exiting, or move it
+to a current MCP SDK). Reaching it over HTTP also sidesteps it, since there the probe is just
+one failed request rather than a dead process.
+
+That turn still exits **0** and ends `[done] end_turn` - the failure is inline text, not an
+error. Grep for `MCP load failed` before trusting any run that used MCP.
 
 Two more traps:
 
 - **A live queue owner refuses a config change.** The owner carries the config path and a
   SHA-256 fingerprint; switching MCP config on a persistent session requires
   `sessions close` first.
-- **The server must outlive the run.** These are ordinary local processes with no supervision:
-  if `pond serve` dies, every agent silently loses its tools mid-run and the turn still ends
-  `[done] end_turn`. Check the port, not the exit code.
+- **`--mcp-config` replaces the whole set**, so a config written for one adapter is not
+  automatically right for another. Verify with a one-shot `exec` that asks the agent to name
+  its own tools before dispatching real work.
 
 `${...}` expansion inside an MCP config is evaluated in the **launcher's** environment,
 because the acpx child inherits it - so a variable like a session id resolves to *your* id,
@@ -300,10 +298,11 @@ Structural, not bugs. Do not design around them.
   `ListAgents` / `SendMessage` cannot see or reach them.
 - **acpx cannot attach to a session it did not start.** It owns the process it drives; a
   human-started headful session is out of reach.
-- **Permission flags are not a sandbox.** See invariant 4: `--deny-all` does not prevent file
-  writes, because the adapters do not ask. `--no-terminal` genuinely removes the terminal
-  capability (an agent that calls it gets a hard error), but for filesystem safety the only
-  real control is which `--cwd` you hand it.
+- **Permission flags are not a sandbox.** See invariant 4: the claude adapter already passed
+  `--allow-dangerously-skip-permissions` to its binary, so no permission request ever reaches
+  acpx's policy layer. Verify it yourself with `ps -Ao args | grep claude-agent-sdk` during a
+  turn. `--no-terminal` genuinely removes the terminal capability (an agent that calls it gets
+  a hard error), but for filesystem safety the only real control is which `--cwd` you hand it.
 
 ## Failures
 
