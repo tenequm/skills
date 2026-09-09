@@ -25,6 +25,8 @@ A useful filter: **write tests for features, not for code.** A good test survive
 
 Watch for weak assertions. `assert!(count >= expected)` passes for buggy code that emits too much; a count-based assertion (`batches == 4`) goes stale the moment batching changes. Assert durable invariants and exact values.
 
+One assertion shape to never write: a **negative wall-clock property** - "less than 20 ms elapsed between these two calls", "the cached call was faster than the cold one". It is not a flaky test you can stabilize by loosening the threshold; it is structurally unsound, because nothing guarantees your thread is scheduled at all on a loaded CI runner compiling three other jobs. Assert the thing you actually meant instead: that the second call did not hit the backend (a counter on a fake), that the value came from the cache (an explicit flag), that the work happened once. If you genuinely need to test timing behaviour, control the clock - `tokio::time::pause` and `tokio::time::Instant`, covered in `async-basics.md`.
+
 ## The reproduce-then-fix habit
 
 The single highest-ROI testing habit: when you find a bug, write the failing test *first*, watch it fail, then fix the bug. Confirm the test actually catches the bug by reverting the fix and seeing it go red again. A regression test that still passes when you delete the fix is worthless - and that happens more often than you would think.
@@ -116,6 +118,27 @@ A slow suite is one developers stop running - then they push untested code, whic
 - Gate genuinely slow tests behind an environment variable so they run on CI but not in the local loop. Do not hide them with `#[cfg(...)]` - conditional compilation means they rot.
 - Doc tests are compile-checked documentation and run under `cargo test` - keep them for public-API examples. The 2024 edition merges compatible doctests into one compilation unit, so the old "doctests are slow to build" concern is largely gone (they still each run in their own process).
 
+  A doc comment is `///` above the item (or `//!` at the top of a file, documenting the file itself), and any Rust block inside it is compiled and run:
+
+  ````rust
+  /// Parses a config file.
+  ///
+  /// # Examples
+  ///
+  /// ```
+  /// let cfg = mycrate::parse("key = 1")?;
+  /// assert_eq!(cfg.key, 1);
+  /// # Ok::<(), mycrate::Error>(())
+  /// ```
+  ///
+  /// # Errors
+  ///
+  /// Returns [`Error::Syntax`] if the input is not valid TOML.
+  pub fn parse(input: &str) -> Result<Config, Error> { /* ... */ }
+  ````
+
+  Two mechanics worth knowing up front: a line prefixed with `# ` inside the block is compiled but hidden from the rendered docs, which is how you make an example that uses `?` compile without showing the boilerplate; and `cargo doc --open` renders the whole thing locally. Mark a block ```` ```no_run ```` to compile but not execute it, and ```` ```ignore ```` to do neither - reach for `ignore` rarely, since an unchecked example is exactly the one that rots.
+
 ## Async tests
 
 Use `#[tokio::test]`. For tests that need real concurrency (two tasks actually contending), use the multi-thread flavor:
@@ -173,7 +196,7 @@ Add as defaults:
 
 | Tool | Why |
 |---|---|
-| `cargo-nextest` | Faster runs and per-test process isolation for multi-binary workspaces. It does not run doctests - keep `cargo test --doc` as a separate step. Its `slow-timeout` with `terminate-after` auto-kills hung tests. |
+| `cargo-nextest` | Faster runs and per-test process isolation for multi-binary workspaces. It does not run doctests - keep `cargo test --doc` as a separate step. Its `slow-timeout` with `terminate-after` auto-kills hung tests, and `cargo nextest bench` now runs benchmark targets through the same runner. |
 | `rstest` | Parametrized tests: one `#[case(...)]` per row generates an independent, individually-named test. Genuinely cuts table-test boilerplate. |
 
 Reach for these when a specific need appears:

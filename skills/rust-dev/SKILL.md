@@ -2,10 +2,10 @@
 name: rust-dev
 description: Day-1 guide to building well in Rust - ownership, errors as values, String vs &str, Box/Rc/Arc, anyhow vs thiserror, and a crate shortlist (tokio, serde, axum, sqlx). Use when starting a Rust project, fighting the borrow checker, or picking crates.
 metadata:
-  version: "0.5.1"
+  version: "0.6.0"
   categories: "development"
   topics: "rust, ownership, cargo, crates, tokio"
-  upstream: "rust@1.98.0, axum@0.8.9, reqwest@0.13.4, sqlx@0.9.0, jiff@0.2.35, kache@0.16.0, dist@0.32.0, release-plz-action@0.5.131"
+  upstream: "rust@1.98.1, axum@0.8.9, reqwest@0.13.5, sqlx@0.9.0, jiff@0.2.35, kache@0.18.0, dist@0.32.0, release-plz-action@0.5.135"
   openclaw:
     homepage: https://github.com/tenequm/skills/tree/main/skills/rust-dev
     emoji: "🦀"
@@ -185,7 +185,8 @@ let Some(name) = user.name else { return Err(anyhow!("no name")); };
 - No exceptions. `Result<T, E>` and `?`. The compiler will not let you ignore errors.
 - No inheritance. Composition + traits + enums.
 - Variables are immutable by default. Add `mut` to mutate. Same for references: `&` vs `&mut`.
-- Integer types are explicit and indexing requires `usize`.
+- Integer types are explicit and indexing requires `usize`. They also overflow differently depending on the build: debug "includes checks for integer overflow that cause your program to _panic_ at runtime", while `--release` drops them and performs "_two's complement wrapping_". A test suite that passes can still wrap in production, so use `checked_*`/`saturating_*`/`wrapping_*` where the arithmetic can actually reach the edge, rather than relying on the debug panic to find it.
+- A `String` is not indexable. `s[0]` does not compile - see `references/ownership-and-types.md` for what to reach for instead.
 
 **From Go:**
 - Errors as values - same instinct, but use `?` instead of `if err != nil`.
@@ -226,7 +227,7 @@ These cover most real apps. Add them as needed; they are not all required.
 | `tracing` + `tracing-subscriber` | Structured logging. The default for any async code (replaces `log`) |
 | `axum` | Web framework. Built on `tokio` + `hyper` + `tower`. The 2026 default |
 | `sqlx` | Database access. Async, compile-time checked queries. PostgreSQL, MySQL, SQLite |
-| `chrono` | Dates and times. The maintainer announced soft-deprecation in Jan 2026 and recommends `jiff` for new code. `jiff` (BurntSushi) is the successor but still pre-1.0 as of May 2026. Pick `chrono` for `serde`/`sqlx` integration today, `jiff` if you can tolerate pre-1.0 churn |
+| `chrono` | Dates and times. The maintainer announced soft-deprecation in Jan 2026 and recommends `jiff` for new code. `jiff` (BurntSushi) is the successor but still pre-1.0 as of September 2026 (0.2.x, with the 1.0 tracking issue open and no date). Pick `chrono` for `serde`/`sqlx` integration today, `jiff` if you can tolerate pre-1.0 churn |
 
 See `references/crate-shortlist.md` for one minimal example each.
 
@@ -287,7 +288,7 @@ unreachable_pub = "warn"
 all = { level = "deny", priority = -1 }
 # Idiomatic helpers
 # Note: uninlined_format_args moved to clippy::pedantic (allow-by-default)
-# in Rust 1.89.0 (mid-2025), so an explicit warn keeps the nudge active.
+# during the 1.89/1.90 cycle, so an explicit warn keeps the nudge active.
 uninlined_format_args         = "warn"
 semicolon_if_nothing_returned = "warn"
 implicit_clone                = "warn"
@@ -304,7 +305,7 @@ style_edition = "2024"
 edition       = "2024"
 ```
 
-That is enough. rustfmt's defaults are good. Some teams add `use_small_heuristics = "Max"` to keep more code on single lines. Fancy options like `imports_granularity` and `group_imports` are still nightly-only as of May 2026.
+That is enough. rustfmt's defaults are good. Some teams add `use_small_heuristics = "Max"` to keep more code on single lines. Fancy options like `imports_granularity` and `group_imports` are still nightly-only as of September 2026 (rustfmt tracking issues #4991 and #5083).
 
 Run `cargo fmt` before you start editing (or commit any pre-existing drift on its own) so formatting noise stays out of your diff, and make `cargo fmt --check` its own CI step.
 
@@ -325,7 +326,7 @@ profile    = "minimal"
 /target
 ```
 
-Commit `Cargo.lock`. Since 2023 it is the recommended default for every crate type, libraries included (`cargo new` tracks it); a library may still choose to ignore it.
+Commit `Cargo.lock`. `cargo new` tracks it, and the Cargo guide's advice is "When in doubt, check `Cargo.lock` into the version control system". The FAQ deliberately stops short of making that universal - "whether you do is dependent on the needs of your package" - but for an application it is unambiguously right, and committing it is now the ordinary default for libraries too.
 
 ## Project Structure
 
@@ -349,6 +350,8 @@ my-app/
 
 Inline modules with `mod { ... }` until a file gets long, then split. Do not pre-split.
 
+**Everything is private by default**, including to a parent module. `mod config;` makes the module exist; it does not make anything inside it reachable. That is the source of the most common early "why can't I call this" error, and the fix is a visibility keyword on the item (and on the module, if it is nested): `pub` exposes it to the outside world, `pub(crate)` exposes it only within your own crate. `pub(crate)` is the right default for anything that is not part of a library's published API - it is what lets the `unreachable_pub` lint in the table below tell you something useful.
+
 The layout above is one crate. The moment you want a second - a shared library plus a CLI, a server plus its client - you need a Cargo **workspace**, along with the `Cargo.toml` machinery that goes with growing past a single crate: feature flags, build scripts, and what `rust-version` actually controls. That is `references/project-shape.md`.
 
 ## Learning Path
@@ -367,10 +370,10 @@ For curated crate recommendations: **blessed.rs** (https://blessed.rs/crates).
 
 Detailed material lives in `references/`. Read each when you hit the topic.
 
-- **ownership-and-types.md** - ownership, borrowing, lifetimes, `String`/`&str`/`Cow`, slices, smart pointers, the self-referential struct trap
-- **error-handling.md** - `Result`, `?`, `anyhow` vs `thiserror` patterns, custom error enums, when `panic!` is appropriate
-- **traits-and-generics.md** - traits as bounds, `dyn` vs `impl Trait` vs generics, common derives, `From`/`Into`/`Display`/`Debug`, blanket impls, the orphan rule
-- **async-basics.md** - `tokio`, `#[tokio::main]`, `.await`, `Send`/`Sync`, common pitfalls (blocking in async, `MutexGuard` across `.await`)
+- **ownership-and-types.md** - ownership, borrowing, lifetimes, `String`/`&str`/`Cow`, why a string is not indexable, slices, `HashMap` and the `entry` API, smart pointers, the self-referential struct trap
+- **error-handling.md** - `Result`, `?`, `anyhow` vs `thiserror` patterns, wrapping at the boundary rather than before it, custom error enums, when `panic!` is appropriate
+- **traits-and-generics.md** - traits as bounds, `dyn` vs `impl Trait` vs generics, common derives, `From`/`Into`/`Display`/`Debug`, closures and the `Fn`/`FnMut`/`FnOnce` family, blanket impls, the orphan rule
+- **async-basics.md** - threads and `mpsc` before async, `tokio`, `#[tokio::main]`, `.await`, `Send`/`Sync`, graceful shutdown on SIGTERM, common pitfalls (blocking in async, `MutexGuard` across `.await`)
 - **crate-shortlist.md** - minimal usage example for each of the 8 crates above
 - **project-shape.md** - past one crate: workspaces and inherited dependencies, `[workspace.lints]`, feature flags, `build.rs`, what `rust-version` controls, `#[non_exhaustive]`
 - **testing.md** - what to test and what to skip, pragmatic test organization, keeping the suite fast, the minimal high-value tool kit

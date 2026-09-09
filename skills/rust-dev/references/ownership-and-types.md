@@ -78,6 +78,22 @@ shout(&String::from("hi"));   // &String coerces to &str via deref
 
 The newcomer trap: putting `&str` in a struct field. The struct now needs a lifetime parameter, and so does every function and struct that holds it. Use `String` and stop the cascade.
 
+### You cannot index a string
+
+`s[0]` does not compile, and this stops people cold on day 1. A Rust string is UTF-8, so a byte offset is not a character offset: indexing by number would either return a meaningless byte or silently cost O(n), and Rust refuses to pick. What you actually want is usually one of:
+
+```rust
+let s = "héllo";
+
+s.chars().next();                 // Option<char> - the first character
+s.chars().nth(2);                 // Option<char> - the third; O(n), that is the point
+s.chars().count();                // characters (5), NOT s.len(), which is bytes (6)
+for (i, c) in s.char_indices() {} // byte offset paired with the char at it
+&s[0..2];                         // a &str slice by BYTE range
+```
+
+Range slicing is allowed, but it panics if an endpoint lands inside a multi-byte character - `&s[0..2]` above cuts `é` in half at runtime. Slice on offsets you got from the string itself (`char_indices`, `find`, `split`), never on arithmetic you did yourself. When you genuinely want fixed-width elements, you want `Vec<u8>` or `&[u8]`, not a string.
+
 ## `Vec<T>` vs `&[T]` vs `[T; N]`
 
 | Type | What it is | When to use |
@@ -96,6 +112,44 @@ sum(&vec![1, 2, 3]);
 sum(&[1, 2, 3]);
 sum(&[1, 2, 3][..]);
 ```
+
+## `HashMap<K, V>`
+
+The other collection you will reach for on day 1. Keys must be `Eq + Hash` (derive both).
+
+```rust
+use std::collections::HashMap;
+
+let mut counts: HashMap<String, u32> = HashMap::new();
+
+counts.insert("a".to_string(), 1);
+counts.get("a");                    // Option<&u32> - borrows, does not move
+counts.get("a").copied().unwrap_or(0);
+counts.remove("a");                 // Option<V> - hands you the owned value back
+for (k, v) in &counts { }           // iterate by reference
+```
+
+`get` takes `&str` even though the key is `String`, because `HashMap::get` is generic over `Borrow<Q>` (see the standard-traits table in `traits-and-generics.md`). That is why you do not have to allocate a `String` just to look one up.
+
+The method worth learning immediately is **`entry`**, which resolves "insert if absent, otherwise update" in one lookup instead of two:
+
+```rust
+// Count occurrences - the canonical example
+let text = "a b a";
+let mut counts: HashMap<&str, u32> = HashMap::new();
+for word in text.split_whitespace() {
+    *counts.entry(word).or_insert(0) += 1;        // counts["a"] == 2
+}
+
+// Build a multimap; or_insert_with's closure runs only on a miss
+let mut by_letter: HashMap<char, Vec<&str>> = HashMap::new();
+for word in text.split_whitespace() {
+    let first = word.chars().next().unwrap();
+    by_letter.entry(first).or_default().push(word);   // or_insert_with(Vec::new)
+}
+```
+
+Writing that as a `contains_key` check followed by an `insert` hashes the key twice and fights the borrow checker; `entry` does neither. `BTreeMap` has the same API and keeps keys sorted, at the cost of `Ord` instead of `Hash` and slower lookups - use it when you need ordered iteration.
 
 ## Smart Pointers
 

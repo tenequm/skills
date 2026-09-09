@@ -256,6 +256,37 @@ impl Iterator for Counter {
 | `iter_mut()` | `&mut T` | Modify in place |
 | `into_iter()` | `T` (consumes the collection) | Move items out |
 
+## Closures and the `Fn` Traits
+
+A closure is an anonymous function that can capture its environment. You write them constantly - every `.map(|x| ...)` is one - and they are ordinary values with ordinary trait bounds. There are three traits, and which one a closure implements is decided by what it *does* with what it captured, not by how you wrote it:
+
+| Bound | The closure... | Callable |
+|---|---|---|
+| `Fn` | only reads its captures | many times, from a `&self` |
+| `FnMut` | mutates its captures | many times, needs `&mut` access |
+| `FnOnce` | consumes its captures (moves something out) | exactly once |
+
+They nest: every `Fn` is also an `FnMut` and an `FnOnce`. So take the loosest bound your function actually needs - `FnOnce` for something you call one time, `Fn` when you will call it repeatedly from shared state.
+
+```rust
+fn call_twice(f: impl Fn(i32) -> i32) -> i32 { f(1) + f(2) }
+fn consume(f: impl FnOnce() -> String) -> String { f() }
+
+let factor = 3;
+call_twice(|x| x * factor);          // Fn: only reads `factor`
+
+let mut log = Vec::new();
+let mut record = |x| log.push(x);    // FnMut: mutates `log`
+record(1);
+
+let owned = String::from("hi");
+consume(move || owned);              // FnOnce: moves `owned` out
+```
+
+`move` forces the closure to take ownership of everything it captures rather than borrowing. You need it whenever the closure outlives the current scope - `thread::spawn`, `tokio::spawn`, anything stored in a struct - which is why those signatures also demand `'static`. Note `move` and `FnOnce` are unrelated: a `move` closure that only reads its captures is still `Fn`.
+
+When a trait has one method and no state, a closure is usually the better abstraction than the trait - see the anti-patterns below.
+
 ## Common Standard Library Traits to Know
 
 | Trait | What it represents |

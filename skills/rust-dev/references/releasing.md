@@ -167,7 +167,13 @@ With clap, the crate for this is `clap_complete`, and the API you want is `gener
 
 `exclude` in `Cargo.toml` keeps your published crate small by dropping tests, fixtures, and docs from the `.crate` file. It is also a loaded gun: **exclude a file the code embeds with `include_str!`/`include_bytes!` and `cargo install` breaks for everyone while `cargo build` in your repo keeps working perfectly.** The failure is invisible locally and can survive several releases.
 
-The guard is cheap - assert in CI that everything the code embeds appears in the packaged file list:
+The same blind spot applies to the install path itself. If you ship through Homebrew, Nix, or `cargo-binstall`, nobody on your team ever runs the plain `cargo install <crate>` that compiles from the published `.crate` - so a packaging break can sit undiscovered for weeks while every channel you actually use keeps working. Test that path directly, in a container with nothing pre-installed and no local checkout to fall back on:
+
+```sh
+docker run --rm rust:slim-bookworm sh -c 'cargo install my-app --locked && my-app --version'
+```
+
+The guard below is the cheaper, per-commit half - assert in CI that everything the code embeds appears in the packaged file list:
 
 ```sh
 # Every file the code embeds must survive into the packaged .crate.
