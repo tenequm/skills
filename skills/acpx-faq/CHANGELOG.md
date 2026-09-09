@@ -4,6 +4,18 @@ All notable changes to this skill are documented in this file, following [Keep a
 
 ## [Unreleased]
 
+## [0.1.2] - 2026-09-09
+
+### Added
+
+- Worked recipe for giving agy an MCP server it does not already have - the case that kept
+  being re-derived from scratch. Covers serving over HTTP (and that a 406 is the normal
+  handshake reply), the fact that the same server needs an OBJECT map for the plain `agy` CLI
+  and an ARRAY for acpx, why the acpx config must be a dedicated file rather than the CLI's,
+  the one-line verification exec, and the fan-out shape with one directory per agent.
+- Note that an HTTP MCP server is unsupervised: if it dies mid-run every agent silently loses
+  its tools and the turn still ends `[done] end_turn`.
+
 ## [0.1.1] - 2026-09-09
 
 ### Changed

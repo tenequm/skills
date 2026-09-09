@@ -2,7 +2,7 @@
 name: acpx-faq
 description: Run coding agents (codex, claude, Antigravity/agy) headlessly through the acpx ACP CLI. Use before launching or prompting an acpx subagent, and when an acpx command fails, a session is not found, or a prompt seems lost.
 metadata:
-  version: "0.1.1"
+  version: "0.1.2"
   categories: "agents, operations"
   topics: "acpx, acp, agent-orchestration, troubleshooting, headless-agents"
   upstream: "acpx@0.15.1"
@@ -219,14 +219,55 @@ Error: Invalid mcpServers in /path/to/config.json: expected array
 { "mcpServers": [ { "name": "pond", "type": "http", "url": "http://127.0.0.1:9797/mcp" } ] }
 ```
 
+### Worked recipe: giving agy a server it does not already have
+
+The case that keeps getting re-derived. A stdio server that works for Claude Code usually
+cannot be reused as-is, because agy's MCP client sends `server/discover` before `initialized`
+and a compliant stdio server rejects that (`expect initialized request`). Serve it over HTTP -
+and note the **same server needs two different config shapes** depending on how you reach it.
+
+```bash
+# 1. Serve over HTTP, wait for the route. A 406 here is the normal MCP handshake reply,
+#    not an error - anything but 000 means it is up.
+nohup pond serve --transport http --host 127.0.0.1 --port 9797 > /tmp/pond-serve.log 2>&1 &
+until curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:9797/mcp | grep -qv 000; do sleep 1; done
+
+# 2. Two files, two shapes, one server:
+#    ~/.gemini/config/mcp_config.json   plain `agy` CLI   OBJECT map keyed by name
+#      {"mcpServers": {"pond": {"serverUrl": "http://127.0.0.1:9797/mcp"}}}
+#    ~/.gemini/acpx-mcp.json            acpx runs         ARRAY of named servers
+#      {"mcpServers": [{"name": "pond", "type": "http", "url": "http://127.0.0.1:9797/mcp"}]}
+
+# 3. Verify before dispatching real work - one exec that calls the tool and reports.
+acpx --agent ~/.local/lib/antigravity-acp/agy_acp_server.par --cwd "$D" \
+     --model gemini-3.7-flash-medium --mcp-config ~/.gemini/acpx-mcp.json \
+     --approve-all --timeout 220 \
+     exec 'Call pond_search with query "x" and limit 2, then reply with only the number of
+           sessions returned. If you have no pond tool at all, reply NONE.'
+
+# 4. Fan out, one directory per agent (agy reads sibling files unprompted).
+for n in 1 2 3; do
+  acpx --agent ~/.local/lib/antigravity-acp/agy_acp_server.par --cwd "$B/a$n" \
+       --model gemini-3.7-flash-medium --mcp-config ~/.gemini/acpx-mcp.json \
+       --approve-all --timeout 2400 \
+       exec 'Read ./brief.md in this directory and execute it exactly as written. Use the
+             pond MCP tools for all searching. Reply with only the path you wrote.' \
+    > "/tmp/a$n.log" 2>&1 &
+done
+```
+
+Keep a **dedicated** config file for acpx rather than reusing the CLI's. `--mcp-config`
+replaces the whole set, so pointing acpx at a config that still holds a stdio entry hands the
+agent the exact handshake it cannot complete.
+
 Two more traps:
 
 - **A live queue owner refuses a config change.** The owner carries the config path and a
   SHA-256 fingerprint; switching MCP config on a persistent session requires
   `sessions close` first.
-- **stdio servers can fail against a strict client.** Antigravity's MCP client sends
-  `server/discover` before `initialized`, which a compliant stdio server rejects
-  (`expect initialized request`). Serve over HTTP instead when the consumer is agy.
+- **The server must outlive the run.** These are ordinary local processes with no supervision:
+  if `pond serve` dies, every agent silently loses its tools mid-run and the turn still ends
+  `[done] end_turn`. Check the port, not the exit code.
 
 `${...}` expansion inside an MCP config is evaluated in the **launcher's** environment,
 because the acpx child inherits it - so a variable like a session id resolves to *your* id,
