@@ -28,7 +28,14 @@ readme:
 
 # `readme` runs first so the pre-commit hooks in `lint-repo` verify a synced
 # README instead of failing on drift this recipe is about to fix.
-check: sync readme lint-repo lint-python typecheck-python check-skills
+#
+# `lint-repo` IS pre-commit, and .pre-commit-config.yaml mirrors every other check
+# (lint-skills, lint-python, format-python, typecheck-python, readme-sync). Listing
+# those recipes here too just ran them twice - check_skills.py alone costs ~49s a
+# pass. The private recipes stay for targeted loops (`just check-skills`); only the
+# duplicate dependencies are gone. The three steps below are strictly ordered, so
+# there is nothing for just's `[parallel]` attribute to overlap.
+check: sync readme lint-repo
 
 release-prepare before after github_output='':
     if [[ -n "{{github_output}}" ]]; then extra_args=(--github-output "{{github_output}}"); else extra_args=(); fi; \

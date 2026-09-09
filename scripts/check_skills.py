@@ -16,6 +16,12 @@ from typing import Any
 import yaml
 from generate_readme import clawhub_slug
 
+# Both slow phases are subprocess- and network-bound, not CPU-bound, so threads are the
+# right tool and the worker counts are latency budgets rather than core counts. Measured on
+# 31 skills: the preflight runs 21.4s at 8 workers, 13.6s at 16, 10.7s at 32.
+VALIDATE_WORKERS = 8
+PREFLIGHT_WORKERS = 16
+
 FRONTMATTER_RE = re.compile(r"^---\s*\n(.*?)\n---\s*(?:\n|$)", re.DOTALL)
 NAME_RE = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
 MAX_NAME_LENGTH = 64
@@ -516,6 +522,19 @@ def lint_skills(repo_root: Path) -> int:
     return 0
 
 
+@dataclass
+class PhaseResult:
+    """A phase's exit code plus its buffered output.
+
+    Phases run concurrently, so they must not write to the streams directly - the
+    caller replays these in a fixed order to keep output deterministic.
+    """
+
+    code: int
+    out: list[str]
+    err: list[str]
+
+
 def normalize_skill(skill_dir: Path, dest_root: Path) -> Path:
     dest_dir = dest_root / skill_dir.name
     dest_dir.mkdir(parents=True, exist_ok=True)
@@ -548,28 +567,40 @@ def normalize_skill(skill_dir: Path, dest_root: Path) -> Path:
     return dest_dir
 
 
-def validate_skills_ref(repo_root: Path) -> int:
-    print("==> Agent Skills reference validation")
+def validate_skills_ref(repo_root: Path) -> PhaseResult:
     skill_dirs = sorted(
         path
         for path in (repo_root / "skills").glob("*")
         if path.is_dir() and (path / "SKILL.md").exists()
     )
-    failed = False
+    out = ["==> Agent Skills reference validation"]
+    err: list[str] = []
 
     with tempfile.TemporaryDirectory(prefix="skills-ref-") as temp_dir:
         temp_root = Path(temp_dir)
-        for skill_dir in skill_dirs:
-            normalized_dir = normalize_skill(skill_dir, temp_root)
-            result = subprocess.run(
-                ["uvx", "--from", "skills-ref", "agentskills", "validate", str(normalized_dir)],
-                cwd=repo_root,
-                text=True,
-            )
-            if result.returncode != 0:
-                failed = True
+        # Normalizing is cheap local I/O and each skill gets its own subdirectory;
+        # only the validator subprocesses are worth parallelizing.
+        normalized = [normalize_skill(skill_dir, temp_root) for skill_dir in skill_dirs]
+        with ThreadPoolExecutor(max_workers=VALIDATE_WORKERS) as pool:
+            results = list(pool.map(lambda path: validate_one(path, repo_root), normalized))
 
-    return 1 if failed else 0
+    failed = False
+    for result in results:
+        if result.returncode != 0:
+            failed = True
+        for stream, sink in ((result.stdout, out), (result.stderr, err)):
+            sink.extend(line for line in stream.splitlines() if line.strip())
+
+    return PhaseResult(1 if failed else 0, out, err)
+
+
+def validate_one(normalized_dir: Path, repo_root: Path) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
+        ["uvx", "--from", "skills-ref", "agentskills", "validate", str(normalized_dir)],
+        cwd=repo_root,
+        text=True,
+        capture_output=True,
+    )
 
 
 def publishable_files(skill_dir: Path) -> list[Path]:
@@ -641,58 +672,69 @@ def preflight_skill(skill_dir: Path, repo_root: Path) -> list[str]:
     return problems
 
 
-def preflight_clawhub(repo_root: Path) -> int:
+def preflight_clawhub(repo_root: Path) -> PhaseResult:
     """Resolve every publish against ClawHub before a release can run.
 
     A token is required rather than optional: without the publisher identity the
     CLI cannot resolve a slug another publisher also owns, and the dry-run fails
     as ambiguous instead of checking anything.
     """
-    print("==> ClawHub publish preflight")
+    out = ["==> ClawHub publish preflight"]
     if shutil.which("clawhub") is None:
-        print(
-            "clawhub CLI not found. Install it with `npm install -g clawhub`.",
-            file=sys.stderr,
+        return PhaseResult(
+            1, out, ["clawhub CLI not found. Install it with `npm install -g clawhub`."]
         )
-        return 1
 
     whoami = subprocess.run(["clawhub", "whoami"], cwd=repo_root, text=True, capture_output=True)
     if whoami.returncode != 0:
-        print(
-            "clawhub is not authenticated. Run `clawhub login`, or set the "
-            "CLAWHUB_TOKEN secret in CI.",
-            file=sys.stderr,
+        return PhaseResult(
+            1,
+            out,
+            [
+                "clawhub is not authenticated. Run `clawhub login`, or set the "
+                "CLAWHUB_TOKEN secret in CI."
+            ],
         )
-        return 1
 
     skill_dirs = sorted(
         path.parent for path in (repo_root / "skills").glob("*/SKILL.md") if path.is_file()
     )
-    with ThreadPoolExecutor(max_workers=8) as pool:
+    with ThreadPoolExecutor(max_workers=PREFLIGHT_WORKERS) as pool:
         results = list(pool.map(lambda path: preflight_skill(path, repo_root), skill_dirs))
 
     problems = [problem for group in results for problem in group]
     if problems:
-        for problem in problems:
-            print(problem, file=sys.stderr)
-        return 1
+        return PhaseResult(1, out, problems)
 
-    print(f"Resolved {len(skill_dirs)} publishes.")
-    return 0
+    out.append(f"Resolved {len(skill_dirs)} publishes.")
+    return PhaseResult(0, out, [])
 
 
 def main() -> int:
     repo_root = Path(__file__).resolve().parent.parent
 
+    # The repo lint is pure local parsing and costs ~0.1s, so it stays a gate: its
+    # errors are the clearest, and malformed frontmatter makes the later phases noisy.
     code = lint_skills(repo_root)
     if code != 0:
         return code
 
-    code = validate_skills_ref(repo_root)
-    if code != 0:
-        return code
+    # The reference validation and the ClawHub preflight are independent, so they
+    # overlap instead of summing.
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        phases = [
+            pool.submit(validate_skills_ref, repo_root),
+            pool.submit(preflight_clawhub, repo_root),
+        ]
+        results = [phase.result() for phase in phases]
 
-    return preflight_clawhub(repo_root)
+    for result in results:
+        for line in result.out:
+            print(line)
+        for line in result.err:
+            print(line, file=sys.stderr)
+
+    return next((r.code for r in results if r.code != 0), 0)
 
 
 if __name__ == "__main__":
