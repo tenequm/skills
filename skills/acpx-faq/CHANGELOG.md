@@ -4,6 +4,14 @@ All notable changes to this skill are documented in this file, following [Keep a
 
 ## [Unreleased]
 
+## [0.2.1] - 2026-09-09
+
+### Added
+
+- `gemini-3.7-flash-medium` named as the recommended agy default, with the measurement behind
+  it: on par with Opus for rubric-driven bulk work and far faster, while 3.8-flash-high scored
+  worse on the same task.
+
 ## [0.2.0] - 2026-09-09
 
 ### Added

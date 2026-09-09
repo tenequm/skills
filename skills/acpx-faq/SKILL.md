@@ -2,7 +2,7 @@
 name: acpx-faq
 description: Run coding agents (codex, claude, Antigravity/agy) headlessly through the acpx ACP CLI. Use before launching or prompting an acpx subagent, and when an acpx command fails, a session is not found, or a prompt seems lost.
 metadata:
-  version: "0.2.0"
+  version: "0.2.1"
   categories: "agents, operations"
   topics: "acpx, acp, agent-orchestration, troubleshooting, headless-agents"
   upstream: "acpx@0.15.1"
@@ -65,6 +65,10 @@ acpx --agent ~/.local/lib/antigravity-acp/agy_acp_server.par \
      exec 'Carry out $D/brief.md. Write your report to $D/report.md.'
 ```
 
+- **Default to `gemini-3.7-flash-medium`.** Measured on par with Opus for rubric-driven bulk
+  work (99.5% verdict agreement across 213 items, and it made the better call on the one they
+  disputed) and far faster; `gemini-3.8-flash-high` scored measurably worse on the same task
+  despite being the bigger, higher-effort model. Pick another id only when a task argues for it.
 - **Effort lives in the model id** - `gemini-3.7-flash-{low,medium,high}`,
   `gemini-3.8-flash-high`. This server exposes no separate effort option.
 - **First run only:** `[error] RUNTIME: Authentication required`. Re-run once with

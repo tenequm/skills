@@ -2,7 +2,7 @@
 name: herdr-faq
 description: Launch and drive coding agents (codex, claude, agy) through the Herdr CLI. Use before starting or prompting a subagent via herdr agent or pane commands, and when a herdr command fails or an agent seems stuck or silently lost a prompt.
 metadata:
-  version: "0.3.1"
+  version: "0.3.2"
   categories: "agents, operations"
   topics: "herdr, troubleshooting, agent-orchestration, terminal-multiplexer"
   upstream: "herdr@0.9.0"
@@ -123,6 +123,10 @@ herdr agent prompt ag1 "Carry out $D/brief.md. Write your report to $D/report.md
   --wait --timeout 1800000 &                # then poll for the file, not the state
 ```
 
+- **Default to `gemini-3.7-flash-medium`.** Measured on par with Opus for rubric-driven bulk
+  work (99.5% verdict agreement across 213 items, and it made the better call on the one they
+  disputed) and far faster; `gemini-3.8-flash-high` scored measurably worse on the same task
+  despite being the bigger, higher-effort model. Pick another id only when a task argues for it.
 - **The trust dialog is unanswerable from this side.** `agent start` returns `idle`, the
   screen holds `Do you trust the contents of this project?`, and `send-keys enter` no-ops
   against it - repeatedly, silently, exit 0. `--dangerously-skip-permissions` is blocked by
@@ -197,9 +201,15 @@ The facts you need while composing a command, not after it fails.
 dies with `parse error: Invalid numeric literal` and you silently lose the read. Use `tail`,
 `grep -qF`.
 
-**Positional vs flagged.** `pane close` takes its id **positionally** (`herdr pane close "$P"`)
-- the one pane command that does, while `pane split|read|list|layout|process-info` all take
-`--pane`. `workspace create` takes `--label`, not `--name`. `send-keys` takes key names only
+**Positional vs flagged**, and it differs per command. `pane close <id>` and
+`pane read <id>` take the pane **positionally** - `pane read` has no `--pane` at all, so
+`herdr pane read --pane "$P"` dies with `unknown option: --pane`. `pane split` accepts either
+form. `pane layout` and `pane process-info` take `--pane`; `pane list` takes neither. When in
+doubt read the `Usage:` line, which names positionals in angle brackets.
+
+**An agent TARGET can be a bare pane id**, not just a name: `agent get w1K:p1`,
+`agent read w1K:p1`, `agent prompt w1K:p1 '<text>'` all work. That is how you reach an agent
+that was never named, without renaming someone else's. `workspace create` takes `--label`, not `--name`. `send-keys` takes key names only
 (`enter`, `esc`, `down`, `ctrl+c`); text and slash commands go through `prompt`.
 
 **Flag dependencies and caps.** `agent start --timeout` defaults to 30000 and is capped at

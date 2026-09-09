@@ -4,6 +4,26 @@ All notable changes to this skill are documented in this file, following [Keep a
 
 ## [Unreleased]
 
+## [0.3.2] - 2026-09-09
+
+### Added
+
+- `gemini-3.7-flash-medium` named as the recommended agy default, with the measurement
+  behind it.
+
+### Fixed
+
+- Corrected the pane-argument rule, which was wrong in a way that broke a documented command:
+  `pane read` takes its id **positionally and has no `--pane` flag**, so the previous guidance
+  produced `unknown option: --pane`. `pane close` is not the only positional one; `pane split`
+  accepts either form; `pane layout` and `pane process-info` take `--pane`; `pane list` takes
+  neither.
+
+### Added
+
+- An agent TARGET may be a bare pane id (`agent get|read|prompt w1K:p1`), which reaches an
+  unnamed agent without renaming someone else's.
+
 ## [0.3.1] - 2026-09-09
 
 ### Changed
