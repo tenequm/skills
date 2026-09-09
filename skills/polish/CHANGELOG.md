@@ -7,6 +7,40 @@ and this skill adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.h
 
 ## [Unreleased]
 
+## [3.1.0] - 2026-09-09
+
+### Added
+
+- Review-mode state gate: a draft, closed, or merged PR - or a withdrawn ask - resolves to a
+  `skip` verdict that posts nothing and names the state, while still reporting every finding.
+  `skip` is reached only from PR state, never from finding severity.
+- Review-mode verdict derivation. Every surviving pre-merge finding is classified SUGGESTION /
+  BLOCKING QUESTION / BLOCKING FIX (SEVERE for security, data loss, irreversible changes, or a
+  broken deploy path), and the verdict is the strictest match. Replaces "any correctness finding
+  on changed lines -> request-changes", which could not tell a nit with a line anchor from a
+  blocker. A consistency check follows: an approve means every comment can be ignored, so a
+  draft comment saying "before merge" disqualifies an approve.
+- Pre-merge asks vs Follow-ups split in the review-mode report. Follow-ups never enter the
+  verdict; `(pre-existing)` and `(out of diff)` findings are always follow-ups.
+- Phase 6 staleness re-check: on confirmation, re-fetch review state, head SHA, and
+  mergeability, and re-evaluate the verdict if any moved since Phase 2 rather than posting a
+  stale one.
+- Phase 6 anchor pre-validation: each inline anchor is confirmed to sit inside a diff hunk
+  before it is proposed, since GitHub rejects the whole review atomically on one bad anchor and
+  nothing posts.
+- Phase 6 thread replies via `pulls/<n>/comments -F in_reply_to=<id>` as a separate call.
+
+### Changed
+
+- Review-mode confirmation protocol is now explicit: `y` posts the recommendation, a named
+  action is an override that must be acknowledged before posting, `n` posts nothing, and
+  anything else is discussion rather than consent.
+- Phase 6 review body is 1-2 sentences of judgment plus counts and unanchored items. Verification
+  steps are never recited - narrating the process is an audit trail and an AI tell - and evidence
+  lives inside the inline comment it supports.
+- Review reports are headed with the full PR URL and title instead of a bare `#number`.
+- The review JSON payload is written to the session scratchpad instead of `/tmp`.
+
 ## [3.0.0] - 2026-09-09
 
 ### Added

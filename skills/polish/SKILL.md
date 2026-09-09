@@ -2,7 +2,7 @@
 name: polish
 description: Pre-release code review - lint and type checks, parallel review agents (cleanliness, design, efficiency, side-effect gating), findings validated, fixes on approval. Reviews a GitHub PR when given one. Run before committing, pushing, or on a PR.
 metadata:
-  version: "3.0.0"
+  version: "3.1.0"
   categories: "development"
   topics: "code-review, linting, refactoring, pre-release, diff-review"
   openclaw:
@@ -203,31 +203,60 @@ List **Correctness** first, and always - including at `(0 issues)`, since a zero
 
 There is no non-blocking "observations" section: anything validated and worth acting on is a finding in its category (tagged `(pre-existing)` or `(out of diff)` where applicable); anything not worth acting on goes under **Dropped after validation** with the reason. That section substantiates the counts - omit it when empty.
 
-End the report with a per-finding **Recommendation** line: which findings you'd fix and which you'd skip, so the user can approve by reference. Judge on long-term codebase benefit. Out-of-diff findings default to fix; recommend deferring one only when fixing it would bloat the change beyond what belongs in this commit, and say so explicitly rather than leaving it open-ended. Scope hygiene loses when the fix is smaller than the explanation for deferring it - defer only what genuinely forces a decision or a change that introduces more risk than the value it provides; a low-risk fix that just makes maintenance easier is a fix, not a deferral.
+End the report with a per-finding **Recommendation** line: which findings you'd fix and which you'd skip, so the user can approve by reference. Judge on long-term codebase benefit. Out-of-diff findings default to fix - defer one only when fixing it would bloat the commit beyond what belongs there, force a decision, or add more risk than value, and say which explicitly rather than leaving it open-ended. Scope hygiene loses when the fix is smaller than the explanation for deferring it; a low-risk fix that just eases maintenance is a fix, not a deferral.
 
 If zero issues found, report "Clean - no issues found", substantiate the correctness zero (what was traced and why it's clean), and offer next actions - e.g. commit as-is, or leave for the user's own review - then stop.
 
 The report MUST end with the line "**Awaiting approval before proceeding with fixes.**" (or the clean-case report above). Do not proceed to Phase 6 until the user explicitly approves.
 
-### Review mode ending
+### Review mode ending (PR mode + review mode only)
 
-In review mode the report is a review draft, so the footer changes: instead of the fix-approval
-line, derive a recommended action from the validated findings and ask to post it.
+Local mode and fix mode end at the approval line above - they never post a review. In review
+mode the report is a review draft, so the footer changes: derive a verdict from the validated
+findings and ask to post it. Header the report with the full PR URL and title, never a bare
+`#number`.
 
-- **request-changes**: any correctness finding on changed lines
-- **comment-only**: findings worth discussing, none of them blocking
-- **approve-with-comments**: only minor / nice-to-have findings
-- **approve**: zero findings
+Split the findings into **Pre-merge asks** and **Follow-ups** (candidate tickets) before
+deciding anything. Findings tagged `(pre-existing)` or `(out of diff)` are always follow-ups.
 
-Close with both lines:
+**State gate first.** A draft PR, a closed or merged PR, or an ask the requester withdrew ->
+**skip**: post nothing, name the state that caused it, and still report every finding so the
+work is not lost. `skip` is reached only from PR state, never from finding severity. Close a skip
+with the same two lines below - `y` confirms posting nothing, and naming an action overrides the
+gate.
+
+**Otherwise** classify every surviving pre-merge finding as exactly one of:
+
+- **SUGGESTION** - the author may ignore it and the PR is still fine to merge (nits,
+  alternatives, questions where any answer is acceptable)
+- **BLOCKING QUESTION** - the verdict depends on the answer (intent or a contract that cannot
+  be verified from the diff alone)
+- **BLOCKING FIX** - a commit on this PR is required. SEVERE if it involves security, data
+  loss, an irreversible change, or a broken deploy path
+
+Follow-ups never enter the verdict. The verdict is the strictest match:
+
+| Strictest surviving finding | Verdict |
+| --- | --- |
+| any SEVERE blocking fix | request-changes |
+| any blocking fix or blocking question | comment-only |
+| suggestions only | approve-with-comments |
+| none | approve |
+
+Consistency check before drafting: an approve means every comment can be ignored. If any
+draft comment says "before merge", the verdict is not an approve.
+
+End with exactly these two lines, nothing after them, so the verdict is the last thing on
+screen:
 
 ```
-**Recommendation: <action>** - <one sentence why, tied to the top finding>
-
-Post this review as <action>? (or pick: approve / approve-with-comments / request-changes / comment-only)
+**Recommended: <action>** - <one-sentence reason tied to the top finding>
+Post it? (y = post as recommended / another action by name / n = don't post)
 ```
 
-Wait for the user to answer. Do not post anything until they do.
+Then wait. `y` posts the recommendation. A named action is an explicit override - acknowledge
+it ("overriding <recommended> -> <named>") before posting. `n` posts nothing. Any other reply
+is discussion, not confirmation.
 
 ## Phase 6 (fix mode): Fix and Verify
 
@@ -240,17 +269,31 @@ After user approves:
 
 ## Phase 6 (review mode): Post Review
 
-After the user confirms the action, post ONE review with every finding attached as an inline comment
-anchored to its file and line. Never put per-finding detail only in the review body, and never submit
-the review first and attach comments afterward - late-attached comments create empty orphan review
-shells on the PR. The body is a short summary only: finding counts plus anything with no line anchor
-(failed checks, `(pre-existing)` and `(out of diff)` findings); each anchored finding lives in `comments[]`.
+On confirmation, first re-fetch the PR's review state, head SHA, and mergeability
+(`gh pr view <n> --json reviewDecision,mergeable,headRefOid`). If any of them moved since Phase 2 -
+a new review landed, someone merged it, the author pushed - re-evaluate the verdict against the new
+state instead of posting a stale one.
 
-`gh pr review` cannot attach inline comments, so build a JSON payload and submit through the reviews
-API in a single call:
+Then post ONE review with every finding attached as an inline comment anchored to its file and line.
+Never submit the review first and attach comments afterward - late-attached comments create empty
+orphan review shells on the PR.
+
+**Body**: 1-2 sentences of judgment plus the finding counts, and anything with no line anchor (failed
+checks, `(pre-existing)` and `(out of diff)` findings). Never recite verification steps - a reader
+assumes the review happened, so narrating the process is an audit trail and an AI tell. Evidence
+belongs inside the inline comment it supports, or nowhere. The one exception is a process note the
+author cannot assume (e.g. "ran the infra plan locally, it is clean" when CI never plans it).
+
+**Anchors**: every inline comment must target an added or changed line in THIS PR's diff (new files:
+any line; modified files: confirm the line sits inside a hunk). Verify each anchor before proposing
+it - GitHub rejects the whole review atomically on one bad anchor, so nothing posts. Fix the anchor;
+never demote an anchored finding to a body-only mention.
+
+`gh pr review` cannot attach inline comments, so write the JSON payload to the session scratchpad and
+submit through the reviews API in a single call:
 
 ```bash
-cat > /tmp/pr-review.json <<'EOF'
+cat > <scratchpad>/pr-review.json <<'EOF'
 {
   "event": "REQUEST_CHANGES",
   "body": "1 correctness, 1 cleanliness - details inline on the diff.",
@@ -271,13 +314,13 @@ cat > /tmp/pr-review.json <<'EOF'
   ]
 }
 EOF
-gh api repos/{owner}/{repo}/pulls/<number>/reviews --input /tmp/pr-review.json
+gh api --method POST repos/{owner}/{repo}/pulls/<number>/reviews --input <scratchpad>/pr-review.json
 ```
 
-- `event` is `APPROVE`, `REQUEST_CHANGES`, or `COMMENT`. Map the confirmed action: approve-with-comments = `APPROVE` with a populated `comments[]`; comment-only = `COMMENT`
-- `line` + `side: "RIGHT"` anchors to the new side of the diff; add `start_line` for a multi-line range. Anchors must be lines present in the diff - a finding with no diff anchor goes in the body instead
+- `event` is `APPROVE`, `REQUEST_CHANGES`, or `COMMENT`. Map the confirmed verdict: approve-with-comments = `APPROVE` with a populated `comments[]`; comment-only = `COMMENT`. A plain approve with zero findings needs no payload: `gh pr review <number> --approve --body "LGTM"`
+- `line` + `side: "RIGHT"` anchors to the new side of the diff; add `start_line` for a multi-line range
 - Use `suggestion` fenced blocks (as above) for small committable fixes so the author can one-click apply
 - `gh api` fills `{owner}/{repo}` from the current repo; when working from a temp clone, spell them out explicitly
-- A plain approve with zero findings needs no payload: `gh pr review <number> --approve --body "LGTM"`
+- Replies to an existing review thread are a separate call, not part of the payload: `gh api repos/{owner}/{repo}/pulls/<number>/comments -F in_reply_to=<comment-id> -f body='...'`
 
-Confirm to the user what was posted, linking the review. If a temp clone was made, mention its path so the user can clean it up.
+Confirm what was posted under the same full-URL header, linking the review. If a temp clone was made, mention its path so the user can clean it up.
