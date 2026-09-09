@@ -1,8 +1,8 @@
 ---
 name: okf-project-knowledge-base
-description: Maintain durable project knowledge as Git-native OKF v0.2 bundles - one Markdown concept per file with YAML frontmatter, provenance sources, trust tiers, and a progressive-disclosure index. Use when recording a decision, finding, or rule that must outlive the session ("document this decision", "add this to the knowledge base", "why did we choose X"), when a repo contains a bundle (a directory whose index.md declares okf_version, canonically docs/knowledge/), when setting up durable knowledge capture in a project, or when reviewing completed work for knowledge worth preserving. Not for session state, scratchpads, or agent operating instructions.
+description: Durable project knowledge as Git-native OKF bundles (docs/knowledge/, one concept per file, with provenance and trust tiers). Use to record a decision, finding, or rule that must outlive the session. Not session state or agent instructions.
 metadata:
-  version: "0.1.2"
+  version: "0.1.3"
   categories: "agents, knowledge"
   topics: "okf, knowledge-base, agent-memory, provenance, documentation"
   openclaw:

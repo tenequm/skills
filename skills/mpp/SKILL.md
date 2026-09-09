@@ -1,8 +1,8 @@
 ---
 name: mpp
-description: "Build with MPP (Machine Payments Protocol) - the open protocol for machine-to-machine payments over HTTP 402. Use when building paid APIs, payment-gated content or endpoints, AI agent payment flows, MCP tool payments, pay-per-token streaming, or metered pay-as-you-go billing. Covers the mppx TypeScript SDK (Hono/Express/Next.js/Elysia middleware), pympp Python SDK, and mpp Rust SDK, with Tempo stablecoins, Stripe cards, Lightning Bitcoin, and custom payment rails."
+description: Build with MPP (Machine Payments Protocol), open machine-to-machine payments over HTTP 402. Use for paid APIs, payment-gated endpoints, agent payment flows, MCP tool payments, or metered billing. Covers mppx (TS), pympp, and mpp Rust SDKs.
 metadata:
-  version: "0.10.1"
+  version: "0.10.2"
   categories: "finance, development"
   topics: "payments, http-402, stablecoins, machine-payments, apis"
   upstream: "mppx@0.8.15, pympp@0.9.1, mpp@0.11.0, @buildonspark/lightning-mpp-sdk@0.1.4, @stellar/mpp@0.7.1, @solana/mpp@0.7.0, @redotpay/mpp@0.1.2, @defuse-protocol/nearintents-mpp-sdk@0.1.2, mpp-card@0.1.8"

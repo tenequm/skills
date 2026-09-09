@@ -1,12 +1,8 @@
 ---
 name: standard-readme
-description: >
-  Writes or audits README files following the Standard Readme specification
-  (github.com/RichardLitt/standard-readme). Use whenever the user asks to create,
-  write, rewrite, improve, audit, or fix a README, or asks about README quality or
-  structure - even if they never mention "standard readme" explicitly.
+description: Writes or audits READMEs against the Standard Readme spec. Use whenever the user asks to create, rewrite, improve, audit, or fix a README, or asks about README quality or structure - even if they never mention "standard readme".
 metadata:
-  version: "0.1.4"
+  version: "0.1.5"
   categories: "knowledge, development"
   topics: "readme, documentation, standard-readme, markdown, open-source"
   openclaw:

@@ -7,6 +7,11 @@ and this skill adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.h
 
 ## [Unreleased]
 
+## [0.3.5] - 2026-09-09
+
+### Changed
+- Description condensed to fit the repo's 250-character limit.
+
 ## [0.3.4] - 2026-08-21
 
 ### Changed

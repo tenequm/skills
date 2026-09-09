@@ -1,8 +1,8 @@
 ---
 name: founder-playbook
-description: Decision validation and thinking frameworks for startup founders. Use when you need to pressure-test a decision, validate your next steps, think through strategic options, or sanity-check your approach. Triggers on phrases like "should I", "help me think through", "is this the right move", "validate my thinking", "what am I missing". Covers fundraising, customer development, runway management, prioritization, and crypto/web3 founder challenges.
+description: Decision validation and thinking frameworks for founders. Use to pressure-test a decision, validate next steps, or sanity-check an approach - "should I", "help me think through", "what am I missing". Covers fundraising, customers, runway.
 metadata:
-  version: "0.1.5"
+  version: "0.1.6"
   categories: "productivity, knowledge"
   topics: "startups, fundraising, decision-making, product-strategy, web3"
   openclaw:

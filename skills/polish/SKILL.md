@@ -1,8 +1,8 @@
 ---
 name: polish
-description: Pre-release code review - runs lint/type checks, launches parallel review agents (cleanliness, design, efficiency, side-effect gating) on the diff, validates findings, and fixes with approval. Run when the user asks for a polish or pre-release review, or told you earlier to polish before committing or pushing.
+description: Pre-release code review - runs lint and type checks, launches parallel review agents (cleanliness, design, efficiency, side-effect gating) on the diff, validates findings, fixes on approval. Run when asked to polish before committing or pushing.
 metadata:
-  version: "2.6.0"
+  version: "2.6.1"
   categories: "development"
   topics: "code-review, linting, refactoring, pre-release, diff-review"
   openclaw:

@@ -1,8 +1,8 @@
 ---
 name: rust-dev
-description: Practical day-1 guide to building applications in Rust well. Covers the mental model (ownership, errors as values, traits-not-interfaces), day-1 decisions (String vs &str, Box vs Rc vs Arc, dyn vs impl Trait, anyhow vs thiserror), idioms, anti-patterns, and a tight crate shortlist (tokio, serde, anyhow, clap, reqwest, tracing, axum, sqlx). Use when starting a Rust project, learning Rust from another language, wrestling with the borrow checker, choosing crates, structuring modules, configuring Cargo.toml/clippy/rustfmt, testing, profiling, or releasing a binary.
+description: Day-1 guide to building well in Rust - ownership, errors as values, String vs &str, Box/Rc/Arc, anyhow vs thiserror, and a crate shortlist (tokio, serde, axum, sqlx). Use when starting a Rust project, fighting the borrow checker, or picking crates.
 metadata:
-  version: "0.5.0"
+  version: "0.5.1"
   categories: "development"
   topics: "rust, ownership, cargo, crates, tokio"
   upstream: "rust@1.98.0, axum@0.8.9, reqwest@0.13.4, sqlx@0.9.0, jiff@0.2.35, kache@0.16.0, dist@0.32.0, release-plz-action@0.5.131"

@@ -1,8 +1,8 @@
 ---
 name: typescript-dev
-description: "Builds full-stack TypeScript apps with Vite 8, React 19, Tailwind CSS v4, shadcn/ui, Biome, Vitest, and Hono. Covers the frontend (Vite/Rolldown build and dev server, type-safe React 19, strict TypeScript 6.0, Tailwind/shadcn styling, Biome lint/format, Vitest) and the Hono 4 backend/edge layer (routing, middleware, Zod validation, end-to-end type-safe RPC, OpenAPI, multi-runtime deploy). Use when setting up or working in a TypeScript project: configuring Vite, writing components, the React Compiler, Tailwind/shadcn, dev server and HMR, bundles, tests, lint/format/CI, or building a Hono API and wiring its RPC client to React."
+description: Full-stack TypeScript with Vite 8, React 19, Tailwind v4, shadcn/ui, Biome, Vitest, and Hono 4. Use when setting up or working in a TypeScript project - components, styling, build and HMR, tests, lint/CI, or a Hono API with type-safe RPC.
 metadata:
-  version: "0.3.4"
+  version: "0.3.5"
   categories: "development"
   topics: "typescript, vite, react, tailwind, hono"
   openclaw:

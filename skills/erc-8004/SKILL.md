@@ -1,8 +1,8 @@
 ---
 name: erc-8004
-description: Build with ERC-8004 Trustless Agents - on-chain agent identity, reputation, validation, and discovery on EVM chains. Use when registering AI agents on-chain, building agent reputation systems, searching/discovering agents, working with the Agent0 SDK (agent0-sdk), or implementing the ERC-8004 standard. Triggers on ERC-8004, Agent0, agent identity, agent registry, agent reputation, trustless agents, agent discovery.
+description: Build with ERC-8004 Trustless Agents - on-chain agent identity, reputation, validation, and discovery on EVM chains. Use when registering agents on-chain, building agent reputation, or using the Agent0 SDK. Triggers on ERC-8004 and Agent0.
 metadata:
-  version: "0.2.3"
+  version: "0.2.4"
   categories: "development, agents"
   topics: "erc-8004, ethereum, smart-contracts, agent-identity, onchain-reputation"
   openclaw:

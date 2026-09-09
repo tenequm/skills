@@ -1,8 +1,8 @@
 ---
 name: lance-format
-description: Deep reference for Lance v12 - the open columnar lakehouse format for multimodal AI - and its Rust crate workspace plus pylance. Covers the 2.x file format and structural encodings, the table format (manifests, fragments, transactions, OCC), vector / scalar / full-text indexes, MemWAL, schema evolution, time travel, namespaces, and object-store config. Use when building directly on the Lance crates or reading `.lance` datasets; this is the Lance format and engine (`lance-format/lance`), not the LanceDB product built on top of it.
+description: Deep reference for Lance v12 columnar format, its Rust crates, and pylance - file encodings, table format, indexes, schema evolution, time travel. Use when building on the Lance crates or reading .lance datasets, not the LanceDB product.
 metadata:
-  version: "0.18.0"
+  version: "0.18.1"
   categories: "development, integrations"
   topics: "lance, columnar-format, vector-search, rust, lakehouse"
   upstream: "lance-format/lance@v12.0.0-beta.6"

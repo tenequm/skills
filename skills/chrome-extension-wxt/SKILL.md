@@ -1,8 +1,8 @@
 ---
 name: chrome-extension-wxt
-description: Build Chrome extensions using WXT framework with TypeScript, React, Vue, or Svelte. Use when creating browser extensions, developing cross-browser add-ons, or working with Chrome Web Store projects. Triggers on phrases like "chrome extension", "browser extension", "WXT framework", "manifest v3", or file patterns like wxt.config.ts.
+description: Build Chrome extensions with the WXT framework and TypeScript, React, Vue, or Svelte. Use when creating browser extensions or cross-browser add-ons. Triggers on "chrome extension", "browser extension", WXT, manifest v3, or wxt.config.ts.
 metadata:
-  version: "1.1.4"
+  version: "1.1.5"
   categories: "development"
   topics: "chrome-extension, wxt, browser-extension, typescript, react"
   openclaw:

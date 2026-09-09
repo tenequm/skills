@@ -1,8 +1,8 @@
 ---
 name: skills-best-practices
-description: Build high-quality Agent Skills for any agent - opinionated best practices distilled from the Agent Skills spec, official Anthropic guidance, and production experience. Covers SKILL.md structure, frontmatter, description writing, single-file vs references/ layout, progressive disclosure, testing, patterns, troubleshooting, and distribution across all surfaces (Claude.ai, Claude Code, API, Agent SDK). Use when creating a skill, reviewing skill quality, debugging why a skill won't trigger, structuring skill directories, or writing skill descriptions.
+description: Opinionated best practices for building Agent Skills - SKILL.md structure, frontmatter, description writing, progressive disclosure, testing, distribution. Use when creating or reviewing a skill, or debugging why one will not trigger.
 metadata:
-  version: "0.8.1"
+  version: "0.8.2"
   categories: "agents, knowledge"
   topics: "agent-skills, skill-authoring, prompt-design, spec, best-practices"
   openclaw:

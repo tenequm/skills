@@ -2,6 +2,7 @@
 name: web3-protocol-gtm
 description: Go-to-market strategy for web3 builders - protocols, products, services, and solo founders. Use when planning growth for a crypto protocol, building developer community, crafting CT narrative, planning ecosystem partnerships, preparing grant applications, launching tokens, pricing crypto-native products, or growing as a solo founder in web3.
 metadata:
+  internal: true
   version: "0.2.6"
   categories: "productivity, communication"
   topics: "go-to-market, growth, developer-relations, crypto, positioning"

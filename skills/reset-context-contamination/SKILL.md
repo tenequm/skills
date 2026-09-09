@@ -1,8 +1,8 @@
 ---
 name: reset-context-contamination
-description: Discards the accumulated drafts and framings from this thread and re-derives the task from a clean problem statement. Use when the user says the thread is contaminated, that the conversation is going in circles, or that they want a fresh take, or when they invoke /reset-context-contamination.
+description: Discards this thread's accumulated drafts and framings and re-derives the task from a clean problem statement. Use when the user says the thread is contaminated, the conversation is going in circles, or that they want a fresh take.
 metadata:
-  version: "0.1.3"
+  version: "0.1.4"
   categories: "agents"
   topics: "context, reset, reframing, thread-hygiene"
   openclaw:

@@ -1,8 +1,8 @@
 ---
 name: solana-development
-description: Build, test, deploy, and audit Solana programs with Anchor or native Rust, and build with ZK Compression (Light Protocol). Use when developing Solana smart contracts, implementing token operations, optimizing compute, deploying to networks, auditing programs for vulnerabilities, or creating compressed tokens/PDAs.
+description: Build, test, deploy, and audit Solana programs with Anchor or native Rust, plus ZK Compression (Light Protocol). Use for Solana contracts, token operations, compute optimization, deployment, program audits, or compressed tokens and PDAs.
 metadata:
-  version: "0.7.2"
+  version: "0.7.3"
   categories: "development"
   topics: "solana, anchor, rust, zk-compression, smart-contracts"
   openclaw:

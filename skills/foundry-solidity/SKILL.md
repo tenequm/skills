@@ -1,8 +1,8 @@
 ---
 name: foundry-solidity
-description: Build and test Solidity smart contracts with Foundry toolkit. Use when developing Ethereum contracts, writing Forge tests, deploying with scripts, or debugging with Cast/Anvil. Triggers on Foundry commands (forge, cast, anvil), Solidity testing, smart contract development, or files like foundry.toml, *.t.sol, *.s.sol.
+description: Build and test Solidity contracts with Foundry. Use when developing Ethereum contracts, writing Forge tests, deploying with scripts, or debugging with Cast/Anvil. Triggers on forge, cast, anvil, foundry.toml, *.t.sol, or *.s.sol.
 metadata:
-  version: "0.2.4"
+  version: "0.2.5"
   categories: "development"
   topics: "solidity, foundry, forge, smart-contracts, ethereum"
   openclaw:

@@ -19,7 +19,10 @@ from generate_readme import clawhub_slug
 FRONTMATTER_RE = re.compile(r"^---\s*\n(.*?)\n---\s*(?:\n|$)", re.DOTALL)
 NAME_RE = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
 MAX_NAME_LENGTH = 64
-MAX_DESCRIPTION_LENGTH = 1024
+SPEC_MAX_DESCRIPTION_LENGTH = 1024
+# Repo policy: descriptions are dispatch signals, not summaries. The spec allows 1024,
+# but prose padding past ~250 chars dilutes the trigger without improving recall.
+MAX_DESCRIPTION_LENGTH = 250
 MAX_COMPATIBILITY_LENGTH = 500
 MAX_SKILL_CHARS = 25_000
 HARD_MAX_SKILL_CHARS = 50_000
@@ -408,7 +411,9 @@ def lint_skill(skill_md: Path) -> LintResult:
             if description_len > MAX_DESCRIPTION_LENGTH:
                 issues.append(
                     LintIssue(
-                        skill_md, f"`description` exceeds {MAX_DESCRIPTION_LENGTH} characters."
+                        skill_md,
+                        f"`description` is {description_len} characters, "
+                        f"over the {MAX_DESCRIPTION_LENGTH}-character repo limit.",
                     )
                 )
 

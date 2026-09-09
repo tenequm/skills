@@ -1,8 +1,8 @@
 ---
 name: polish-new
-description: Pre-release code review that converges - runs checks, launches parallel review agents (cleanliness, design, efficiency, side-effect gating) sized to the diff, validates findings against reproducible evidence in a run ledger, fixes on approval, then reviews its own fixes until a round warrants no edits. Run on /polish-new, or when asked for a polish or pre-release review before committing or pushing.
+description: Pre-release code review that converges - parallel review agents sized to the diff, findings validated against evidence in a run ledger, fixes on approval, then re-reviews its own fixes until a round warrants no edits. Run on /polish-new.
 metadata:
-  version: "0.1.1"
+  version: "0.1.2"
   categories: "development"
   topics: "code-review, linting, refactoring, pre-release, diff-review"
   openclaw:
