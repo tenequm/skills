@@ -7,6 +7,14 @@ and this skill adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.h
 
 ## [Unreleased]
 
+## [2.6.2] - 2026-09-09
+
+### Removed
+- The `!` dynamic-injection block. It is a Claude Code-only body feature that reaches other
+  agents as literal text, and Phase 2 already derives the same repository state; the branch
+  name it uniquely supplied moved into Phase 2 step 1.
+- `allowed-tools`, which existed only to keep that block from prompting.
+
 ## [2.6.1] - 2026-09-09
 
 ### Changed

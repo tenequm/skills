@@ -7,6 +7,11 @@ and this skill adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.h
 
 ## [Unreleased]
 
+## [0.8.4] - 2026-09-09
+
+### Removed
+- Removed `disable-model-invocation`, so the skill can be invoked by the model as well as by `/name`.
+
 ## [0.8.3] - 2026-09-09
 
 ### Changed

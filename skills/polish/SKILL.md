@@ -2,25 +2,16 @@
 name: polish
 description: Pre-release code review - runs lint and type checks, launches parallel review agents (cleanliness, design, efficiency, side-effect gating) on the diff, validates findings, fixes on approval. Run when asked to polish before committing or pushing.
 metadata:
-  version: "2.6.1"
+  version: "2.6.2"
   categories: "development"
   topics: "code-review, linting, refactoring, pre-release, diff-review"
   openclaw:
     homepage: https://github.com/tenequm/skills/tree/main/skills/polish
     emoji: "✨"
 argument-hint: "[base-ref]"
-allowed-tools: "Bash(git diff *), Bash(git show *), Bash(git status *), Bash(git rev-parse *), Bash(git log *)"
 ---
 
 # Pre-Release Polish
-
-Repository state:
-
-```!
-git rev-parse --abbrev-ref HEAD
-git status --short
-git diff --stat 2>/dev/null | tail -1
-```
 
 Base ref argument (optional): $ARGUMENTS
 
@@ -49,7 +40,7 @@ If no validation command is found in CLAUDE.md, ask the user what to run.
 ## Phase 2: Diff Analysis
 
 Determine what changed:
-1. Check for uncommitted changes: `git diff` + `git diff --cached`
+1. Note the current branch (`git rev-parse --abbrev-ref HEAD`), then check for uncommitted changes: `git diff` + `git diff --cached`
 2. Check for untracked (`??`) files in `git status --short`. Include new untracked source files in the review. A staged change that references an untracked file (a new module, benchmark target, or test) is itself a finding: if the change lands without the file, fresh checkouts and CI break on the missing reference
 3. If a base ref was passed as an argument, diff against it: `git diff <base-ref>...HEAD`
 4. If no uncommitted changes and no base ref, diff against main: `git diff main...HEAD`. If the work under review was already committed this session, scope the review to those session commits rather than the whole branch

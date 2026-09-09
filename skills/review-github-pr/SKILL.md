@@ -2,7 +2,7 @@
 name: review-github-pr
 description: Reviews a GitHub pull request end to end - fetches the diff, runs checks, analyzes with three parallel agents (correctness, conventions, efficiency), validates every finding against the code, drafts inline comments with a recommended action.
 metadata:
-  version: "0.4.3"
+  version: "0.4.4"
   categories: "development, automation"
   topics: "pull-requests, code-review, github, ci-checks, subagents"
   openclaw:
@@ -25,7 +25,6 @@ metadata:
       - name: GITHUB_TOKEN
         required: false
         description: Alias for GH_TOKEN.
-disable-model-invocation: true
 ---
 
 # PR Review
