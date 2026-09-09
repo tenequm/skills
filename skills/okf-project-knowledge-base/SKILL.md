@@ -2,7 +2,7 @@
 name: okf-project-knowledge-base
 description: Durable project knowledge as Git-native OKF bundles (docs/knowledge/, one concept per file, with provenance and trust tiers). Use to record a decision, finding, or rule that must outlive the session. Not session state or agent instructions.
 metadata:
-  version: "0.1.3"
+  version: "0.2.0"
   categories: "agents, knowledge"
   topics: "okf, knowledge-base, agent-memory, provenance, documentation"
   openclaw:
@@ -18,8 +18,7 @@ rules with what they protect against - lives in the repository as an
 bundle: plain Markdown concepts with YAML frontmatter, readable by humans,
 parseable by any agent, diffable in git. This skill is the discipline for
 creating, writing, reading, and maintaining such bundles. It standardizes the
-mechanics; without it every model invents its own incompatible structure
-(measured in `evals/runs.md`).
+mechanics; without it every model invents its own incompatible structure.
 
 ## Finding the bundle
 
@@ -35,28 +34,27 @@ the root is a common alternative).
 
 Before reading or writing anything else, read the bundle's root `index.md`.
 Its preamble states what belongs in this bundle and its local conventions
-(type vocabulary, directory layout). The preamble may tighten the rules
-below; it never loosens them.
+(type vocabulary, directory layout). The preamble may tighten or loosen the
+rules below for its bundle; only the instructions fence is never relaxed.
 
 ## Three fences
 
 Route by what the information is about, never by how you discovered it. A
 finding about a tool this project depends on is project knowledge even when
-a session-local tool surfaced it; the admission test is whether it is true
-and useful in a fresh clone, to a reader who never used this session's tools.
+a session-local tool surfaced it; the default admission test is whether it
+is true and useful in a fresh clone, to a reader who never used this
+session's tools.
 
-1. **Durability fence (knowledge vs state).** State - counts, versions,
-   hashes, in-flight work, "where we left off" - never enters the bundle;
-   it lives in its authoritative source (ledger, git, the tracker for work
-   items). A number belongs in a concept only when the number IS the
-   finding. Eventual mutability is NOT state: the test is what invalidates
-   it - the next commit or session means state; an upstream release or
-   vendor decision means knowledge, captured with `stale_after` to absorb
-   the decay.
-2. **Publicity fence.** Write every concept as if the repository goes public
-   tomorrow: no secrets, no personal or sensitive data, no host-local context
-   (absolute paths, machine names, internal hostnames). This holds even in
-   private repositories - bundles travel with repos.
+1. **Durability fence (knowledge vs state).** By default, state - counts,
+   versions, hashes, in-flight work, "where we left off" - stays out of the
+   bundle; it lives in its authoritative source (ledger, git, the tracker
+   for work items). A number belongs in a concept only when the number IS
+   the finding. Eventual mutability is NOT state: the test is what
+   invalidates it - the next commit or session means state; an upstream
+   release or vendor decision means knowledge, captured with `stale_after`
+   to absorb the decay.
+2. **Publicity fence.** Never commit secrets or credentials - git history
+   is forever, even in private repositories.
 3. **Instructions fence (knowledge vs AGENTS.md).** Agent instruction files
    hold standing orders obeyed every session; the bundle holds facts consulted
    when relevant. When a decision produces both, the instruction file gets one
@@ -67,8 +65,9 @@ and useful in a fresh clone, to a reader who never used this session's tools.
 ## Concept format
 
 Every concept is one Markdown file: YAML frontmatter, then a body. Minimal
-conformance is a parseable frontmatter block with a non-empty `type`;
-everything else below strengthens trust and should be present.
+conformance is a parseable frontmatter block with a non-empty `type`, a
+`description`, and a `generated` record; everything else below strengthens
+trust and should be present.
 
 ```markdown
 ---
@@ -91,7 +90,8 @@ Chosen because public clients cannot hold a secret.[^rfc]
 [^rfc]: RFC 7636 (PKCE)
 ```
 
-Field reference (all optional except `type`):
+Field reference (`type`, `description`, `generated` required; the rest
+optional but encouraged):
 
 | Field | Meaning |
 |---|---|
@@ -138,35 +138,42 @@ unverified concept is honest, not deficient; consumers derive trust tiers
 3. **Every claim is traceable.** Record `sources` for whatever the concept
    derives from; when no durable link exists, write an honest scope
    descriptor rather than dropping the source or inventing a URL.
-4. **Bookkeeping travels with the change.** Adding, moving, or removing a
-   concept updates the nearest `index.md` (a bullet with title, link, and
-   the concept's description) and adds a dated entry to the bundle's
-   `log.md` (newest date first, `## YYYY-MM-DD` headings), in the same
-   change.
+4. **Indexes are generated, never hand-edited.** A bundle SHOULD carry its
+   own index generator and pre-commit hook - in the bundle's repo, not in
+   this skill - that rebuilds every `index.md` and fails the commit on a
+   missing or empty `type`, or a type outside the folder's declared set
+   (a stdlib-only script taking `folder=Type,...` rules is enough).
+   Hand-edit `index.md` (a bullet with title, link, and the concept's
+   description) only in a bundle without a generator. There is no `log.md`:
+   git history is the log.
 5. **Deprecate, never delete.** A concept that stops being true gets
    `status: deprecated` and, when replaced, a link to its successor. History
    and inbound links survive.
 6. **Progressive disclosure on read.** Enter through `index.md` and open only
    the concepts the task needs; never bulk-dump a bundle into context.
 7. **Verify before claiming conformance.** After writing, confirm what the
-   format requires: the frontmatter parses, `type` is non-empty, links you
-   added resolve, and the index matches the directory. Use whatever tools
-   the session has; the checks, not the commands, are the contract.
+   format requires: the frontmatter parses with the required fields, links
+   you added resolve, and the index is current - run the bundle's generator,
+   or in a hand-indexed bundle confirm the index matches the directory. Use
+   whatever tools the session has; the checks, not the commands, are the
+   contract.
 
 ## Workflows
 
 **Cold start** (a repo with knowledge to keep and no bundle): create
 `docs/knowledge/` with a root `index.md` whose frontmatter declares
 `okf_version: "0.2"` and whose preamble states, in a few sentences, what this
-bundle holds and what it refuses (the three fences, localized); a `log.md`;
-and the first real concept (invariant 2). Then add one line to the repo's
-agent instruction file naming the location, telling agents to load this
-skill before reading or writing the bundle, and asking for an end-of-task
-capture review.
+bundle holds and what it refuses (the three fences, localized); the first
+real concept (invariant 2); and the bundle's index generator with its
+pre-commit hook, or a preamble note that the bundle is hand-indexed
+(invariant 4). Then add one line to the repo's agent instruction file
+naming the location, telling agents to load this skill before reading or
+writing the bundle, and asking for an end-of-task capture review.
 
 **Capture** (mid-work or on request): decide with the fences whether it is
 knowledge; search first (invariant 1); write or update the concept with full
-frontmatter; update index and log (invariant 4); verify (invariant 7). If
+frontmatter; regenerate or update the index (invariant 4); verify
+(invariant 7). If
 the knowledge also implies a standing order, apply the instructions fence:
 one line in the instruction file, linking here.
 
