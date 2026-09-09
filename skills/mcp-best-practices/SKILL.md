@@ -2,7 +2,7 @@
 name: mcp-best-practices
 description: Build, harden, and debug production MCP servers with the TypeScript SDK. Use when writing or reviewing an MCP server - transports, tool schemas, errors, OAuth, token bloat, SDK migrations, MCP Apps, Registry. Assumes a server already exists.
 metadata:
-  version: "1.2.0"
+  version: "1.2.1"
   categories: "development, integrations"
   topics: "mcp, typescript-sdk, tool-design, transports, server-hardening"
   upstream: "@modelcontextprotocol/sdk@1.30.0, @modelcontextprotocol/server@2.0.0, @modelcontextprotocol/ext-apps@2.0.0, modelcontextprotocol-spec@2026-07-28"

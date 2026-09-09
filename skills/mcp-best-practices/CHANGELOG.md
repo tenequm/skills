@@ -7,14 +7,13 @@ and this skill adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.h
 
 ## [Unreleased]
 
-## [1.1.3] - 2026-09-09
+## [1.2.1] - 2026-09-09
 
 ### Fixed
 
 - `references/security-auth.md`: the malicious-command example now uses the RFC 2606 reserved
   `attacker.example` domain instead of `evil.com`, which Snyk scored as a live exfiltration
   endpoint (E005 CRITICAL) rather than as the attack illustration it is.
-
 
 ## [1.2.0] - 2026-09-09
 
