@@ -4,6 +4,38 @@ All notable changes to this skill are documented in this file, following [Keep a
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-09-09
+
+### Added
+
+- agy: provenance of `agy_acp_server.par` - shipped by the Antigravity install, sha512-verified
+  against Google's manifest, never downloaded by acpx or by this skill. Build
+  `20260818_01_RC01` is pinned and self-updates nothing. Clears the Socket alert on unverified
+  executable provenance.
+- agy: Linux / NixOS section - the `--uid=` wrapper, the mandatory `SSL_CERT_FILE` export, and
+  installing `agy` by hand rather than piping the installer (its `agy install` step writes to
+  `~/.bashrc` / `~/.profile`).
+- agy: how to capture the OAuth URL the server opens silently, and how to complete the callback
+  by hand on a headless box.
+- Failures: `502 Bad Gateway: Failed to connect to backend API` (a missing CA bundle on NixOS,
+  surfacing as invariant 5 - exit 0 with `[done] end_turn`), and `authenticate` never returning.
+
+### Changed
+
+- agy: the credential split is now stated exactly - the server reads
+  `~/.gemini/antigravity-acp/acp_token.json` and never the CLI's token; `GEMINI_HOME` relocates
+  the whole tree.
+
+### Removed
+
+- `ACPX_AUTH_OAUTH_PERSONAL=1` as auth guidance. It is dead in build `20260818_01_RC01`
+  ("Environment-based auth selection has been removed") and its absence makes the server hang
+  on `authenticate` rather than error. Replaced by `auth.type` in
+  `~/.gemini/antigravity-acp/settings.json`.
+
+Verified against: agy 1.1.28, agy_acp_server 20260818_01_RC01, acpx 0.15.1 on NixOS.
+
+
 ## [0.2.1] - 2026-09-09
 
 ### Added

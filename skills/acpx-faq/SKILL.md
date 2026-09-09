@@ -2,10 +2,10 @@
 name: acpx-faq
 description: Run coding agents (codex, claude, Antigravity/agy) headlessly through the acpx ACP CLI. Use before launching or prompting an acpx subagent, and when an acpx command fails, a session is not found, or a prompt seems lost.
 metadata:
-  version: "0.2.1"
+  version: "0.3.0"
   categories: "agents, operations"
   topics: "acpx, acp, agent-orchestration, troubleshooting, headless-agents"
-  upstream: "acpx@0.15.1"
+  upstream: "acpx@0.15.1, agy@1.1.28, agy_acp_server@20260818_01_RC01"
   openclaw:
     homepage: https://github.com/tenequm/skills/tree/main/skills/acpx-faq
     emoji: "🔌"
@@ -56,33 +56,56 @@ is the *public Gemini CLI*, a different product, and it is dead for Code Assist:
 To continue using Gemini, please migrate to the Antigravity suite of products
 ```
 
-The only route is Google's own signed ACP server through the raw-command escape hatch:
+The only route is Google's own signed ACP server, reached through the raw-command escape
+hatch. **What the `.par` is:** installed by Antigravity under
+`~/.local/lib/antigravity-acp/` and sha512-verified against Google's release manifest. Neither
+acpx nor this skill downloads it - if it is missing, install Antigravity. It is a readable zip
+of a Google-built Python runtime, pinned at build `agy_acp_server_20260818_01_RC01` because it
+self-updates nothing. `localharness_external` ships beside it and must stay executable, or the
+server starts anyway and only logs `Localharness not found`.
 
 ```bash
+# macOS: --agent may point straight at the .par
 D=/abs/real/dir                              # must exist: roots resolve through realpath
 acpx --agent ~/.local/lib/antigravity-acp/agy_acp_server.par \
      --cwd "$D" --model gemini-3.7-flash-medium --timeout 1800 \
      exec 'Carry out $D/brief.md. Write your report to $D/report.md.'
 ```
 
+**On Linux, `--agent` points at a wrapper, not at the `.par`** - the server needs `--uid=`
+there (every ACP registry entry passes it for `linux-*`, none for `darwin-arm64`), and on NixOS
+a CA bundle too. See Linux / NixOS below.
+
 - **Default to `gemini-3.7-flash-medium`.** Measured on par with Opus for rubric-driven bulk
-  work (99.5% verdict agreement across 213 items, and it made the better call on the one they
-  disputed) and far faster; `gemini-3.8-flash-high` scored measurably worse on the same task
-  despite being the bigger, higher-effort model. Pick another id only when a task argues for it.
+  work (99.5% verdict agreement across 213 items, and the better call on the one they disputed)
+  and far faster; `gemini-3.8-flash-high` scored measurably worse on the same task despite
+  being the bigger, higher-effort model. Pick another id only when a task argues for it.
 - **Effort lives in the model id** - `gemini-3.7-flash-{low,medium,high}`,
   `gemini-3.8-flash-high`. This server exposes no separate effort option.
-- **First run only:** `[error] RUNTIME: Authentication required`. Re-run once with
-  `ACPX_AUTH_OAUTH_PERSONAL=1` and complete the browser sign-in; credentials persist in
-  `~/.gemini` and every later run needs nothing.
+- **Auth is a settings file, not an env var.** `ACPX_AUTH_OAUTH_PERSONAL=1` is dead in build
+  `20260818_01_RC01` - the `.par` carries the string *"Environment-based auth selection has
+  been removed."* With no auth type configured the server does not error, it **hangs on
+  `authenticate` forever**, which reads exactly like a network stall. Write the type first:
+
+  ```bash
+  mkdir -p ~/.gemini/antigravity-acp
+  echo '{"auth":{"type":"oauth-personal"}}' > ~/.gemini/antigravity-acp/settings.json
+  ```
+
+  Types: `oauth-personal` (the subscription path, the one you want), `gemini-api-key`,
+  `agent-platform`. Then sign in once; the token persists and later runs need nothing.
+- **The OAuth browser opens silently; the URL is never printed.** Capture it with a fake
+  `xdg-open` (or `open`) early on `PATH` that echoes its argument. The callback port is
+  per-run: on a headless box, `curl '<callback-url>'` the redirect your browser could not
+  deliver. A session created before auth finished stays broken - start a fresh one.
 - **Never pass a positional agent with `--agent`** - exit **2**,
   `Do not combine positional agent with --agent override`.
-- **This lane is subscription-backed. Leave the auth alone.**
-  `~/.gemini/settings.json` -> `security.auth.selectedType: "oauth-personal"` is the Google
-  subscription path and the intended default; there is no tier setting, and `agy` has no auth
-  subcommand at all. Re-running with `ACPX_AUTH_OAUTH_PERSONAL=1` is non-destructive and needs
-  no browser while the token is valid. If entitlement ever looks wrong it is a server-side
-  lookup, with no client-side lever - do not "fix" it by switching to `gemini-api-key` or a
-  GCP project, which are separate billing arrangements rather than fixes.
+- **This lane is subscription-backed. Leave the auth alone.** On the *CLI* side
+  (`~/.gemini/settings.json`, a different file from the ACP server's above),
+  `security.auth.selectedType: "oauth-personal"` is the Google subscription path and the
+  intended default; there is no tier setting, and `agy` has no auth subcommand at all. If entitlement ever looks wrong it is a server-side lookup with no
+  client-side lever - do not "fix" it by switching to `gemini-api-key` or a GCP project, which
+  are separate billing arrangements rather than fixes.
 - **Ask an agy verification prompt for a bare reply, and read the whole log.** agy will route
   an answer into a brain artifact file instead of the stream, so a `tail` shows you an
   `AbsolutePath` and nothing else and you cannot tell "no tools" from "answered elsewhere".
@@ -91,8 +114,46 @@ acpx --agent ~/.local/lib/antigravity-acp/agy_acp_server.par \
   inline text - `MCP load failed for <name>: ... expect initialized request, but received: ...
   "server/discover"` - in a stream that still ends `[done] end_turn` with exit 0. Grep the
   output for `MCP load failed`, do not trust the exit code.
-- The CLI (`agy`) and this ACP server keep **separate state under the same home**: two
-  onboardings, and authenticating one does not authenticate the other.
+- **The credential split is total, not just "two onboardings".** The server reads
+  `~/.gemini/antigravity-acp/acp_token.json` and never looks at the CLI's
+  `~/.gemini/antigravity-cli/antigravity-oauth-token`, so a fully authenticated `agy` does
+  nothing for the ACP lane. Its own docstrings give the layout: `<GEMINI_HOME>/antigravity-acp/`
+  holds `settings.json`, `acp_token.json`, `conversations/` and `brain/`, while
+  `<GEMINI_HOME>/antigravity-cli/skills/` is shared across surfaces. Setting `GEMINI_HOME`
+  relocates the whole tree - that is how you run a second isolated lane.
+
+#### Linux / NixOS
+
+Three differences from macOS, all silent.
+
+1. **`--uid=` is required**, so `--agent` points at a wrapper rather than the `.par`
+   (`~/.local/bin/agy-acp-server`):
+
+   ```bash
+   #!/usr/bin/env bash
+   export SSL_CERT_FILE=/etc/ssl/certs/ca-certificates.crt   # NixOS; see 2
+   exec ~/.local/lib/antigravity-acp/agy_acp_server.par --uid= "$@"
+   ```
+
+2. **Without that `SSL_CERT_FILE`, NixOS gets a 502.** The `.par` embeds a Google-built Python
+   and OpenSSL whose compiled-in CA paths do not exist there, so every handshake with
+   `cloudcode-pa.googleapis.com` fails. Its local proxy (`ccpa_connection/proxy_server.py`)
+   swallows that and reports `502 Bad Gateway: Failed to connect to backend API`, and the turn
+   still ends `[done] end_turn` with **exit 0** - invariant 5 with a concrete signature. The
+   real `CERTIFICATE_VERIFY_FAILED` appears only under `--alsologtostderr`.
+3. **Install `agy` by hand, not by piping the installer to a shell.** Its last step runs
+   `agy install`, which appends PATH blocks to `~/.bashrc` and `~/.profile` - useless when
+   `~/.local/bin` is already on PATH via home-manager, and broken when `~/.zshrc` is a
+   read-only nix-store symlink. Both binaries link against `/lib64/ld-linux-x86-64.so.2`,
+   which resolves through nix-ld; no patchelf needed.
+
+Working invocation:
+
+```bash
+acpx --agent ~/.local/bin/agy-acp-server \
+     --cwd "$D" --model gemini-3.7-flash-medium \
+     --approve-all --timeout 1800 exec '<prompt>'
+```
 
 ### codex
 
@@ -346,7 +407,17 @@ itself rejects the id. This is a real typo or an entitlement problem, not the pr
 claude adapter. Expected; ignore.
 
 **`[error] RUNTIME: Authentication required`** - the agy ACP server has never been
-authenticated. One run with `ACPX_AUTH_OAUTH_PERSONAL=1`.
+authenticated. Write `auth.type` into `~/.gemini/antigravity-acp/settings.json`, then complete
+its own sign-in; the CLI's token does not count. See agy.
+
+**`502 Bad Gateway: Failed to connect to backend API`** (agy ACP, turn still ends
+`[done] end_turn` exit 0) - the server's local proxy could not reach
+`cloudcode-pa.googleapis.com`. On NixOS this is a missing `SSL_CERT_FILE`, not a network or
+model problem; confirm with `--alsologtostderr` and look for `CERTIFICATE_VERIFY_FAILED`.
+
+**`authenticate` never returns** (agy ACP, no error, no URL) - no `auth.type` in
+`~/.gemini/antigravity-acp/settings.json`. `ACPX_AUTH_OAUTH_PERSONAL=1` no longer selects
+anything in this build.
 
 **`RUNTIME: This client is no longer supported for Gemini Code Assist for individuals`** - you
 used the built-in `gemini` agent. It is the public Gemini CLI, not Antigravity; use `--agent`

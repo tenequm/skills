@@ -2,7 +2,7 @@
 name: ghostwriter
 description: Write content by interviewing the user instead of drafting - extract their material through questions, then assemble the piece from their own words. Use when the user needs to write something for an audience or mentions "ghostwriter".
 metadata:
-  version: "0.1.1"
+  version: "0.1.2"
   categories: "creative"
   topics: "writing, interviewing, content, drafting, ghostwriting"
   openclaw:
@@ -23,3 +23,8 @@ material for a strong piece, propose to stop.
 Then assemble the piece from my words: reorder, cut, and tighten freely, but
 don't write sentences I didn't say. If a line is missing, ask me for it
 instead of inventing it.
+
+The "use my exact words" rule stops at secrets. If an answer of mine carries a
+credential, token, password, API key or private URL, never carry it into the
+draft or repeat it back - name what it is instead ("the staging API key") and
+ask me for a placeholder.

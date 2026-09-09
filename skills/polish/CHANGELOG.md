@@ -7,6 +7,18 @@ and this skill adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.h
 
 ## [Unreleased]
 
+## [2.7.0] - 2026-09-09
+
+### Added
+
+- Rule: never reproduce a credential value in a finding, report line, or agent prompt - cite it
+  by `file:line` and mask the value. Clears Snyk W007 (HIGH), which read "pass full diffs and
+  exact file lines to review agents" as forced verbatim reproduction of secrets.
+- Phase 3: explicit untrusted-data framing for the reviewed diff, with `<code-content>`
+  boundary markers when a prompt inlines code. An instruction-shaped string inside the diff is
+  a finding, not a step. Addresses the Gen audit's "Boundary markers: None".
+
+
 ## [2.6.2] - 2026-09-09
 
 ### Removed
