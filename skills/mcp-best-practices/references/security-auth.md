@@ -285,6 +285,14 @@ return Response.json({
 
 The general principle this case establishes: **absorb client bugs server-side whenever you can, so clients and users work unchanged.** A client-side workaround (downgrade, manual config) is a last-resort mention, never your shipped fix.
 
+### DPoP: sender-constrained tokens (RFC 9449 / SEP-1932)
+
+Bearer tokens are bearer tokens - anything that steals one can use it. DPoP binds an access token to a client-held key pair, so a stolen token is useless without the private key. It is the Agent Identity WG's headline item on the 2026-08-22 roadmap: *"Finalize the specification for Demonstrating Proof of Possession (DPoP) and focus on getting widespread adoption."*
+
+Client-side support has already landed in the TypeScript SDK (`@modelcontextprotocol/client`, `client/dpop` module) on `main`, unreleased as of `2.0.0`. Nothing is required of your server yet, and none of it is normative in 2026-07-28. What it changes today is a design decision: if you are choosing how to bind credentials now, DPoP is the direction of travel, so avoid architectures that assume a plain bearer token is the permanent shape - notably anything that copies tokens between components.
+
+Related and still earlier-stage: Workload Identity Federation (SEP-1933) and ID-JAG / RFC 8693 token exchange, both under the same working group.
+
 ### v2 SDK Auth Helpers (2.0.0)
 
 `@modelcontextprotocol/server` ships runtime-neutral helpers for web-standard `fetch(request)` hosts (Cloudflare Workers, Deno, Bun, Hono): `requireBearerAuth` gates requests via an `OAuthTokenVerifier`, and `oauthMetadataResponse` serves the RFC 9728 Protected Resource Metadata and RFC 8414 Authorization Server metadata documents ([PR #2420](https://github.com/modelcontextprotocol/typescript-sdk/pull/2420), [PR #2422](https://github.com/modelcontextprotocol/typescript-sdk/pull/2422)). The insecure-issuer escape hatch is an explicit `dangerouslyAllowInsecureIssuerUrl` option, no longer an env read.

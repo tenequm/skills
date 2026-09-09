@@ -158,6 +158,37 @@ server.tool("my-tool", "desc", {
 
 A related v1 trap that does *not* throw: passing raw JSON Schema `properties` to `McpServer.tool()` on an older v1 makes **every argument arrive as `undefined`** at the handler rather than erroring - the SDK tries to validate incoming args against the raw JSON objects, fails, and hands you nothing. For pass-through proxies that must forward schemas verbatim, use the lower-level `Server` class with raw request handlers instead of `McpServer`.
 
+### A Raw Shape Skips refine/superRefine/transform ([#2705](https://github.com/modelcontextprotocol/typescript-sdk/issues/2705))
+
+**Severity: High, and fail-open.** Passing a raw shape where a `z.object()` is expected validates against the shape only:
+
+> `registerTool(name, { inputSchema: <zod object> })` validates against the **raw shape only**; `refine` / `superRefine` / `transform` constraints never run. A payload rejected by `schema.safeParse` passes the server gate - a fail-open validation gap for tools whose security-critical constraints are expressed via refine/superRefine.
+
+Cross-field rules (`.refine(d => d.start < d.end)`), conditional requirements, and custom `superRefine` issues are exactly where authorization and safety logic tends to live, so this is not a cosmetic gap.
+
+```typescript
+// RISKY: the refine never runs at the server boundary
+const schema = z.object({ start: z.string(), end: z.string() })
+  .refine((d) => d.start < d.end, "start must precede end");
+
+// FIX: re-validate inside the handler for anything security-critical
+async ({ start, end }) => {
+  const parsed = schema.safeParse({ start, end });
+  if (!parsed.success) {
+    return { isError: true, content: [{ type: "text", text: parsed.error.issues[0].message }] };
+  }
+  // ...
+}
+```
+
+### zod 3 -> 4 Silently Drops `additionalProperties: false` ([#2636](https://github.com/modelcontextprotocol/typescript-sdk/issues/2636))
+
+Upgrading Zod under an unchanged SDK changes what your server publishes:
+
+> We upgraded zod from v3 to v4. After the upgrade, all input schemas are missing `additionalProperties: false` in the `tools/list` response.
+
+Nothing errors; your strict input schemas quietly become open ones, and the LLM can start passing unmodeled arguments. **Assert on the published `tools/list` JSON, not on the Zod source** - a Zod-level test cannot see this. Open as of `sdk@1.30.0`; reproduced against zod 3.25.76 (emits it) versus zod 4.5.4 (does not).
+
 ### z.passthrough() - Allows Arbitrary Properties
 
 `z.passthrough()` on object schemas produces JSON Schema without `additionalProperties: false`, allowing the LLM to send any extra fields. This can cause unexpected behavior.
@@ -403,7 +434,8 @@ Clients silently truncate large results (SKILL.md "Result-Size Budgets" has the 
 #### Mechanics of the per-tool cap
 
 - **`_meta["anthropic/maxResultSizeChars"]` is a wire-level `tools/list` field, not an SDK feature.** It is a flat JSON field at the protocol level, so a Rust (`rmcp`), Python, or Go server can emit it exactly as a TypeScript one does - the TS SDK has no special privilege here. The key is literal, including the forward slash. Values above 500,000 are clamped, and clients that don't know the key ignore it harmlessly, so it is strictly additive.
-- **It raises the cap for text content only.** Image or binary bytes in a `CallToolResult` remain bound by the client's global env cap (`MAX_MCP_OUTPUT_TOKENS`) with no per-tool override. Don't size an image-returning tool against the raised number.
+- **It replaces the env cap for text; it is not bounded by it.** Per the client docs: *"the environment variable applies to tools that don't declare their own limit. Tools that set `anthropic/maxResultSizeChars` use that value instead for text content, regardless of what `MAX_MCP_OUTPUT_TOKENS` is set to."* So a per-tool value can raise **or lower** the effective cap independently of the user's env setting - declaring a small one is a legitimate way to enforce your own budget client-side.
+- **It covers text content only.** Image or binary bytes in a `CallToolResult` remain bound by the client's global env cap (*"Tools that return image data are still subject to `MAX_MCP_OUTPUT_TOKENS`"*) with no per-tool override. Don't size an image-returning tool against the raised number.
 - **Budget in bytes, not code points.** A char-count budget under-measures CJK and emoji payloads: a response that "fits" by character count can still blow the client cap once JSON-serialized.
 
 #### Prefer paging over truncation

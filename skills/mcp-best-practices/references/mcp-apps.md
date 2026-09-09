@@ -2,6 +2,19 @@
 
 Interactive HTML interfaces rendered inside MCP hosts. The MCP Apps spec (SEP-1865) reached **Stable** status on 2026-01-26 as the first official MCP extension (`io.modelcontextprotocol/ui`).
 
+> **`@modelcontextprotocol/ext-apps` 2.0.0 (2026-09-08) is a breaking release - of the TypeScript API, not the protocol.** *"The MCP Apps wire protocol is unchanged: 2.x Views run in 1.x hosts and 2.x hosts render 1.x Views (covered by a test that runs the published 1.7.5 against this release in both directions). What breaks is dependencies and the TypeScript API."* You can upgrade either side independently. See [Migrating to 2.0](https://github.com/modelcontextprotocol/ext-apps/blob/main/docs/migrate-to-2.md).
+
+## Upgrading to ext-apps 2.0
+
+| Change | Detail |
+|---|---|
+| **Peer packages** | `@modelcontextprotocol/sdk@^1` is replaced by `@modelcontextprotocol/client@^2.0.0` (required - `App` and `AppBridge` extend its `Protocol`) and `@modelcontextprotocol/server@^2.0.0` (optional, only for the `./server` helpers). Node.js 20+. |
+| **Zod** | **zod 3 is dropped**; the peer range is `zod@^4.2.0`. Schemas must implement Standard JSON Schema (`~standard.jsonSchema`) - *"zod 4.0 and 4.1 do not expose `~standard.jsonSchema`"*, so 4.2.0 is a real floor, not a suggestion. ArkType and Valibot also qualify. |
+| **Handler context** | *"Custom handlers receive the SDK 2.x `BaseContext`: `extra.signal` is now `extra.mcpReq.signal`, `extra.requestId` is `extra.mcpReq.id`."* |
+| **Registration** | The 1.x `(Schema, handler)` form *"still works as a deprecated overload with a one-time warning ... and goes away in 3.0."* Move to the config-object form now. |
+
+The examples below use the v1-era imports (`@modelcontextprotocol/sdk/...`), which remain correct on the 1.x line. On 2.x, import `McpServer` and the transport from `@modelcontextprotocol/server` exactly as in `v2-migration.md`, and install `@modelcontextprotocol/ext-apps @modelcontextprotocol/server @modelcontextprotocol/client zod@^4.2.0` instead of the 1.x pair.
+
 ## Table of Contents
 - [Architecture](#architecture)
 - [Server Implementation](#server-implementation)
@@ -153,7 +166,7 @@ document.getElementById("refresh")!.addEventListener("click", async () => {
 });
 ```
 
-### App Class API (ext-apps v1.7+)
+### App Class API (ext-apps v1.7+, unchanged in 2.0)
 
 Verified against [`src/app.ts`](https://github.com/modelcontextprotocol/ext-apps/blob/main/src/app.ts).
 

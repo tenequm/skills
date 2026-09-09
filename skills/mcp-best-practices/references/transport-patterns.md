@@ -46,7 +46,17 @@ Client                              Server
 - `Content-Type: application/json` (single response) OR `Content-Type: text/event-stream` (streaming)
 - `MCP-Session-Id: <id>` on the InitializeResult response (stateful only)
 
-**On 2026-07-28** there is no initialization and no session: the protocol version and client identity ride `_meta` per request, and POSTs additionally require `Mcp-Method` and `Mcp-Name` routing headers. A modern-only server receiving 2025-era traffic **SHOULD** respond: `405 Method Not Allowed` to GET or DELETE; ignore an `Mcp-Session-Id` header without minting or echoing one; ignore `Last-Event-ID` (streams are not resumable).
+**On 2026-07-28** there is no initialization and no session: client identity rides `_meta` per request, and POSTs additionally require `Mcp-Method` and `Mcp-Name` routing headers. A modern-only server receiving 2025-era traffic **SHOULD** respond: `405 Method Not Allowed` to GET or DELETE; ignore an `Mcp-Session-Id` header without minting or echoing one; ignore `Last-Event-ID` (streams are not resumable).
+
+**The `MCP-Protocol-Version` header did not go away with `initialize`.** It is required on every modern POST *in addition to* the `_meta` field, and the two must agree:
+
+> Every POST request to the MCP endpoint **MUST** include an `MCP-Protocol-Version` header. [...] The header value **MUST** match the `io.modelcontextprotocol/protocolVersion` field carried in the request body's `_meta`. If the values do not match, the server **MUST** reject the request with `400 Bad Request` and a `HeaderMismatch` JSON-RPC error.
+
+The duplication is deliberate, and the spec generalizes it into a server duty for *every* mirrored header:
+
+> Servers that process the request body **MUST** reject requests where the values specified in the headers do not match the corresponding values in the request body. This prevents potential security vulnerabilities when different components in the network rely on different sources of truth (e.g., a load balancer routing on the header value while the MCP server executes based on the body value).
+
+So `Mcp-Method` and `Mcp-Name` need the same cross-check, after base64-sentinel decoding (see `spec-2026-07-28.md`). A header-less request is not automatically fatal: a server that supports pre-`2025-06-18` clients **MAY** treat it as `2025-03-26`; one that does not **MUST** reject it. The TS SDK closed the permissive gap on `main` - a modern POST with a valid `_meta` envelope but no header used to be classified modern, dispatched, and answered `200` with tool handlers running.
 
 Validate `Origin` only when it is **present** - the spec's MUST-403 is scoped to *"present and invalid"*, and clients exist that omit it entirely.
 
@@ -81,18 +91,26 @@ The recommended pattern for K8s, Cloudflare Workers, and any horizontally-scaled
 const transport = new WebStandardStreamableHTTPServerTransport({
   sessionIdGenerator: undefined,    // no session tracking
   enableJsonResponse: true,         // always return JSON, never SSE
+  enableDnsRebindingProtection: true,          // defaults to FALSE
+  allowedOrigins: ["https://app.example.com"], // unset by default
+  allowedHosts: ["mcp.example.com"],           // unset by default
 });
 ```
+
+**The last three lines are not boilerplate.** `enableDnsRebindingProtection` defaults to `false`, and `allowedOrigins`/`allowedHosts` default to unset - so the two-option constructor everyone copies validates neither `Origin` nor `Host`, no matter what the spec says a server MUST do. The check is also all-or-nothing: with protection off the validator returns early, and with it on but a list empty, that list is skipped. The `@modelcontextprotocol/express` and `/hono` factories turn Host validation on for localhost; the raw transport does not.
 
 ### Operational Gotchas
 
 - **Answer GET with an explicit 405 when you don't offer a stream.** Spec (2025-11-25): "The server MUST either return `Content-Type: text/event-stream` in response to this HTTP GET, or else return HTTP 405 Method Not Allowed." The official TS client special-cases 405 as the expected no-stream signal (`streamableHttp.ts`: `if (response.status === 405) { return; }` - silent, no retry); any other non-OK response, **including 406, throws**. A hand-rolled stateless server that answers GET with an empty `200` (or closes it instantly) sends official-SDK clients into a reconnect storm (hundreds of requests within minutes). The SDK transport won't do this for you: `WebStandardStreamableHTTPServerTransport` never returns 405 for GET - with a conforming `Accept` header it opens a (hanging) SSE stream even in stateless mode, and returns 406 only when the `Accept` header lacks `text/event-stream`. If your route only handles POST (the common stateless layout), return 405 for GET yourself.
 - **A stateless transport instance is single-use.** Reusing it across requests throws `Stateless transport cannot be reused across requests` - create server + transport per request (the canonical pattern).
 - **Only parse the body on POST.** Route GET and DELETE straight to the transport - calling `JSON.parse` (or a body-parsing middleware) on a bodyless GET/DELETE throws and 500s the request before the transport sees it.
+- **Reject an unknown method loudly; never absorb it.** A modern-era client may open with a `server/discover` POST, and an intermediary that swallows the unrecognized method into an empty `2xx` bricks `connect()` outright: *"a server or intermediary (reverse proxy, API gateway, middlebox) that swallows the unrecognized `server/discover` POST into an empty 2xx bricks the connection, while one that rejects it with a 4xx degrades gracefully"* ([#2619](https://github.com/modelcontextprotocol/typescript-sdk/issues/2619)). The spec's own rule points the same way: an unimplemented RPC method **MUST** get `404 Not Found` plus a JSON-RPC `-32601`. Audit your gateway's catch-all route - a friendly `200 OK` is the failure mode here.
 - **Transport-level rejections bypass your application logging.** A 406/405/415 emitted by the SDK transport never reaches app middleware, so "no errors in the logs" is not evidence the server is healthy. When a client reports a broken connection you cannot see, capture at the edge (access logs, proxy logs) rather than trusting app-level instrumentation.
 - **Exclude GET from request-rate metrics.** SSE keep-alive traffic outnumbers real work by roughly two orders of magnitude - a keep-alive `GET /mcp` runs on the order of ~5 req/s per connection against ~0.01 req/s for actual tool calls. Any rate limit, autoscaling signal, or usage-billing filter on `/mcp` that counts GET is measuring noise.
 - **SSE keep-alive is now built in.** Both lines write `: keepalive` comment frames to open SSE streams so idle connections survive intermediaries and idle timeouts, configurable via `keepAliveMs` (default `15000`; `0` disables). Shipped in v1.30.0 ([PR #2538](https://github.com/modelcontextprotocol/typescript-sdk/pull/2538), with per-stream timer lifecycle fixed in [PR #2547](https://github.com/modelcontextprotocol/typescript-sdk/pull/2547)) and in v2 via `createMcpHandler` ([PR #2541](https://github.com/modelcontextprotocol/typescript-sdk/pull/2541)). Don't hand-roll keep-alive on a current SDK.
 - **Non-JSON POSTs are rejected with 415.** Since v1.30.0 / v2, the Content-Type is parsed as a media type rather than substring-matched, so a sloppy `Content-Type` that used to pass now fails ([PR #2444](https://github.com/modelcontextprotocol/typescript-sdk/pull/2444)). Custom transports composing `classifyInboundRequest`/`PerRequestHTTPServerTransport` must apply `isJsonContentType()` themselves.
+- **Reusing a stateless transport surfaces as an opaque empty 500.** The assertion that guards single-use never reaches your error handling through the Node wrapper: *"The Node wrapper (`StreamableHTTPServerTransport` via `@hono/node-server`) converts that assertion into a bare `500` with an empty body - no `onerror`, no rejection"* ([#2704](https://github.com/modelcontextprotocol/typescript-sdk/issues/2704)). A bodyless 500 with silent logs is the signature of a transport being reused, not of a handler throwing.
+- **Coming on `main`, not yet released** (`server@2.0.0` has none of it): every SDK-owned body read stops at a `maxRequestBodySize` of **4 MiB** and answers `413 Payload Too Large` before parsing, JSON-RPC batch arrays are capped at **100 messages**, and a modern POST without `MCP-Protocol-Version` is rejected rather than served. Size your own edge limits with those numbers in mind so the SDK's default is not the first thing your users discover.
 
 ### K8s Specifics
 

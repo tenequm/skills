@@ -2,10 +2,18 @@
 
 Open and recently-fixed defects in the TypeScript SDK that change how you write server code. Status verified against `@modelcontextprotocol/sdk@1.30.0` (legacy line) and `@modelcontextprotocol/server@2.0.0`.
 
-`SKILL.md` carries the four must-know entries inline; this is the full table with status and workarounds.
+`SKILL.md` carries the must-know entries inline; this is the full table with status and workarounds.
 
 | Issue | Severity | Status | Workaround |
 |-------|----------|--------|------------|
+| [#2721](https://github.com/modelcontextprotocol/typescript-sdk/issues/2721) / [#2677](https://github.com/modelcontextprotocol/typescript-sdk/issues/2677) - v1 emits `$schema: draft-07`, strict 2020-12 clients reject the tool | High | **Open**, v1 only - v2 pins `JSON_SCHEMA_CONVERSION_TARGET = 'draft-2020-12'` | Move to v2, or post-process your `tools/list` output to strip or rewrite `$schema`. Reproduced against the official reference servers, which are still on `sdk@^1.30.0` |
+| [#2636](https://github.com/modelcontextprotocol/typescript-sdk/issues/2636) - zod 3 -> 4 silently drops `additionalProperties: false` | High | **Open** | Assert on your published `tools/list` output, not on the Zod source. A schema that was strict under zod 3 becomes open under zod 4 with no error anywhere |
+| [#2705](https://github.com/modelcontextprotocol/typescript-sdk/issues/2705) - `registerTool` with a raw shape never runs `refine`/`superRefine`/`transform` | High | **Open** (observed on 1.30.0) | Pass a real `z.object()`, and re-validate inside the handler with `safeParse` when a constraint is security-critical. This is fail-**open**: input your schema rejects passes the server gate |
+| [#2607](https://github.com/modelcontextprotocol/typescript-sdk/issues/2607) - v2 `createMcpHandler` + reused `McpServer` grows an unbounded `onclose` chain | High | **Open**, affects released `server@2.0.0` | Per-request `McpServer`. Symptoms are a slow leak, then `RangeError: Maximum call stack size exceeded` at ~19-25k accumulated sessions |
+| [#2650](https://github.com/modelcontextprotocol/typescript-sdk/issues/2650) - v2 `subscriptions/listen` never closes a stream with an empty honored set | Medium | **Open** | If you advertise no `listChanged` capabilities and no `resources.subscribe`, the honored set is `{}`, the stream can carry nothing, and nothing closes it. Close it yourself or don't route `subscriptions/listen` |
+| [#2622](https://github.com/modelcontextprotocol/typescript-sdk/issues/2622) - `capabilities.tools.listChanged: false` silently overridden to `true` | Low | **Open** | The constructor value never reaches the wire once any tool is registered. Don't rely on advertising `false` |
+| [#2723](https://github.com/modelcontextprotocol/typescript-sdk/issues/2723) - `remove()` is a no-op after a rename, entry stays live and callable | Medium | **Open** - prompts/resources/templates on `main`; all four including tools on `v1.x` | Verify removal against a real `*/list` call rather than trusting the return |
+| [#2605](https://github.com/modelcontextprotocol/typescript-sdk/issues/2605) - `AjvJsonSchemaValidator.getValidator()` recompiles `$id`-less schemas on every call | Medium | **Open** (memory leak) | Give schemas an `$id` |
 | [#1643](https://github.com/modelcontextprotocol/typescript-sdk/issues/1643) - `z.union()`/`z.discriminatedUnion()` silently dropped | High | Fixed in the v2 line ([PR #1796](https://github.com/modelcontextprotocol/typescript-sdk/pull/1796)); v1.x backport [PR #2017](https://github.com/modelcontextprotocol/typescript-sdk/pull/2017) **still open** | Use flat `z.object()` + `z.enum()`. Present on **every released v1 including v1.30.0** (still routed through `normalizeObjectSchema`) |
 | [#1699](https://github.com/modelcontextprotocol/typescript-sdk/issues/1699) - Transport closure stack overflow (15-25+ concurrent) | High | Fixed on the **v2 line only** (PR #1788, merged to `main` 2026-04-02); no v1 backport observed | Move to v2, or cap concurrent transport closures on v1 |
 | [#1619](https://github.com/modelcontextprotocol/typescript-sdk/issues/1619) - HTTP/2 + SSE Content-Length error | Medium | Closed (reclassified to upstream `@hono/node-server#266`) | Use `enableJsonResponse: true` or avoid HTTP/2 upstream |
@@ -16,4 +24,12 @@ Open and recently-fixed defects in the TypeScript SDK that change how you write 
 | GHSA-345p-7cg4-v4c7 / [CVE-2026-25536](https://nvd.nist.gov/vuln/detail/cve-2026-25536) - Shared instances leak cross-client data | Critical | Fixed v1.26.0 | **Require >= v1.26.0** (or v2.0.0-alpha.1+); per-request server+transport |
 | [CVE-2026-0621](https://github.com/modelcontextprotocol/typescript-sdk/pull/1365) - UriTemplate ReDoS | Medium | Fixed v1.25.2 / v2.0.0-alpha.1 | Upgrade |
 
-Conversion-level detail for the schema entries (#1643, #1596, #702, AJV strict) lives in `tool-schema-guide.md`. The CVEs and their attack shapes are covered in `security-auth.md`.
+Conversion-level detail for the schema entries (#1643, #1596, #702, #2636, #2705, AJV strict) lives in `tool-schema-guide.md`. The CVEs and their attack shapes are covered in `security-auth.md`.
+
+## Three schema defects, one symptom
+
+`#2721` (draft-07), `#2636` (dropped `additionalProperties`) and `#2705` (skipped `refine`) all fail **silently on the server** and only surface at the client, which is why they are worth testing for explicitly. The check that catches all three is the same one: call `tools/list` against your running server and assert on the JSON it actually publishes - the dialect in `$schema`, the presence of `additionalProperties`, and a `tools/call` with input your Zod schema should reject. `@modelcontextprotocol/inspector` >= 2.4.0 automates the portability half of that.
+
+## Fixed on `main`, not yet released
+
+`@modelcontextprotocol/server@2.0.0` is still the newest published v2, with several fixes sitting unreleased on `main`. Do not code around them yet, but know they are coming: a 4 MiB `maxRequestBodySize` with a `413` response and a 100-message JSON-RPC batch cap; rejection of a modern POST missing `MCP-Protocol-Version`; `Mcp-Name` mirrored onto `tasks/get`/`update`/`cancel` (without it, conforming servers rejected **every** task poll with `-32020`); `notifications/cancelled` carrying request id `0` no longer ignored; and no more spec-forbidden cancel notification for `initialize`.

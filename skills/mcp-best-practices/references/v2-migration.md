@@ -408,6 +408,14 @@ Why it matters concretely: before this, "the client hard-rejected a conforming s
 
 ### Timeline
 
-v2 stable shipped **2026-07-27**, alongside the released 2026-07-28 spec revision. v1.x gets bug and security fixes for **at least 6 months** from that date, so the migration clock is running but there is no cliff. New code should target v2; the `@modelcontextprotocol/codemod` `v1-to-v2` codemod handles the mechanical parts.
+v2 stable shipped **2026-07-27**, alongside the released 2026-07-28 spec revision. The support window is now written down in the SDK's own `ROADMAP.md`:
+
+> The `v1.x` branch (`@modelcontextprotocol/sdk`) continues to receive bug fixes and security updates for at least six months after the v2 release (2026-07-27). It targets the 2025-11-25 spec revision; new spec revisions are implemented on `main` only.
+
+The second sentence is the one that sets the real deadline: **v1 will never speak a revision past 2025-11-25**. Fixes for six-plus months, but no path to 2026-07-28 or anything after it, so "v1 still gets patches" is not a reason to stay if you need the modern wire. The repo also added `VERSIONING.md` and a `DEPENDENCY_POLICY.md` (including a 7-day `minimumReleaseAge` supply-chain cooldown on lockfile entries) alongside it.
+
+In practice the ecosystem is still on v1: the official reference servers (`server-filesystem`, `server-memory`, `server-everything`) were republished 2026-08-31 still pinning `"@modelcontextprotocol/sdk": "^1.30.0"`, which is why the v1 draft-07 defect in `sdk-bugs.md` has such a wide blast radius.
+
+New code should target v2; the `@modelcontextprotocol/codemod` `v1-to-v2` codemod handles the mechanical parts.
 
 Two reasons to move sooner rather than later, both v1-only defects with no backport: `z.union()`/`z.discriminatedUnion()` still produce empty schemas on every released v1 including 1.30.0 ([PR #2017](https://github.com/modelcontextprotocol/typescript-sdk/pull/2017) is still open), and the concurrent-transport-closure stack overflow ([#1699](https://github.com/modelcontextprotocol/typescript-sdk/issues/1699)) was fixed on the v2 line only.
