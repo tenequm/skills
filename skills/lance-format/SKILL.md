@@ -2,10 +2,10 @@
 name: lance-format
 description: Deep reference for Lance v12 columnar format, its Rust crates, and pylance - file encodings, table format, indexes, schema evolution, time travel. Use when building on the Lance crates or reading .lance datasets, not the LanceDB product.
 metadata:
-  version: "0.18.1"
+  version: "0.19.0"
   categories: "development, integrations"
   topics: "lance, columnar-format, vector-search, rust, lakehouse"
-  upstream: "lance-format/lance@v12.0.0-beta.6"
+  upstream: "lance-format/lance@v12.0.0-beta.15"
   openclaw:
     homepage: https://github.com/tenequm/skills/tree/main/skills/lance-format
     emoji: "🗄️"
@@ -19,7 +19,7 @@ specs: a **file format**, a **table format**, **index formats**, **catalog specs
 **namespace client spec**. The Rust workspace at `lance-format/lance` implements all of them
 plus Python (`pylance`) and Java bindings.
 
-This skill tracks **`v12.0.0-beta.6`** (the `lance-format/lance` git tag), the current
+This skill tracks **`v12.0.0-beta.15`** (the `lance-format/lance` git tag), the current
 development frontier; **`v11.0.0`** is the stable pin. Pin against tags, not `main` - Lance ships
 beta tags every few days and `next`-format encodings can change. Version landscape below.
 
@@ -102,15 +102,21 @@ dataset).
 |---------|--------|-------|
 | `0.1` (`legacy`) | read-only | Original format; no longer writable |
 | `2.0` | stable | Removed row groups; null support for lists/FSL/primitives |
-| `2.1` | **current default** (`stable`) | Adaptive structural encodings; better integer/string compression; nulls in struct fields; better nested random access. Default since Lance 5.0.0 |
-| `2.2` | unstable | Map type, Blob v2, `VariablePackedStruct`, larger mini-blocks. Required for Map and Blob v2; the real experimental frontier - encodings may still change |
+| `2.1` | previous default | Adaptive structural encodings; better integer/string compression; nulls in struct fields; better nested random access. Was the default from Lance 5.0.0 until `v12.0.0-beta.15` |
+| `2.2` | **current default** (`stable`) | Map type, Blob v2, `VariablePackedStruct`, larger mini-blocks. Required for Map and Blob v2 |
 | `2.3` | unstable (`next`) | The current `next` alias target (`V2_3` in the enum). Ships **sparse structural pages**, which the 2.3 writer now auto-selects under a rep/def budget heuristic |
 
-`stable` resolves to the default (2.1); **`next` now resolves to 2.3, not 2.2** - pin an
-explicit number for deterministic behavior. In the version ladder 2.2 sits *below* `next`, so
-the code does not flag 2.2 as unstable even though the docs version table lists only 2.3 as the
-unstable row. The release *selectors* (`LanceFileVersion`) are a type distinct from the
-persisted identity (`ConcreteFileVersion`). Details, plus the sparse auto-selection rules, in
+**`stable` now resolves to 2.2, not 2.1** (#8657, beta.15), and `2.2` is the enum `#[default]`,
+so a dataset created without an explicit `data_storage_version` is written as 2.2. The change
+reaches new-dataset creation through `DataStorageFormat::default() -> stable_file_version()`,
+and Python's `write_dataset` inherits it because its default routes through `stable`. **The docs
+were not updated with it** - `format/file/versioning.md` still only says `stable` is an "alias
+for the default version", so the code is the authority here. `next` resolves to 2.3. Pin an
+explicit number for deterministic behavior across builds.
+
+2.3 is the only version the code flags unstable; 2.2 never was, and is now what you get by
+default. The release *selectors* (`LanceFileVersion`) are a type distinct from the persisted
+identity (`ConcreteFileVersion`). Details, plus the sparse auto-selection rules, in
 `references/format-file.md` sections 3.1 and 3.6.
 
 ## Version landscape
@@ -118,45 +124,38 @@ persisted identity (`ConcreteFileVersion`). Details, plus the sparse auto-select
 The major is bumped by a bot, not a human: `ci/publish_beta.sh` re-roots at `MAJOR+1` whenever
 any PR since the release root carries the GitHub `breaking-change` label - the marker is the
 **label**, not a conventional-commit `!`. A major bump therefore means "some labeled breaking
-change landed", not a redesign. It has now fired on **three consecutive lines**, which is why
-**none of `v9.1.0`, `v10.1.0`, or `v11.1.0` was ever released**. The 10.1 line exists only as
-`v10.1.0-beta.{1,2}`; the 11.1 line never got even one beta tag - `release-root/11.1.0-beta.N`
-was cut at `371da45`, `main` went to `11.1.0-beta.0`, one labeled breaking PR landed, and the bot
-re-rooted to 12 off the *same base* (`release-root/12.0.0-beta.N` points at `371da45` too).
+change landed", not a redesign, and a `!` without the label bumps nothing. It has fired on
+**three consecutive lines**, which is why **none of `v9.1.0`, `v10.1.0`, or `v11.1.0` was ever
+released** - the 11.1 line never got even one beta tag, and `release-root/12.0.0-beta.N` points at
+the same base commit `release-root/11.1.0-beta.N` did.
 
-Both recent lines **did** ship a final: `v10.0.0` (2026-08-08) and `v11.0.0` (2026-08-30, cut
-from the `v11.0.0-rc.2` line). Each sits on a stabilization branch that is **not an ancestor of
-`main`** - normal for a Lance final, not a sign the release is unofficial.
+Both recent lines **did** ship a final: `v10.0.0` (2026-08-08) and `v11.0.0` (2026-08-30). Each
+sits on a stabilization branch that is **not an ancestor of `main`** - normal for a Lance final,
+not a sign the release is unofficial.
 
 | Major | Its breaking theme |
 |-------|--------------------|
-| **v12** (current, `v12.0.0-beta.6`) | `WrappingObjectStore` implementors must add `wrap_paginated` (no default); MemWAL `ShardManifestStore` renamed and narrowed; `lance-namespace` 0.11 returns response objects. Net-new: bit 8 reserved for mixed data-file versions, paged listing, server-side copy. Delta below |
-| **v11** (`v11.0.0`, 2026-08-30) | Fragment ids became a dataset-lifetime high-water mark; large internal reorganization of `lance-file` / `lance-encoding`; the first new manifest feature flag since v7 - which was then **reallocated before the final** (below). Net-new: covering indexes, `merge_insert` `write_mode`, row-address prefilter. Delta below |
+| **v12** (current, `v12.0.0-beta.15`) | `WrappingObjectStore` implementors must add `wrap_paginated` (no default); MemWAL `ShardManifestStore` renamed and narrowed; `lance-namespace` returns response objects; external stores gained predecessor-conditioned publication; namespace merge-insert keys became a list. Unlabeled but bigger: `stable` -> 2.2 and the IVF_RQ 5-bit default. Delta below |
+| **v11** (`v11.0.0`, 2026-08-30) | Fragment ids became a dataset-lifetime high-water mark; large internal reorganization of `lance-file` / `lance-encoding`; the first new manifest feature flag since v7 - which was then **reallocated before the final**. Net-new: covering indexes, `merge_insert` `write_mode`, row-address prefilter. Delta below |
 | **v10** | Blob APIs preserve null selections; cache keys became opaque BLAKE3 digests (every warm or persisted cache cold-misses, no legacy fallback); async `create_remapper`; MemWAL renamed generation -> SSTable, merge -> compaction (wire-compatible, symbol-breaking) |
 | **v9.1** (never released; renamed into v10) | FTS/inverted creation took a `block_size` param. Net-new: Data Overlay Files (cell-level updates without base-file rewrite, unstable + env-gated), sparse structural pages, `lance-index-core` |
 | **v9** | Python 3.9 dropped; `alter_columns` fails fast when casting an indexed column; FM-Index proto rename made existing FM indexes unreadable; FTS/inverted defaults to on-disk format v2 |
 | **v8** | All index builds unified onto one segment-based lifecycle. Net-new: `lance-derive`, FM-Index, multi-bit IVF_RQ, public `approx_mode`, TOS + GooseFS object stores |
 | **v7** | MemWAL, branches, the geo/RTree index, the `lance-select` crate, ICU FTS |
 
-**`v11.0.0` is the stable pin** (2026-08-30, superseding `v10.0.0`), and it is what GitHub
-Releases marks `Latest`. crates.io carries **finals only** (newest is `lance 11.0.0`; no 12.x,
-and the only pre-release in ~186 versions is the ancient `0.0.1-alpha0`); PyPI `pylance` is
-likewise at `11.0.0`. So a beta pin means a git dependency - beta wheels publish to fury.io
-instead, under the renamed org (`https://pypi.fury.io/lance-format`).
-
-**Do not pin anywhere in `v11.0.0-beta.4` through `beta.17`.** Those builds treat manifest bit
-128 as a MemWAL flag they support, so they *open* a covering-index dataset instead of refusing
-it - wrong neighbours, no error. Flag note in the v11 delta.
+**`v11.0.0` is the stable pin** and what GitHub Releases marks `Latest`. crates.io carries
+**finals only** (newest `lance 11.0.0`, no 12.x); PyPI `pylance` is likewise at `11.0.0`. So a
+beta pin means a git dependency - beta wheels publish to fury.io instead, under the renamed org
+(`https://pypi.fury.io/lance-format`).
 
 Full per-tag deltas with every PR citation: `references/changelog-v7-v12.md`.
 
 ## The v11 delta
 
 357 commits from `v10.0.0-beta.7` to the `v11.0.0` final, with **16 `breaking-change`-labeled
-PRs** (14 through `beta.16`, plus #8407 and #8535 in the final). Most structural invariants
-held: **26 crates**, **16 transaction ops**, `CommitConfig.num_retries` **20**, file-format enum
-still `next => 2.3` / default 2.1 (no 2.4), arrow 58 / datafusion 54, MSRV 1.91.0, Edition 2024,
-Python 3.10+ - and all of them still hold at `v12.0.0-beta.6`.
+PRs** (14 through `beta.16`, plus #8407 and #8535 in the final). Most structural invariants held:
+**26 crates**, **16 transaction ops**, `CommitConfig.num_retries` **20**, arrow 58 / datafusion 54,
+MSRV 1.91.0, Edition 2024, Python 3.10+ - and all of them still hold at `v12.0.0-beta.15`.
 
 **`references/changelog-v7-v12.md` has the full delta** - every PR citation, the per-tag
 breakdown from v7 forward, the Python/Java surface, and each correctness fix with its trigger
@@ -185,32 +184,31 @@ what bites hardest.
   external store's put-if-not-exists is a *reservation*, and a stored ETag must be **ignored**;
   a retained one makes readers reject a good manifest with `Manifest e_tag mismatch`. Section 9.
 
-**The manifest feature flags changed - and bit 128 was then reallocated before the final.**
-v11 added the first new bit since v7 and moved `FLAG_UNKNOWN` 128 -> 256. But the bit it added,
+**The manifest feature flags changed - and bit 128 was reallocated before the final.** v11 added
+the first new bit since v7 and moved `FLAG_UNKNOWN` 128 -> 256. But the bit it added,
 `FLAG_MEM_WAL_INDEX_CATCHUP`, was **retired again** (#8680) and the reclaimed bit handed to
 `FLAG_COVERED_INDEX_METADATA = 128` (#8535) before `v11.0.0` shipped. At the final and at v12
 there is no index-catchup flag and no `require_index_catchup` proto field; a shard absent from
-`index_catchup` now unconditionally means *unknown*, so its SSTables are retained and a repair
-scheduled. Both reader and writer must hold bit 128 or refuse the table. Section 7.
+`index_catchup` now unconditionally means *unknown*. Both reader and writer must hold bit 128 or
+refuse the table. Section 7.
 
-Upstream picked that bit because a released build already refuses it - but builds from the
-window where it meant index catch-up (`beta.4` through `beta.17`) count it as supported and
-"will open a covering dataset rather than refuse it". The exposure is inherited by whichever
-flag takes the bit.
+**Do not pin anywhere in `v11.0.0-beta.4` through `beta.17`.** Those builds treat bit 128 as a
+MemWAL flag they support, so they *open* a covering-index dataset instead of refusing it - wrong
+neighbours, no error. The exposure is inherited by whichever flag takes the bit.
 
 **Covering indexes are the v11 net-new format feature** (#8535). `IndexMetadata.covering_fields`
 (proto field 11) names the trailing subset of `fields` an index *carries* values for but is not
 keyed on, so a query projecting only those columns is answered without a base-table take. This
-redefines `fields` as "keyed columns followed by carried ones", and widens index invalidation:
-an in-place update must clear the fragment from **any** index whose `fields` include that
-column, "whether the index is keyed on it or merely carries it". But "no index builder writes
-carried values yet", so this is capability-in-place, not a usable speedup. Section 11.
+redefines `fields` as "keyed columns followed by carried ones", and widens index invalidation to
+**any** index whose `fields` include the updated column, "whether the index is keyed on it or
+merely carries it". But "no index builder writes carried values yet", so this is
+capability-in-place, not a usable speedup - and because the flag is set only while some index
+actually carries values, it is not set in practice. Section 11.
 
 **v12 reserved bit 8 without spending it.** `FLAG_MIXED_DATA_FILE_VERSIONS = 1 << 8` is declared
-*equal to* `FLAG_UNKNOWN` (a compile-time assert pins them together) and carried by a new
-`STICKY_PAIRED_FLAGS` mechanism, so the supported set is unchanged and a manifest setting the
-bit is still refused. Only the reservation (#8580) merged; the five activation PRs have not
-landed anywhere. Section 7.
+*equal to* `FLAG_UNKNOWN` (a compile-time assert pins them together) and carried by a
+`STICKY_PAIRED_FLAGS` mechanism, so the supported set is unchanged and a manifest setting the bit
+is still refused. Only the reservation (#8580) merged. Section 7.
 
 **Two `LANCE_*` env vars landed** (from the AMX work, #8540): `LANCE_DISABLE_AMX` (runtime kill
 switch) and `LANCE_AMX_FP16_CC` (build-time compiler override). Grep trap: `LANCE_AMX_CFG_*` and
@@ -222,44 +220,38 @@ substring of `BALANCE_FACTOR` - a plain `LANCE_*` grep reports all four as if th
 format v3; transactions above **20 MiB** spill out of the manifest entirely (#7881); MemWAL
 catch-up became derived rather than declared (#8481); transaction proto field 9
 (`updated_fragment_offsets`) is deprecated for field 10 (#7432); and compaction gained row/byte
-budgets plus fragment exclusion (#8235, #8532). Landing after `beta.16`, in the final:
-`merge_insert` gained `write_mode` (`Auto` / `RewriteRows` / `RewriteColumns`, where
-`RewriteColumns` patches columns in place through a new `InPlaceMergeInsertExec` instead of
-rewriting whole rows, #8423); `Scanner::with_row_addr_prefilter(RowAddrMask)` (#7288);
-`get_deleted_row_ids` for the row-id diff between two versions (#8589); and Python commit
-conflicts became `lance.commit.CommitConflictError` with a typed `retryable` attribute - a
-subclass of `OSError`, so existing `except OSError` handlers keep working (#8563).
+budgets plus fragment exclusion (#8235, #8532). Landing in the final: `merge_insert` gained
+`write_mode` (`Auto` / `RewriteRows` / `RewriteColumns`, the last patching columns in place
+through a new `InPlaceMergeInsertExec`, #8423); `Scanner::with_row_addr_prefilter(RowAddrMask)`
+(#7288); `get_deleted_row_ids` (#8589); and Python commit conflicts became
+`lance.commit.CommitConflictError` with a typed `retryable` attribute - a subclass of `OSError`,
+so existing `except OSError` handlers keep working (#8563).
 
 **Address-domain indexes stopped falsely claiming compacted fragments** (v11, `beta.16` or
 earlier). On a stable-row-id dataset a rewrite used to advance *every* index's `fragment_bitmap`
-onto the new fragment ids - including ZoneMap, whose stored addresses point into the fragments
-the rewrite dropped. The Rewrite path now branches on `results_are_row_addrs()`: a row-id-domain
-index follows its data via `recalculate_fragment_bitmap`, an address-domain one gets
+onto the new fragment ids - including ZoneMap, whose stored addresses point into the fragments the
+rewrite dropped. The Rewrite path now branches on `results_are_row_addrs()`: a row-id-domain index
+follows its data via `recalculate_fragment_bitmap`, an address-domain one gets
 `drop_rewritten_fragments` and "the scanner falls back to a full scan for them" -
 correct-but-slower instead of stale addresses. ZoneMap is squarely address-domain
-(`can_remap() -> false`; `remap()` errors `"ZoneMapIndex does not support remap"`). **Heals only
-for new compactions**: an index already damaged under v10 or earlier must be recreated.
-Section 11.
+(`can_remap() -> false`). **Heals only for new compactions**: an index already damaged under v10
+or earlier must be recreated, and the damage does not self-heal through routine maintenance
+because the refreshed `fragment_bitmap` also makes incremental folds a no-op. Section 11.
 
 **Correctness fixes split by whether upgrading is enough.** Most are read-path only and heal on
-upgrade. These do **not** - they need data rewritten or repaired: #8382 (variable-width offsets),
-#8669 (JSON columns updated from string expressions), #8509 (re-run affected merges), #7703 and
-#8539 (bad manifests already committed - validation is commit-time only), #8459 (a clobbered tag
-is unrecoverable and undetectable), #8378 (data "written to a UNC URL" landed on the local
-drive), #8482 (re-run the distributed FTS build), #8834 (rebuild HNSW indexes - a persisted graph
-can hold edges to ids it does not contain; the reader now drops them, but lost recall stays lost),
-#8101 (**nullable primary keys silently duplicated rows** on every repeat `merge_insert`; the
-check only blocks future manifests, so existing duplicates must be removed by hand), #8511
-(rebuild LabelList), #8427 (recreate an index an older build silently deleted), #8513 (re-compact
-stranded remainder fragments), #8839 (chmod files written 0600 before the 0666 default), #8904
-(restart long-lived sessions holding index metadata for a dataset recreated at the same URI).
-Conditions for each in `references/changelog-v7-v12.md`.
+upgrade. These do **not** - they need data rewritten or repaired: #8382, #8669, #8509, #7703,
+#8539, #8459, #8378, #8482, #8834 (rebuild HNSW - a persisted graph can hold edges to ids it does
+not contain; lost recall stays lost), #8101 (**nullable primary keys silently duplicated rows** on
+every repeat `merge_insert`; existing duplicates must be removed by hand), #8511, #8427, #8513,
+#8839, #8904. Conditions for each in `references/changelog-v7-v12.md`.
 
 ## The v12 delta
 
-81 commits from `release-root/12.0.0-beta.N`, with **exactly 3 `breaking-change`-labeled PRs**.
-No new index types, no proto change except the bit-8 reservation, and every structural invariant
-above still holds.
+170 commits from `release-root/12.0.0-beta.N`, with **exactly 5 `breaking-change`-labeled PRs**.
+No new index types and no new crates; every structural invariant above still holds. **The label is
+a floor, not a ceiling** - the two biggest behavior changes in the line carry a conventional-commit
+`!` but no label, so the bot never counted them: the `stable` -> 2.2 move (#8657, above) and the
+IVF_RQ 5-bit default (below).
 
 - **`WrappingObjectStore` implementors must add `wrap_paginated`** (#8606) - "There is
   deliberately no default: getting this wrong is either a silent loss of speed or a silent loss
@@ -278,15 +270,54 @@ above still holds.
   response objects instead of bare values: `count_table_rows` -> `CountTableRowsResponse`,
   `query_table` -> `QueryTableResponse`, `namespace_exists` / `table_exists` -> their own
   response types. Callers unwrap; anyone implementing the trait needs the same signature updates.
+- **External manifest stores gained predecessor-conditioned publication** (#8800) -
+  `put_if_predecessor` reserves a version only while the predecessor still carries the identity
+  the writer observed, and `commit_after` refuses with `PrerequisiteFailed`, "never a conflict".
+  The hard compile break is the new `ManifestLocation.identity` field, not the trait methods
+  (all default-implemented). No built-in store implements it. Section 9.
+- **Namespace merge-insert keys became a list** (#8915) - `on` moves from `Option<String>` to
+  `Option<Vec<String>>`, with **arity-dependent NULL semantics**: a single-column key treats NULL
+  as equal to NULL, a composite key uses SQL equality, "under which a NULL key matches nothing -
+  not even a byte-identical NULL".
+
+**The `lance-namespace` pin is no longer one number.** #8915 moved the Rust client to **0.12.0**
+while Java and Python deliberately stay on **0.11.1** - their generated models still send `on` as
+a bare string. Quote a language-specific pin, never one number for all three.
+
+**IVF_RQ now defaults to 5 bits per dimension, not 1** (#8936) - roughly a **4.4x index-size
+increase** at the default (upstream's 100M x 768d example: ~10.8 GiB -> ~47.3 GiB). `Fast` search
+mode "uses only the 1-bit sign code even when the index stores additional bits", so it pays the
+storage without using it; set `num_bits=1` explicitly to opt out, at the cost of the multi-bit
+distance estimate and some recall. Sizing formulas in `references/indexes.md`.
+
+**Column slice stitching (#8660) was reverted** at beta.9 (#8926) - it "should not ship while the
+caller-managed replacement in #8923 is being developed". `rust/lance-file/src/concat.rs` exists
+again at beta.15, but holds #8923's caller-managed data file parts, not the reverted stitching.
+
+**Two proto additions.** MemWAL `SsTable` gained `in_memory_bytes`, `physical_rows` and
+`primary_key_bytes` (fields 3-5, #8981); all optional, and **absence must not be read as zero**.
+`FilteredReadOptions` gained `materialization_readahead_bytes` and `batch_size_bytes` (13, 14) -
+not a format change under a new rule in `protos/AGENTS.md`: execution-plan schemas "are wire
+contracts, not persisted Lance formats". `transaction.proto` / `ann.proto` / `index.proto` are
+untouched.
 
 **Net-new, non-breaking:** provider-native bulk copy and a deep-clone concurrency bound (section
-13); Python `ObjectStoreProvider` registration for out-of-tree providers (#8522); `BinaryView` in
-the packed blob writer, format-stable (#8700); column slice stitching, Rust-only for now (#8660).
-Namespace latest-version resolution no longer lists the whole `_versions/` prefix (#8679) - on a
+13); Python `ObjectStoreProvider` registration (#8522); `BinaryView` in the packed blob writer
+(#8700); caller-managed data file parts (#8923); cleanup of specific versions (#8617);
+`LanceDataset.slice()` (#8059) and six more `LanceFragment.scanner` options (#8429); restored
+Python index retraining (#8786); namespace-managed clone deprecated to a shim (#8964). Namespace
+latest-version resolution no longer lists the whole `_versions/` prefix (#8679) - on a
 ~340k-version table that was ~344 list pages, "~25s of pure I/O wait", paid by every open.
 
-**In flight, not landed - do not treat as shipped:** generic block v5 compression (1 of 10 PRs
-merged, #8324) and mixed data-file versions (1 of 6, #8580, the reservation only).
+**Fixes needing a rebuild or rewrite, not just an upgrade:** #8779 (rebuild NGRAM indexes), #8510
+(rewrite data compacted from uniformly reordered fragments), #8984 (re-drop a resurrected index),
+#8837 (repair a MemWAL shard below ~2.7KB/row - it cannot be reopened). Full per-PR conditions,
+plus the much longer list that *does* heal on upgrade, in `references/changelog-v7-v12.md`.
+
+**In flight, not landed - do not treat as shipped:** generic block v5 compression (still 1 of 10
+PRs merged, #8324) and mixed data-file versions (still 1 of 6, #8580, the reservation only). Next
+big dependency break in the queue: #8997, "upgrade to arrow 59, DataFusion 55, and pyo3 0.29" -
+open at beta.15, so arrow 58 / datafusion 54 still hold.
 
 ## Performance questions
 

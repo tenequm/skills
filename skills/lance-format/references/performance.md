@@ -1,6 +1,6 @@
 # Lance performance - combined reference
 
-Everything performance-shaped for Lance (`lance-format/lance@v12.0.0-beta.6`) in one place.
+Everything performance-shaped for Lance (`lance-format/lance@v12.0.0-beta.15`) in one place.
 **Part A** routes to the official guidance - which lives verbatim in this skill's
 `references/docs/` mirror, so it is pointed at rather than re-copied - and then adds the
 performance behavior upstream has *not* documented, derived from source and commit history.
@@ -42,10 +42,14 @@ Provenance: `docs/src/guide/performance.md` was byte-unchanged from `v9.1.0-beta
 `v11.0.0-beta.2`, then **changed at `v11.0.0-beta.4`** (#8387), which added the "Tuning remote
 scans" section and a `row_id_meta` component to the Row Id Sequence cache key, and **again at
 `v11.0.0-beta.16`** (#8540), which appended the "AMX Acceleration" section (+29 lines, no other
-edit). Between `v11.0.0-beta.16` and `v12.0.0-beta.6` the file did not change at all. The
-mirror is refreshed to `v12.0.0-beta.6`, so every number, default, and
-recommendation in it is current as written; the other perf-bearing sections above remain
-byte-unchanged across that range.
+edit). It then held byte-unchanged through `v12.0.0-beta.6` and **changed again at
+`v12.0.0-beta.12`** (#8936), which rewrote the RQ block for the 5-bit default: new per-row sizing
+formulas, a new worked example (~10.8 GiB -> ~47.3 GiB), and new `Fast`-mode guidance.
+
+The mirror is refreshed to `v12.0.0-beta.15`, so every number, default, and recommendation in it
+is current as written. **Any RQ sizing figure you remember from an earlier read of this guide is
+stale** - re-read the block rather than trusting a cached number. The other perf-bearing sections
+above remain byte-unchanged across the range.
 
 ## OpenTelemetry metrics (not in the performance guide)
 
@@ -100,9 +104,11 @@ is gone.
 ## Performance changes not in the guide (v11, source-derived)
 
 Same caveat as above: verified against the `v11.0.0-beta.16` source and commit history, absent
-from `docs/src/guide/performance.md`. The section is unchanged at `v12.0.0-beta.6` -
-`docs/src/guide/performance.md` is byte-identical across the two tags, so the official
-"Tuning remote scans" numbers and everything Part A routes to still stand as written.
+from `docs/src/guide/performance.md`. The section is unchanged at `v12.0.0-beta.15`. The only
+edits to `docs/src/guide/performance.md` between `v12.0.0-beta.6` and `v12.0.0-beta.15` are three
+hunks from line 483 onward, all in the RQ sizing block (#8936), so the official "Tuning remote
+scans" numbers and everything else Part A routes to still stand as written - but the RQ sizing
+figures do not, and are restated in `references/indexes.md`.
 
 **Large commits got much cheaper on the manifest side** (PR #7881). Transactions serialized
 above 20 MiB are no longer inlined into the manifest and live only in their external
@@ -204,7 +210,7 @@ this is the fix; OpenDAL-backed stores were never affected and are unchanged.
 
 ## Performance changes not in the guide (v12, source-derived)
 
-Verified against `v12.0.0-beta.6`.
+Verified against `v12.0.0-beta.15`.
 
 **Latest-version resolution stopped listing the whole `_versions/` prefix** (PR #8679). The
 namespace path previously enumerated every historical manifest to find the newest: on a
@@ -224,6 +230,16 @@ readahead buffer by default", configurable through this variable
 (`docs/src/guide/performance.md:439`). This is a distinct knob from the per-scan
 `io_buffer_size` in the "Tuning remote scans" block, and it is the one that dominates memory
 during a large index build.
+
+**Blob v2 materialization got a byte budget** (PR #8919, beta.10), wired through the new
+`FilteredReadOptions.materialization_readahead_bytes` (proto field 13). It is "a nonzero upper
+bound on bytes reserved by Blob v2 materialization awaiting ordered emission in one scanner
+execution"; admission follows output order and "one oversized output batch may exceed the bound
+when no other batch is reserved". **If absent, Blob v2 materialization has no independent memory
+bound** - which is the state you are in by default, so set it before scanning wide blob columns.
+A sibling field 14, `batch_size_bytes`, gives the file reader a byte-based batch boundary
+alongside the row-based `batch_size` (PR #8933, also carried through distributed
+`FilteredReadOptions`).
 
 **MemWAL memory accounting was wrong in a way that matters for sizing** (PR #7831).
 `MemTable::estimated_size` counts buffered batches plus the PK bloom filter - "every in-memory
@@ -330,6 +346,16 @@ round trips.
 - **Never commit per item.** A benchmark that committed once per logical unit produced
   3.3 GB of store for 40k tiny rows in ~20 min (manifest churn); the same work batched at
   ~100 units per commit was 17 MB in 1.6 s.
+- **When batching is not enough, coalesce the commits themselves.** Lance has a public primitive
+  for this that the docs barely surface: write N batches with
+  `InsertBuilder::execute_uncommitted()` (`rust/lance/src/dataset/write/insert.rs:133`), which
+  writes data files and returns a `Transaction` **without** committing, then publish them all with
+  one `CommitBuilder::execute_batch(Vec<Transaction>)`
+  (`rust/lance/src/dataset/write/commit.rs:560`) for a single manifest bump. The data-file writes
+  can be fanned out concurrently; only the final commit is serialized. **Append-only for now** -
+  the API's own warning reads "Only works for append transactions right now. Other kinds of
+  transactions will be supported in the future." This is the right shape for a micro-batching
+  ingest daemon, where commit count is the binding constraint.
 - **Skip no-op merges.** A `merge_insert` where every row matches with
   `WhenMatched::DoNothing` still commits a new (empty) version. Pre-filter to genuinely
   new keys and skip the merge entirely when the set is empty.
@@ -420,12 +446,36 @@ analogue on object storage. Mechanism, verified at `v11.0.0-beta.2`:
   Folding FTS + vector indexes on each 5-minute sync cost 15-445 s of the sync; deferring
   folds until the unindexed tail reaches ~5,000 rows cut a 80-524 s sync to ~44 s. The
   deferred tail costs only ~50-350 ms extra per query (see next point).
+- **A remote fold is close to fixed-cost per pass, not proportional to the delta.** Measured on
+  S3-compatible storage, folding a delta of **~200 rows took ~346 s**; the same fold against a
+  local store took **2-4 s for a delta of 424k rows**. The dominant cost is neither transfer nor
+  verification but the index fold itself on the remote - roughly the same ~100x object-store
+  penalty that shows up everywhere else in this document, and essentially a floor you pay to push
+  even one new row. This is what makes a row-count threshold non-optional remotely: the amortized
+  cost per row falls almost linearly with how much you batch behind it, so the threshold should be
+  tuned against fold *frequency*, not against how stale the tail is allowed to get.
 - **An unindexed tail is a latency concern, not a correctness one - if `fast_search` is
   off.** Lance answers FTS and vector queries as a union of the index scan and a flat
   scan of unindexed fragments. `fast_search` skips that flat arm, silently dropping the
   newest rows from results. Only enable it when no unindexed tail exists, and keep a
   tail-recall regression test. On v11, an unindexed tail additionally disqualifies the
   posting-backed compound FTS scorer (section 11.3), so it costs plan quality too.
+- **Know exactly what the flat arm does, because it bounds your commit cadence.** Read the
+  branch at `rust/lance/src/dataset/scanner.rs:5662-5680` (`v12.0.0-beta.15`). It scans **every**
+  unindexed fragment, and two properties make that cost scale badly. First, the filter is applied
+  as a post-scan `LanceFilterExec` over the scanned rows rather than through scalar indexes - the
+  code says so outright: "we could try and use the scalar indices here to reduce the scope of this
+  scan but the most common case is that fragments newer than the vector index are also newer than
+  the scalar indices." Second, **limit/offset is not pushed down** - "Can't pushdown limit/offset
+  in an ANN search" - so a `k` of 10 does not shrink the scan. A selective filter therefore does
+  not save you here the way it does on the indexed arm.
+
+  The practical consequence: every commit adds at least one fragment, and every fragment stays on
+  this arm until the next `optimize_indices`. Query cost grows roughly linearly with **commits
+  since the last fold**, not with rows. A one-second ingest cadence against hourly folds means
+  thousands of fragments flat-scanned per query. For a frequent-append workload this - not commit
+  throughput - is usually the first thing to fall over, and the fix is fold frequency, not a
+  bigger machine.
 - **Measuring the backlog: there is no `count_unindexed_rows()`.** The supported API is
   `Dataset::unindexed_fragments(idx_name)` on the `DatasetIndexInternalExt` trait
   (`rust/lance/src/index.rs:2548`) - public, but carrying "Internal use only. No API stability
@@ -444,6 +494,13 @@ analogue on object storage. Mechanism, verified at `v11.0.0-beta.2`:
   versions), not O(delta): it consumed 8.8 s (58%) of a 200-row incremental sync and gets
   slower as versions pile up. Gating it on `dataset.version_id() % N` cut cleanup walks
   by ~87% with no behavior change.
+- **Cleanup does not have to run on the write path at all.** The official guide documents an
+  off-write-path alternative under "Other cleanup strategies"
+  (`references/docs/guide/read_and_write.md`): drive cleanup from an external scheduler rather
+  than from the writer. The tradeoff is stated plainly - it "keeps cleanup off the write path
+  entirely, avoiding any impact to write latency, but requires setting up and maintaining
+  additional infrastructure." For a latency-sensitive ingest path where the Nth-commit gate still
+  shows up in tail latency, this is the next move.
 - **"Pending cleanup" bytes are the retention window, not bloat.** Versions younger than the
   retention window are pinned by design, so an optimize pass over a young store legitimately
   reclaims zero. Know your actual window before calling it a leak: Python's
@@ -575,10 +632,20 @@ analogue on object storage. Mechanism, verified at `v11.0.0-beta.2`:
 
 ## Read path and query shaping
 
+- **Freshness is poll-only, and polling is cheaper than it looks.** There is **no `subscribe`,
+  `watch`, or version-notification API anywhere in the workspace** at `v12.0.0-beta.15` - a reader
+  that must see new commits polls, full stop. The good news is the cost model:
+  `Dataset::checkout_latest()` (`rust/lance/src/dataset.rs:556`) on an **unchanged** version costs
+  a single list/head and does **not** re-read the manifest body, so a ~100 ms poll interval is
+  affordable even remotely; you only pay manifest decode when the version actually moved. Budget
+  for the changed case, not the steady state. The only alternatives are in-process
+  `lance::dataset_events` tracing (same process only) and MemWAL's `WalTailer` (cross-process, but
+  only for MemWAL tables - and see the parallel-stack caveat in section 10).
+
 - **A latent timezone smell in scalar-index coercion - worth knowing, not currently a bug.**
   `safe_coerce_scalar`'s same-unit arm is
   `DataType::Timestamp(TimeUnit::Microsecond, _) => Some(value.clone())`
-  (`rust/lance-datafusion/src/expr.rs:311`, unchanged at `v12.0.0-beta.6`): when the literal's
+  (`rust/lance-datafusion/src/expr.rs:311`, unchanged at `v12.0.0-beta.15`): when the literal's
   time unit already matches the column's, it returns the literal **unchanged, discarding the
   target timezone**. The other-unit branches clone the timezone correctly. At the pinned
   `datafusion-common` 54.x this is harmless - `ScalarValue::partial_cmp` for two same-unit
@@ -711,7 +778,7 @@ not in release notes:
   ship a final (2026-08-08, on `release/v10.0`) - note that finals are cut on `release/vX.Y`
   branches, so "not an ancestor of `main`" is normal and not a sign the release is unofficial.
   "Upgrade to the latest major" is still not a valid plan without checking which majors actually
-  have finals - as of `v12.0.0-beta.6` that is `v11.0.0` and below.
+  have finals - as of `v12.0.0-beta.15` that is `v11.0.0` and below.
 - **v11 changes fragment-id semantics** (PR #8206). Overwrite no longer restarts ids at 0, and
   any commit producing duplicate ids is now rejected. Two audit items on a bump: code that reads
   a fragment by a hardcoded id after an overwrite, and any dataset written by Lance 0.16 or

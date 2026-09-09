@@ -14,7 +14,7 @@ files, in `performance.md`, and in `SKILL.md`) use the original 16-section numbe
 Each file keeps the original section headings and its own table of contents.
 
 Citations are `path:line` relative to the repo root. Build a permalink as
-`https://github.com/lance-format/lance/blob/v12.0.0-beta.6/<path>`. Line numbers drift
+`https://github.com/lance-format/lance/blob/v12.0.0-beta.15/<path>`. Line numbers drift
 between tags; treat them as approximate. The authoritative in-repo sources are the format
 spec under `docs/src/format/`, the user guide under `docs/src/guide/`, the protobuf schemas
 under `protos/`, and the Rust workspace under `rust/`.

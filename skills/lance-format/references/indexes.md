@@ -1,8 +1,8 @@
 # Lance v12 reference - indexes and distributed builds (sections 11-12)
 
-Part of the Lance v12 reference (`lance-format/lance@v12.0.0-beta.6`). Citations are `path:line`
+Part of the Lance v12 reference (`lance-format/lance@v12.0.0-beta.15`). Citations are `path:line`
 relative to the repo root; build a permalink as
-`https://github.com/lance-format/lance/blob/v12.0.0-beta.6/<path>`. Line numbers drift between
+`https://github.com/lance-format/lance/blob/v12.0.0-beta.15/<path>`. Line numbers drift between
 tags - treat them as approximate. Cross-references written as "section N" use the original
 16-section numbering; `lance-reference.md` maps every number to its file.
 
@@ -50,6 +50,22 @@ The declaration is ahead of the storage: "No index builder writes carried values
 every declaration is ahead of its storage." Treat this as capability-in-place, not a speedup you
 can use. The wire change itself is additive.
 
+**The fence is deliberately not permanent, which is why the flag costs nothing today.** Bit 128
+is set only while some index actually carries values:
+
+```rust
+if final_indices.iter().any(|index| !index.covering_fields.is_empty()) {
+    manifest.reader_feature_flags |= FLAG_COVERED_INDEX_METADATA;
+    manifest.writer_feature_flags |= FLAG_COVERED_INDEX_METADATA;
+}
+```
+
+(`rust/lance-table/src/transaction/manifest_build.rs:1323-1329`.) Upstream un-sets it rather than
+inheriting it, precisely so the fence lifts again: "fence by simply not setting it again.
+Inheriting it from the previous manifest instead would make the fence permanent." The practical
+consequence is that because no builder writes `covering_fields`, the bit is never set in normal
+operation - so v11/v12-written datasets stay openable by older builds despite the flag existing.
+
 ### 11.1 Vector indexes
 
 Every vector index has **three orthogonal parts: clustering, sub-index, quantization**, named
@@ -78,7 +94,7 @@ SIMD kernels in `lance-linalg`; the `fp16kernels` feature compiles C SIMD kernel
 | FLAT | `dimension * 4` | 1x (exact) |
 | SQ (8-bit) | `dimension` | ~4x |
 | PQ | `num_sub_vectors` (one uint8 code per sub-vector) | ~`(dimension*4)/m` |
-| RQ (RaBitQ, `num_bits` bits/dim) | `ceil(dimension * num_bits / 8)` + correction factors | ~32x at 1 bit |
+| RQ (RaBitQ, `num_bits` bits/dim) | `ceil(dimension * num_bits / 8)` + correction factors | ~32x at 1 bit; ~6.5x at the 5-bit default |
 
 **IVF_RQ requires the vector dimension to be divisible by 8** - enforced with the error
 "vector dimension must be divisible by 8 for IVF_RQ" (`rust/lance-index/src/vector/bq/builder.rs`).
@@ -101,10 +117,33 @@ A new `query_estimator` metadata field selects the distance-estimator layout: "`
 or `raw_query`. Missing values are read as `residual_query` for compatibility with released
 1-bit IVF_RQ indexes" (`index.md:258`); raw-query search (PR #7078) adds an `__error_factors`
 column "for raw-query lower-bound pruning" (`index.md:201`). The metadata schema also carries
-`code_dim` (u32, the rotated-vector dimension). Per-row storage is `dimension/8 + 16` bytes
-(8 for the row ID + 8 for the factors) **only at `num_bits=1`**
-(`docs/src/guide/performance.md:416`); multi-bit adds the `__blocked_ex_codes` and ex-factor
-columns.
+`code_dim` (u32, the rotated-vector dimension).
+
+**`num_bits` now defaults to 5, not 1** (#8936, `v12.0.0-beta.12`) - the PR carries a
+conventional-commit `!` but no `breaking-change` label, so the release bot did not count it.
+`RABIT_DEFAULT_NUM_BITS: u8 = 5` (`rust/lance-index/src/vector/bq.rs`) drives both
+`RQBuildParams::default` and `RabitBuildParams::default`, and the Python `build_rq_model` stub
+default moved with it. Per-row storage (`docs/src/guide/performance.md:483-501`):
+
+- 1-bit: `dimension / 8 + 20` bytes
+- Multi-bit: `dimension / 8 + round_up(dimension, 64) * (num_bits - 1) / 8 + 28` bytes
+
+"Every bit width stores a 1-bit sign code plus three 4-byte correction factors." Multi-bit adds
+the `__blocked_ex_codes` and ex-factor columns on top of the sign code.
+
+**Budget for a ~4.4x jump if you relied on the default.** Upstream's own worked example moved
+from `100M * (768 / 8 + 16) = ~10.8 GiB` to
+`100M * (768 / 8 + 768 * 4 / 8 + 28) = ~47.3 GiB`. The escape hatch is explicit and documented:
+"`Fast` search mode uses only the 1-bit sign code even when the index stores additional bits. Set
+`num_bits=1` explicitly to minimize index size and build I/O; the same 100M-row example uses about
+10.8 GiB, but searches cannot use the multi-bit distance estimate and may have lower recall."
+So `Fast` mode gains nothing from the wider default while paying its full storage cost.
+
+**A separate multi-bit correctness fix landed at beta.15**: RaBitQ FastScan above 1024 rotated
+dimensions overflowed its accumulator (#8842) - "the scalar path saturates and the AVX2/AVX-512/NEON
+kernels wrap, so a distance becomes `true_sum % 65536` and the ranking collapses. At rotated dim
+4096 a full-range sum reaches 261120, four times the ceiling." Query-time only, so it heals on
+upgrade - but any recall figure measured on an affected index before the fix is invalid.
 
 **bfloat16 is not usable for vector indexes**, despite the docs recommending it as an embedding
 type directly above an IVF_PQ `create_index` example (`docs/src/guide/data_types.md:406`). The
@@ -262,6 +301,12 @@ As of v9.1, both **ZONEMAP and BLOOM_FILTER carry a `null_bitmap`** (a serialize
 finding NULLs is a common query pattern, the index also maintains a bitmap of null rows which
 allows it to return exact results for IS NULL queries" (`docs/src/format/index/scalar/bloom_filter.md`,
 `.../zonemap.md`). Other predicates on these indexes stay inexact/`AtMost`.
+
+**For SBBF internals, read the spec page directly.** `references/docs/format/index/scalar/bloom_filter.md`
+carries the block structure ("The SBBF divides the bit array into blocks of 256 bits, where each
+block consists of 8 contiguous 32-bit words"), the 8 salt constants, and the binary-search sizing
+algorithm behind the FPP figure. None of that is restated here - go to the mirror when you need to
+reimplement or validate a filter rather than just use one.
 
 **In v11 that capability became wire-explicit and grew a second half** (PR #8088). The zone-map
 details proto gained `optional bool has_null_bitmap = 3` (`protos/index_old.proto:44`),
@@ -628,6 +673,14 @@ stop `unindexed_fragments(<idx>)` from reporting the new fragments, so a "is my 
 check built on that call will still see churn after every compaction. The FRI removes the cost of
 *rewriting* index entries, not the bookkeeping that says an index does not cover a fragment.
 
+**The FRI has an operational cost model the spec page states and this file does not restate.**
+`references/docs/format/index/system/frag_reuse.md` covers index *load* cost (every reader pays
+remap work proportional to the accumulated reuse versions) and the growth/cleanup duty: "Once all
+scalar and vector indices have been rebuilt past a given reuse version, that version is no longer
+needed and can be trimmed. Users should schedule a periodic process to trim stale reuse"
+versions. An FRI left untrimmed is a slow, silent tax on open - read that page before running
+compaction continuously.
+
 ---
 
 ## 12. Distributed write and indexing
@@ -665,6 +718,13 @@ size-based grouping) was **removed in v8** from Rust, Python, and Java (PR #6997
 `execute_uncommitted` path above. Distributed BTree and bitmap builds were folded into this
 same framework (PR #7013, #6869) - the old Python Bitmap shard path
 (`create_scalar_index(..., fragment_ids=)` + `merge_index_metadata(..., "BITMAP")`) is gone.
+
+**Segment grouping is a separate decision from worker build, and it is yours to make.** The guide
+is explicit that the two are not the same knob: "The grouping decision is separate from worker
+build. Workers only build segments; Lance applies the segment build policy when it plans physical
+segments." Grouping sets commit granularity - how many logical builds land per physical segment -
+so it drives both commit count and later merge cost. Full treatment in
+`references/docs/guide/distributed_indexing.md` ("Segment Grouping").
 
 **v10 extends the segment lifecycle to the rest of the scalar family.** BLOOMFILTER (PR #7925),
 RTREE (PR #7932), NGRAM (PR #7244), and LABEL_LIST (PR #7884) all gained segment-native

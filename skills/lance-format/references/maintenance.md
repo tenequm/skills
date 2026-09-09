@@ -1,7 +1,7 @@
 # Maintaining this skill
 
 Citations across the reference files are `path:line` relative to the `lance-format/lance` repo;
-build a permalink as `https://github.com/lance-format/lance/blob/v12.0.0-beta.6/<path>`. Line
+build a permalink as `https://github.com/lance-format/lance/blob/v12.0.0-beta.15/<path>`. Line
 numbers drift between tags - treat them as approximate.
 
 To refresh: `git -C <your lance-format/lance clone> fetch --tags`, then read the newest tag (the
@@ -9,8 +9,16 @@ major may have jumped again - the release train re-roots on any `breaking-change
 has now fired on **three consecutive lines**, so sort tags by date rather than assuming the
 current major, and do not assume an intermediate `.1` line ever got a final or even a beta tag).
 
-Two traps worth knowing before you start:
+Three traps worth knowing before you start:
 
+- **The `breaking-change` label is a floor, not a ceiling.** It drives the release bot, so it is
+  the right query for "did the major re-root" - but it does **not** enumerate what will break a
+  consumer. The `v12.0.0-beta.6 -> beta.15` range is the worked example: exactly two labeled PRs,
+  while the two changes most likely to bite (`stable` resolving to 2.2, #8657; the IVF_RQ 5-bit
+  default, #8936) carried a conventional-commit `!` and no label. **Always also scan the range for
+  `!` commits** (`git log --oneline <a>..<b> | grep '!'`) and diff the defaults you already
+  document - version enums, `*_DEFAULT_*` consts, and the sizing formulas in
+  `docs/src/guide/performance.md`.
 - **A final is not on `main`.** Finals are cut on stabilization branches, so
   `git merge-base --is-ancestor <final> main` returns false for a perfectly official release.
   Check GitHub Releases / crates.io / PyPI to identify the stable pin, not ancestry.

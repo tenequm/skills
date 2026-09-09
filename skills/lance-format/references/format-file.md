@@ -1,8 +1,8 @@
 # Lance v12 reference - file format (sections 1-4)
 
-Part of the Lance v12 reference (`lance-format/lance@v12.0.0-beta.6`). Citations are `path:line`
+Part of the Lance v12 reference (`lance-format/lance@v12.0.0-beta.15`). Citations are `path:line`
 relative to the repo root; build a permalink as
-`https://github.com/lance-format/lance/blob/v12.0.0-beta.6/<path>`. Line numbers drift between
+`https://github.com/lance-format/lance/blob/v12.0.0-beta.15/<path>`. Line numbers drift between
 tags - treat them as approximate. Cross-references written as "section N" use the original
 16-section numbering; `lance-reference.md` maps every number to its file.
 
@@ -54,7 +54,7 @@ code. The format itself is the product - there is no server.
 
 ## 2. The crate workspace
 
-26 crate directories under `rust/`. `[workspace.package]`: `version = "11.0.0-beta.2"`,
+26 crate directories under `rust/`. `[workspace.package]`: `version = "12.0.0-beta.15"`,
 `edition = "2024"`, `rust-version = "1.91.0"` (MSRV; the pinned build toolchain in
 `rust-toolchain.toml` is `1.97.0`, PR #7712), `license = "Apache-2.0"`,
 `resolver = "3"` (`Cargo.toml:32-56`). `exclude = ["python", "java/lance-jni"]`. The crate set
@@ -98,17 +98,22 @@ path dependency rather than an explicit member.
 **Bindings.** Python: package `pylance` (`python/pyproject.toml`), built with maturin, imported
 as `lance`; the Rust extension crate is `pylance` (`[lib] name = "lance"`); supports Python
 **3.10-3.14** (3.9 dropped in v9, PR #7345, breaking; PyO3 abi3 floor raised to `abi3-py310`);
-runtime deps `pyarrow>=14`, `numpy>=1.22`, `lance-namespace>=0.8.5,<0.9`. Java: an
+runtime deps `pyarrow>=14`, `numpy>=1.22`, `lance-namespace>=0.11.1,<0.12`. Java: an
 SDK under `java/` (Maven `org.lance`), bridged to Rust by the `lance-jni` crate
 (`java/lance-jni/`, excluded from the Rust workspace). Notable workspace deps at this tag
 (`Cargo.toml`): `arrow 58.0.0` (`:85`), `datafusion 54.0.0` (`:132`), `geodatafusion 0.5.0`,
-**`opendal 0.58.1`** (`:178`, was `0.57` at v10 - PR #7823), `object_store 0.13.2` (`:177`),
-`object_store_opendal 0.58` (`:179`), `jieba-rs 0.10` (`:166`), `itertools 0.14` (`:165`),
-`lance-namespace-reqwest-client 0.8.6` (`:77`), and `blake3 1.8.5` (`:113`, backing the
-cache-key digest, section 9.4). The `lance-namespace`/`-impls` crates publish at the workspace
-version (`11.0.0-beta.2`); note the `[workspace.dependencies]` declaration still pins
-`lance-namespace-datafusion` consumers to `=7.0.0-beta.9` even though that crate itself
-publishes at the workspace version.
+**`opendal 0.58.1`** (`:180`, was `0.57` at v10 - PR #7823), `object_store 0.13.2` (`:179`),
+`object_store_opendal 0.58` (`:181`), `jieba-rs 0.10` (`:166`), `itertools 0.14` (`:165`),
+`lance-namespace-reqwest-client 0.12.0` (`:76`, bumped from 0.11.1 by #8915), and
+`blake3 1.8.5` (`:113`, backing the cache-key digest, section 9.4). The
+`lance-namespace`/`-impls` crates publish at the workspace version (`12.0.0-beta.15`).
+
+**The `lance-namespace` version is no longer a single number.** #8915 moved the *Rust* client to
+`0.12.0` while the Java pin (`java/pom.xml:113,118`, `0.11.1`) and the Python pin
+(`python/pyproject.toml:4`, `lance-namespace>=0.11.1,<0.12`) deliberately stay on 0.11: "The Java
+and Python `lance-namespace` pins stay on 0.11, so their generated models still send `on` as a
+bare string and rely on the promotion described above." Quote a language-specific pin, not one
+number for all three.
 
 **Dependency deltas in the v11 range.** Only five non-version-bump lines changed in the root
 `Cargo.toml`: `opendal`/`object_store_opendal` 0.57 -> 0.58.1/0.58, and **`strum 0.26` plus
@@ -158,7 +163,7 @@ instead of panicking or yielding garbage - a file that previously "read" may now
 **Published vs tagged.** crates.io carries only final releases - `lance 9.0.1` (2026-08-06) is
 the newest, preceded that same day by the sibling patch finals 8.0.1, 7.1.0, 6.1.0, 4.0.2, and
 3.0.2. **No 10.x or 11.x version, and no pre-release of any kind, is published.** Beta and rc
-tags exist in git only (beta artifacts go to fury.io), so building against `v12.0.0-beta.6`
+tags exist in git only (beta artifacts go to fury.io), so building against `v12.0.0-beta.15`
 means a git dependency, not a registry one.
 
 **Building.** Five workspace crates carry a protobuf build script - `lance-encoding`,
@@ -181,18 +186,37 @@ The footer stores `u16` major and `u16` minor (`protos/file2.proto:90-91`).
 |---------|-----------|--------|-------------|
 | `0.1` (`legacy`) | any | read-only, no longer writable | Initial Lance format |
 | `2.0` | 0.16.0 | stable | Removed row groups; null support for lists, fixed-size lists, primitives |
-| `2.1` | 0.38.1 | **current default** | Adaptive structural encodings; better integer/string compression; nulls in struct fields; better nested random access |
-| `2.2` | - | unstable | Map type, Blob v2, `VariablePackedStruct`, larger mini-blocks; encodings may still change. The real experimental frontier |
+| `2.1` | 0.38.1 | previous default | Adaptive structural encodings; better integer/string compression; nulls in struct fields; better nested random access |
+| `2.2` | - | **current default** (`stable`) | Map type, Blob v2, `VariablePackedStruct`, larger mini-blocks |
 | `2.3` | - | unstable (`next`) | The current `next` alias target. Ships **sparse structural pages** (PR #7889) - the first 2.3-specific encoding; **auto-selected** by the 2.3 writer under a budget heuristic (PR #7756), or forced via `lance-encoding:structural-encoding=sparse` |
 
-`stable` resolves to the default (2.1); `next` resolves to the latest unstable version. The
-enum order is `Legacy < 2.0 < 2.1 (#[default]) < Stable < 2.2 < Next < 2.3`, with
-`Stable => 2.1` and `Next => 2.3`, and `is_unstable() = self >= Next`
-(`rust/lance-file/src/version.rs:25-54` - the module **moved out of `lance-encoding` in v11**,
-PR #8026, with no re-export). No 2.4 or new variant exists at this tag. Two consequences that
-surprise readers: (1)
-**`next` now resolves to 2.3, not 2.2** - writing with `next` produces a 2.3 file; (2)
-because 2.2 sits *below* `Next` in the ladder, the code does **not** flag 2.2 as unstable.
+`stable` resolves to **2.2** as of `v12.0.0-beta.15` (#8657); `next` resolves to the latest
+unstable version. The enum declaration order is
+`Legacy, V2_0, V2_1, Stable, V2_2 (#[default]), Next, V2_3`, with `Stable => 2.2` and
+`Next => 2.3` (`rust/lance-file/src/version.rs:18-45` - the module **moved out of
+`lance-encoding` in v11**, PR #8026, with no re-export). No 2.4 or new variant exists at this
+tag.
+
+`#[default]` moved from `V2_1` to `V2_2` in the same PR, and the default reaches new datasets
+through `impl Default for DataStorageFormat { fn default() -> Self { Self::new(stable_file_version()) } }`
+(`rust/lance-table/src/format/manifest.rs:677-680`). Upstream's framing was that the code lagged
+the intent: "Lance 2.2 is the current stable file format, but the centralized release policy and
+enum default still resolve new datasets to 2.1." The docs were **not** updated with the change -
+`docs/src/format/file/versioning.md` is byte-identical across the range and still describes
+`stable` only as an "Alias for the default version for new datasets in the Lance release you are
+running", so read the code, not the table, for what `stable` means at a given tag.
+
+Two consequences that surprise readers: (1) **`next` resolves to 2.3, not 2.2** - writing with
+`next` produces a 2.3 file; (2) the code does **not** flag 2.2 as unstable, and now writes it by
+default.
+
+**`is_unstable()` is not an ordering comparison.** An earlier form of this note read
+`is_unstable() = self >= Next`, which describes no recent tag and could not compile:
+`LanceFileVersion` derives only `Debug, Default, Clone, Copy, PartialEq, Eq` - it lost
+`PartialOrd`/`Ord` in #8027/#8028. The selector delegates
+(`pub const fn is_unstable(self) -> bool { self.resolve().is_unstable() }`, `version.rs:71-74`)
+and the concrete version matches exactly
+(`pub const fn is_unstable(self) -> bool { matches!(self, Self::V2_3) }`, `version.rs:147-150`).
 As of v9 the docs version table (`docs/src/format/file/versioning.md:18-27`) agrees: it lists
 `2.3 (unstable)` and no longer labels 2.2 unstable (2.2 now reads "Adds support for newer
 nested type/encoding capabilities (including map support) and 2.2-era storage features"). As
@@ -320,6 +344,19 @@ empty; `size==0 && position!=0` = null. Recommended only when one IOP per value 
 **Blob v2** (`lance.blob.v2` extension type) is the path for file format >=2.2; for >=2.2 the
 legacy `lance-encoding:blob` metadata is rejected on write (`docs/src/guide/blob.md:45-52`).
 
+**The logical Arrow schema became documented contract in v12** (#8929, `v12.0.0-beta.11`).
+"A blob v2 field is tagged with `ARROW:extension:name = "lance.blob.v2"`", and writers accept
+two logical struct shapes - Minimal and Complete (`blob.md:68-71`). The row-level invariants are
+now spelled out: "Every non-null row must set exactly one of `data` and `uri`. For the complete
+shape, `position` and `size` must either both be set or both be null, a range requires `uri`, and
+an explicit range must have `size > 0`" (`blob.md:78-81`).
+
+The guarantee that matters for round-tripping is preservation: "Lance preserves an accepted
+logical shape, including child fields, nullability, and metadata, across create, append, and
+merge-insert writes; descriptor scans still return the compact stored descriptor shape"
+(`blob.md:83-85`). So the shape you write is the shape you read back - except through a
+descriptor scan, which always yields the compact stored form.
+
 **Four read paths** (`docs/src/guide/blob.md:6-7,177-188`). `read_blobs` is the **primary** API -
 "For data loaders and batch processing that need complete byte payloads, use `read_blobs`" - it
 returns `List[Tuple[int, Optional[bytes]]]` (`(row_address, payload)`) and "plans and executes
@@ -327,8 +364,8 @@ batched blob reads through Lance's scheduler." `take_blobs` returns lazy `BlobFi
 streaming/seeking/partial reads (`with blob as f: f.read()`) - "Do not wrap `take_blobs` in your
 own thread pool just to call `read()` ... Use `read_blobs` instead." **`read_blob_ranges`**
 (v10) returns `List[Tuple[int, int, Optional[bytes]]]` for "selected byte ranges from multiple
-rows without materializing complete blobs" (`blob.md:178`) and "accepts the same selector kinds
-through its required `selector` argument" (`blob.md:187-188`).
+rows without materializing complete blobs" (`blob.md:197`) and "accepts the same selector kinds
+through its required `selector` argument" (`blob.md:206-207`).
 `scanner(..., blob_handling="all_binary")` reads blob columns as Arrow binary columns in a scan
 / `pyarrow.Table`; `LanceTableProvider::with_blob_handling` is the DataFusion-side equivalent
 (v10). The selector-taking APIs take **exactly one** of `ids` (logical row-id), `indices`
@@ -338,7 +375,7 @@ and null - enabling many payloads packed into one container file referenced by
 `(position, size)` slices.
 
 **Blob v2 fields nest** (v11): "Blob v2 fields can be nested inside structs and variable-length
-lists. Blob-aware scans preserve the surrounding nested layout" (`docs/src/guide/blob.md:118-119`).
+lists. Blob-aware scans preserve the surrounding nested layout" (`docs/src/guide/blob.md:137-138`).
 v11 also taught `FileFragment::update_columns` to handle blob-v2 columns via their descriptor
 representation (#8344), and added `BlobFile.read_ranges(ranges) -> list[bytes]` (#8319) for
 vectored reads - "The underlying physical reads may be reordered, coalesced, or split for
@@ -348,7 +385,7 @@ efficiency."
 the major bump. "Blob selection APIs preserve logical result cardinality. `read_blobs()` and
 `take_blobs()` return one element per selected row, and `read_blob_ranges()` returns one element
 per request. A null blob is returned as `None`; a valid empty blob remains a non-null empty
-payload or zero-length `BlobFile`" (`docs/src/guide/blob.md:228-231`). Previously null blobs were
+payload or zero-length `BlobFile`" (`docs/src/guide/blob.md:247-250`). Previously null blobs were
 **omitted**, so any caller zipping results positionally against its inputs was silently
 misaligned whenever a null appeared. Signature changes:
 
@@ -366,7 +403,7 @@ surfaces a surviving null as a valid zero-length descriptor (PR #8070) and no lo
 an inline blob with `position=0/size=0` as null (PR #7965); blob selection by stable row ID no
 longer drops deleted/unknown IDs or misattributes bytes to the wrong `request_index` (PR #8003).
 
-**Auto-tiering.** Blob v2 tiers payloads by size (`docs/src/guide/blob.md:354`): "by default it
+**Auto-tiering.** Blob v2 tiers payloads by size (`docs/src/guide/blob.md:373`): "by default it
 keeps payloads under 16 KiB inline, packs mid-sized payloads into shared `.blob` sidecars, and
 gives payloads over 2 MiB their own dedicated `.blob` file." The blob column avoids the
 row-rewrite write amplification that inline binary incurs on compaction/update. The cutoffs are
@@ -455,7 +492,7 @@ representation (`docs/src/guide/data_types.md`).
   projected or grouped.
 - **Blob** (`lance.blob.v2` extension type) - large binary objects, lazy file-like loading
   (section 3.5). Migrating an existing dataset is a rewrite, not an alter: the guide has a
-  dedicated "Rewrite to a New Blob v2 Dataset" procedure (`docs/src/guide/blob.md:358`) plus a
+  dedicated "Rewrite to a New Blob v2 Dataset" procedure (`docs/src/guide/blob.md:377`) plus a
   troubleshooting section (`:404`). Note Blob v2 needs file format **2.2**, while the default is
   2.1 - so a dataset created without an explicit `data_storage_version` cannot take it, and the
   version is fixed at creation.
