@@ -1,6 +1,14 @@
 # golang-migrate Reference
 
-Latest: **v4.19.1** (2025-11-29; still current as of 2026-08). Supports Go 1.24+. MIT license, 18K+ stars.
+Latest: **v4.20.1** (2026-09-09). Built with Go 1.25/1.26. MIT license, 18K+ stars.
+
+**Pin v4.20.1, not v4.20.0.** A release-workflow bug meant v4.20.0 exists as a git tag but never reached Docker or the package registries - "Due to a bug in the release workflow, GoReleaser failed and `v4.20.0` was not published to Docker or other package registries." v4.20.1 is that release redistributed, and carries no other changes.
+
+v4.20.0 is worth upgrading for regardless of the pin mechanics:
+
+- **S3 sources silently truncated at 1000 migrations** - "fix(source/aws_s3): paginate ListObjects to load >1000 migrations".
+- **Quadratic startup cost removed** - "perf(source): build migrations index lazily to avoid quadratic startup".
+- **Security:** the `docker/docker` dependency was swapped for `moby/moby` modules to clear a scanner finding.
 
 ## Installation
 
@@ -14,10 +22,10 @@ brew install golang-migrate
 scoop install migrate
 
 # Pre-built binary
-curl -L https://github.com/golang-migrate/migrate/releases/download/v4.19.1/migrate.linux-amd64.tar.gz | tar xvz
+curl -L https://github.com/golang-migrate/migrate/releases/download/v4.20.1/migrate.linux-amd64.tar.gz | tar xvz
 
 # With Go (specify database driver via build tags)
-go install -tags 'postgres' github.com/golang-migrate/migrate/v4/cmd/migrate@v4.19.1
+go install -tags 'postgres' github.com/golang-migrate/migrate/v4/cmd/migrate@v4.20.1
 
 # Docker
 docker run -v $(pwd)/migrations:/migrations --network host migrate/migrate \
@@ -110,7 +118,7 @@ migrate create -ext sql -dir migrations -seq add_email_column
 - `-lock-timeout N` - seconds to acquire lock (default 15)
 - `-verbose` - verbose logging
 
-Handles `SIGINT` gracefully, stopping at a safe point.
+Handles `SIGINT` gracefully, stopping at a safe point. Programmatically the same guarantee is exposed as a channel - "To help prevent database corruptions, it supports graceful stops via `GracefulStop chan bool`" - and the library takes your own logger via its `Logger` interface ("Bring your own logger.") rather than writing to stdout.
 
 ## Up/Down Migration Patterns
 
@@ -329,6 +337,7 @@ The up-down-up pattern validates both directions work correctly.
 6. **Empty files** - 0-byte migration files cause issues. Add a SQL comment if intentionally empty
 7. **Schema + role name clash** in PostgreSQL - `search_path` causes migrations table duplication. Fix: set `search_path=public` in URL
 8. **Never edit applied migrations** - treat merged migrations as immutable. Create new ones for corrections
+9. **Not every migration is reversible** - upstream's `MIGRATIONS.md` has a "Reversibility of Migrations" section; a destructive `up` (dropping a column, collapsing rows) cannot be undone by a `down` that only restores schema. Say so in a comment rather than shipping a `down` that silently loses data
 
 ## Best Practices
 

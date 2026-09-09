@@ -165,7 +165,11 @@ set minimum-version := "1.58.0"   # Error if `just` is older than this
 set script-interpreter := ["bash", "-euo", "pipefail"]  # Default for [script] recipes
 set fallback := true              # Search parent directories for a recipe
 set no-exit-message := true       # Suppress just's own error line on failure
+set dotenv-command := 'sops -d .enc.env'  # Run a command, load its output as the env file
+set default-script := true        # Recipes default to script mode instead of shell mode
 ```
+
+This is a catalog, not a copy-pasteable header - `dotenv-command` and `dotenv-load` are mutually exclusive, and `just` rejects a file setting both.
 
 `set minimum-version` is worth adding to any Justfile that uses recent attributes: without it, an older `just` fails with a confusing parse error instead of a version message.
 
@@ -248,9 +252,10 @@ fmt:
     golangci-lint fmt ./...
 
 # Check formatting (CI-safe, non-zero exit on diff)
+# Gate with the same tool that fixes - see the two-formatter footgun in SKILL.md
 [group('quality')]
 fmt-check:
-    gofumpt -d . 2>&1 | (! grep -q '^') || (gofumpt -l . && exit 1)
+    golangci-lint fmt --diff ./...
 
 # Run linter
 [group('quality')]
@@ -449,6 +454,29 @@ just --jobs 4          # Cap parallelism for [parallel] dependencies
 
 `just --fmt --check` is a natural addition to the `check` recipe - "Run `--fmt` in 'check' mode. Exits with 0 if justfile is formatted correctly."
 
+## Go Tooling Traps in Recipes
+
+Three ways a recipe that reads correctly still fails:
+
+**`go tool` is scoped to the current directory's module.** Per `go help tool`, "additional tools may be defined in the go.mod of the current module" - so in a monorepo, a recipe invoked from the repo root fails with `go: no such tool "golangci-lint"` even though the tool is tracked in the submodule. Pin the directory on the recipe:
+
+```just
+[group('quality')]
+[working-directory('services/api')]
+lint:
+    go tool golangci-lint run ./...
+```
+
+**A version-manager shim is a fourth install path**, alongside binary, Homebrew, and `go install`. If a tool is on PATH via mise, asdf, or similar and no version is pinned for the project, the recipe fails inside the shim rather than in the tool - `mise ERROR No version is set for shim: golangci-lint` - which reads like a Justfile bug. Pin the tool version in the version manager's config, or call an absolute path.
+
+**`GOFLAGS=-trimpath` lets worktrees share one warm cache.** `-trimpath` "remove[s] all file system paths from the resulting executable", which also makes the build and test cache keys path-independent. Without it, every git worktree recompiles the whole dependency tree (with `-race`, expensively) because its absolute paths differ:
+
+```just
+export GOFLAGS := "-trimpath"
+```
+
+Set it at the top of the Justfile so `build`, `test`, and the linter's own package loading all share cache entries across worktrees.
+
 ## Tips
 
 - Use `set shell := ["bash", "-euo", "pipefail", "-c"]` to catch command failures, undefined variables, and broken pipelines
@@ -457,3 +485,20 @@ just --jobs 4          # Cap parallelism for [parallel] dependencies
 - `set dotenv-load := true` loads `.env` automatically - no separate tooling needed
 - `export PATH` to include `$(go env GOPATH)/bin` so Go-installed tools are always available
 - Prefer `just` over `make` for Go projects: no `.PHONY`, better variable handling, cross-platform, readable syntax
+
+## Beyond the Basics
+
+Surface worth knowing about, none of it needed for the Justfile above:
+
+| Feature | What it does |
+|---------|--------------|
+| Agent skill | just ships its own: "A skill for agents is available in [skills/just] and may be installed manually or with `npx skills add casey/just --global`" |
+| `just-lsp` / `just-mcp` | An LSP server, and an MCP adapter - "just-mcp provides a model context protocol adapter to allow LLMs to query the contents of justfiles and run recipes" |
+| `[cache]` (1.54.0) | "Skip recipe invocations when a matching entry exists in the cache." Currently unstable |
+| `set lists` / `set guards` / `set lazy` | Unstable settings: list-valued variables, the `?` guard sigil, lazy evaluation |
+| Remote and markdown justfiles | Run recipes from a URL, or keep them in fenced code blocks inside a Markdown file |
+| Global / user justfiles | A personal recipe set available from any directory |
+| `--choose` / `--man` / `--dump` | Interactive recipe picker, a generated man page, and a machine-readable dump |
+| `[continue(SIGNALS)]` | "Continue execution normally if a command is interrupted by any of `SIGNALS` and exits successfully. Defaults to `SIGINT`" |
+| User-defined functions (1.47+) | Reusable expression-level helpers, distinct from recipes |
+| `[metadata]`, `[extension]`, `[no-cd]`, `[exit-message]`, `[default]` | Further recipe attributes |

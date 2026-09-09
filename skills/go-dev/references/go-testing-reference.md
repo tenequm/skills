@@ -266,7 +266,7 @@ func TestService(t *testing.T) {
 | Library | Approach | Best For |
 |---------|----------|----------|
 | **go.uber.org/mock** (v0.6.0) | Code gen via `mockgen` | Precise expectations, call ordering |
-| **vektra/mockery** (v3.7.4) | Batch code gen, templates | Large codebases (5-30x faster than sequential mockgen) |
+| **vektra/mockery** (v3.8.0) | Batch code gen, templates | Large codebases (5-30x faster than sequential mockgen) |
 | **matryer/moq** | Function-field based mocks | Lightweight, simple mocks |
 | **testify/mock** | Runtime (no codegen) | Quick mocking without generators |
 | **Hand-written** | Interface implementation | Full control, no dependencies |
@@ -645,5 +645,7 @@ go test -coverpkg=./... ./...          # Cross-package coverage
 go test -artifacts ./...               # Emit an artifact manifest (Go 1.26+)
 go test -outputdir=./out ./...         # Where t.ArtifactDir() writes
 ```
+
+**Go 1.27 annotates the JSON stream.** `go test -json` "now annotates `"Action":"output"` lines with an optional new field `"OutputType"`", distinguishing framework output from a test's own writes. Anything parsing `go test -json` - gotestsum, CI report generators, custom tooling - sees this field appear after a toolchain bump; consumers that validate the schema strictly may need updating.
 
 **A cached green run proves nothing.** `go test` caches results for unchanged packages and replays them, so a passing run may not have executed a single test. When a result matters - before a release, after a dependency bump, when confirming a fix - pass `-count=1` to force real execution. This is why the CI recipes in this skill use it.

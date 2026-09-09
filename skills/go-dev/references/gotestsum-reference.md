@@ -1,6 +1,6 @@
 # gotestsum Reference
 
-Latest: **v1.13.0** (September 2025; still current as of 2026-08). Module: `gotest.tools/gotestsum`. Requires Go 1.24+.
+Latest: **v1.13.0** (September 2025; still current as of 2026-09). Module: `gotest.tools/gotestsum`. Requires Go 1.24+.
 
 A test runner that wraps `go test -json` with readable output, watch mode, JUnit XML, and rerun capabilities.
 
@@ -149,6 +149,18 @@ go test -json -short ./... | gotestsum tool slowest --skip-stmt "testing.Short" 
 echo -n "matrix=" >> $GITHUB_OUTPUT
 go list ./... | gotestsum tool ci-matrix --timing-files ./*.log --partitions 4 >> $GITHUB_OUTPUT
 ```
+
+## Custom Commands with `--raw-command`
+
+`--raw-command` tells gotestsum to run your command verbatim instead of prepending `go test -json`. The contract is strict: "The stdout produced by the script must only contain the `test2json` output, or `gotestsum` will fail." Send anything else to stderr.
+
+This is how you run an already-compiled test binary - useful for cross-compiled or long-lived test binaries you do not want to rebuild:
+
+```bash
+gotestsum --raw-command -- go tool test2json -t -p pkgname ./binary.test -test.v
+```
+
+`-p` supplies the package name that `test2json` cannot infer from a bare binary, and `-t` adds timestamps.
 
 ## Post-Run Commands
 

@@ -1,23 +1,37 @@
 # golangci-lint v2 Reference
 
-Latest: **v2.13.1** (2026-08-20). Requires `version: "2"` in config.
+Latest: **v2.13.2** (2026-08-27). Requires `version: "2"` in config.
 
-**Go version floor:** "golangci-lint supports Go versions lower or equal to the Go version used to compile it." Go 1.27 support arrived in v2.13.0 ("🎉 go1.27 support"), so a Go 1.27 project needs v2.13 or newer - an older pin fails outright rather than degrading. `go install` of v2.13.1 itself requires Go 1.26.
+**Go version floor:** "golangci-lint supports Go versions lower or equal to the Go version used to compile it." Go 1.27 support arrived in v2.13.0 ("🎉 go1.27 support"), so a Go 1.27 project needs v2.13 or newer - an older pin fails outright rather than degrading. `go install` of v2.13.2 itself requires Go 1.26.
 
 ## Installation
 
 ```bash
 # Binary (recommended)
-curl -sSfL https://golangci-lint.run/install.sh | sh -s -- -b $(go env GOPATH)/bin v2.13.1
+curl -sSfL https://golangci-lint.run/install.sh | sh -s -- -b $(go env GOPATH)/bin v2.13.2
 
 # Homebrew
 brew install golangci-lint
 
 # Docker
-docker run --rm -v $(pwd):/app -w /app golangci/golangci-lint:v2.13.1 golangci-lint run
+docker run --rm -v $(pwd):/app -w /app golangci/golangci-lint:v2.13.2 golangci-lint run
+
+# mise (uses the aqua backend, so it fetches the GitHub binary)
+mise use -g golangci-lint@2.13.2
 
 # go install (not recommended - dependency conflicts possible)
-go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.13.1
+go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.13.2
+```
+
+**Upstream recommends binary installation and warns against the tools pattern:** "Using `go install`/`go get`, \"tools pattern\", and `tool` command/directives installations aren't guaranteed to work. We recommend using binary installation." Seven reasons are listed, the load-bearing one for shared repos being that "the dependencies of a tool can modify the dependencies of another tool or your project". There is a blunt "We don't recommend using `go tool`" on top.
+
+If you need it in `go.mod` anyway, isolate it behind a dedicated module file so it cannot perturb your project's graph - "the best approach is to use a dedicated module or module file to isolate golangci-lint from other tools or dependencies":
+
+```bash
+go mod init -modfile=golangci-lint.mod github.com/org/repo/golangci-lint
+go get -tool -modfile=golangci-lint.mod github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.13.2
+go tool -modfile=golangci-lint.mod golangci-lint run
+go get -tool -modfile=golangci-lint.mod github.com/golangci/golangci-lint/v2/cmd/golangci-lint@latest   # update
 ```
 
 ## Commands
@@ -48,7 +62,19 @@ JSON Schema: use the **versioned** URL matching your binary, e.g. `https://golan
 
 `.golangci.reference.yml` in the repo lists every supported option with descriptions and defaults - "There is a `.golangci.reference.yml` file with all supported options, their descriptions, and default values."
 
-**Cache isolation:** golangci-lint honours `GOLANGCI_LINT_CACHE`. Give each git worktree its own value so a deleted branch's cached results cannot resurface as issues in files that no longer exist.
+**Cache isolation:** golangci-lint honours `GOLANGCI_LINT_CACHE`. Give each git worktree its own value so a deleted branch's cached results cannot resurface as issues in files that no longer exist. The cache does not reliably invalidate on config, tool-version, or dependency changes, so if a phantom issue keeps returning, fold those inputs into the cache path rather than clearing by hand each time.
+
+**Cache isolation does not buy you concurrency.** The run lock is a single file in the system temp dir - `filepath.Join(os.TempDir(), "golangci-lint.lock")` - so two runs collide no matter how their caches are separated. A second run retries for five seconds and then exits with `parallel golangci-lint is running`. Two knobs change this:
+
+```yaml
+run:
+  allow-parallel-runners: true   # "Allow multiple parallel golangci-lint instances running." Drops the lock.
+  allow-serial-runners: true     # "Allow multiple golangci-lint instances running, but serialize them around a lock." Waits instead of failing.
+```
+
+Reach for one of them before putting `golangci-lint fmt` and `golangci-lint run` in the same `just` recipe under `[parallel]`, or in concurrent CI steps - otherwise the failure lands on green code and looks like a lint bug.
+
+**Debugging the nolint filter.** When nolintlint claims a live `//nolint` directive is unused, `GL_DEBUG=nolint_filter` prints what the filter actually received - the fastest way to tell a stale cache from a genuinely dead suppression before you delete a real one. Other useful keys: `GL_DEBUG=exec` (the lock file), `pkgcache`, `linters_context`, `enabled_linters`.
 
 ```yaml
 version: "2"  # REQUIRED
@@ -60,6 +86,11 @@ run:
   go: ""                  # Default: from go.mod
   concurrency: 0          # 0 = auto (CPU count)
   relative-path-mode: cfg # cfg | gomod | gitroot | wd
+  issues-exit-code: 1     # Exit code when issues were found
+  modules-download-mode: readonly  # mod | readonly | vendor
+  allow-parallel-runners: false    # Drop the global run lock
+  allow-serial-runners: false      # Queue on the lock instead of failing
+  enable-build-vcs: false          # Default false, which implies `-buildvcs=false`
 
 linters:
   default: standard       # standard | all | none | fast
@@ -110,6 +141,8 @@ output:
       colors: true
   sort-order: [linter, file]
   show-stats: true
+  path-mode: ""           # "abs" shows absolute paths instead of relative ones
+  path-prefix: ""         # Prepended to every reported path
 
 severity:
   default: ""
@@ -351,7 +384,7 @@ Not enabled by default in v2 - you must opt in explicitly.
 
 ## Output Formats
 
-`output.formats.text` is only one of eight. All can be written simultaneously, each to its own path:
+`output.formats.text` is only one of nine. All can be written simultaneously, each to its own path:
 
 ```yaml
 output:
@@ -390,7 +423,7 @@ Linters not bundled with golangci-lint can be compiled into a custom binary. Def
 
 ```yaml
 # .custom-gcl.yml
-version: v2.13.1
+version: v2.13.2
 name: custom-golangci-lint
 destination: ./bin
 plugins:
@@ -399,6 +432,19 @@ plugins:
 ```
 
 The resulting binary reads the same `.golangci.yml` and exposes the plugin's linters alongside the built-in set.
+
+Module plugins are one of two plugin systems. **Go plugins** (`.so` files loaded at runtime, built with `go build -buildmode=plugin`) are the other; they avoid the rebuild step but are fragile across toolchain versions and unsupported on Windows. Prefer module plugins unless you specifically need runtime loading.
+
+## Editor and Shell Integration
+
+Beyond the editor settings below, two integrations are easy to miss:
+
+- **`golangci-lint-langserver`** exposes the linter over LSP for NeoVim, Vim, and Emacs, so findings appear inline without a save-and-run cycle.
+- **`golangci-lint completion`** generates shell completion: "Golangci-lint can generate Bash, fish, PowerShell, and Zsh completion files."
+
+## Other CI Systems
+
+The GitHub Action is the best-supported path, but upstream documents GitLab CI and Buildkite recipes as well. The portable shape is the install script plus a cached `$GOLANGCI_LINT_CACHE`; use the `junit-xml` or `checkstyle` output format to surface findings natively in those systems.
 
 ## Formatters Section (v2)
 
@@ -448,7 +494,7 @@ Key options:
 
 | Option | Default | Description |
 |--------|---------|-------------|
-| `version` | *(optional)* | e.g. `v2.13`, `v2.13.1`, or `latest`. Declared `required: false` in `action.yml` - omit it and the action resolves a default |
+| `version` | *(optional)* | e.g. `v2.13`, `v2.13.2`, or `latest`. Declared `required: false` in `action.yml` - omit it and the action resolves a default |
 | `version-file` | - | Read the version from `.golangci-lint-version` or `.tool-versions` |
 | `install-only` | false | Install the binary without running it |
 | `only-new-issues` | false | Show only new issues on PRs |
@@ -496,4 +542,5 @@ Run `golangci-lint migrate` to auto-convert v1 configs.
 | v2.11.0 | New gosec rules, revive `package-naming` (⚠️ breaking: package checks moved out of `var-naming`) |
 | v2.12.0 | `clickhouselint` linter, `gomodguard_v2` major bump, JSON schema embedded in the binary |
 | v2.13.0 | **Go 1.27 support**; `exhaustruct` deprecated in favour of `exhaustruct_v5`; gofumpt 0.11.0 with granular `extra.*` options; `govet-modernize` 0.49.0 |
-| v2.13.1 | Linter bug fixes (current release) |
+| v2.13.1 | Linter bug fixes |
+| v2.13.2 | Cache-entropy fix; linter deps bumped (`staticcheck` 0.8.1, `iface` 1.5.1, `unparam`); `canonicalheader` moved to a temporary fork. No config-schema change (current release) |

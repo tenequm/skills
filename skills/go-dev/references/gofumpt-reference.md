@@ -1,8 +1,12 @@
 # gofumpt Reference
 
-Latest: **v0.11.0** (July 2026). Based on Go 1.26's gofmt - "Like v0.10.0, this release is based on Go 1.26's gofmt, and requires Go 1.25 or later."
+Latest: **v0.12.0** (2026-09-07). Based on Go 1.27's gofmt - "This release is based on Go 1.27's gofmt, and requires Go 1.26 or later."
 
 gofumpt is a **strict superset of gofmt** - any code formatted by gofumpt produces zero changes when processed by gofmt. It adds 19 opinionated formatting rules on top, plus 3 opt-in extra rules.
+
+**Upgrading to v0.12.0 reformats imports.** Four fixes change output on real code, so expect a one-time diff: a std import carrying a comment is "no longer moved into the top import group, as the comment stayed behind and ended up detached at the bottom of the group"; moving a std import up "no longer leaves an empty line where it used to be"; a copyright header or package doc "no longer makes gofumpt treat a single-line first declaration as multi-line"; and an assignment whose right-hand side is split by a comment "is now left alone".
+
+**golangci-lint lags gofumpt.** golangci-lint v2.13.2 vendors `mvdan.cc/gofumpt v0.11.0`, so `golangci-lint fmt` and a standalone v0.12.0 binary disagree on exactly the cases above. Do not use one as fixer and the other as gate.
 
 ## Installation
 
@@ -40,7 +44,7 @@ cat main.go | gofumpt         # Format from stdin
 - `-e` - report all errors (not just the first 10 on different lines)
 - `-lang` - language version (default: from go.mod)
 - `-modpath` - module path (affects import grouping)
-- `-s` - hidden, always enabled (simplification)
+- `-s` - hidden, always enabled (simplification). Note "the `-r` rewrite flag is removed in favor of `gofmt -r`, and the `-s` flag is hidden as it is always enabled"
 
 **Skipped automatically:** `vendor/`, `testdata/`, generated files (unless given as explicit args). Obeys `ignore` directives in go.mod (Go 1.25+).
 
@@ -133,6 +137,12 @@ let g:go_fmt_command="gopls"
 let g:go_gopls_gofumpt=1
 ```
 
+### govim
+
+```vim
+call govim#config#Set("Gofumpt", 1)
+```
+
 ### Helix
 
 ```toml
@@ -196,31 +206,24 @@ formatters:
   settings:
     gofumpt:
       module-path: github.com/org/project
-      extra-rules: true
-```
-
-Run: `golangci-lint fmt`
-
-Since golangci-lint v2.13.0 (which bundles gofumpt 0.11.0) the extra rules can also be selected individually - "`gofumpt`: from 0.9.2 to 0.11.0 (new options: `extra.group-params`, `extra.clothe-returns`, `extra.balance-calls`)":
-
-```yaml
-formatters:
-  settings:
-    gofumpt:
       extra:
         group-params: true
         clothe-returns: true
         balance-calls: false
 ```
 
-The coarse `extra-rules: true` remains valid and turns on all of them.
+Run: `golangci-lint fmt`
+
+Since golangci-lint v2.13.0 (which bundles gofumpt 0.11.0) the extra rules are selected individually - "`gofumpt`: from 0.9.2 to 0.11.0 (new options: `extra.group-params`, `extra.clothe-returns`, `extra.balance-calls`)".
+
+**`extra-rules: true` is deprecated, and it is not a neutral shorthand.** golangci-lint marks it `# Deprecated: use `extra` instead.` and warns on every run: `` `extra-rules` is deprecated, please use `extra.group-params` instead ``. More importantly it enables *all three* rules, `balance_calls` included - in gofumpt's own code `ExtraRules` calls `Extra.Set("true")`, whose branch sets `GroupParams`, `ClotheReturns` **and** `BalanceCalls`. Since `balance_calls` is the rule gofumpt deliberately demoted as controversial and disabled by default, `extra-rules: true` silently opts you back into it. Use the `extra:` map.
 
 ## Diagnostics
 
 Insert `//gofumpt:diagnose` in any Go file and run gofumpt - it rewrites the comment with version and config info:
 
 ```go
-//gofumpt:diagnose version: v0.11.0 flags: -lang=go1.27 -modpath=github.com/org/project
+//gofumpt:diagnose version: v0.12.0 flags: -lang=go1.27 -modpath=github.com/org/project
 ```
 
 ## Go API
@@ -245,6 +248,7 @@ formatted, err := format.Source(src, format.Options{
 
 | Version | Date | Key Changes |
 |---------|------|-------------|
+| v0.12.0 | Sep 2026 | Based on Go 1.27's gofmt; **requires Go 1.26+**. Four import/blank-line fixes: std imports with comments stay put, no orphan empty line when a std import moves up, copyright headers no longer force a blank line after the first declaration, comment-split assignments left alone |
 | v0.11.0 | Jul 2026 | Multi-line call rule demoted to the `balance_calls` extra rule (disabled by default); stable single-pass output for a lone var next to a single-element var group |
 | v0.10.0 | May 2026 | Based on Go 1.26's gofmt; requires Go 1.25+. **Breaking:** `-extra` takes a comma-separated rule list instead of a boolean. New default rule dropping redundant parentheses |
 | v0.9.2 | Oct 2025 | "Clothe naked returns" moved to `-extra` flag |
