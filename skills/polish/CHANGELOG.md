@@ -7,6 +7,30 @@ and this skill adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.h
 
 ## [Unreleased]
 
+## [3.0.0] - 2026-09-09
+
+### Added
+
+- PR mode. The argument now also accepts a GitHub PR - a URL, a bare number, or a description
+  ("the PR for this branch") - resolved with `gh`, checked out in place or cloned to a temp dir.
+  Absorbs the `review-github-pr` skill, which is removed from this repo; the review core (Phases
+  2-5) is shared, so the PR path no longer lags behind polish's improvements.
+- Phase 6 (review mode): posts one review through the reviews API with every anchored finding as
+  an inline comment, after the user confirms a recommended action.
+- Rules: convention findings must cite a specific existing example; review-mode findings are framed
+  as questions, and `(pre-existing)` / `(out of diff)` findings never drive the recommended action.
+
+### Changed
+
+- Fix mode vs review mode is decided once in Setup, from the argument and PR authorship (your PR
+  defaults to fix, someone else's to review; an explicit `fix`/`review` overrides), and is never
+  re-derived from repository state later - the modes disagree on whether the tree may be edited.
+- Phase 1 in review mode reads the validation command from the base branch
+  (`git show origin/<baseRefName>:CLAUDE.md`) and confirms before running it, since `gh pr checkout`
+  lands an untrusted tree. Check failures become findings instead of being fixed.
+- Phase 3's untrusted-data framing extends to the PR title, body, and commit messages, wrapped in
+  `<pr-content>` markers.
+
 ## [2.7.0] - 2026-09-09
 
 ### Added
