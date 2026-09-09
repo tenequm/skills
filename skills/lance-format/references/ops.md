@@ -1,8 +1,8 @@
 # Lance v12 reference - object store, capabilities, source map (sections 13, 15, 16)
 
-Part of the Lance v12 reference (`lance-format/lance@v12.0.0-beta.6`). Citations are `path:line`
+Part of the Lance v12 reference (`lance-format/lance@v12.0.0-beta.15`). Citations are `path:line`
 relative to the repo root; build a permalink as
-`https://github.com/lance-format/lance/blob/v12.0.0-beta.6/<path>`. Line numbers drift between
+`https://github.com/lance-format/lance/blob/v12.0.0-beta.15/<path>`. Line numbers drift between
 tags - treat them as approximate. Cross-references written as "section N" use the original
 16-section numbering; `lance-reference.md` maps every number to its file.
 
@@ -96,22 +96,32 @@ Per-backend highlights:
 - **Azure** - `account_name` / `account_key`, service principal, SAS tokens, managed
   identity, workload-identity federation.
 - **Alibaba OSS** - `oss_endpoint` (required), `oss_access_key_id`, `oss_secret_access_key`.
-- **Tencent COS** (`object_store.md:252`) - `cos://bucket/path` with `cos_endpoint`,
+- **Tencent COS** (`object_store.md:333`) - `cos://bucket/path` with `cos_endpoint`,
   `cos_secret_id`, `cos_secret_key`, and optional `cos_enable_versioning`; env vars are read
   from the `COS_` or `TENCENTCLOUD_` prefixes.
-- **Volcengine TOS** (new in v8, `object_store.md:222-246`) - `tos://bucket/path` with
+- **Volcengine TOS** (new in v8, `object_store.md:303`) - `tos://bucket/path` with
   `tos_endpoint` required (e.g. `https://tos-cn-beijing.volces.com`), plus `tos_region` and
   access-key options.
-- **GooseFS** (new in v8, feature-gated `goosefs`, now documented at `object_store.md:306`) -
+- **GooseFS** (new in v8, feature-gated `goosefs`, now documented at `object_store.md:396`) -
   `goosefs://host:port/path`; master address comes from `goosefs_master_addr` (HA-aware:
   `"addr1:port,addr2:port"`), the URL host, or default port `9200`. Optional keys:
   `goosefs_write_type` (`MUST_CACHE` / `CACHE_THROUGH` / `THROUGH` / `ASYNC_THROUGH`),
   `goosefs_auth_type` (`nosasl` / `simple`), `goosefs_auth_username`, `goosefs_block_size`,
   `goosefs_chunk_size` (`rust/lance-io/src/object_store/providers/goosefs.rs:24-61`).
+
+  **`storage_options` keys must be lowercase** (#8940, `v12.0.0-beta.12`) - a wrong-case key is
+  now a hard error rather than a silently ignored value: "Uppercase or mixed-case spellings such
+  as `GOOSEFS_MASTER_ADDR` are rejected with an explicit error - they are not ignored, and they
+  are not treated as the matching environment variable" (`object_store.md:547-549`). A config
+  that appeared to work by accident will start failing loudly on upgrade.
+
+  **`goosefs_block_size` / `goosefs_chunk_size` accept unit suffixes** (#8943): "Accepts a raw
+  byte count or GooseFS suffixes such as `64MB` (binary units: `1KB = 1024`). Optional."
+  (`object_store.md:556`).
   **In v11 GooseFS commits became safe** (PR #8134): manifest commits now use
   `ConditionalPutCommitHandler` (`PutMode::Create` / if-not-exists), "backed by GooseFS master's
   atomic no-replace rename so concurrent writers cannot clobber each other's versioned
-  manifests" (`object_store.md:375-378`), replacing `UnsafeCommitHandler`. **Mixed-version
+  manifests" (`object_store.md:404-407`), replacing `UnsafeCommitHandler`. **Mixed-version
   writers are a data-loss hazard during the rollout**: "The `if-not-exists` guarantee only holds
   when **every** writer for a dataset routes through this new handler. A writer running an older
   Lance release still selects `UnsafeCommitHandler` for `goosefs://` and writes the version path
@@ -199,7 +209,7 @@ Disable globally with `LANCE_USE_VERSION_HINT=0`.
 
 ## 15. Capability matrix
 
-What Lance can and cannot do at `v12.0.0-beta.6`.
+What Lance can and cannot do at `v12.0.0-beta.15`.
 
 **Storage and format**
 
@@ -280,7 +290,7 @@ registered `fts` table function (`ctx.register_udtf("fts", ...)`,
 
 ## 16. Source map
 
-Where to look in `lance-format/lance` at `v12.0.0-beta.6`.
+Where to look in `lance-format/lance` at `v12.0.0-beta.15`.
 
 | Topic | Path |
 |-------|------|

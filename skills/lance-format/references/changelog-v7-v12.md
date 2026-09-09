@@ -1,8 +1,8 @@
 # Lance changelog - v7 -> v12 (section 14)
 
-Part of the Lance v12 reference (`lance-format/lance@v12.0.0-beta.6`). Citations are `path:line`
+Part of the Lance v12 reference (`lance-format/lance@v12.0.0-beta.15`). Citations are `path:line`
 relative to the repo root; build a permalink as
-`https://github.com/lance-format/lance/blob/v12.0.0-beta.6/<path>`. Line numbers drift between
+`https://github.com/lance-format/lance/blob/v12.0.0-beta.15/<path>`. Line numbers drift between
 tags - treat them as approximate. Cross-references written as "section N" use the original
 16-section numbering; `lance-reference.md` maps every number to its file.
 
@@ -54,6 +54,7 @@ any beta pin is a git dependency; beta artifacts publish to fury.io
 - [v11 silent-corruption and wrong-results fixes](#v11-silent-corruption-and-wrong-results-fixes)
 - [v11.0.0 final (the beta.16 -> final delta)](#v1100-final-the-beta16---final-delta)
 - [v12 (release-root/12.0.0-beta.N -> v12.0.0-beta.6)](#v12-release-root1200-betan---v1200-beta6)
+- [The v12.0.0-beta.6 -> v12.0.0-beta.15 delta](#the-v1200-beta6---v1200-beta15-delta)
 
 Other files: `format-file.md` (1-4), `format-table.md` (5-10), `indexes.md` (11-12),
 `ops.md` (13, 15, 16).
@@ -281,7 +282,7 @@ transaction op (still 15), no file-format change.
 - **Cleanup explain API** (PR #7147) - `Dataset::cleanup(policy)` splits into `explain()`
   (returns a `CleanupExplanation`, a dry run) and `execute()`. See section 7.
 - **Object-store docs** (PR #7151) - the guide gained full Tencent COS and GooseFS config
-  sections (`docs/src/guide/object_store.md:252,306`); GooseFS is no longer undocumented. See
+  sections (`docs/src/guide/object_store.md:333,396`); GooseFS is no longer undocumented. See
   section 13.
 - **Smaller adds**: Python zonemap segment builds exposed (PR #7177); per-query I/O metrics
   (`bytes_read` / `iops` / `requests`) on `ANNSubIndex` / `ANNIvfPartition` in EXPLAIN ANALYZE
@@ -627,6 +628,17 @@ panic while slicing the shortened string." `frostem` is generated from current u
 and exposes the same 18 algorithms. `strum` and the direct `goosefs-sdk` dependency were dropped;
 `crc32c` left the lockfile and `opendal-http-transport-reqwest` entered it.
 
+**It is not a drop-in for existing FTS indexes.** The two stemmers disagree on a small but
+non-trivial slice of ordinary English. Measured over `/usr/share/dict/words`, **484 of 235,976
+words (0.2%) stem differently** - most are the `-ogist` family (`anthropologist` ->
+`anthropolog`), but the rest are everyday vocabulary: `internal` (old `intern`, new `internal`),
+`added` (`ad` vs `add`), `emergency`, `evening`, `interfering`, `erring`. An index built with
+`.stem(true)` under v10 and queried by a v11 binary therefore **silently misses those forms** -
+the query stems to `internal` while the index holds `intern`. There is no error and no version
+check. Two consequences for a rollout: a mixed v10/v11 fleet appending FTS segments to the same
+store produces segments stemmed two ways, so the upgrade wants to be fleet-coordinated, and any
+stemmed FTS index built before the swap needs one rebuild to become self-consistent.
+
 ---
 
 ### The v11.0.0-beta.2 -> v11.0.0-beta.6 delta
@@ -727,7 +739,7 @@ unchanged (bit 128 allocated, `FLAG_UNKNOWN` 256).
 
 The **final** added two more breaking PRs (#8407, #8535) for **357 commits and 16 breaking PRs**
 to `v11.0.0`, and reallocated bit 128 to `FLAG_COVERED_INDEX_METADATA` as described above. Every
-structural invariant above still holds at `v12.0.0-beta.6`.
+structural invariant above still holds at `v12.0.0-beta.15`.
 
 **Breaking:**
 
@@ -1005,3 +1017,182 @@ compression (1 of 10 merged, #8324, which "introduces no protobuf variants or pr
 selector changes"), and mixed data-file versions (1 of 6, #8580). Several `xuanwo/*` remote
 branches touch blob reuse indexes, stable field ids and sparse writers; none is merged into a
 v12 beta.
+
+---
+
+### The v12.0.0-beta.6 -> v12.0.0-beta.15 delta
+
+89 commits across nine beta tags (beta.7 .. beta.15), **exactly 2 `breaking-change`-labeled PRs**
+(#8800, #8915 - verified by intersecting the 80 PR numbers in the range with every merged
+`breaking-change` PR), taking the v12 line to **5**. The line has not re-rooted: no
+`release-root/13.0.0-beta.N` exists and no `v12.0.0` final has been cut. No new index types, no
+new crates.
+
+**Every structural invariant still holds** at beta.15: 26 crate directories, 16 transaction ops,
+`CommitConfig.num_retries = 20`, arrow 58.0.0, datafusion 54.0.0, MSRV 1.91.0, edition 2024,
+`requires-python = ">=3.10"`, `FLAG_COVERED_INDEX_METADATA = 128`,
+`FLAG_MIXED_DATA_FILE_VERSIONS == FLAG_UNKNOWN` (bit 8, still reserved and unspent, with the
+`const _: () = assert!(...)` still pinning them together), and no new manifest feature flag.
+
+**The label is a floor, not a ceiling.** The two largest behavior changes in the range carry a
+conventional-commit `!` but **no** `breaking-change` label, so the release bot did not count them
+and the major did not re-root on them.
+
+- **`stable` now resolves to 2.2, and 2.2 is the default file version** (#8657, beta.15).
+  `stable_file_version()` returns `ConcreteFileVersion::V2_2` and `#[default]` moved from `V2_1`
+  to `V2_2` (`rust/lance-file/src/version.rs:18-45`). It reaches new datasets through
+  `impl Default for DataStorageFormat` (`rust/lance-table/src/format/manifest.rs:677-680`), and
+  Python's `write_dataset` inherits it because its default routes through `"stable"`
+  (`python/python/lance/dataset.py:8059`). Upstream's framing: "Lance 2.2 is the current stable
+  file format, but the centralized release policy and enum default still resolve new datasets to
+  2.1. As a result, the `stable` selector and default writes lag behind the intended stable
+  format." **The docs were not updated** - `docs/src/format/file/versioning.md` is byte-identical
+  across the range. `next` still resolves to 2.3, `is_unstable()` is still
+  `matches!(self, Self::V2_3)`, and no 2.4 exists. Section 3.1.
+- **IVF_RQ defaults to 5 bits per dimension, not 1** (#8936, beta.12).
+  `RABIT_DEFAULT_NUM_BITS: u8 = 5` (`rust/lance-index/src/vector/bq.rs`) drives both
+  `RQBuildParams::default` and `RabitBuildParams::default`; the Python `build_rq_model` stub
+  default moved with it. Roughly a **4.4x index-size increase** at the default - upstream's
+  100M x 768d example went from ~10.8 GiB to ~47.3 GiB. `Fast` search mode "uses only the 1-bit
+  sign code even when the index stores additional bits", so it pays the storage without using it;
+  set `num_bits=1` explicitly to opt out. Section 11.1.
+
+**Breaking (labeled):**
+
+- **Predecessor-conditioned publication for external manifest stores** (#8800, beta.12).
+  `ExternalManifestStore::put_if_predecessor` "reserves a version only if the store's record for
+  the predecessor still carries the identity the writer observed"; `CommitHandler::commit_after`
+  publishes on that condition and "refuses with `PrerequisiteFailed`", "never a conflict". The new
+  trait methods are default-implemented, so the hard compile break is the new
+  `ManifestLocation.identity: Option<String>` field killing struct-literal construction - "A
+  dataset recreated at the same version has a different one". No built-in store implements the
+  contract; unconditioned commits are unaffected. Section 9.
+- **Namespace merge-insert accepts multiple key columns** (#8915, beta.12).
+  `MergeInsertIntoTableRequest.on` moves from `Option<String>` to `Option<Vec<String>>`; Rust
+  callers wrap a single column in a list. The subtle part is arity-dependent NULL handling: "a
+  single-column key treats NULL as equal to NULL, while a composite key uses standard SQL
+  equality, under which a NULL key matches nothing - not even a byte-identical NULL." This also
+  moved the **Rust** `lance-namespace-reqwest-client` to `0.12.0` while Java and Python stay on
+  `0.11.1` on purpose: "The Java and Python `lance-namespace` pins stay on 0.11, so their
+  generated models still send `on` as a bare string and rely on the promotion described above."
+
+**Reverted - do not treat as shipped:**
+
+- **Column slice stitching (#8660) was reverted at beta.9** (#8926). "The ColumnSlice lifecycle
+  introduced in #8660 should not ship while the caller-managed replacement in #8923 is being
+  developed." The revert removed `concat.rs`, encoded-file concatenation, and the stitching path,
+  "restoring the previous binary-copy compaction implementation". `rust/lance-file/src/concat.rs`
+  exists again at beta.15, but it holds #8923's caller-managed parts, not the reverted work.
+
+**Proto changes:**
+
+- **MemWAL `SsTable` gained three optional accounting fields** (#8981, beta.14 - the range's only
+  `format-change`-labeled PR): `in_memory_bytes` (3), `physical_rows` (4), `primary_key_bytes` (5)
+  (`protos/table.proto:781,786,797`). All optional; "a reader must not treat an absent value as
+  zero". Downstream struct literals for `SsTable` need updating. Section 10.
+- **`FilteredReadOptions` gained `materialization_readahead_bytes` (13) and `batch_size_bytes`
+  (14)** (`protos/filtered_read.proto:71,76`; #8919, #8933). These are **not** format changes
+  under a new governance rule in `protos/AGENTS.md`: execution-plan schemas ("`ann.proto`,
+  `filtered_read.proto`, and `table_identifier.proto`") "are wire contracts, not persisted Lance
+  formats. Changes to them belong with their implementation and do not require a format vote or a
+  `docs/src/format/` change."
+- `transaction.proto`, `ann.proto` and `index.proto` have **zero** field-number changes in the
+  range. Proto comment style is now CI-enforced (#8991, `ci/check_proto_comments.py`), which
+  accounts for a large but semantically empty proto diffstat.
+
+**Net-new, non-breaking:**
+
+- **Caller-managed data file parts** (#8923, beta.12) - `DataFileTarget`
+  (`rust/lance/src/dataset/data_file.rs:49`), `DataFilePart` and `BlobTargetId`
+  (`rust/lance-file/src/concat.rs:121,:46`). Explicitly format-neutral: "No new Lance file,
+  manifest, transaction, target, or part format is introduced. The completed output is an ordinary
+  DataFile committed through the existing transaction path; readers cannot distinguish it from a
+  normally written file."
+- **Cleanup of specific versions** (#8617, beta.7) - `versions: Option<HashSet<u64>>` on the
+  cleanup params (`rust/lance/src/dataset/cleanup.rs:1351`), surfaced as
+  `dataset.cleanup_old_versions(versions=[2])` and Java `CleanupPolicy.withVersions`. "The filter
+  combines with existing cleanup filters; current and tagged versions remain protected."
+- **`LanceDataset.slice(start, end, columns=None)`** (#8059, beta.12) - "equivalent to
+  take(list(range(start, end))) but implemented as a thin wrapper over scanner(offset=start,
+  limit=end-start), reusing the existing offset/limit scan pushdown instead of materializing an
+  index list."
+- **Six more scanner options on `LanceFragment.scanner`** (#8429, beta.7): `use_scalar_index`,
+  `io_buffer_size`, `late_materialization`, `include_deleted_rows`, `batch_size_bytes`,
+  `strict_batch_size`.
+- **Python index retraining restored** (#8786, beta.7) - `optimize_indices(retrain=...)` had been
+  silently unreachable from Python since #4726; #8047 restored the Rust path "but the PyLance
+  binding, documentation, and test were not restored with it."
+- **`MemTableVisibility`** (#8835, beta.7) lets a MemWAL writer read its own indexed prefix -
+  "Sound only for a writer reading its own prefix under the lock that makes it the sole writer."
+- **Blob materialization readahead budget** (#8919, beta.10) - a scanner-level byte budget that
+  "admits a single oversized batch for forward progress" and preserves output order.
+- **Namespace-managed clone removed** (#8964, beta.13): "That clone mode is no longer supported
+  ... `with_source_dataset` remains as a deprecated compatibility shim because published v12 beta
+  releases exposed it."
+- **Env vars:** the only three new `LANCE_*` names in the range are bench-only and confined to
+  `rust/lance-index/benches/two_file_shuffle_read.rs` - `LANCE_SHUFFLE_BENCH_DISTRIBUTION`,
+  `LANCE_SHUFFLE_BENCH_FIXTURE_ROOT`, `LANCE_SHUFFLE_BENCH_IMPLEMENTATION`. None user-facing, none
+  removed.
+
+**Correctness fixes that need a rebuild, rewrite, or repair** (they do *not* heal on upgrade):
+
+- **#8779** (beta.12) - NGRAM FTS defaults were not substring-safe. "Existing NGRAM indexes retain
+  their persisted analyzer behavior and must be rebuilt to adopt the corrected defaults."
+- **#8510** (beta.11) - compaction crossed logical columns. "Binary-copy eligibility only required
+  source files to agree with one another ... so uniformly reordered source files crossed logical
+  columns after compaction." Data already compacted from uniformly reordered fragments is wrong on
+  disk and must be rewritten.
+- **#8984** (beta.14) - index maintenance could resurrect a dropped index: "A drop is encoded with
+  an empty `new_indices` list, so stale optimize or append operations could be rebased after it and
+  publish index metadata again." Index metadata already republished must be re-dropped.
+- **#8837** (beta.7) - a MemWAL shard whose rows average below ~2.7KB never sealed on the byte arm
+  and then could not be reopened: "Replay hits the same wall while rebuilding the tail memtable's
+  indexes, so the shard cannot be reopened either." A shard already in this state needs repair.
+  "A 1024-dim f32 vector is safe; 512-dim or 128-dim is not."
+
+**Correctness fixes that heal on upgrade** (read-path, query-time, or write-blocking):
+
+- **#8842** (beta.15) - RaBitQ FastScan above 1024 rotated dimensions overflowed: "a distance
+  becomes `true_sum % 65536` and the ranking collapses." Query-time, but recall measured on an
+  affected index before the fix is invalid.
+- **#8855** (beta.14) - FM indexes on stable-row-id datasets "dropped matches outside fragment 0"
+  because `FMIndexScalarIndex` declared logical row IDs instead of row addresses.
+- **#8351** (beta.7) - stale vector-segment rows displaced correct top-k: "Ownership was applied
+  only after the sub-index local top-k."
+- **#8832** (beta.12) - PyArrow/Substrait timestamp literals decoded as the wrong unit: a filter
+  "matched 0 of 100 rows where 49 was correct ... the literal arrived a million times too large."
+  Any result set computed through such a filter before the fix is suspect.
+- **#6236** (beta.7) - float filters compared bit encodings, so `value < 0.0` returned `-0.0` and
+  `value = 0.0` missed it.
+- **#8441** (beta.11) - an index this build could not open "fails that commit and every one after
+  it, leaving the dataset unwritable rather than merely unreadable". Stuck datasets become
+  writable again on upgrade.
+- **#8935** (beta.12) - rebasing against a read version a concurrent cleanup had removed unwrapped
+  a `DatasetNotFound`; under `panic = "abort"` (common under FFI) "this aborts the entire host
+  process".
+- **#7740** (beta.12) - an undecodable inline transaction no longer fails `load_manifest`, so an
+  older build can open a dataset whose transaction uses a newer op type.
+- **#9020** (beta.14) - the 2.1+ writer could not re-write what it had just written: "`write(read(write(x)))`
+  fails on data this writer had just accepted." Blocks the write; no bad data lands.
+- **#9048** (beta.15) - a sliced boolean column "reads from `2 * offset` and runs off the end of
+  its values buffer". Panic, not silent corruption.
+- **#7962** (beta.15) - the scalar index cache served results from a rotated-away store.
+- Also: #8827 / #8841 (out-of-range and empty all-null dictionary keys), #8379 (nested column
+  casts during schema evolution), #8929 (blob v2 complete schema collapsing to minimal), #8934
+  (1-bit booleans in the single-row full-zip fallback), #7494 (duplicate field when merging
+  identical `List<Struct>`), #8612 (fully deleted batch with no row to copy), #8888 / #8737 (u8
+  distance accumulator overflow, unchecked cosine length), #8922 (FTS v1 merge reads), #8845
+  (`distance_range` dropped for the MemWAL fresh tier), #8626 (system columns missing from SQL
+  queries), #8772 (`analyze_plan` profiling the wrong join side).
+
+**Behavior change worth calling out separately:** **#8940** (beta.12) made wrong-case GooseFS
+`storage_options` keys a hard error - "Uppercase or mixed-case spellings such as
+`GOOSEFS_MASTER_ADDR` are rejected with an explicit error - they are not ignored, and they are not
+treated as the matching environment variable." A config that appeared to work by accident now
+fails loudly. Paired with **#8943**, which added `64MB`-style binary-unit suffix parsing to
+`goosefs_block_size` / `goosefs_chunk_size`. Section 13.
+
+**In flight, not landed** - unchanged from beta.6: generic block v5 compression is still **1 of 10
+merged** (#8324; #8325-#8333 all open) and mixed data-file versions still **1 of 6** (#8580, the
+reservation only). New to watch: **#8997**, "upgrade to arrow 59, DataFusion 55, and pyo3 0.29",
+open at beta.15 - the next big dependency break, and the reason arrow 58 / datafusion 54 still hold.

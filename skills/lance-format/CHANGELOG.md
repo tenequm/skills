@@ -7,6 +7,84 @@ and this skill adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.h
 
 ## [Unreleased]
 
+## [0.19.0] - 2026-09-09
+
+### Added
+
+- v12 delta extended to `v12.0.0-beta.15`: two more `breaking-change`-labeled PRs (#8800
+  predecessor-conditioned publication, #8915 namespace merge-insert key list), taking the v12
+  line from 3 to 5, plus a full `beta.6 -> beta.15` section in `references/changelog-v7-v12.md`.
+- MemWAL `SsTable` accounting fields `in_memory_bytes` / `physical_rows` / `primary_key_bytes`
+  (proto fields 3-5, #8981), with the "absent is not zero" reader rule.
+- Blob v2 logical Arrow schema: the Minimal and Complete shapes, the row-level invariants, and
+  the shape-preservation guarantee across create/append/merge-insert (#8929).
+- `FilteredReadOptions` fields 13/14 (`materialization_readahead_bytes`, `batch_size_bytes`) and
+  the proto governance rule exempting execution-plan schemas from the format vote.
+- Net-new API surface: cleanup of specific versions (#8617), `LanceDataset.slice()` (#8059), six
+  scanner options on `LanceFragment` (#8429), restored Python index retraining (#8786),
+  `MemTableVisibility` (#8835), namespace-managed clone deprecated to a shim (#8964).
+- Correctness fixes needing rebuild or repair rather than an upgrade: #8779 (NGRAM rebuild),
+  #8510 (compaction crossed logical columns), #8984 (resurrected index), #8837 (unreopenable
+  MemWAL shard), plus #8441, #8935, #8842 and the longer heals-on-upgrade list.
+- MemWAL is a parallel stack: `Dataset::scanner()` has no MemWAL integration, no manifest feature
+  flag marks a MemWAL table, and no SSTable compactor ships in-tree.
+- Field-verified practice: append-commit coalescing via `execute_uncommitted` +
+  `CommitBuilder::execute_batch`; `checkout_latest` polling cost and the absence of any
+  subscribe/watch API; remote index folding as near fixed-cost per pass (~346 s for a ~200-row
+  delta vs 2-4 s for a 424k-row delta locally); what the unindexed-fragment flat arm actually
+  does (full scan, post-scan filter not scalar-index-accelerated, no limit/offset pushdown).
+- The v2 manifest-path compatibility fence (default on; unreadable by Lance < 0.17.0) and
+  `migrate_manifest_paths_v2`.
+- Measured `rust-stemmers` -> `frostem` stem drift (~0.2% of English words), which makes a
+  v11 binary silently miss forms in a v10-built FTS index.
+- Pointers to six concepts that existed only in the docs mirror: SBBF internals, the MemWAL
+  bucket-hash transform, MemWAL query planning, distributed-indexing segment grouping, FRI load
+  cost and trimming, and off-write-path cleanup strategies.
+
+### Changed
+
+- **Breaking:** tracked tag moves to `v12.0.0-beta.15` (89 commits, 9 beta tags).
+- **Breaking:** `stable` now resolves to **2.2**, which is also the enum `#[default]` and the
+  default for new datasets (#8657). The skill previously called 2.1 the current default and 2.2
+  "the real experimental frontier"; 2.3 remains the only code-unstable version. Upstream did not
+  update the docs with this, so the code is the authority.
+- **Breaking:** IVF_RQ defaults to **5 bits** per dimension, not 1 (#8936) - roughly a 4.4x
+  index-size increase at the default. Per-row sizing is now `dimension/8 + 20` at 1-bit plus a
+  separate multi-bit formula.
+- `lance-namespace` is no longer one number: the Rust client is 0.12.0 (#8915) while the Java and
+  Python pins deliberately stay at 0.11.1.
+- GooseFS `storage_options` keys must be lowercase - a wrong-case key is now a hard error rather
+  than silently ignored (#8940) - and block/chunk sizes accept `64MB`-style suffixes (#8943).
+- `references/maintenance.md` now warns that the `breaking-change` label is a floor, not a
+  ceiling, and that a refresh must also scan for `!` commits and diff documented defaults.
+- Docs mirror refreshed to `v12.0.0-beta.15` (4 files changed; still 45 markdown + 4 diagrams,
+  every per-directory count unchanged).
+- `SKILL.md` v11 and v12 delta sections and the version landscape condensed to absorb the new
+  material; full detail stays in `references/changelog-v7-v12.md`.
+
+### Removed
+
+- Column slice stitching (#8660). It was reverted at beta.9 (#8926); #8923's caller-managed data
+  file parts replace it.
+
+### Fixed
+
+- `is_unstable() = self >= Next` described no recent tag and could not compile - the enum carries
+  no `Ord`. The selector delegates to `resolve()`; the concrete version is `matches!(self, V2_3)`.
+- Stale workspace metadata in `format-file.md`: `[workspace.package] version` (`11.0.0-beta.2` ->
+  `12.0.0-beta.15`), the Python `lance-namespace` pin, the `lance-namespace-reqwest-client`
+  version, and the `opendal` / `object_store` / `object_store_opendal` line citations.
+- The RQ per-row sizing citation pointed at `guide/performance.md:416`, the KMeans `sample_rate`
+  paragraph, rather than `:483`.
+- Citation drift from the mirror refresh: `mem_wal.md` cites above line 148 shift +23, `blob.md`
+  cites above line 67 shift +19.
+- Pre-existing stale `object_store.md` citations (TOS, GooseFS, the GooseFS commit-handler
+  quotes, Tencent COS) retargeted against the refreshed mirror.
+- `performance.md` claimed `docs/src/guide/performance.md` was byte-identical across the range;
+  it changed at beta.12 (#8936), so the provenance note and the RQ figures it implied were wrong.
+
+Verified against: lance-format/lance@v12.0.0-beta.15
+
 ## [0.18.1] - 2026-09-09
 
 ### Changed

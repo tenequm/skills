@@ -1,8 +1,8 @@
 # Lance v12 reference - table format (sections 5-10)
 
-Part of the Lance v12 reference (`lance-format/lance@v12.0.0-beta.6`). Citations are `path:line`
+Part of the Lance v12 reference (`lance-format/lance@v12.0.0-beta.15`). Citations are `path:line`
 relative to the repo root; build a permalink as
-`https://github.com/lance-format/lance/blob/v12.0.0-beta.6/<path>`. Line numbers drift between
+`https://github.com/lance-format/lance/blob/v12.0.0-beta.15/<path>`. Line numbers drift between
 tags - treat them as approximate. Cross-references written as "section N" use the original
 16-section numbering; `lance-reference.md` maps every number to its file.
 
@@ -658,6 +658,30 @@ one - but while legacy *finalizers* remain in the fleet the pre-existing race ca
 republish a stale ETag that a legacy reader rejects. Full protocol:
 `references/docs/format/table/transaction.md`.
 
+**v12 (beta.12): predecessor-conditioned publication (PR #8800), a `breaking-change`-labeled PR.**
+`ExternalManifestStore::put_if_predecessor` "reserves a version only if the store's record for the
+predecessor still carries the identity the writer observed", and `CommitHandler::commit_after`
+publishes on that condition. Its contract is explicit that this is not the ordinary conflict path:
+"Commit only if `predecessor` is still the manifest at its version, decided with the reservation;
+otherwise [`Error::PrerequisiteFailed`], never a conflict"
+(`rust/lance-table/src/io/commit.rs:1036-1041`).
+
+The identity comes from a new `ManifestLocation` field - "A token unique to this manifest record
+in the commit handler's store ... A dataset recreated at the same version has a different one"
+(`pub identity: Option<String>`). **That field is the actual compile break**: the new trait
+methods are all default-implemented, so only code constructing `ManifestLocation` with a struct
+literal must change. No built-in store implements the conditioned contract, and unconditioned
+commits behave exactly as before.
+
+### v2 manifest paths are a compatibility fence
+
+`CommitBuilder::enable_v2_manifest_paths` is **default true** for new datasets. The v2 naming
+scheme is what "allow[s] constant-time lookups for the latest manifest on object storage" instead
+of listing `_versions/`, but its own doc carries a warning worth reading before writing a dataset
+other systems must read: "turning this on will make the dataset unreadable for older versions of
+Lance (prior to 0.17.0)" (`rust/lance/src/dataset/write/commit.rs:171-180`). The parameter has no
+effect on an existing dataset - migrate one with `Dataset::migrate_manifest_paths_v2`.
+
 ### 9.4 Cache keys and backend (v10, BREAKING)
 
 Cache keys became an opaque 16-byte BLAKE3 digest (PR #7878). The format is stamped as
@@ -736,13 +760,13 @@ contract; in-memory buffering and scheduling are implementation-defined.
   order can resurrect stale rows). Append-only MemWAL tables may omit the primary key.
   Sharding is also a **read** optimization, not only a write one: "When sharding specs are
   available, the planner evaluates query predicates against shard fields and skips shards whose
-  computed shard values cannot match" (`mem_wal.md:586-588`). A predicate over the shard field
+  computed shard values cannot match" (`mem_wal.md:609-611`). A predicate over the shard field
   therefore prunes whole shards before any data is touched - so choosing shard fields that
   appear in common filters buys read selectivity, not just write parallelism.
 - **MemTable** - holds rows before flush; a list of Arrow record batches. **A MemTable does not
   have a generation** - generation numbers belong to SSTables. `current_generation` in the shard
   manifest "is the generation number to assign to the next SSTable created by flushing the
-  MemTable" (`docs/src/format/table/mem_wal.md:285`).
+  MemTable" (`docs/src/format/table/mem_wal.md:308`).
 - **WAL** - durable storage of all MemTables in a shard, ordered by generation. Each WAL
   entry is an Arrow IPC stream file at `_mem_wal/{shard_id}/wal/`, named with bit-reversed
   64-bit binary (spreads sequential writes across S3 partitions). The writer epoch is in the
@@ -753,9 +777,24 @@ contract; in-memory buffering and scheduling are implementation-defined.
   SSTable is not sorted by key; random access is instead served by its BTree primary-key
   sidecar. It is called an SSTable because it is an immutable, persisted, indexed run"
   (`mem_wal.md:134`).
+
+  **v12 added three optional accounting fields** to the `SsTable` proto message (#8981,
+  `v12.0.0-beta.14` - the only `format-change`-labeled PR in that range):
+  `in_memory_bytes` (field 3), `physical_rows` (field 4), `primary_key_bytes` (field 5)
+  (`protos/table.proto:781,786,797`). They record "what the SSTable holds, as the writer's
+  MemTable accounted for it at flush" (`mem_wal.md:148-151`).
+
+  Three traps. (1) These are **payload estimates, not read-cost bounds**: `in_memory_bytes`
+  "excludes the per-array structure a reader materializes, so a consumer budgeting memory from it
+  must add its own headroom." (2) `physical_rows` counts "the older duplicates of a primary key
+  that the generation's deletion vector masks. A scan applying the deletion vector yields fewer."
+  (3) **Absence is not zero**: "An entry written before they existed records none of them, and a
+  reader must not treat an absent value as zero; `primary_key_bytes` is also absent on a table
+  with no primary key" (`mem_wal.md:167-170`). Downstream code constructing `SsTable` with a
+  struct literal needs updating.
 - **Shard manifest** - source of truth per shard: `writer_epoch`, shard assignment, WAL
   pointers, and "**SSTable generation state**: `current_generation` and `sstables`"
-  (`mem_wal.md:271`). Versioned, immutable, committed via put-if-not-exists.
+  (`mem_wal.md:294`). Versioned, immutable, committed via put-if-not-exists.
   **v12 renamed and narrowed `ShardManifestStore`** (#8640): `read_latest` -> `latest`,
   `read_latest_uncached` -> `refresh_latest`, and `write` became crate-private - callers reach
   it through `commit_update`, `claim_epoch`, or `initialize_shard`
@@ -766,12 +805,40 @@ contract; in-memory buffering and scheduling are implementation-defined.
   `mem_wal.md:43`), index catchup, and shard snapshots. Tied to the `UpdateMemWalState`
   transaction.
 
+**Two MemWAL internals live only in the mirror.** `references/docs/format/table/mem_wal.md`
+carries the reader-side **"Query Planning" / "Indexed Read Plan"** model - how sources are
+collected and ranked, where "Each source is tagged with its shard and freshness tier. SSTable
+sources are also tagged with their generation" - and, in Appendix 3, the exact **bucket transform
+hash** (32-bit wrapping `fmix`/`rotl32` mixing) that decides shard bucketing. Read the mirror for
+either; reimplementing bucketing from anything else will not interoperate.
+
+### MemWAL is a parallel stack, not an integration into `Dataset`
+
+Three properties decide whether MemWAL is adoptable for a given system, and none of them are
+stated in the spec pages. All three were verified at `v12.0.0-beta.15`.
+
+- **`Dataset::scanner()` has no MemWAL integration.** The whole of
+  `rust/lance/src/dataset/scanner.rs` mentions MemWAL exactly once, in an unrelated comment about
+  phrase matching (`:290`). Fresh rows - MemTable, WAL, and un-compacted SSTables - are reachable
+  only through `LsmScanner` (`rust/lance/src/dataset/mem_wal/scanner/builder.rs:193`), which is a
+  **narrower** API than the normal scanner: no SQL, no joins, no aggregation, no `take`. A system
+  needing DataFusion-grade query over fresh data does not get it from MemWAL.
+- **No manifest feature flag marks a MemWAL table.** The flag set is bits 0-6 plus bit 7
+  (`rust/lance-table/src/feature_flags.rs:11-52`) and none of them means "this table has a
+  MemWAL" - the one that briefly existed, `FLAG_MEM_WAL_INDEX_CATCHUP`, was retired before the
+  `v11.0.0` final. So an ordinary reader opens the dataset happily and **silently sees only
+  base-table data**, missing everything not yet compacted. That is a correctness-of-expectation
+  hazard with no error surface, not a format hazard.
+- **No SSTable compactor ships in-tree.** The spec fully describes an SSTable Compactor and a
+  Garbage Collector, but the workspace contains no struct implementing either - adopting MemWAL
+  means writing and operating both yourself.
+
 **Read freshness.** The ordering rules grew from three to five, with the MemTable given its own
 explicit tier: "The active MemTable is newer than every published SSTable" (`mem_wal.md:81`),
 and any uncompacted SSTable wins over the base table. The background job formerly called the
 *MemTable Merger* is now the **SSTable Compactor**: "The compaction uses Lance merge-insert
 semantics and updates `compacted_sstables[shard_id]` atomically with the base-table commit"
-(`mem_wal.md:485`).
+(`mem_wal.md:508`).
 
 ### The appender/tailer/flusher model
 
@@ -812,7 +879,7 @@ base version references them. MemWAL GC is separate from `cleanup_old_versions`.
 
 The spec treats the **garbage collector as a named subsystem** with its own removal preconditions
 ("The garbage collector may remove obsolete SSTables after:",
-`docs/src/format/table/mem_wal.md:494`) rather than as an incidental cleanup step, and carries a
+`docs/src/format/table/mem_wal.md:517`) rather than as an incidental cleanup step, and carries a
 matching **reader-consistency model** ("Reader consistency depends on:", `:540`) plus an
 **LSM-tree merging read** section describing how a reader overlays shard state on the base table.
 One physical guarantee worth relying on when reasoning about replay and scan order: "SSTable rows
