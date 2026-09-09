@@ -7,6 +7,37 @@ and this skill adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.h
 
 ## [Unreleased]
 
+## [1.2.0] - 2026-09-09
+
+### Added
+- Modern-era HTTP status duties: `404` + `-32601` for an unimplemented RPC method, `400` + `-32020` for a header/body mismatch, and `-32021` carrying `data.requiredCapabilities`.
+- The full `x-mcp-header` contract - clients MUST support it and MUST drop violating tools from `tools/list` entirely - plus the spec's "do not mark secrets or PII" warning.
+- "Long-Running Tools" in `SKILL.md`: Claude Code's per-call MCP timeout is a hard wall-clock limit that progress notifications do not extend, so long work returns a handle or a task instead.
+- Prompt-cache invalidation as a real cost of dynamic tool loading, and `list_changed` invalidating a cached list ahead of its `ttlMs`.
+- DPoP (RFC 9449 / SEP-1932) sender-constrained tokens, shipped in the v2 client on `main`.
+- The 2026-08-22 roadmap as a "what not to over-invest in" table: tool-result-shape redesign, protocol-level progressive discovery, HTTP over stdio, ETag caching, and `audience`/`priority` annotations as deprecation candidates. New working and interest groups listed.
+- Registry package types (Cargo, NuGet, MCPB) and `mcp-name:` namespace verification, including the crates.io HTML-comment gotcha.
+- Four new open SDK defects promoted to the bugs table: v1 draft-07 schema emission, zod 3-to-4 dropping `additionalProperties: false`, `registerTool` skipping `refine`/`superRefine`, and the v2 `createMcpHandler` `onclose` leak; plus four lower-severity open issues and a "fixed on `main`, not yet released" section.
+- MRTR retries require a fresh JSON-RPC id, and `inputRequests` is a keyed map with lifetime-unique keys.
+- Tasks: per-request `-32021` opt-in contract, per-request auth-binding MUST, task-ID entropy, and the durability rule for `CreateTaskResult`.
+
+### Changed
+- **Breaking:** `@modelcontextprotocol/ext-apps` 1.7.5 -> 2.0.0 (2026-09-08). New "Upgrading to ext-apps 2.0" table covers the SDK 2.0 split packages, the `zod@^4.2.0` floor, `extra.signal` -> `extra.mcpReq.signal`, and the deprecated registration overload. The wire protocol is unchanged and 1.x/2.x interoperate both ways.
+- `MCP-Protocol-Version` is a MUST on every modern POST and must match the `_meta` value or the server MUST answer `400` + `HeaderMismatch`. The former "handle it leniently" guidance is now scoped to which version you accept, on 2025-era wires.
+- The stdio pre-init probe hazard is written generically instead of naming the Rust SDK, which implemented `server/discover` in 3.0.0. What actually fails is a probe missing the two required `_meta` keys; rmcp >= 3.1.4 answers `-32602` and still closes.
+- Codex CLI's result cap is 10,000 **tokens** on every current model, not 10,000 bytes; the bytes policy survives only on legacy `gpt-5.2` and as the unknown-model fallback.
+- `_meta["anthropic/maxResultSizeChars"]` replaces `MAX_MCP_OUTPUT_TOKENS` for text rather than being bounded by it, so it can lower the cap as well as raise it.
+- Rust SDK is Tier 1 (2026-08-21), and a SEP no longer needs an SDK implementation to reach Final.
+- Sampling-with-tools is in the released schema, not a proposal; added the `sampling.{context,tools}` and `elicitation.{form,url}` sub-capabilities.
+- The 12-month deprecation window is a default, not a guarantee: a 90-day security floor exists, and HTTP+SSE is scheduled three months after SEP-2596 reaches Final.
+- The v1.x sunset now cites the SDK's own `ROADMAP.md`, including the harder deadline that v1 will never implement a revision past 2025-11-25.
+
+### Fixed
+- The canonical stateless example called `Origin` validation a server requirement while shipping it inert: `enableDnsRebindingProtection` defaults to `false` and `allowedOrigins`/`allowedHosts` are unset on the raw transport. Both `SKILL.md` and `transport-patterns.md` examples now pass them.
+- Added the gateway failure mode where an unrecognized `server/discover` POST absorbed into an empty `2xx` bricks `connect()`, while a `4xx` degrades gracefully.
+
+Verified against: @modelcontextprotocol/sdk@1.30.0, @modelcontextprotocol/server@2.0.0, @modelcontextprotocol/ext-apps@2.0.0, modelcontextprotocol-spec@2026-07-28
+
 ## [1.1.2] - 2026-09-09
 
 ### Changed

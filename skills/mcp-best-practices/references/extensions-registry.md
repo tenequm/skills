@@ -31,10 +31,10 @@ Format: `{vendor-prefix}/{extension-name}`
 
 | Extension | Identifier | Status | Repo |
 |-----------|-----------|--------|------|
-| MCP Apps | `io.modelcontextprotocol/ui` | Stable (SEP-1865, 2026-01-26) | [ext-apps](https://github.com/modelcontextprotocol/ext-apps) |
+| MCP Apps | `io.modelcontextprotocol/ui` | Stable (SEP-1865, 2026-01-26); SDK `ext-apps@2.0.0` 2026-09-08 | [ext-apps](https://github.com/modelcontextprotocol/ext-apps) |
 | OAuth Client Credentials | `io.modelcontextprotocol/oauth-client-credentials` | Draft | [ext-auth](https://github.com/modelcontextprotocol/ext-auth) |
 | Enterprise-Managed Auth | `io.modelcontextprotocol/enterprise-managed-authorization` | Stable (2026-06-18) | [ext-auth](https://github.com/modelcontextprotocol/ext-auth) |
-| Tasks | `io.modelcontextprotocol/tasks` | Official (SEP-2663, final 2026-05-15) | [ext-tasks](https://github.com/modelcontextprotocol/ext-tasks) |
+| Tasks | `io.modelcontextprotocol/tasks` | Official (SEP-2663, final 2026-05-15); repo dropped its "experimental" framing 2026-08-19, schema frozen Stable at `2026-07-28` | [ext-tasks](https://github.com/modelcontextprotocol/ext-tasks) |
 
 ### Negotiation
 
@@ -167,6 +167,10 @@ The official centralized metadata repository for publicly accessible MCP servers
 
 **Namespace authentication**: Server names use reverse DNS format (`io.github.user/server-name`, `com.example/server`). Only verified owners (via GitHub account or DNS/HTTP challenge) can publish under their namespace.
 
+**Package types**: beyond npm, PyPI and Docker/OCI, the registry now accepts **Cargo** (crates.io only - *"For Cargo packages, the MCP Registry currently supports the official crates.io registry (`https://crates.io`) only"*), **NuGet**, and **MCPB** - *"prebuilt binary distributed via GitHub or GitLab Releases. End users need no toolchain."*
+
+**Ownership is proven from inside the package**, via an `mcp-name:` token in the published README. One gotcha bites Rust publishers specifically: *"Unlike PyPI and NuGet (which preserve HTML comments in their README rendering), **crates.io strips HTML comments during markdown -> HTML conversion**"* - so on crates.io the token has to be visible text, not a hidden comment.
+
 **Public servers only**: Private servers (internal networks, private registries) are not supported. Self-host for those.
 
 **Aggregator-first design**: Intended for consumption by downstream aggregators (marketplaces, catalogs) via REST API, not direct use by host applications. Aggregators poll periodically (e.g., hourly).
@@ -228,13 +232,28 @@ const response = await ctx.mcpReq.requestSampling({
 });
 ```
 
-Related SEP: [#1577](https://github.com/modelcontextprotocol/modelcontextprotocol/issues/1577) (Sampling With Tools - allow sampling requests to include tool definitions).
+**Sampling with tools is released, not proposed.** SEP-1577 landed in the 2026-07-28 schema: `CreateMessageRequest` carries `tools?: Tool[]` and `toolChoice?: ToolChoice`, with `ToolUseContent`/`ToolResultContent` for the exchange. It is gated on a sub-capability - *"The client MUST return an error if this field is provided but `ClientCapabilities.sampling.tools` is not declared. Default is `{ mode: \"auto\" }`."*
+
+**Capabilities have sub-flags now.** Both sampling and elicitation are structured rather than boolean, so "the client supports elicitation" is not a single fact to check:
+
+```typescript
+elicitation?: { form?: JSONObject; url?: JSONObject; };
+sampling?:    { context?: JSONObject; tools?: JSONObject; };
+```
+
+Check the specific sub-flag you need (`elicitation.url` for out-of-band flows, `sampling.tools` for tool-augmented sampling) before relying on it.
 
 ### Tasks (SEP-2663)
 
 Long-running operations with lifecycle management - progress tracking, cancellation, and status updates for operations spanning multiple requests. [SEP-2663](https://github.com/modelcontextprotocol/modelcontextprotocol/pull/2663) (final, 2026-05-15) supersedes the earlier SEP-1686 proposal: Tasks moved out of the core `2025-11-25` spec (the experimental `tasks` feature there is removed) into the official `io.modelcontextprotocol/tasks` extension. A server may answer a `tools/call` with an async task handle instead of a final result; the client **polls** via `tasks/get` and `tasks/update` (`tasks/cancel` to abort). The redesign drops the blocking `tasks/result` and `tasks/list` methods and allows servers to return task handles unsolicited.
 
-**Canonical source**: the [ext-tasks repo](https://github.com/modelcontextprotocol/ext-tasks) holds the full specification, with docs at [/docs/extensions/tasks/overview](https://modelcontextprotocol.io/docs/extensions/tasks/overview). (Its README still carries an "experimental / not an official extension" banner that contradicts the shipped spec and docs site - treat the banner as stale.)
+**Canonical source**: the [ext-tasks repo](https://github.com/modelcontextprotocol/ext-tasks) holds the full specification, with docs at [/docs/extensions/tasks/overview](https://modelcontextprotocol.io/docs/extensions/tasks/overview). The stale "experimental" README banner was removed on 2026-08-19; the repo now opens *"This repository contains the official Model Context Protocol Tasks extension"* and pins an immutable `2026-07-28` Stable schema snapshot.
+
+**Three rules that changed or are easy to miss:**
+
+- **Missing-capability code is now `-32021`, renumbered from `-32003`.** *"If a server is unable to service a request to a client that does not declare this extension capability without returning `CreateTaskResult`, the server **MUST** return an error with the code `-32021` (Missing Required Client Capability), indicating the required extension."* Tasks is per-request opt-in: to a client that did not declare it, answer synchronously or return `-32021` - never a task handle it cannot poll.
+- **Authorize every task request, not just task creation.** *"Servers **MUST** perform authentication and authorization checks on each task-related request to ensure that the client has permission to access a task."* And because a task ID may function as a bearer token for stored state, servers **MUST** generate them *"with sufficient entropy that a third party cannot enumerate or guess them"* - the same discipline as the stateful-tool handles in `SKILL.md`.
+- **`CreateTaskResult` must not outrun durability.** A server **MUST NOT** return it *"until the task is durably created - that is, until a `tasks/get` for the returned `taskId` would resolve"*, waiting for consistency in eventually-consistent stores. That removes the need for clients to speculatively poll.
 
 In TypeScript SDK v2 the entire 2025-era task wire vocabulary is `@deprecated` - importable for backwards compatibility, but excluded from the typed method maps (`RequestMethod`, `RequestTypeMap`, `ResultTypeMap`, `NotificationTypeMap` carry no `tasks/*` entries), and removable at the major version that drops 2025-era support.
 

@@ -2,10 +2,10 @@
 name: mcp-best-practices
 description: Build, harden, and debug production MCP servers with the TypeScript SDK. Use when writing or reviewing an MCP server - transports, tool schemas, errors, OAuth, token bloat, SDK migrations, MCP Apps, Registry. Assumes a server already exists.
 metadata:
-  version: "1.1.2"
+  version: "1.2.0"
   categories: "development, integrations"
   topics: "mcp, typescript-sdk, tool-design, transports, server-hardening"
-  upstream: "@modelcontextprotocol/sdk@1.30.0, @modelcontextprotocol/server@2.0.0, @modelcontextprotocol/ext-apps@1.7.5, modelcontextprotocol-spec@2026-07-28"
+  upstream: "@modelcontextprotocol/sdk@1.30.0, @modelcontextprotocol/server@2.0.0, @modelcontextprotocol/ext-apps@2.0.0, modelcontextprotocol-spec@2026-07-28"
   openclaw:
     homepage: https://github.com/tenequm/skills/tree/main/skills/mcp-best-practices
     emoji: "🔌"
@@ -86,6 +86,11 @@ app.post("/mcp", async (c) => {
   const transport = new WebStandardStreamableHTTPServerTransport({
     sessionIdGenerator: undefined,   // stateless - no session tracking
     enableJsonResponse: true,        // JSON responses, no SSE streaming
+    // Origin/Host checking is OFF unless you turn it on: the SDK defaults
+    // enableDnsRebindingProtection to false and leaves both lists unset.
+    enableDnsRebindingProtection: true,
+    allowedOrigins: ["https://app.example.com"],
+    allowedHosts: ["mcp.example.com"],
   });
 
   // All tools/resources must be registered before connect() (#893)
@@ -142,7 +147,7 @@ server.registerTool("search_docs", {
 
 ### Naming
 
-Spec 2025-11-25 (SHOULD, not MUST): 1-128 chars, case-sensitive, `A-Za-z0-9_-.` only. **DO**: `search_docs`, `get_user_profile`, `admin.tools.list`. **DON'T**: `search` (generic names collide across servers), `Search Docs` (spaces disallowed). Service-prefix (`github_*`, `jira_*`) when multiple servers are active - LLMs confuse generic names.
+Spec 2025-11-25 (SHOULD, not MUST): 1-128 chars, case-sensitive, `A-Za-z0-9_-.` only. **DO**: `search_docs`, `get_user_profile`, `admin.tools.list`. **DON'T**: `search` (generic names collide across servers), `Search Docs` (spaces disallowed). Service-prefix (`github_*`, `jira_*`) when multiple servers are active - LLMs confuse generic names. Bake the prefix into the tool name itself: the spec is explicit that *"The server `name` (from `serverInfo`) is not guaranteed to be unique across servers and **SHOULD NOT** be relied upon for disambiguation"*, so an aggregator cannot derive a safe prefix for you.
 
 ### Schema Rules
 
@@ -265,7 +270,7 @@ Tool definitions consume context window before any conversation starts. GitHub M
 2. **Outcome-oriented tools** - bundle multi-step operations into single tools (e.g., `track_order(email)` not `get_user` + `list_orders` + `get_status`).
 3. **Response granularity** - return curated results, not raw API dumps. 800-token user object vs 20-token summary.
 4. **`outputSchema` + `structuredContent`** - typed output for programmatic/PTC clients. Caveat: on shadowing clients `structuredContent` is stringified into the model's context at the **same token cost as text** - not a free out-of-band channel (see "Tool Result Delivery").
-5. **Dynamic tool loading** - register only relevant tool subsets per request context (e.g. a `?tools=search,fetch` query param). Pair with `listChanged` if the set changes mid-session.
+5. **Dynamic tool loading** - register only relevant tool subsets per request context (e.g. a `?tools=search,fetch` query param). Pair with `listChanged` if the set changes mid-session. **Vary the set per connection, not mid-conversation**: tool definitions sit in the prompt prefix, and *"Adding or removing tool definitions mid-conversation invalidates that cache, and the resulting miss can cost more tokens than the definitions you removed."* A client must also treat a cached list as stale the moment `list_changed` arrives, even before the `ttlMs` you advertised.
 6. **Progressive tool discovery / code mode** - large-catalog clients increasingly use a `search_tools` meta-tool and programmatic tool calling, where `structuredContent` is consumed outside the model context ([client best practices](https://modelcontextprotocol.io/docs/develop/clients/client-best-practices)). Curated, well-described tools make these flows work.
 
 ### Result-Size Budgets (per-client caps)
@@ -274,11 +279,17 @@ Clients silently truncate large tool results. Budget for the strictest client yo
 
 | Client | Default cap | Configurable |
 |--------|------------|--------------|
-| Claude Code | 25,000 tokens (warning at 10k) | `MAX_MCP_OUTPUT_TOKENS` env; per-tool `_meta["anthropic/maxResultSizeChars"]` up to 500,000 chars |
-| OpenAI Codex CLI | 10,000 bytes on byte-policy models (includes the JSON envelope) | `tool_output_token_limit` config |
+| Claude Code | 25,000 tokens (warning at 10k) | `MAX_MCP_OUTPUT_TOKENS` env; per-tool `_meta["anthropic/maxResultSizeChars"]` up to 500,000 chars, which **replaces** the token cap for text rather than being bounded by it |
+| OpenAI Codex CLI | **10,000 tokens** on every current model (~40KB); `bytes`-mode 10,000 survives only on legacy `gpt-5.2` and as the unknown-model fallback | `tool_output_token_limit` config |
 | Gemini CLI | 40,000 chars (head 20% / tail 80% trim; full output saved to a file) | settings; 0 or negative disables |
 
 Enforce your own cap server-side - see "Result-Size Budgets and Truncation" in `references/tool-schema-guide.md`. Two rules worth stating here: **never truncate `isError` results** (payment/auth challenges must survive intact), and treat client budgets as **per-connection properties** - accept them as URL query params (`?max_chars=`, alongside `?tools=`) rather than growing every tool schema with override args.
+
+### Long-Running Tools
+
+**A client timeout is a wall clock, not an idle timer.** Claude Code's per-server tool-call timeout is documented as a *"Hard wall-clock limit per call; progress notifications do not extend it"* - so the common instinct (emit `notifications/progress` to keep a slow call alive) does not work there. Progress is for the human watching, not for buying time.
+
+Design past the cap instead: return quickly with a server-minted handle and let the caller poll (see "Stateful Tools"), or adopt the `io.modelcontextprotocol/tasks` extension, which is built for exactly this and returns a `CreateTaskResult` the client polls via `tasks/get`. Tasks is per-request opt-in - a server that cannot service a call synchronously for a client that did **not** declare the tasks capability **MUST** return `-32021` (Missing Required Client Capability) naming the extension, not silently block.
 
 ### No-Parameter Tools
 
@@ -309,7 +320,9 @@ Generic hygiene still applies: validate inputs at tool boundaries, enforce per-u
 ### Server-Side Requirements (spec normative)
 
 - **Validate the `Origin` header** - but only reject when it is **present and invalid**: *"If the `Origin` header is present and invalid, servers MUST respond"* with 403. Shipping clients exist that send no `Origin` at all; a blanket 403-on-missing locks them out.
-- **Handle `MCP-Protocol-Version` leniently.** On 2025-era wires it is required after initialization (spec 2025-06-18+); on 2026-07-28 there is no initialization and the version rides `_meta`. Accept a range of declared versions rather than enforcing one - clients advertising `2024-11-05` are still in the wild.
+- **Turn the checks on.** `WebStandardStreamableHTTPServerTransport` defaults `enableDnsRebindingProtection` to `false` and leaves `allowedOrigins`/`allowedHosts` unset, so the stock stateless constructor validates nothing. The `@modelcontextprotocol/express` and `/hono` factories enable Host validation for localhost by default; the raw transport does not.
+- **`MCP-Protocol-Version` is not optional on a modern wire.** The header survived the sessionless overhaul: *"Every POST request to the MCP endpoint **MUST** include an `MCP-Protocol-Version` header"*, and its value **MUST** match `io.modelcontextprotocol/protocolVersion` in the body's `_meta` or the server **MUST** answer `400 Bad Request` with a `HeaderMismatch` error. The version rides `_meta` *and* the header, redundantly and on purpose - intermediaries route on the header while the server executes on the body, so both must agree.
+- **Be lenient about *which* version, not about whether it is declared.** On 2025-era wires accept a range of declared versions rather than enforcing one - clients advertising `2024-11-05` are still in the wild, and a server supporting pre-`2025-06-18` clients **MAY** treat a header-less request as `2025-03-26`. A server that does not support those clients **MUST** reject a header-less request.
 
 ### Auth (OAuth 2.1)
 
@@ -329,8 +342,10 @@ Must-know as of `sdk@1.30.0` / `server@2.0.0`:
 - **Require SDK >= v1.26.0** - shared instances leaked cross-client data below that ([CVE-2026-25536](https://nvd.nist.gov/vuln/detail/cve-2026-25536)).
 - **Register everything before `connect()`** - later registration throws; open on both `main` and `v1.x` ([#893](https://github.com/modelcontextprotocol/typescript-sdk/issues/893)).
 - **Client AJV strict rejects unstripped `structuredContent` extras** - `.parse()` upstream data first, or `.passthrough()` for intentional extras.
+- **v1.30.0 stamps every tool schema `"$schema": "http://json-schema.org/draft-07/schema#"`**, and a strict 2020-12 client rejects the whole tool: *"JSON Schema declares an unsupported dialect ... The default validator supports JSON Schema 2020-12 only."* One bad schema can take the server's other tools down with it in clients that drop the whole `tools/list`. v2 emits 2020-12. Open ([#2721](https://github.com/modelcontextprotocol/typescript-sdk/issues/2721), [#2677](https://github.com/modelcontextprotocol/typescript-sdk/issues/2677)); `@modelcontextprotocol/inspector` >= 2.4.0 flags it for you.
+- **Don't reuse one `McpServer` across `createMcpHandler` requests on v2.** Each request wraps `onclose`, the chain grows unbounded, and it dies with `RangeError: Maximum call stack size exceeded` at roughly 19-25k accumulated sessions - affects released `server@2.0.0` ([#2607](https://github.com/modelcontextprotocol/typescript-sdk/issues/2607)). The per-request pattern above is the fix.
 
-> Full table (statuses, transport-closure stack overflow, HTTP/2, raw JSON Schema, `z.transform()`, ReDoS): see `references/sdk-bugs.md`
+> Full table (statuses, zod 3->4 dropping `additionalProperties`, `refine`/`superRefine` never running, transport-closure stack overflow, HTTP/2, raw JSON Schema, `z.transform()`, ReDoS): see `references/sdk-bugs.md`
 
 ## V2 Migration
 
@@ -366,7 +381,7 @@ The `content` vs `structuredContent` dual-delivery footgun is **unchanged** - no
 
 ## Extensions
 
-Optional, strictly additive capabilities named `{vendor-prefix}/{extension-name}` (official: `io.modelcontextprotocol/*`; third-party: reversed domain). Negotiated in `initialize` capabilities on 2025-era wires; on 2026-07-28 clients advertise support **per request** in `_meta["io.modelcontextprotocol/clientCapabilities"]`. Official ones: **MCP Apps** (`/ui`, interactive HTML UIs, Stable, widely supported), **OAuth Client Credentials** (Draft), **Enterprise-Managed Authorization** (Stable 2026-06-18) - [client matrix](https://modelcontextprotocol.io/extensions/client-matrix).
+Optional, strictly additive capabilities named `{vendor-prefix}/{extension-name}` (official: `io.modelcontextprotocol/*`; third-party: reversed domain). Negotiated in `initialize` capabilities on 2025-era wires; on 2026-07-28 clients advertise support **per request** in `_meta["io.modelcontextprotocol/clientCapabilities"]`. Official ones: **MCP Apps** (`/ui`, interactive HTML UIs, Stable, widely supported; `ext-apps` **2.0.0** since 2026-09-08 - breaking on the TypeScript side only, the wire protocol is unchanged), **OAuth Client Credentials** (Draft), **Enterprise-Managed Authorization** (Stable 2026-06-18), **Tasks** (official since 2026-08-19) - [client matrix](https://modelcontextprotocol.io/extensions/client-matrix).
 
 Server capabilities beyond tools, all 2025-era APIs (the SDK default):
 
