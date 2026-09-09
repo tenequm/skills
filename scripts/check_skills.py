@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import argparse
 import json
 import re
 import shutil
@@ -710,14 +711,45 @@ def preflight_clawhub(repo_root: Path) -> PhaseResult:
     return PhaseResult(0, out, [])
 
 
-def main() -> int:
+def emit(result: PhaseResult) -> None:
+    for line in result.out:
+        print(line)
+    for line in result.err:
+        print(line, file=sys.stderr)
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(description="Validate every skill in this repo.")
+    modes = parser.add_mutually_exclusive_group()
+    modes.add_argument(
+        "--no-preflight",
+        action="store_true",
+        help="Local checks only. Skips the ClawHub preflight, so it needs no network or login.",
+    )
+    modes.add_argument(
+        "--preflight-only",
+        action="store_true",
+        help="Run only the ClawHub publish preflight.",
+    )
+    args = parser.parse_args(argv)
+
     repo_root = Path(__file__).resolve().parent.parent
+
+    if args.preflight_only:
+        result = preflight_clawhub(repo_root)
+        emit(result)
+        return result.code
 
     # The repo lint is pure local parsing and costs ~0.1s, so it stays a gate: its
     # errors are the clearest, and malformed frontmatter makes the later phases noisy.
     code = lint_skills(repo_root)
     if code != 0:
         return code
+
+    if args.no_preflight:
+        result = validate_skills_ref(repo_root)
+        emit(result)
+        return result.code
 
     # The reference validation and the ClawHub preflight are independent, so they
     # overlap instead of summing.
@@ -729,10 +761,7 @@ def main() -> int:
         results = [phase.result() for phase in phases]
 
     for result in results:
-        for line in result.out:
-            print(line)
-        for line in result.err:
-            print(line, file=sys.stderr)
+        emit(result)
 
     return next((r.code for r in results if r.code != 0), 0)
 
