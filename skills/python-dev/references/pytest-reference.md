@@ -36,11 +36,11 @@ python_files = ["test_*.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
 asyncio_mode = "auto"                  # pytest-asyncio: auto-detect async tests
-addopts = [
-    "--strict-markers",                # Error on unknown markers
-    "--strict-config",                 # Error on config issues
-    "-ra",                             # Show summary for all non-passing tests
-]
+# pytest 9.0 silently ignored --strict-markers/--strict-config given via addopts.
+# The ini keys work on 9.0 and 9.1 alike; `strict` is the shorthand for all four
+# strictness axes (config, markers, xfail, parametrization ids).
+strict = true
+addopts = ["-ra"]                      # Show summary for all non-passing tests
 
 markers = [
     "slow: marks tests as slow (deselect with '-m \"not slow\"')",
@@ -90,15 +90,25 @@ async def async_client():
     async with SomeAsyncClient() as client:
         yield client
 
-# For custom event loop (e.g., uvloop)
-# conftest.py
-@pytest.fixture(scope="session")
-def event_loop_policy():
-    import uvloop
-    return uvloop.EventLoopPolicy()
+# For a custom event loop (e.g. uvloop), pytest-asyncio 1.4+
+# conftest.py - maps factory names to loop factories
+import uvloop
+
+
+def pytest_asyncio_loop_factories(config, item):
+    return {
+        "uvloop": uvloop.new_event_loop,
+    }
 ```
 
-Breaking changes in 1.0: the `event_loop` fixture was removed. Use `asyncio.get_running_loop()` inside tests, or override `event_loop_policy` for a custom policy. 1.3 dropped Python 3.9 and added pytest 9 compatibility.
+Select one per test with `@pytest.mark.asyncio(loop_factories=["uvloop"])`.
+
+Breaking changes in 1.0: the `event_loop` fixture was removed - use `asyncio.get_running_loop()`
+inside tests. 1.3 dropped Python 3.9 and added pytest 9 compatibility. **1.4.0 deprecated
+overriding the `event_loop_policy` fixture** in favour of the hook above, and raised the minimum
+pytest to 8.4.0. The deprecation is downstream of CPython: `asyncio.AbstractEventLoopPolicy` is
+deprecated as of Python 3.14 (removal planned for 3.16), and `uvloop.EventLoopPolicy` goes with
+it - so the old fixture form is on a clock, not merely out of fashion.
 
 ### pytest-cov
 

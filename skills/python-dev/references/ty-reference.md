@@ -2,9 +2,9 @@
 
 Astral's Python type checker - extremely fast, written in Rust.
 
-**GitHub**: https://github.com/astral-sh/ty | **Status**: Beta (0.0.x; current line 0.0.33)
+**GitHub**: https://github.com/astral-sh/ty | **Status**: Beta (0.0.x; current line 0.0.79)
 
-> **Heads up**: ty is still pre-1.0 and each minor bump can change inference. Notable: 0.0.30 stopped unioning `Unknown` into most inferred attribute types; 0.0.31 introduced `--fix`; 0.0.33 prefers declared annotation over inferred RHS when assignable, removing many `cast(...)` workarounds. Pin a concrete version in `[dependency-groups]` rather than tracking `@latest`.
+> **Heads up**: ty is still pre-1.0 and each minor bump can change inference. Notable: 0.0.31 introduced `--fix`; 0.0.33 prefers declared annotation over inferred RHS when assignable, removing many `cast(...)` workarounds; **0.0.52 made `error-on-warning` the default**, so warnings now fail your build; 0.0.57 onward added a dedicated Pydantic support track; 0.0.67 removed the deprecated `src.root` in favour of `environment.root`. Pin a concrete version in `[dependency-groups]` rather than tracking `@latest`.
 
 ## Installation
 
@@ -16,8 +16,8 @@ uv run ty check
 # Quick run without installing
 uvx ty check
 
-# Global install
-uv tool install ty@latest
+# Global install - pin a version; ty is beta and inference moves between minors
+uv tool install ty@0.0.79
 
 # Homebrew
 brew install ty
@@ -102,6 +102,11 @@ empty-body = "error"
 # Suppress unresolved-import for specific modules
 allowed-unresolved-imports = ["test.**", "!test.foo"]
 
+# Replace a module's types with `Any` - the targeted fix for a heavy-typing
+# dependency that produces false positives, instead of swapping type checker.
+# Import diagnostics are unconditionally suppressed for matching modules.
+replace-imports-with-any = ["sqlalchemy.**"]
+
 # Whether to respect `type: ignore` comments (default: true)
 # Set false to only use `ty: ignore` comments
 respect-type-ignore-comments = true
@@ -114,7 +119,8 @@ respect-type-ignore-comments = true
 # Output format: full, concise, github, gitlab, junit
 output-format = "full"
 
-# Exit code 1 on warnings
+# Exit code 1 on warnings. NOTE: the default is `true` since 0.0.52 -
+# set this to false only if you deliberately want warnings to pass.
 error-on-warning = false
 ```
 
@@ -146,7 +152,7 @@ ty check [OPTIONS] [PATH]...
 --ignore <rule>             # Disable rule
 
 # Environment
---python-version <ver>      # 3.7 through 3.15
+--python-version <ver>      # 3.7-3.15 accepted; 3.10 is the real support floor
 --python-platform <plat>    # win32, darwin, linux, all
 --python <path>             # Path to environment/interpreter
 --extra-search-path <path>  # Additional module path
@@ -248,7 +254,7 @@ def split_paths(paths: str) -> list[Path]:
 
 1. **Beta status** - expect bugs and missing features. Version 0.0.x, targeting stable in 2026.
 2. **Incomplete typing spec** - long tail of Python typing features still being added.
-3. **Third-party libraries** - Pydantic, Django, SQLAlchemy support not yet complete.
+3. **Third-party libraries** - Django and SQLAlchemy support is not yet complete. Pydantic has had a dedicated support track since 0.0.57 (constructors, `model_config`, `BaseSettings`, `RootModel`, strict vs lax) and is no longer the usual culprit. For a dependency that still misbehaves, silence just that one with `[tool.ty.analysis] replace-imports-with-any = ["sqlalchemy.**"]`.
 4. **No plugin system** - unlike mypy, no plugin API for custom type inference.
 5. **Some rules off by default** - `possibly-unresolved-reference`, `possibly-missing-import`, `division-by-zero` produce false positives.
 
@@ -271,5 +277,6 @@ For the Justfile:
 ```just
 check:
     uv run ty check
-    uv run ruff check --fix && uv run ruff format
+    uv run ruff check
+    uv run ruff format --check
 ```

@@ -1,8 +1,10 @@
-# uv Reference (0.11.x)
+# uv Reference (0.12.x)
 
 Complete guide to uv - the Python package manager, version manager, and project runner.
 
-> **Heads up (0.10 -> 0.11)**: `uv venv` now requires explicit `--clear` to remove an existing environment (was implicit). `--native-tls` is deprecated in favor of `--system-certs`. `uv python upgrade`, `--upgrade-group`, and workspace commands `uv workspace dir` / `uv workspace list` are now stable. Always run a recent uv (>= 0.11.6) to pick up the wheel-uninstall path-traversal fix (GHSA-pjjw-68hj-v9mw).
+> **Heads up (0.11 -> 0.12)**: `uv init` now **packages by default** - it writes a `[build-system]` using `uv_build`, uses src layout, and adds a `[project.scripts]` entry; `--no-package` restores the old flat layout. The default pre-release mode is now `if-necessary`, and `if-necessary-or-explicit` survives only as a deprecated alias. `uv venv --clear` now refuses to clear a directory that is not a virtualenv (use `--force`). `uv lock --upgrade-group <name>` validates the group and errors if it does not exist.
+>
+> **Earlier (0.10 -> 0.11)**: `uv venv` requires explicit `--clear` to remove an existing environment. `--native-tls` is deprecated in favor of `--system-certs`. `uv python upgrade`, `--upgrade-group`, and workspace commands `uv workspace dir` / `uv workspace list` are stable. Always run a recent uv (>= 0.11.6) to pick up the wheel-uninstall path-traversal fix (GHSA-pjjw-68hj-v9mw).
 
 **Docs**: https://docs.astral.sh/uv/ | **GitHub**: https://github.com/astral-sh/uv
 
@@ -23,12 +25,16 @@ uv version
 
 ### `uv init` Templates
 
-```bash
-# Application (flat layout, no build system)
-uv init my-app
+As of uv 0.12.0 `uv init` **packages by default**: it writes a `[build-system]` using
+`uv_build`, uses src layout, and adds a `[project.scripts]` entry. `--package` is now redundant;
+`--no-package` gets the old flat, build-systemless layout.
 
-# Packaged application (src layout, build system, entry point) - PREFERRED
-uv init --package my-project
+```bash
+# Packaged application (src layout, uv_build, entry point) - the default since 0.12
+uv init my-project
+
+# Flat application, no build system (the pre-0.12 default)
+uv init --no-package my-app
 
 # Library (src layout, py.typed marker)
 uv init --lib my-lib
@@ -36,19 +42,20 @@ uv init --lib my-lib
 # Minimal (only pyproject.toml)
 uv init --bare my-project
 
-# With specific build backend
-uv init --package --build-backend hatchling my-project
+# With specific build backend (overriding the uv_build default)
+uv init --build-backend hatchling my-project
 
 # With author from git config
-uv init --package --author-from git my-project
+uv init --author-from git my-project
 ```
 
 ### Key `uv init` Flags
 
 | Flag | Effect |
 |------|--------|
-| `--app` | Application template (default) |
-| `--package` | Packaged app with build system and src layout |
+| `--app` | Application template |
+| `--package` | Packaged app with build system and src layout (default since 0.12) |
+| `--no-package` | Flat layout with no build system (the pre-0.12 default) |
 | `--lib` | Library (implies --package, adds py.typed) |
 | `--bare` | Only pyproject.toml, no other files |
 | `--build-backend <name>` | hatchling, flit-core, pdm-backend, setuptools, uv_build, maturin |
@@ -308,9 +315,9 @@ default = true     # Replaces PyPI
 ```toml
 [dependency-groups]
 dev = [
-    "ruff>=0.15.0",
-    "ty>=0.0.30",
-    "pytest>=9.0.0",
+    "ruff>=0.16.6",
+    "ty>=0.0.79",
+    "pytest>=9.1.1",
     {include-group = "lint"},
 ]
 lint = ["ruff"]
@@ -405,15 +412,14 @@ jobs:
   check:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v6
-        with:
-          enable-cache: true
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10.0.1   # full version: floating majors stop at v7
       - run: uv sync --all-groups
       - run: uv run ty check
-      - run: uv run ruff check
+      - run: uv run ruff check --output-format github
       - run: uv run ruff format --check
       - run: uv run pytest
+      - run: uv run lefthook validate
 ```
 
 ## Troubleshooting

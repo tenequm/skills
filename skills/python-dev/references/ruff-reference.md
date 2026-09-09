@@ -2,9 +2,9 @@
 
 Extremely fast Python linter and formatter, written in Rust. Replaces flake8, black, isort, pyupgrade.
 
-**Docs**: https://docs.astral.sh/ruff/ | **GitHub**: https://github.com/astral-sh/ruff | **Tracked line**: ruff 0.15.x
+**Docs**: https://docs.astral.sh/ruff/ | **GitHub**: https://github.com/astral-sh/ruff | **Tracked line**: ruff 0.16.x
 
-> **Heads up**: ruff 0.14 changed the default and latest target Python to 3.14. ruff 0.15 ships the 2026 formatter style guide and adds block-level suppression comments (`# ruff: disable[rule]` / `# ruff: enable[rule]`); a number of rules also stabilised out of preview. Pinning `target-version` in `pyproject.toml` keeps formatter output reproducible across upgrades.
+> **Heads up**: ruff **0.16 is the big one** - the default rule set went from 59 to 413 rules, 18 opinionated `E`/`F` rules were dropped from that default set, and `ruff format` now formats Python blocks inside Markdown by default. A `select` list replaces the defaults, so prefer `extend-select`/`ignore`. 0.16 also adds line-level `ruff: ignore` comments and `--add-ignore`, and `format --check` gained the linter's `--output-format github`. Earlier: 0.14 moved the default target Python to 3.14; 0.15 shipped the 2026 formatter style guide and block-level suppressions. Pinning `target-version` in `pyproject.toml` keeps formatter output reproducible across upgrades.
 
 ## Usage
 
@@ -50,17 +50,12 @@ exclude = [
 
 ```toml
 [tool.ruff.lint]
-# Recommended: loose, helpful rules
-select = [
-    "E",   # pycodestyle errors - syntax issues that break code
-    "F",   # pyflakes - undefined vars, unused imports (actual bugs)
-    "I",   # isort - import sorting
-    "UP",  # pyupgrade - use modern Python syntax
-]
-
+# Ruff 0.16 enables 413 rules by default (up from 59), and dropped 18 opinionated
+# E/F rules from that set. Writing a `select` list REPLACES the default set, so
+# `select = ["E","F","I","UP"]` now yields a weaker linter than no config at all.
+# Start from the defaults and narrow with `ignore`, or widen with `extend-select`.
 ignore = [
     "E501",   # line too long - formatter handles it
-    "E741",   # ambiguous variable name (l, O, I) - sometimes valid
     "UP007",  # X | Y unions - Optional[X] is more readable
     "UP006",  # type vs Type - both valid
 ]
@@ -72,15 +67,14 @@ unfixable = []
 
 ### Extended Rule Sets (add when needed)
 
+Use `extend-select`, not `select` - it adds to ruff 0.16's default set instead of replacing it.
+Some of these are already on by default (a mutable-default arg raises `B006` with no config at
+all), while `S`, `T20` and `ERA` are not.
+
 ```toml
 [tool.ruff.lint]
-select = [
-    "E",   # pycodestyle errors
-    "F",   # pyflakes
-    "I",   # isort
-    "UP",  # pyupgrade
-    # Add these incrementally:
-    "B",   # flake8-bugbear - common bugs and design problems
+extend-select = [
+    "B",   # flake8-bugbear - common bugs and design problems (partly default in 0.16)
     "SIM", # flake8-simplify - simplification suggestions
     "RUF", # ruff-specific rules
     "S",   # flake8-bandit - security issues
@@ -144,15 +138,36 @@ docstring-code-format = true  # Format code in docstrings
 | PIE | flake8-pie | Miscellaneous lints |
 | RET | flake8-return | Return statement issues |
 
-## Pre-commit Integration
+## Git Hook Integration
+
+```yaml
+# lefthook.yml
+pre-commit:
+  piped: true
+  jobs:
+    - name: ruff-check
+      glob: "*.{py,pyi,ipynb}"
+      run: uv run ruff check --force-exclude --fix {staged_files}
+      stage_fixed: true
+    - name: ruff-format
+      glob: "*.{py,pyi,ipynb}"
+      run: uv run ruff format --force-exclude {staged_files}
+      stage_fixed: true
+```
+
+`--force-exclude` is required whenever paths are passed explicitly, or `[tool.ruff] exclude`
+is ignored for them. Lint before format: `--fix` output may need reformatting.
+
+On pre-commit instead, the current hook ids are `ruff-check` and `ruff-format` - bare `ruff`
+is a legacy alias - and `rev` must be kept in step with the ruff pin in `pyproject.toml`:
 
 ```yaml
 # .pre-commit-config.yaml
 repos:
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.15.12
+    rev: v0.16.6
     hooks:
-      - id: ruff
+      - id: ruff-check
         args: [--fix]
       - id: ruff-format
 ```

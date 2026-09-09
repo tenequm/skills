@@ -143,7 +143,8 @@ _helper:
 [doc("Run type checking and linting")]
 check:
     uv run ty check
-    uv run ruff check --fix && uv run ruff format
+    uv run ruff check
+    uv run ruff format --check
 ```
 
 ## Shebang Recipes
@@ -210,7 +211,8 @@ set quiet
 [group('quality')]
 check:
     uv run ty check
-    uv run ruff check --fix && uv run ruff format
+    uv run ruff check
+    uv run ruff format --check
 
 # Run tests
 [group('testing')]
@@ -228,10 +230,11 @@ fix:
     uv run ruff check --fix
     uv run ruff format
 
-# Install all dependencies
+# Install all dependencies and git hooks
 [group('dev')]
 install:
     uv sync --all-groups
+    uv run lefthook install
 
 # Update all dependencies
 [group('dev')]
