@@ -4,6 +4,33 @@ All notable changes to this skill are documented in this file, following [Keep a
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-09-11
+
+### Added
+
+- Syntax authority section: `acpx --skill show acpx` is the syntax source of truth,
+  retrieved tiered (`--help` first, grep/sed a topic second, dump-to-scratch-file only
+  for novel authoring - never into the transcript; the reference is ~29k chars).
+- When this lane section: the herdr-vs-acpx-vs-in-session routing rule, so the skill is
+  self-contained instead of relying on a private harness config.
+- agy: sibling-file reads warning (one directory per agent) - previously only in the
+  herdr-faq sibling skill.
+
+### Changed
+
+- The file now carries only the vendor-reference delta: exit codes, failure semantics,
+  traps, and per-agent recipes. Invariant 4 absorbed the "permission flags are not a
+  sandbox" bullet; the Failures catalog is compressed to error string -> fix + section
+  pointer.
+- Description names the lane condition (outside a herdr pane / no HERDR_ENV).
+
+### Removed
+
+- Everything retrievable verbatim from `acpx --skill show acpx`: the sessions verb
+  table, `Ctrl+C`/`cancel` semantics, `--format` enumeration, prune how-to, headful
+  takeover walkthrough. MCP era-mismatch history, `.par` provenance, and measurement
+  backstories compressed to their actionable clauses. 27,963 -> 20,128 chars.
+
 ## [0.4.0] - 2026-09-11
 
 ### Added

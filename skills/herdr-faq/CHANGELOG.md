@@ -4,6 +4,32 @@ All notable changes to this skill are documented in this file, following [Keep a
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-09-11
+
+### Added
+
+- Syntax authority section: `herdr --skill` (~13k chars) is the syntax source of truth,
+  read once per session; flags come from bare command groups or `--help`, never bare
+  `herdr` (it launches the TUI).
+- When this lane section up front: the `HERDR_ENV=1` gate and the routing to acpx
+  (acpx-faq) when outside a herdr pane, so the skill is self-contained instead of
+  relying on a private harness config.
+- Model defaults for all three kinds under Per kind (codex `gpt-5.6-sol` at high
+  reasoning effort, claude `claude-opus-5`, agy `gemini-3.7-flash-medium`).
+
+### Changed
+
+- The file now carries only the vendor-reference delta: recipes, detection gaps, flag
+  caps, and the error catalog. Shapes renamed to Composing traps and stripped of plain
+  syntax the `Usage:` lines answer. Description names the HERDR_ENV requirement.
+
+### Removed
+
+- Everything `herdr --skill` states verbatim: the Multiple machines section, read-source
+  enumeration, prompt-submission and wait/settled-state mechanics, done/idle seen-state,
+  the pane split/process-info launch walkthrough, "confirm before resend on timeout"
+  basics. 24,988 -> 19,120 chars.
+
 ## [0.3.2] - 2026-09-09
 
 ### Added
