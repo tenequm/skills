@@ -2,7 +2,7 @@
 name: acpx-faq
 description: Run coding agents (codex, claude, Antigravity/agy) headlessly through the acpx ACP CLI. Use before launching or prompting an acpx subagent, and when an acpx command fails, a session is not found, or a prompt seems lost.
 metadata:
-  version: "0.3.0"
+  version: "0.4.0"
   categories: "agents, operations"
   topics: "acpx, acp, agent-orchestration, troubleshooting, headless-agents"
   upstream: "acpx@0.15.1, agy@1.1.28, agy_acp_server@20260818_01_RC01"
@@ -40,10 +40,20 @@ launch-to-result recipe. After that: Sessions, Completion, MCP, Limits, Failures
 5. **`[done] end_turn` and exit 0 are not proof of success.** A content-filter kill, an MCP
    load failure, or a truncated turn all end that way. Read the stream, or require the agent
    to write a result file you can check.
+6. **A persistent session leaves a resident process stack until you close it.** Every `-s`
+   prompt elects a queue owner holding `npm exec -> node <adapter> -> <agent binary>`,
+   roughly 700 MB per executor. `sessions close` is the only supported teardown; the idle
+   TTL (default 300s) is the backstop, and `--ttl 0` removes it. See Teardown.
 
 ## Per agent
 
 Each section is self-contained: flags, launch, and the quirks that bite while it runs.
+
+**Default to `exec` for dispatched work.** `exec` runs a temporary session: no saved record,
+and not queue-aware, so it never elects a queue owner and leaves nothing to clean up. Reach
+for `-s <name>` only when you will queue follow-ups onto the live run or read
+`sessions history` afterwards - and then the closing `sessions close` is part of the recipe,
+not an optional courtesy (invariant 6).
 
 ### agy / Antigravity - the `--agent` escape hatch
 
@@ -162,8 +172,10 @@ D=/abs/dir
 acpx --cwd "$D" codex sessions ensure --name work            # idempotent; -s cannot create
 acpx --cwd "$D" codex set model gpt-5.6-sol -s work          # -> model set: gpt-5.6-sol
 acpx --cwd "$D" codex set reasoning_effort high -s work      # -> config set: ... (5 options)
-acpx --cwd "$D" --approve-all --timeout 5400 --ttl 0 --format quiet --suppress-reads \
+acpx --cwd "$D" --approve-all --timeout 5400 --format quiet --suppress-reads \
      codex -s work 'Carry out ./brief.md. Write your report to ./report.md.' > run.log 2>&1 &
+# ...after the run finishes and you have read what you need:
+acpx --cwd "$D" codex sessions close work   # ALWAYS - the run is not over until this returns
 ```
 
 For a one-shot, skip the session entirely - `exec --config-option` sets model and effort
@@ -197,6 +209,8 @@ D=/abs/dir
 acpx --cwd "$D" --model claude-opus-5 claude sessions ensure -s work
 acpx --cwd "$D" --model claude-opus-5 --approve-all --suppress-reads --timeout 2400 \
      claude -s work -f /abs/brief.md >> run.log 2>&1 &
+# ...after the run finishes and you have read what you need:
+acpx --cwd "$D" claude sessions close work  # ALWAYS - the run is not over until this returns
 ```
 
 - **No effort knob.** `set reasoning_effort` returns `Internal error`. Only the model id.
@@ -237,7 +251,7 @@ worktree and their per-session model and effort settings cannot race.
 | a bare prompt with `-s <n>` | never auto-creates; exits **4** with `Create one: ...` |
 | `sessions show <n>` | `lastActivity`, `lastPrompt`, `historyEntries`, `sessionId`, `closed` |
 | `sessions history <n> --limit N` | the actual turn content |
-| `sessions close <n>` | releases the agent; required before `codex resume` and before `sessions export` |
+| `sessions close <n>` | the teardown verb: marks the record closed, sends ACP `session/close`, and takes down the owner and adapter processes (see Teardown); also required before `codex resume` and `sessions export` |
 | `sessions list --local` | local records including closed ones |
 | `sessions prune` | deletes closed records - they persist indefinitely otherwise |
 
@@ -250,9 +264,9 @@ its cwd, so prune it.
 **Never poll `status`.** It is a local `kill(pid,0)`-style check on the queue owner and never
 touches the agent. Its states are `running`, `idle`, `dead`, `no-session`, where `dead` means
 the owner is gone or the last exit was abnormal. A turn that finished seconds ago still reads
-`running`, because the owner survives for its idle TTL (default **300s**, `--ttl <seconds>`,
-`--ttl 0` to keep it forever). A loop waiting for `idle` will spin past real completion and
-time out.
+`running`, because the owner survives for its idle TTL (default **300s**, `--ttl <seconds>`;
+`--ttl 0` keeps it forever - see Teardown before reaching for that). A loop waiting for
+`idle` will spin past real completion and time out.
 
 What is actually correct:
 
@@ -271,6 +285,29 @@ check liveness with `pgrep -fl 'acpx|codex-acp|claude-agent-acp'`.
 
 `Ctrl+C` (and the `cancel` subcommand) sends ACP `session/cancel` first and force-kills only
 if the agent does not stop in time.
+
+## Teardown
+
+`sessions close <n>` is the teardown verb, not a bookkeeping nicety: it marks the record
+closed, asks the queue owner to send ACP `session/close`, and takes down the whole resident
+stack (`acpx __queue-owner` -> `npm exec` -> `node <adapter>` -> agent binary). Make it the
+last line of every scripted persistent run. Skipped closes accumulate silently: seven
+forgotten owners from one afternoon of dispatched runs were still holding ~4.9 GB RSS hours
+after their turns ended, every one of them heartbeating a `queueDepth: 0` lock file.
+
+- **Verify, do not assume.** The liveness command from Completion doubles as the leak check:
+  `pgrep -fl 'acpx __queue-owner|claude-agent-acp|codex-acp'` should print nothing once your
+  runs are closed.
+- **A straggler gets a plain `kill`, never `kill -9` on an owner.** acpx (0.15.1) kills the
+  adapter by PID only - there is no process-group kill in the ACP session path - so SIGKILL
+  on an owner strands `npm exec -> node -> <agent>` reparented to PID 1, and you are back to
+  hunting processes by hand. `sessions close` (or plain SIGTERM, which lets it clean up)
+  takes the whole stack with it.
+- **If owners linger with no `--ttl 0` on the command line**, check `~/.acpx/config.json`:
+  its `ttl` key sets the default idle TTL, and `"ttl": 0` there disables the self-reap for
+  every invocation.
+- **Closed records persist indefinitely.** `sessions prune --older-than 7` on a cadence
+  keeps `~/.acpx/sessions` from growing without bound.
 
 ## MCP
 
@@ -343,7 +380,10 @@ not the child's. Never let an identity flow in through the environment.
   script can start failing here.
 - Terminal output retention is 64 KiB per call; `ACPX_TERMINAL_MAX_OUTPUT_BYTES` adjusts it.
 - `--timeout <seconds>` is the wall clock for the whole prompt. Long unattended work wants
-  `--timeout 5400 --ttl 0`; a wrapping shell `timeout` is a reasonable belt-and-braces.
+  `--timeout 5400`; a wrapping shell `timeout` is a reasonable belt-and-braces. Do not add
+  `--ttl 0`: the TTL only governs how long an idle owner lingers between prompts, the 300s
+  default already covers any gap within one run, and `--ttl 0` removes the only automatic
+  reaper (invariant 6). Reserve it for a human-driven warm session you will close by hand.
 - Output: `--format quiet` for many backgrounded executors, `text` for one you are watching,
   `json` (with `--json-strict`) when a script parses it. `--suppress-reads` keeps read-file
   contents out of the log and is worth setting on every long run.

@@ -4,6 +4,32 @@ All notable changes to this skill are documented in this file, following [Keep a
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-09-11
+
+### Added
+
+- Invariant 6: a persistent session leaves a resident process stack (~700 MB per executor)
+  until `sessions close`; the idle TTL is the backstop and `--ttl 0` removes it. Learned
+  from a real incident: seven forgotten owners from dispatched runs held ~4.9 GB RSS for
+  hours, all heartbeating `queueDepth: 0` lock files.
+- Teardown section: close as the last line of every scripted run, the pgrep leak check,
+  plain `kill` (never `kill -9`) for stragglers - acpx 0.15.1 kills the adapter by PID only,
+  so SIGKILL strands the `npm exec -> node -> agent` subtree on PID 1 - plus the
+  `~/.acpx/config.json` `ttl` key and a `sessions prune --older-than 7` cadence.
+- Per agent now opens with the exec-vs-session fork: `exec` is temporary, unsaved, and not
+  queue-aware (nothing to leak), so it is the default for dispatched work; `-s <name>` is
+  for queued follow-ups or reading `sessions history` afterwards.
+
+### Changed
+
+- Both launch recipes (codex, claude) now end with `sessions close` instead of stopping at
+  "background it and read the log".
+- Dropped `--ttl 0` from the codex recipe and from the Limits guidance; both spots now say
+  what it costs and reserve it for human-driven warm sessions.
+- The `sessions close` row in the Sessions table leads with teardown (per upstream
+  docs/sessions.md: marks closed, sends ACP `session/close`, tears down adapter processes)
+  instead of reading as a mere precondition for `codex resume` / `sessions export`.
+
 ## [0.3.0] - 2026-09-09
 
 ### Added
