@@ -2,7 +2,7 @@
 name: acpx-faq
 description: Run coding agents (codex, claude, agy/Antigravity) through the acpx ACP CLI - the headless lane outside a herdr pane (no HERDR_ENV). Use before launching or prompting a subagent, and when a command fails, a session is not found, or a prompt is lost.
 metadata:
-  version: "0.5.0"
+  version: "0.5.1"
   categories: "agents, operations"
   topics: "acpx, acp, agent-orchestration, troubleshooting, headless-agents"
   upstream: "acpx@0.15.1, agy@1.1.28, agy_acp_server@20260818_01_RC01"
@@ -74,15 +74,12 @@ sessions key on cwd.
 
 ### agy / Antigravity - the `--agent` escape hatch
 
-**acpx has no Antigravity adapter and never will** (issue #362, externally blocked: no
-supported ACP stdio mode). The built-in `gemini` agent is the *public Gemini CLI*, a
-different product, dead for Code Assist
-(`[error] RUNTIME: This client is no longer supported for Gemini Code Assist for
-individuals`). The only route is Google's signed ACP server via `--agent`. The `.par`
-is installed by Antigravity under `~/.local/lib/antigravity-acp/` (build
-`agy_acp_server_20260818_01_RC01`, self-updates nothing; if missing, install
-Antigravity - never download it). `localharness_external` beside it must stay
-executable, or the server starts anyway and only logs `Localharness not found`.
+**acpx has no Antigravity adapter**, and the built-in `gemini` agent is the *public
+Gemini CLI* - a different product, dead for Code Assist. The only route is Google's
+signed ACP server via `--agent`: the `.par` installed by Antigravity under
+`~/.local/lib/antigravity-acp/` (if missing, install Antigravity - never download it).
+`localharness_external` beside it must stay executable, or the server starts anyway
+and only logs `Localharness not found`.
 
 ```bash
 # macOS: --agent may point straight at the .par
@@ -98,39 +95,30 @@ acpx --agent ~/.local/lib/antigravity-acp/agy_acp_server.par \
 - **agy reads sibling files unprompted** - agents sharing a directory reproduce each
   other's output. One directory per agent, and checksum any rerun before believing an
   agreement number.
-- **Auth is a settings file, not an env var** (`ACPX_AUTH_OAUTH_PERSONAL=1` is dead in
-  this build). With no auth type configured the server **hangs on `authenticate`
-  forever**, which reads like a network stall. Write the type first:
+- **Auth: with no auth type configured the server hangs on `authenticate` forever** -
+  it reads exactly like a network stall. One-time fix:
 
   ```bash
   mkdir -p ~/.gemini/antigravity-acp
   echo '{"auth":{"type":"oauth-personal"}}' > ~/.gemini/antigravity-acp/settings.json
   ```
 
-  Types: `oauth-personal` (the subscription path, the one you want),
-  `gemini-api-key`, `agent-platform`. Sign in once; the token persists.
-- **The OAuth browser opens silently; the URL is never printed.** Capture it with a
-  fake `xdg-open` (or `open`) early on PATH that echoes its argument; on a headless
-  box `curl` the callback URL yourself. A session created before auth finished stays
-  broken - start fresh.
-- **Leave the auth alone.** This lane is subscription-backed (`oauth-personal`, also
-  the CLI-side default in `~/.gemini/settings.json` - a different file). An
-  entitlement problem is a server-side lookup with no client lever; do not "fix" it by
-  switching to `gemini-api-key` or a GCP project (separate billing, not fixes).
+  then complete its own sign-in once; the token persists. The server reads
+  `~/.gemini/antigravity-acp/acp_token.json`, never the CLI's token - a fully
+  authenticated `agy` does nothing for this lane, and `GEMINI_HOME` relocates the
+  whole tree (a second isolated lane). An entitlement problem is server-side with no
+  client lever - do not "fix" it by switching to `gemini-api-key` or a GCP project
+  (separate billing, not fixes).
 - **Never pass a positional agent with `--agent`** - exit **2**.
 - **Verification prompts: demand a bare reply and read the whole log.** agy routes
   answers into brain artifact files, so a `tail` cannot tell "no tools" from
   "answered elsewhere". Add "Do not create any files".
 - **agy hides MCP failures inside a successful-looking turn** - grep the output for
   `MCP load failed`; the exit code stays 0.
-- **The credential split is total.** The ACP server reads
-  `~/.gemini/antigravity-acp/acp_token.json`, never the CLI's token - a fully
-  authenticated `agy` does nothing for this lane. `GEMINI_HOME` relocates the whole
-  tree; that is how you run a second isolated lane.
 
 #### Linux / NixOS
 
-Three silent differences from macOS:
+Two silent differences from macOS:
 
 1. **`--uid=` is required**, so `--agent` points at a wrapper
    (`~/.local/bin/agy-acp-server`):
@@ -146,15 +134,9 @@ Three silent differences from macOS:
    `502 Bad Gateway: Failed to connect to backend API` and the turn still ends
    `[done] end_turn` with **exit 0** (invariant 5). The real
    `CERTIFICATE_VERIFY_FAILED` appears only under `--alsologtostderr`.
-3. **Install `agy` by hand, not via the piped installer** - its `agy install` step
-   writes PATH blocks into `~/.bashrc`/`~/.profile`, broken when rc files are
-   read-only nix-store symlinks. Both binaries resolve through nix-ld; no patchelf.
 
-```bash
-acpx --agent ~/.local/bin/agy-acp-server \
-     --cwd "$D" --model gemini-3.7-flash-medium \
-     --approve-all --timeout 1800 exec '<prompt>'
-```
+The invocation is otherwise the macOS one with
+`--agent ~/.local/bin/agy-acp-server`.
 
 ### codex
 
@@ -172,9 +154,7 @@ acpx --cwd "$D" codex sessions close work   # ALWAYS - the run is not over until
 One-shot: `exec --config-option reasoning_effort=low` sets model and effort inline
 (0.14.0+), applied after `--model` and before the prompt.
 
-- **The adapter floats** (`@agentclientprotocol/codex-acp@^1.1.5` tracks the latest
-  1.x on every `npx` resolution) - a codex-side change can land without you upgrading
-  acpx.
+- The codex adapter floats on `^1.1.5` - behavior can change without an acpx upgrade.
 - **OpenAI's content filter kills benign turns** that end clean (`[done] end_turn`,
   exit 0). Vocabulary like race / sweep / exploit / attack in a filename, comment or
   prompt triggers it. Read the transcript tail before believing completion; recover by
@@ -209,12 +189,8 @@ acpx --cwd "$D" claude sessions close work  # ALWAYS - the run is not over until
   **creation**, so recreate the session, do not re-prompt it.
 - **Second account**: export `CLAUDE_CONFIG_DIR` and `CLAUDE_SECURESTORAGE_CONFIG_DIR`
   before `acpx`; the child inherits them.
-- **The adapter is pinned far behind your CLI** (`claude-agent-acp@^0.60.0` -> SDK
-  0.3.215 -> bundled claude 2.1.215, regardless of PATH): no cross-session messaging
-  socket, no newer harness features. Override with `--agent` at a newer adapter build.
-- A **session-creation stall** is a known adapter bug; acpx's own error text
-  recommends `--approve-all` with `nonInteractivePermissions=deny`, upgrading both
-  sides, or falling back to `exec`.
+- The claude adapter bundles an old claude (2.1.215) regardless of your PATH - newer
+  harness features are absent; override with `--agent` at a newer adapter build.
 
 ## Sessions
 

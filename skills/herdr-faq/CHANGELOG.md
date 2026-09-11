@@ -4,6 +4,14 @@ All notable changes to this skill are documented in this file, following [Keep a
 
 ## [Unreleased]
 
+## [0.4.1] - 2026-09-11
+
+### Removed
+
+- Windows branches compressed to parentheticals, asides (grok comparison, free-tier
+  data-terms clause), and second explanatory sentences in Failures entries where the
+  fix alone suffices.
+
 ## [0.4.0] - 2026-09-11
 
 ### Added

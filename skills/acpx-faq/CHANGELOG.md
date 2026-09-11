@@ -4,6 +4,17 @@ All notable changes to this skill are documented in this file, following [Keep a
 
 ## [Unreleased]
 
+## [0.5.1] - 2026-09-11
+
+### Removed
+
+- Content agents never act on mid-run: the agy OAuth-URL capture choreography (the
+  Failures catalog still routes both auth signatures to the compressed auth bullet),
+  the session-creation-stall bullet (acpx prints its own remedy at failure time),
+  issue/build provenance, the adapter float/pin backstories (kept as one-liners), the
+  hand-install note and duplicate invocation block in Linux / NixOS. 20,097 -> 18,493
+  chars.
+
 ## [0.5.0] - 2026-09-11
 
 ### Added

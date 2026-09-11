@@ -2,7 +2,7 @@
 name: herdr-faq
 description: Launch and drive coding agents (codex, claude, agy) through the Herdr CLI; requires a herdr pane (HERDR_ENV=1). Use before starting or prompting a herdr subagent, and when a herdr command fails or an agent seems stuck or silently lost a prompt.
 metadata:
-  version: "0.4.0"
+  version: "0.4.1"
   categories: "agents, operations"
   topics: "herdr, troubleshooting, agent-orchestration, terminal-multiplexer"
   upstream: "herdr@0.9.0"
@@ -152,7 +152,7 @@ herdr agent prompt ag1 "Carry out $D/brief.md. Write your report to $D/report.md
 - **Read the startup banner before blaming herdr.** `<account> (Google AI Pro)` means
   entitlement is reaching Code Assist. A bare address, or `Eligibility check failed:
   UNAVAILABLE (code 503)`, means dead on arrival however healthy the status looks -
-  re-auth, do not re-prompt. A silent drop to free tier also changes the data terms.
+  re-auth, do not re-prompt.
 - **`not a valid artifact path` is agy-internal, not your filesystem.**
   `ArtifactMetadata` on a `write_to_file` confines the write to
   `~/.gemini/antigravity-cli/brain/<session-id>/`. It self-recovers by retrying as
@@ -160,8 +160,8 @@ herdr agent prompt ag1 "Carry out $D/brief.md. Write your report to $D/report.md
 - **agy reads sibling files unprompted** - agents sharing a directory reproduce each
   other's output. Own directory each, and `md5` any rerun before believing an
   agreement number: byte-identical multi-KB prose is copying, not consensus.
-- **Premature `done`** lasts up to ~50s mid-turn while the pane visibly streams (grok
-  shares this bug) - wait on the report file, never a settled state. A first prompt
+- **Premature `done`** lasts up to ~50s mid-turn while the pane visibly streams -
+  wait on the report file, never a settled state. A first prompt
   can be swallowed entirely with `agent_prompt_stalled` and no trace in the composer;
   re-prompt, never `send-keys`. No session ref until the first prompt. Integration
   install target is `antigravity-cli`; `~/.gemini/config` must exist (or
@@ -184,7 +184,7 @@ detection - and their hooks silently no-op without `python3` on PATH.
   still-`blocked` state within milliseconds, a no-op that looks like the key never
   landed.
 - Names die with the agent and freed names get recycled - namespace them
-  (`myproj-reviewer`, never `driver`). After a killed `agent start`, one
+  (`myproj-reviewer`). After a killed `agent start`, one
   `herdr agent get <name>` frees the reservation (reconciliation is lazy). An agent
   TARGET can be a bare pane id (`agent prompt w1K:p1 '<text>'`) - how you reach an
   unnamed agent without renaming someone else's.
@@ -255,17 +255,16 @@ Triage first:
   agents untouched; trust `herdr status` (`endpoint_compatible`, `restart_needed`,
   `server_binary_stale`). A stale CLIENT inverts the picture: it calls the server
   "old" while `pane list` correctly says `client protocol N is older than server`.
-- **"herdr is stuck"** is often the terminal emulator, not herdr - a wedged surface
-  takes no input while panes and agents are fine in the server. Open a fresh tab
+- **"herdr is stuck"** is often the terminal emulator, not herdr - open a fresh tab
   before touching the server.
 
 Catalog:
 
 - `agent_not_ready` (start) - a dialog is on screen; exit 1 but the agent is running
   and the name is bound. Read, answer via `send-keys` (safe keys in Per kind), gate
-  `--until idle done`, prompt. A blocked launch never times out: `launch_pending`
-  stays true and `rename` returns `agent_launch_pending` until answered. agy's trust
-  dialog is NOT detected and reads as `idle` instead - see agy.
+  `--until idle done`, prompt. A blocked launch never times out (`launch_pending`
+  stays true until answered). agy's trust dialog is NOT detected and reads as `idle`
+  instead - see agy.
 - `timeout` (start) - invariant 3; read the pane. `command not found` in a non-login
   shell: set `[terminal] shell_mode = "login"`, recreate the pane. Under `--remote`,
   panes inherit the SERVER's PATH, so a `~/.local/bin` agent CLI gives a bare timeout.
@@ -276,8 +275,8 @@ Catalog:
   (a) racy rc files (`starship`, `direnv`): herdr retries only 2s and `pane get` looks
   identical ready vs not - retry with backoff, clean up orphaned tabs; (b) genuine
   occupant: split a new pane, never reclaim (killing the occupant cascades into
-  `pane_not_found`); (c) Windows profiles that chain-launch pwsh nest shells
-  invisibly: `[terminal] default_shell = "pwsh.exe"`.
+  `pane_not_found`). (Windows: pwsh chain-launch profiles nest shells - set
+  `[terminal] default_shell = "pwsh.exe"`.)
 - `agent_not_found` - downstream symptom: failed start, exited agent, or a bad name
   earlier in the loop. A live pane can rarely lose registration while the TUI runs
   fine - `agent rename <pane> <same-name>` restores it.
@@ -287,8 +286,8 @@ Catalog:
 - `agent_prompt_stalled` - **not proof of non-delivery**; the text may have landed and
   been consumed. Causes in observed order: stale manifest; a dialog-opening prompt; a
   target-side paste modal swallowing Enter (omp's Large Paste Menu triggers on *line
-  count*, not bytes - disable it in omp `/settings`); Windows input races on long
-  prompts. Never blind-resend and never recover with a lone `send-keys enter`. Read
+  count*, not bytes - disable it in omp `/settings`). Never blind-resend and never
+  recover with a lone `send-keys enter`. Read
   the pane, then re-send with a fresh `agent prompt`:
 
   ```bash
@@ -300,8 +299,8 @@ Catalog:
 
 - `agent_blocked` (prompt) - refused before anything is written. Read detection,
   surface the dialog, answer via send-keys.
-- `invalid_agent_name` - `[a-z][a-z0-9_-]{0,31}`; shell loops producing uppercase are
-  the classic cause, and one bad name cascades into a wall of `agent_not_found`s.
+- `invalid_agent_name` - `[a-z][a-z0-9_-]{0,31}`; uppercase from shell loops cascades
+  into a wall of `agent_not_found`s.
 - `pane_not_found` / `workspace_not_found` / `unknown option: <valid-looking value>` -
   IDs are runtime-only, never reused: re-list at session start, recreate only what is
   missing. `unknown option` on a whole flag string is the zsh variable trap (see
