@@ -1,6 +1,6 @@
 # Lefthook Reference
 
-Latest: **v2.1.12** (2026-08-28). Single Go binary, no runtime dependency. `go install github.com/evilmartians/lefthook/v2@v2.1.12` needs Go 1.26+; Homebrew, npm, and the GitHub release binaries avoid that floor.
+Latest: **v2.1.14** (2026-09-14). Single Go binary, no runtime dependency. `go install github.com/evilmartians/lefthook/v2@v2.1.14` needs Go 1.26+; Homebrew, npm, and the GitHub release binaries avoid that floor.
 
 Config is discovered at the repo root or in `.config/`, and read fresh on every hook run - "Reinstall is not required when you modify `lefthook.yml`, the configuration file is read every time a git hook is run." Only adding or removing a *hook section* requires `lefthook install`.
 
@@ -54,22 +54,29 @@ pre-commit:
 
 - **Sequential is the default.** "Lefthook runs commands and scripts **sequentially** by default." `parallel: true` opts into concurrency; `piped: true` is fail-fast - "Stop running commands and scripts if one of them fail." The two are mutually exclusive and lefthook errors if both are set.
 - **`priority`** orders jobs when `parallel: false` or `piped: true`. Values run low-to-high from 1; "Value `0` is considered an `+Infinity`", so unprioritised jobs run last.
+- **`commands:` is a map, and lefthook sorts it before running it.** Written order is not run order. The sort is `priority` first (0 last), then a leading numeric prefix in the name, then plain alphabetical comparison of the names (`internal/config/command.go:60-92`, same logic in `internal/config/script.go:54-85`). So a `piped: true` block of unprioritised commands runs alphabetically: `fmt` before `secrets`, `lint` before `test`. `jobs:` is a list and preserves declaration order - and its `Job` struct carries no `Priority` field at all, so `priority` is a `commands:`/`scripts:` option only.
 - **`fail_on_changes`** decides whether a job that modified tracked files fails: `never` (default), `always`, `ci` ("exit with a non-zero status only when the `CI` environment variable is set ... useful when combined with `stage_fixed` to ensure a frictionless devX locally, and a robust CI"), or `non-ci`.
 
 ## `stage_fixed`
 
 Re-stages files after a fixer rewrote them. Since v2.1.12 a failed re-stage fails the hook - "If the `git add` call fails, the hook fails too. Otherwise the commit would silently go through with the unfixed content."
 
-Unstaged work is safe across a hook run: lefthook hides unstaged changes for the hook's duration and restores them afterwards, so the gate judges exactly what is being committed, not your working tree. (Behaviour before 1.7 differed; ignore older accounts of this.)
+**It re-stages the substituted file list, not the files the command actually touched.** Lefthook stages the same list it handed the job - the filtered `{staged_files}` expansion, or the filtered staged set when the job used no file template (`internal/run/controller/job.go:155-181`). A file the command *created*, or fixed while absent from that list, is left unstaged and the commit goes through without the fix.
+
+**Unstaged work is hidden only for *partially staged* files.** The guard asks git for files dirty in *both* the index and the worktree, and if that list is empty it runs the hook with no stash at all (`internal/git/repo.go:228-246`, `internal/run/controller/guard.go:68-88`). A file carrying only unstaged changes - never `git add`ed - is not hidden, so the hook judges the on-disk file, not the indexed one. Verified live: an unstaged `Justfile` edit was the version the hook executed. Treat any claim that lefthook hides *all* unstaged changes for the hook's duration as wrong for 2.1.14.
+
+**Worktree hazard: the backup is shared across linked worktrees.** The partial-stage backup patch lands at `.git/info/lefthook-unstaged.patch` and the safety stash is stored under the message `lefthook auto backup` (`internal/git/repo.go:24-25`, `:170`). Both resolve through the *common* git dir - `git rev-parse --git-path info` and `refs/stash` are shared, not per worktree - so every linked worktree of a repo contends for one patch file and one stash entry, and two worktrees committing concurrently can destroy each other's unstaged changes. Open upstream, both unfixed in 2.1.14: [the shared backup patch and stash across linked worktrees](https://github.com/evilmartians/lefthook/issues/1529), and [a failed patch re-apply falling back to a bare `git checkout .`](https://github.com/evilmartians/lefthook/issues/1480), which discards unstaged changes in unrelated files too (`internal/git/repo.go:46`, `:302`).
 
 ## Guardrails
 
 ```yaml
-assert_lefthook_installed: true   # exit 1 if the binary is missing, instead of skipping every rule
-min_version: 2.1.12               # refuse to run under an older lefthook
+assert_lefthook_installed: true   # bake an exit-1-if-missing check into the installed hook script
+min_version: 2.1.14               # refuse to run under an older lefthook
 ```
 
 `assert_lefthook_installed` is the fix for the dormancy failure mode - "fail (with exit status 1) if `lefthook` executable can't be found in $PATH, under node_modules/, as a Ruby gem, or other supported method."
+
+**But it is not a runtime guard.** The flag is only a template argument, baked into the generated `.git/hooks/<hook>` script at `lefthook install` time (`internal/command/install.go:332`, `internal/templates/hook.tmpl:100-105`); nothing in `lefthook run` ever reads it. Flipping it in config changes nothing until you reinstall, and it does nothing at all for a CI job that invokes `lefthook run` directly.
 
 If you add a secret scanner, give it `priority: 1` so it runs before any formatter - otherwise a fixer can rewrite the file holding a credential before the scan ever reads it:
 
@@ -117,7 +124,7 @@ Two install behaviours worth knowing:
 
 | Variable | Effect |
 |----------|--------|
-| `LEFTHOOK=0` | Disable lefthook entirely for this command |
+| `LEFTHOOK=0` / `LEFTHOOK=false` | Disable lefthook entirely for this command |
 | `LEFTHOOK_EXCLUDE=job1,job2` | Skip named jobs |
 | `LEFTHOOK_OUTPUT` | Control which output sections print |
 | `LEFTHOOK_VERBOSE=1` | Verbose logging |
@@ -125,6 +132,8 @@ Two install behaviours worth knowing:
 | `LEFTHOOK_CONFIG` | Path to the config file, overriding discovery |
 | `CI` | Recognised by `fail_on_changes: ci` and skip/only conditions |
 | `NO_COLOR` / `CLICOLOR_FORCE` | Disable / force colour |
+
+**`LEFTHOOK=0` fails silently open.** `lefthook run` checks the variable before anything else and returns success having done nothing (`internal/command/run.go:49`, which also accepts `false`), and the generated `.git/hooks/*` script exits 0 on the literal `0` before it even looks for the binary (`internal/templates/hook.tmpl:7-9`). A CI job that inherits `LEFTHOOK=0` from its environment goes green without running a single check, and nothing in the output says so.
 
 ## Agent Hooks (`ai:`, beta)
 
