@@ -5,7 +5,7 @@ metadata:
   version: "0.4.0"
   categories: "development"
   topics: "go, golangci-lint, gofumpt, testing, just"
-  upstream: "go@1.27.1, golangci-lint@v2.13.2, gofumpt@v0.12.0, gotestsum@v1.13.0, golang-migrate@v4.20.1, just@1.58.0, lefthook@v2.1.12"
+  upstream: "go@1.27.1, golangci-lint@v2.13.2, gofumpt@v0.12.0, gotestsum@v1.13.0, golang-migrate@v4.20.1, just@1.58.0, lefthook@v2.1.14"
   openclaw:
     homepage: https://github.com/tenequm/skills/tree/main/skills/go-dev
     emoji: "🐹"
@@ -317,7 +317,7 @@ clean:
 Lefthook is preferred over pre-commit for Go projects - it is a single Go binary, runs hooks in parallel, and needs no Python.
 
 ```bash
-go install github.com/evilmartians/lefthook/v2@v2.1.12   # needs Go 1.26+
+go install github.com/evilmartians/lefthook/v2@v2.1.14   # needs Go 1.26+
 lefthook install
 ```
 
