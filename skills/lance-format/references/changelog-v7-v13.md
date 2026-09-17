@@ -1,8 +1,8 @@
 # Lance changelog - v7 -> v12 (section 14)
 
-Part of the Lance v12 reference (`lance-format/lance@v12.0.0-beta.15`). Citations are `path:line`
+Part of the Lance v13 reference (`lance-format/lance@v13.0.0-beta.4`). Citations are `path:line`
 relative to the repo root; build a permalink as
-`https://github.com/lance-format/lance/blob/v12.0.0-beta.15/<path>`. Line numbers drift between
+`https://github.com/lance-format/lance/blob/v13.0.0-beta.4/<path>`. Line numbers drift between
 tags - treat them as approximate. Cross-references written as "section N" use the original
 16-section numbering; `lance-reference.md` maps every number to its file.
 
@@ -55,13 +55,15 @@ any beta pin is a git dependency; beta artifacts publish to fury.io
 - [v11.0.0 final (the beta.16 -> final delta)](#v1100-final-the-beta16---final-delta)
 - [v12 (release-root/12.0.0-beta.N -> v12.0.0-beta.6)](#v12-release-root1200-betan---v1200-beta6)
 - [The v12.0.0-beta.6 -> v12.0.0-beta.15 delta](#the-v1200-beta6---v1200-beta15-delta)
+- [The v12.0.0-beta.15 -> v12.0.0 final delta](#the-v1200-beta15---v1200-final-delta)
+- [The v13 line (release-root/13.0.0-beta.N -> v13.0.0-beta.4)](#the-v13-line-release-root1300-betan---v1300-beta4)
 
 Other files: `format-file.md` (1-4), `format-table.md` (5-10), `indexes.md` (11-12),
 `ops.md` (13, 15, 16).
 
 ---
 
-## 14. What changed (v7 -> v12)
+## 14. What changed (v7 -> v13)
 
 The v7 tag line ran `v7.0.0-beta.1` through `v7.0.0-beta.17`, then `v7.0.0-rc.1` and
 `v7.0.0`. The v7.1 line opened at `v7.1.0-beta.1`, continued through `v7.1.0-beta.4` and
@@ -739,7 +741,7 @@ unchanged (bit 128 allocated, `FLAG_UNKNOWN` 256).
 
 The **final** added two more breaking PRs (#8407, #8535) for **357 commits and 16 breaking PRs**
 to `v11.0.0`, and reallocated bit 128 to `FLAG_COVERED_INDEX_METADATA` as described above. Every
-structural invariant above still holds at `v12.0.0-beta.15`.
+structural invariant above still holds at `v13.0.0-beta.4`.
 
 **Breaking:**
 
@@ -1046,8 +1048,11 @@ and the major did not re-root on them.
   (`python/python/lance/dataset.py:8059`). Upstream's framing: "Lance 2.2 is the current stable
   file format, but the centralized release policy and enum default still resolve new datasets to
   2.1. As a result, the `stable` selector and default writes lag behind the intended stable
-  format." **The docs were not updated** - `docs/src/format/file/versioning.md` is byte-identical
-  across the range. `next` still resolves to 2.3, `is_unstable()` is still
+  format." **The docs were not updated** - the `stable` row of the alias table in
+  `docs/src/format/file/versioning.md` still reads only "Alias for the default version for new
+  datasets in the Lance release you are running", unchanged through `v13.0.0-beta.4`, so the code
+  remains the authority. (The *file* is no longer byte-identical: it gained a 29-line
+  "Compatibility Caveats" section in the `v12.0.0` final - see the FSL note below.) `next` still resolves to 2.3, `is_unstable()` is still
   `matches!(self, Self::V2_3)`, and no 2.4 exists. Section 3.1.
 - **IVF_RQ defaults to 5 bits per dimension, not 1** (#8936, beta.12).
   `RABIT_DEFAULT_NUM_BITS: u8 = 5` (`rust/lance-index/src/vector/bq.rs`) drives both
@@ -1196,3 +1201,166 @@ fails loudly. Paired with **#8943**, which added `64MB`-style binary-unit suffix
 merged** (#8324; #8325-#8333 all open) and mixed data-file versions still **1 of 6** (#8580, the
 reservation only). New to watch: **#8997**, "upgrade to arrow 59, DataFusion 55, and pyo3 0.29",
 open at beta.15 - the next big dependency break, and the reason arrow 58 / datafusion 54 still hold.
+
+### The v12.0.0-beta.15 -> v12.0.0 final delta
+
+**55 commits.** The v12 line closed at **225 commits** from `release-root/12.0.0-beta.N` with
+**7 `breaking-change`-labeled PRs**, not the 5 visible at beta.15: #9072 and #9101 landed in the
+run-up to the final. Tags in between: `beta.16`, `beta.17`, `beta.18`, `rc.1`, then `v12.0.0`
+(2026-09-17, commit `cbeec97cb`), which is **not an ancestor of `main`** - the usual stabilization
+branch, not a sign of an unofficial release. GitHub Releases marks it `Latest`, crates.io carries
+`lance 12.0.0` and PyPI `pylance 12.0.0`.
+
+**#9072 (labeled) removed the caller-provided Writer / `open_part` flow.** It "replaces the
+high-level caller-provided Writer and `open_part` flow with serializable part descriptions.
+Callers use `Dataset::concat_data_file_parts` and construct `DataReplacementGroup` themselves;
+fragment row coverage and commit fencing remain their responsibility. No separate
+`FileFragment::write_columns_from_parts` entry point is retained." This **supersedes the
+caller-managed data file parts note from #8923**. The caller also owns staging lifecycle now:
+"Callers explicitly invoke `target.finish(dataset)` after commit to remove staging parts, or
+`target.cleanup(dataset)` after abandoning the target to remove staging parts, the final file,
+and Blob payloads."
+
+**#9101 (labeled) de-routed `json_extract` / `json_get` from JSON indices** - detailed in the v13
+section below, because it is the same change that carries the `!`.
+
+**Mixed data-file versions landed.** #8581 (validation), #8582 (per-operation V2 write targets),
+#8583 (propagation across dataset operations) and #8584 (compaction targeting) are all in
+`v12.0.0`; #8585 exposed it in the bindings in the v13 line. `FLAG_MIXED_DATA_FILE_VERSIONS`
+became a supported capability and `FLAG_UNKNOWN` moved `1 << 8` -> `1 << 9` (section 7). The
+proto redefinition matters for readers: `DataStorageFormat.version` is now "the default format
+version used when writing data files", and "each DataFile's version is authoritative for
+decoding" once the capability is set.
+
+**#9180 flipped a default the release notes do not advertise:** `inline_optimization_enabled`
+went `true` -> `false` for manifest-index maintenance, justified with "Index-free manifests retain
+sub-100 ms median reads through one million entries while materially reducing write latency and
+eliminating index maintenance" and a write-p50 table showing `| 1M | 2,749 ms | 1,414 ms | -49% |`.
+It carried neither a `breaking-change` label nor a `!`.
+
+**Dependency break:** `object_store` 0.13 -> **0.14** and OpenDAL -> **0.59** (#9123).
+
+**Needing a rewrite or repair, not just an upgrade:**
+
+- **#9130** - a `FixedSizeList` whose inner values are all null was written unreadable: "If we had
+  a fixed-size-list array where each list was non-null but consisted only of null elements (e.g.
+  `FSL<2> = [[NULL, NULL], [NULL, NULL], [NULL, NULL]]`) then we would store it with
+  `bits_per_values=0` and the resulting file would be unreadable." Existing files must be
+  rewritten. The fix also raises a **forward** fence - post-fix files "are **not readable by
+  Lance < 11.1.0**. Old readers encounter the `Compression::Constant` inner encoding in the FSL
+  descriptor and panic rather than returning an error." Note the doc bug: **11.1.0 was never
+  released**; the fix shipped in `v12.0.0`.
+- **#8507** - v2.0 silently discarded struct-level validity, because "the stable v2.0 struct
+  encoding has no representation for struct-level validity" and "callers of the public v2.0
+  encoding strategy bypassed" the only guard. Data already written has lost it. The fix is also a
+  new hard error for writers that relied on the permissive path.
+- **#9053** - parallel HNSW builds strand nodes: "A stranded node can never be returned by a graph
+  traversal. It is only found by the sparse-prefilter flat scan. On the 100-point line dataset
+  used by the test, roughly 0.7% of builds (14 of 2000, debug) strand a node, usually row 0." The
+  fix is build-time only, so existing graphs stay damaged - a **second** HNSW-rebuild trigger
+  alongside #8834.
+- **#9084** - DataOverlay commits "never refreshed the target fragments row-level last-updated
+  metadata. Incremental and time-travel reads therefore could not observe overlay value changes."
+  Scope is limited to the env-gated overlay path.
+
+**Heals on upgrade:** #9141 (a shallow clone's FRI `details.binpb` stays in the source's indices
+directory and was never copied, so any FRI-loading path on the clone failed not-found).
+
+### The v13 line (release-root/13.0.0-beta.N -> v13.0.0-beta.4)
+
+**66 commits, 2 `breaking-change`-labeled PRs.** The line re-rooted from the same base commit the
+never-tagged 12.1 line used (`c3c9632a2`): `main` took `chore: bump main to 12.1.0-beta.0`, and
+four commits later the bot re-rooted to 13 on the strength of **#9192** alone - the only labeled
+PR before the bump commit `cfbd1b8fd`. #7465 is the second labeled PR and landed later, at
+`beta.3`.
+
+**All three `!` commits in this window carry the label** (#7465, #9192, #9101), inverting the v12
+pattern where the biggest changes carried `!` and no label. The floor-not-ceiling rule still
+holds as a rule; this window just is not an example of it.
+
+- **#9192 `feat!: expose file writer page options in dataset APIs`.** The declared break is
+  narrow - "adds `file_writer_options` to the public Rust `WriteParams` struct"
+  (`rust/lance/src/dataset/write.rs:702`) - so anything building `WriteParams` as a struct literal
+  stops compiling. `FileWriterOptions { data_cache_bytes, max_page_bytes, keep_original_array }`
+  lives at `rust/lance-file/src/writer.rs:37-49`, is plumbed through Python and Java, and now
+  rejects "a zero `max_page_bytes` before constructing current-format encoders".
+- **#7465 `perf(encoding)!: initialize only the page metadata a read will touch`.** The trait
+  break: `StructuralFieldScheduler::initialize` gained `requested_ranges`, and the page-scheduler
+  `initialize` "is split into `init_ranges()` (declare the byte ranges the page needs) and
+  `init_from_buffers(buffers, io)` (finish initialization from those bytes)". The public
+  `DecodeBatchScheduler::try_new` kept its signature; the range-aware path is the crate-private
+  `try_new_with_ranges`. **The silent part is the cache**: "Page metadata is cached per page via
+  `PageDataCacheKey { column_index, page_index, view_tag }` (replacing the per-column
+  `FieldDataCacheKey`)", with `view_tag` retained so a column decoded under two shapes "can't
+  collide on cached state". Every warm or persisted metadata cache cold-misses across this
+  upgrade. Payoff: "a cold point/range read's metadata IO is invariant to the column's total page
+  count."
+- **#9101 `fix(index)!: do not route json_extract predicates to JSON indices`.** The code drops
+  **both** `json_extract` and `json_get`; the allow-list is now exactly `json_get_int`,
+  `json_get_float`, `json_get_bool`, `json_get_string`. Three real bugs motivated it:
+  `json_extract(v, 'val') = '"click"'` "searched for a quoted key and matched nothing, where the
+  unindexed scan matched"; a numeric path "took a `Utf8` literal into an `Int64` btree, whose page
+  scan selects its comparator from the query's type on the stated invariant that the two always
+  agree, and panicked"; and `json_extract(v, 'val') > '"m"'` "returned every row: quoting is not
+  order-preserving (`ab` < `ab!` but `"ab"` > `"ab!"`), so a decoded-key btree cannot answer a
+  text-ordered range, and its page min/max pruning is unsound for one". The cost: "This PR changes
+  the index to decline these predicates so they fall back to a full scan" - silently.
+
+**Format changes.** `covering_fields` was redefined (#8856) - no longer a suffix of `fields`, and
+a keyed column may also be carried; `VectorQueryProto.covering_projection` (field 15) reserves the
+query-side tag. The FRI gained a versioned contract (#9136): field 1 renamed
+`versions` -> `legacy_versions`, tagged `transitions` added at field 2, and an
+`OrderedCompaction` / `StablePartition` oneof, where "Legacy groups can be read as
+ordered-compaction transitions; mixed histories follow fragment lineage, not the order of records
+or dataset version numbers." `FLAG_FRAGMENT_REUSE_INDEX = 1 << 10` is declared and **never read**
+- see section 7. Only `protos/table.proto` and `protos/ann.proto` changed; `transaction.proto`,
+`index.proto`, `filtered_read.proto`, `file2.proto` and `rowids.proto` are untouched across the
+whole 119-commit window.
+
+**Needing a rebuild or repair:**
+
+- **#9204** - "Direct maps contain mapped addresses but no fragment row counts. The previous fast
+  path treated all mapped values being deleted as proof that every row in each mentioned fragment
+  was deleted, so a partial public remap could incorrectly keep stale index files." Such an index
+  must be re-created. Trigger: a caller-supplied row-address remap over partially-deleted
+  fragments.
+- **#8941** - "Reject null `__ivf_part_id` values instead of treating Arrow's dummy `0` as
+  partition 0." Indexes built before the fix have rows mis-assigned into partition 0.
+- **#9268** - "Writing a nullable struct inside a list can lose the repetition/definition slots
+  reserved for null and empty lists." This is a write-path invariant violation; upstream does not
+  state that already-written files are corrupt, so treat it as rewrite-suspect rather than
+  confirmed data loss.
+- **#8944** - cleanup "capped the data subtree listing at the earliest retained manifest
+  timestamp. Abandoned writes are not owned by any manifest and can be newer than that timestamp",
+  so they were never reclaimed. Heals by **re-running** cleanup after upgrading.
+
+**Read-path only, heals on upgrade - the useful contrast case:** **#9254**. Severe in effect - the
+decoder's threshold "lands above the level written for a null list, so it hands a leaf value to
+items that were written as invisible and every later value shifts by one", which "silently
+corrupts data, trips the structural validity check, or panics" - but "The bytes on disk are
+correct, so this is a read-path fix: existing files decode correctly once the reader agrees with
+the writer, with no rewrite." Trigger: `struct<x: list<int32>>` with both struct and list
+nullable, full-zip layout.
+
+**Behavior change without a rebuild:** **#8996** - f16/f64 vector columns used to panic streaming
+IVF training and now cast instead, but "An f64 above `f32::MAX` saturates to an infinity rather
+than failing the cast", and `drop_rows_that_saturated` "removes exactly the rows the narrowing
+broke and logs how many". Rows disappear from the index with only a log line.
+
+**Security:** **#9212** bumped rustls 0.23.40 -> 0.23.45 for **RUSTSEC-2026-0285**. Two PyO3
+advisories remain outstanding - "its advisory check remains blocked by existing PyO3 0.28.3
+advisories RUSTSEC-2026-0176 and RUSTSEC-2026-0177; the PyO3 upgrade is covered separately by
+#8997" (still open).
+
+**Net-new, non-breaking:** `Dataset::frag_reuse_index()` public (#9112); `FileFragment::write_overlay`
+-> `OverlayWriter` (#8761), the first real writer for data overlay files, with typed
+`WriteOverlayError`s; `hf://` reads with `hf_enable_resolve_cache` (#9236); `HybridCompoundQueryExec`
+public (#9166) and `ANNIvfBatchExec` internals exposed (#9262) for downstream plan rewriters;
+Python `base_paths()` (#9191); Java `DataStorageVersion` and `FileWriteOptions`;
+`LANCE_COMMIT_RETRY_TIMEOUT_SECS` (#9177). IVF optimize gained one-pass split-and-join
+rebalancing (#9051) and Auto probing became metric-aware (#9195), which "retains the original Auto
+policy" for Dot.
+
+**In flight, not landed:** generic block v5 compression is **still 1 of 10** (#8324; #8325-#8333
+open). #8997 (arrow 59 / DataFusion 55 / pyo3 0.29) is **still open**, so arrow 58 / datafusion 54
+hold at `v13.0.0-beta.4`.

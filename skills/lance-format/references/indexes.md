@@ -1,8 +1,8 @@
 # Lance v12 reference - indexes and distributed builds (sections 11-12)
 
-Part of the Lance v12 reference (`lance-format/lance@v12.0.0-beta.15`). Citations are `path:line`
+Part of the Lance v13 reference (`lance-format/lance@v13.0.0-beta.4`). Citations are `path:line`
 relative to the repo root; build a permalink as
-`https://github.com/lance-format/lance/blob/v12.0.0-beta.15/<path>`. Line numbers drift between
+`https://github.com/lance-format/lance/blob/v13.0.0-beta.4/<path>`. Line numbers drift between
 tags - treat them as approximate. Cross-references written as "section N" use the original
 16-section numbering; `lance-reference.md` maps every number to its file.
 
@@ -17,7 +17,7 @@ tags - treat them as approximate. Cross-references written as "section N" use th
 - [12. Distributed write and indexing](#12-distributed-write-and-indexing)
 
 Other files: `format-file.md` (1-4), `format-table.md` (5-10), `ops.md` (13, 15, 16),
-`changelog-v7-v12.md` (14).
+`changelog-v7-v13.md` (14).
 
 ---
 
@@ -37,18 +37,37 @@ search and full-text search transparently fall back to a flat scan rather than e
 `IndexMetadata` carries `uuid`, `name`, `fields`, `fragment_bitmap`, `index_details` (a typed
 `Any`), `version`, and - since v11 - `covering_fields` (proto field 11).
 
-**Covering indexes / carried columns** (v11, PR #8535; manifest flag
-`FLAG_COVERED_INDEX_METADATA = 128`, section 7). `covering_fields` is "the trailing subset of
-`fields` whose values the index carries but is not keyed on, letting a query that only projects
-those columns be answered without a fragment take." This **redefines `fields`**: `fields[0]` is
-always a keyed column, but trailing entries "may instead be merely carried, not keyed on". A
-reader without the flag would select an index by plain membership of `fields` and so answer a
-query on a merely-carried column with an index keyed on a different one - wrong neighbours, no
-error - which is why both reader and writer must refuse a covering dataset without the bit.
+**Covering indexes / carried columns** (v11, PR #8535; **redefined at v13**, PR #8856; manifest
+flag `FLAG_COVERED_INDEX_METADATA = 128`, section 7). `covering_fields` names the columns an
+index carries values for, letting a query that only projects those columns be answered without a
+fragment take.
 
-The declaration is ahead of the storage: "No index builder writes carried values yet, so today
-every declaration is ahead of its storage." Treat this as capability-in-place, not a speedup you
-can use. The wire change itself is additive.
+**It is no longer a trailing suffix of `fields`.** The v11 wording ("must be a suffix of
+`fields`") was replaced: it "must be a subset of `fields`, in the order the index emits them. A
+column is carried if and only if it is named here, so a column the index is both keyed on and
+carries is listed once in `fields` and named here; no id repeats in `fields`, and `fields[0]`
+remains a column the index is keyed on." So a keyed column may *also* be carried, and membership
+of `covering_fields` - not position in `fields` - is what decides. "Every id in `covering_fields`
+names a top-level field. Covering a struct column carries the whole struct, its children
+included, as one column." A reader without the flag would select an index by plain membership of
+`fields` and answer a query on a merely-carried column with an index keyed on a different one -
+wrong neighbours, no error - which is why both reader and writer must refuse a covering dataset
+without the bit.
+
+**Carried values are now really written, per segment.** The v11-era "no index builder writes
+carried values yet" is gone from upstream. V3 IVF auxiliary files can hold them, and "a reader
+discovers carried columns by exclusion, not by position: any column in the auxiliary file's
+schema that is not one of the quantizer's internal columns is a carried column", bound to source
+fields by a `covering_field_ids` schema-metadata key. A merge "must not combine shards whose
+carried columns disagree on these ids, even when those columns match by name and type". Coverage
+is therefore a per-segment property: "one logical index may hold values for some of its segments
+and not others", depending on "the index type, on the writer that produced the segment, and on
+what later maintenance did to it".
+
+Query-side, `VectorQueryProto.covering_projection` (field 15) reserves the narrowing tag as a
+message rather than a bare list, because empty is meaningful: "absent: no narrowing computed;
+materialize every covering column declared. present and empty: materialize nothing, though the
+index does declare covering. present and non-empty: materialize exactly these."
 
 **The fence is deliberately not permanent, which is why the flag costs nothing today.** Bit 128
 is set only while some index actually carries values:
@@ -290,7 +309,24 @@ BLOOM_FILTER now answer **`IS NULL` exactly** (see the `null_bitmap` note below)
 | RTREE | 2D spatial pruning | See 11.4 |
 
 NGRAM, ZONEMAP, and BLOOM_FILTER are newer additions. A JSON scalar index wraps another
-index's details with a JSON path. Since v9, **BTREE and ZONEMAP accept `large_string`
+index's details with a JSON path.
+
+**As of v13, only four UDFs reach a JSON index** (#9101). The routing allow-list was cut from
+six names to `json_get_int`, `json_get_float`, `json_get_bool` and `json_get_string`;
+**`json_extract` and `json_get` are no longer routed at all** and fall back to a full scan. This
+was a correctness fix, not a regression - the three symptoms it removed were a predicate that
+"searched for a quoted key and matched nothing, where the unindexed scan matched", a `Utf8`
+literal pushed into an `Int64` btree that "panicked", and a range that "returned every row"
+because "quoting is not order-preserving (`ab` < `ab!` but `"ab"` > `"ab!"`), so a decoded-key
+btree cannot answer a text-ordered range, and its page min/max pruning is unsound for one". The
+cost lands silently: the query still succeeds, just without the index. Rewrite `json_extract`
+predicates onto the typed accessors if they were carrying an index.
+
+One more routing prerequisite, easy to miss and now doubly load-bearing: a DataFusion JSON
+predicate only reaches the index if the UDF the planner parsed is the **same `ScalarUDF` object**
+Lance registered. Register Lance's functions on the same `SessionContext` that owns the table
+provider; otherwise the name matches, the object does not, and the predicate is evaluated
+post-scan with no error. Since v9, **BTREE and ZONEMAP accept `large_string`
 (`LargeUtf8`) columns** (PR #7525), not just `Utf8`. A ZoneMap index also exposes a column's
 global **min/max without a scan** via `zonemap_value_range(column)` (`DatasetIndexExt`;
 `ZoneMapIndex::value_range` / `value_range_over(segments)`, PR #7463) - cheap stats and a
@@ -354,6 +390,18 @@ fragments into disjoint subsets, each a self-contained FM-Index; appends build a
 over the unindexed fragments, and `merge_segments` re-reads the covered fragments' raw text
 to rebuild a unified segment (`fmindex.md:53`). Queries (`CONTAINS(column, "...")`) return an
 inexact candidate set; the engine verifies.
+
+**Sizing and residency, field-measured - `num_segments` does not bound query memory.** An
+FM-Index is roughly **1:1 on disk with the raw column** it covers (measured: a 2,793.8 MiB text
+column produced a 2,617 MiB index, 0.937x), so it roughly doubles the footprint of the data it
+indexes rather than compressing it, and peak build RSS exceeded the column size (~3.1 GB). More
+surprising at query time: the wavelet-tree blocks are **heap-resident, not mmap'd**, `prewarm()`
+calls `wavelet.load_all()`, and `prewarm_partitions` warms **every** partition
+(`rust/lance-index/src/scalar/fmindex.rs:1146,1546`, concurrently via `buffer_unordered`). So
+`num_segments` lowers *build* RSS per segment but **not** query RSS - one `CONTAINS` can pull the
+whole index resident, per process, unshared. On object storage that is also a full cold download
+on first query. The practical mitigation is to index a narrow materialized column rather than a
+wide blob.
 
 **Choosing between NGRAM, FM-Index, and FTS for substring work.** These three are not
 interchangeable, and two column-level constraints decide the choice before performance does:
@@ -674,12 +722,28 @@ check built on that call will still see churn after every compaction. The FRI re
 *rewriting* index entries, not the bookkeeping that says an index does not cover a fragment.
 
 **The FRI has an operational cost model the spec page states and this file does not restate.**
-`references/docs/format/index/system/frag_reuse.md` covers index *load* cost (every reader pays
-remap work proportional to the accumulated reuse versions) and the growth/cleanup duty: "Once all
+`references/docs/format/index/system/frag_reuse.md` covers index *load* cost - every reader pays
+remap work proportional to the accumulated history - and the cleanup duty. An FRI left untrimmed
+is a slow, silent tax on open, so read that page before running compaction continuously.
+
+**The cleanup rule changed at v13 and is stricter than the old one.** The v11-era text ("Once all
 scalar and vector indices have been rebuilt past a given reuse version, that version is no longer
-needed and can be trimmed. Users should schedule a periodic process to trim stale reuse"
-versions. An FRI left untrimmed is a slow, silent tax on open - read that page before running
-compaction continuously.
+needed and can be trimmed") is **gone**. Rebuilding past a version is no longer sufficient on its
+own: "Cleanup must retain intermediate transitions still needed to translate old addresses", and
+a second rule now governs the external payloads - "External mapping files can be deleted only
+when no retained dataset version references them." A trimming job written against the old
+sentence can delete a transition a retained version still needs.
+
+**The FRI became a versioned format at v13** (#9136), with a second use case. `InlineContent`
+field 1 is now `legacy_versions` and tagged `transitions` arrived at field 2 under
+`index_version >= 1`, as a oneof of `OrderedCompaction` or `StablePartition`. The new one covers
+**reclustering**: "A stable partition assigns source rows to destination fragments while
+preserving their relative source order within each destination. This lets FRI reuse existing
+indices after reclustering." Its payload is an immutable row-map Lance file with `uint16` labels
+and an `LSPC`-magic counts matrix. Two constraints to plan around: "Tables using stable row IDs
+do not support tagged histories; writers must not publish `index_version >= 1` on them", and the
+advertising manifest bit (1024) is documented but not implemented - section 7. Upstream also
+walked back the conflict claim: "FRI does not remove conflicts between overlapping rewrites."
 
 ---
 

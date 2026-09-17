@@ -1,8 +1,8 @@
 # Lance v12 reference - object store, capabilities, source map (sections 13, 15, 16)
 
-Part of the Lance v12 reference (`lance-format/lance@v12.0.0-beta.15`). Citations are `path:line`
+Part of the Lance v13 reference (`lance-format/lance@v13.0.0-beta.4`). Citations are `path:line`
 relative to the repo root; build a permalink as
-`https://github.com/lance-format/lance/blob/v12.0.0-beta.15/<path>`. Line numbers drift between
+`https://github.com/lance-format/lance/blob/v13.0.0-beta.4/<path>`. Line numbers drift between
 tags - treat them as approximate. Cross-references written as "section N" use the original
 16-section numbering; `lance-reference.md` maps every number to its file.
 
@@ -14,7 +14,7 @@ tags - treat them as approximate. Cross-references written as "section N" use th
 - [16. Source map](#16-source-map) - where each spec, proto, and crate lives in the repo
 
 Other files: `format-file.md` (1-4), `format-table.md` (5-10), `indexes.md` (11-12),
-`changelog-v7-v12.md` (14).
+`changelog-v7-v13.md` (14).
 
 ---
 
@@ -23,8 +23,20 @@ Other files: `format-file.md` (1-4), `format-table.md` (5-10), `indexes.md` (11-
 The object store is chosen by URI scheme (`docs/src/guide/object_store.md`): `s3://`,
 `s3+ddb://` (S3 + DynamoDB commits), `gs://`, `az://` / `abfss://`, `oss://` (Alibaba),
 `cos://` (Tencent), `tos://` (Volcengine, new in v8), `goosefs://` (feature-gated `goosefs`,
-new in v8), `file://`, `file+uring://`, `memory://`, `shared-memory://` (in-memory,
-cross-component).
+new in v8), `hf://` (Hugging Face, read-oriented, new in v13), `file://`, `file+uring://`,
+`memory://`, `shared-memory://` (in-memory, cross-component).
+
+**`hf://` has an opt-in resolve cache with a staleness hazard** (#9236). Setting
+`storage_options={"hf_enable_resolve_cache": "true"}` "reuses resolved HTTP download URLs and
+XET file metadata across readers"; it "defaults to `"false"`". The caveat is a correctness one,
+not a tuning one: "Enable the resolve cache only when existing files will not change. Updates,
+including changes behind a moving branch or tag, may remain invisible while cached results are
+reused." A moving branch or tag is exactly the common Hugging Face setup, so leave it off unless
+you are pinned to an immutable revision.
+
+The underlying stack moved in the `v12.0.0` final: `object_store` 0.13 -> **0.14** and OpenDAL
+-> **0.59** (#9123), with OpenDAL reaching 0.59.2 in the v13 line. Anything depending on
+`object_store` types transitively needs the matching bump.
 
 `file+uring://` is a **local** store, not a remote one: `is_local()` returns true for both
 `file` and `file+uring` (`rust/lance-io/src/object_store.rs:630`), and
@@ -209,7 +221,7 @@ Disable globally with `LANCE_USE_VERSION_HINT=0`.
 
 ## 15. Capability matrix
 
-What Lance can and cannot do at `v12.0.0-beta.15`.
+What Lance can and cannot do at `v13.0.0-beta.4`.
 
 **Storage and format**
 
@@ -219,8 +231,9 @@ What Lance can and cannot do at `v12.0.0-beta.15`.
 | GooseFS (`goosefs://`) | yes (feature-gated `goosefs`) |
 | In-memory store (`memory://`, `shared-memory://`) | yes |
 | Multi-base storage (hot/cold, multi-region, shallow clone) | yes (`FLAG_BASE_PATHS`) |
-| File format 2.1 (default), 2.0, legacy 0.1 (read-only) | yes |
-| File format 2.2 (Map type, Blob v2) | yes, but unstable |
+| File format 2.1, 2.0, legacy 0.1 (read-only) | yes |
+| File format 2.2 (Map type, Blob v2) - **the current default** | yes, stable |
+| Mixed exact V2 versions within one dataset | yes (`FLAG_MIXED_DATA_FILE_VERSIONS`, v12 final) |
 | File format 2.3 sparse structural pages (auto-selected, or forced via `structural-encoding=sparse`) | yes, but `next` / unstable |
 | Concurrent writes on plain `s3://` | yes (native conditional PUT) |
 | Concurrent writes - GCS / Azure / local | yes |
@@ -237,7 +250,7 @@ What Lance can and cannot do at `v12.0.0-beta.15`.
 | Cell-level updates without base-file rewrite (data overlay files) | yes, but unstable (env-gated `LANCE_ENABLE_UNSTABLE_DATA_OVERLAY_FILES`; release builds refuse) |
 | Type change / cast | yes (rewrites that column; drops its index) |
 | Time travel, tags, branches | yes |
-| Stable row IDs (must be enabled at creation) | yes (opt-in) |
+| Stable row IDs (opt-in at creation; existing datasets can migrate) | yes |
 | Change data feed | yes (stable row IDs only) |
 
 **Indexes and search**
@@ -288,9 +301,49 @@ registered `fts` table function (`ctx.register_udtf("fts", ...)`,
 
 ---
 
+### 15.1 Operational notes that bite
+
+**Migrating an existing dataset to stable row IDs has a prerequisite checklist.** Upstream now
+documents the procedure rather than treating creation-time opt-in as the only path, and the
+prerequisites are strict: "Before migration, stop all index builds and index commits, drop every
+secondary index so no index entry remains in the dataset metadata, and keep index creation
+quiesced until migration completes." There is a legacy-manifest pre-step too - run a no-op
+`false`-predicate delete first to recompute physical row counts, because "affected releases may
+have recorded stale counts, which would produce incomplete row ID sequences." Do not run the
+migration directly on such a manifest.
+
+**Lance exposes no dataset-level identity, which quietly breaks external caches.** There is no
+dataset UUID, and every candidate identity - fragment ids, row ids, version numbers - **restarts
+when a dataset is recreated**. So a cache keyed on any of them still looks current after the
+dataset it described was dropped and rebuilt, and silently answers against different data. The
+check that actually works needs no new persisted state: sample a few row ids and `take_rows` them
+from the dataset; if what comes back disagrees with what the cache recorded, the cache describes
+a different dataset - discard and rebuild.
+
+**An index-free copy is not a dataset root minus `_indices`.** `_indices` is part of the root and
+manifests can reference index metadata, so copying a dataset directory and deleting the index
+subtree produces a root whose manifest points at things that are gone. For an index-free archive,
+write fresh dataset roots from scans instead of editing a copied one.
+
+**Net-new surface worth knowing** (v12 final and the v13 line): `Dataset::frag_reuse_index()` is
+public (#9112) and returns `None` when the loaded version has no FRI; `FileFragment::write_overlay`
+returns a real `OverlayWriter` keyed by `_rowaddr` (#8761, still env-gated behind
+`LANCE_ENABLE_UNSTABLE_DATA_OVERLAY_FILES`); Python gained `lance.bitmap.Bitmap` (a real
+RoaringBitmap binding, #7837), `deep_clone()` (#9181), `base_paths()` (#9191) and
+`update_columns(with_offsets=True)` (#8891); Java gained `DataStorageVersion`, `FileWriteOptions`
+and `ScanOptions.indexSegments`. Namespace table listing is finally bounded - #9165 moved
+`list_directory_tables` onto the v12 `read_dir_page` so "a bounded caller only pays for what it
+asks for", with a 1000-entry page hint.
+
+**A third real `LANCE_*` env var landed**: `LANCE_COMMIT_RETRY_TIMEOUT_SECS` (#9177) overrides
+the commit retry timeout, still 30s by default. That makes the full set `LANCE_DISABLE_AMX`,
+`LANCE_AMX_FP16_CC` and this one - plus the overlay gate above. The old grep trap still holds:
+`LANCE_AMX_CFG_*` and `LANCE_AMX_TILE_COUNT` are C macros, and `LANCE_FACTOR` is a substring of
+`BALANCE_FACTOR`.
+
 ## 16. Source map
 
-Where to look in `lance-format/lance` at `v12.0.0-beta.15`.
+Where to look in `lance-format/lance` at `v13.0.0-beta.4`.
 
 | Topic | Path |
 |-------|------|

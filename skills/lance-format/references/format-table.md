@@ -1,8 +1,8 @@
 # Lance v12 reference - table format (sections 5-10)
 
-Part of the Lance v12 reference (`lance-format/lance@v12.0.0-beta.15`). Citations are `path:line`
+Part of the Lance v13 reference (`lance-format/lance@v13.0.0-beta.4`). Citations are `path:line`
 relative to the repo root; build a permalink as
-`https://github.com/lance-format/lance/blob/v12.0.0-beta.15/<path>`. Line numbers drift between
+`https://github.com/lance-format/lance/blob/v13.0.0-beta.4/<path>`. Line numbers drift between
 tags - treat them as approximate. Cross-references written as "section N" use the original
 16-section numbering; `lance-reference.md` maps every number to its file.
 
@@ -25,7 +25,7 @@ tags - treat them as approximate. Cross-references written as "section N" use th
 - [10. MemWAL](#10-memwal)
 
 Other files: `format-file.md` (1-4), `indexes.md` (11-12), `ops.md` (13, 15, 16),
-`changelog-v7-v12.md` (14).
+`changelog-v7-v13.md` (14).
 
 ---
 
@@ -338,11 +338,13 @@ implementation seeing an unknown flag must return "unsupported" (`docs/src/forma
 | 16 | `FLAG_BASE_PATHS` | Dataset uses multiple base paths |
 | 32 | `FLAG_DISABLE_TRANSACTION_FILE` | Transaction recorded in the manifest, not a separate `.txn` file (writer-only) |
 | 64 | `FLAG_UNSTABLE_DATA_OVERLAY_FILES` | Fragments may carry data overlay files; **unstable** - release builds reject it unless explicitly opted in |
-| 128 | `FLAG_COVERED_INDEX_METADATA` | Some index declares covering columns (`IndexMetadata.covering_fields`), so `fields` means keyed columns followed by carried ones (v11 final) |
-| 256 | `FLAG_MIXED_DATA_FILE_VERSIONS` | **Reserved, not supported** - declared equal to `FLAG_UNKNOWN` at v12, so a manifest setting it is still refused |
+| 128 | `FLAG_COVERED_INDEX_METADATA` | Some index declares covering columns (`IndexMetadata.covering_fields`); `fields` means keyed columns plus carried ones (v11 final; `covering_fields` redefined at v13, see section 11) |
+| 256 | `FLAG_MIXED_DATA_FILE_VERSIONS` | **Supported** as of the `v12.0.0` final - the snapshot may reference recognized V2 data files at different exact versions; both reader and writer bits must be set and stay set |
+| 1024 | `FLAG_FRAGMENT_REUSE_INDEX` | **Documented, not implemented** - the spec page lists it reader/writer `Yes`, the code declares it above `FLAG_UNKNOWN` and never reads it, so this build refuses it (see below) |
 
-**Flags at or above 256 are unknown** and must be rejected as "unsupported" - the boundary
-moved from 128 in v11 when bit 128 was allocated. Bits 32 and 64 existed in Rust before v11 but
+**Flags at or above 512 are unknown** and must be rejected as "unsupported" - the boundary moved
+from 128 in v11 when bit 128 was allocated, and again to `1 << 9` in the `v12.0.0` final when bit
+256 was spent. Bits 32 and 64 existed in Rust before v11 but
 were undocumented until the v11 docs catch-up. At v12 the constants are written as bit shifts
 (`1 << 7`) rather than decimals; the serialized values and compatibility behavior are unchanged.
 
@@ -369,13 +371,27 @@ to have caught up, so the shard's SSTables must be retained until some commit re
 has." There is no longer a legacy "absence means fully caught up" reading and no one-way flag to
 set - an absent shard simply means *unknown*, and a repair is scheduled.
 
-**Bit 256 is reserved without being spent** (v12, #8580). `FLAG_MIXED_DATA_FILE_VERSIONS` is
-declared `1 << 8`, the same value as `FLAG_UNKNOWN`, with a compile-time assert
-(`assert!(FLAG_MIXED_DATA_FILE_VERSIONS == FLAG_UNKNOWN)`) pinning them together, plus a
-`STICKY_PAIRED_FLAGS` carry mechanism for when activation lands. The supported set is unchanged
-and this layer still refuses mixed manifests. The spec text says implementations "that do not
-support the per-file exact-version contract must treat this bit as unknown". Only the
-reservation has merged; the five follow-up PRs are not in the tree.
+**Bit 256 was spent in the `v12.0.0` final.** `FLAG_MIXED_DATA_FILE_VERSIONS` is still declared
+`1 << 8`, but the compile-time assert relaxed from `== FLAG_UNKNOWN` to `< FLAG_UNKNOWN`, and
+`FLAG_UNKNOWN` moved `1 << 8` -> `1 << 9`. Tests now assert both
+`can_read_dataset(FLAG_MIXED_DATA_FILE_VERSIONS)` and `can_write_dataset(...)`, so this layer
+accepts mixed manifests. The follow-ups landed with it: #8581 (validation), #8582 (per-operation
+V2 write targets), #8583 (propagation across dataset operations) and #8584 (compaction
+targeting) are in `v12.0.0`; #8585 exposed it in the bindings in the v13 line.
+
+`STICKY_PAIRED_FLAGS` survives and is still exactly this bit. A **half-set** manifest is now a
+hard error rather than an ambiguity: "Manifest has only one of the mixed data-file-version reader
+and writer feature bits set, so its semantics are undefined." The flags also do not come back off
+- they "remain set even if compaction later makes the files homogeneous again."
+
+**Bit 1024 is documented but not implemented - trust the code.** `FLAG_FRAGMENT_REUSE_INDEX` is
+declared `1 << 10` at `rust/lance-table/src/feature_flags.rs:69`, and at `v13.0.0-beta.4` that
+declaration is its **only occurrence in the tree**. Because `supported_flags()` is computed as
+`FLAG_UNKNOWN - 1` and `FLAG_UNKNOWN` is `1 << 9`, bit 1024 is outside the supported set and a
+manifest setting it is refused. The spec page says the opposite - reader `Yes`, writer `Yes`,
+unknown starting at 2048 - and also states "Flag bit 512 is reserved", which the code does not
+reflect either. The docs describe where tagged FRI is going; the constants describe what this
+build does.
 
 ### Tags
 
@@ -439,8 +455,13 @@ index maps `_rowid -> (new fragment, new offset)`.
 
 Row-id sequences are stored per fragment as a `RowIdSequence` protobuf (`protos/rowids.proto`)
 with five compact segment encodings (Range, RangeWithHoles, RangeWithBitmap, SortedArray,
-Array) - bitpacked, stored inline when <200KB else in an external file. A row-id index is
-built at table load by aggregating all fragments' sequences.
+Array) - bitpacked. The wire format defines both inline and external alternatives, but upstream
+now explicitly disclaims a size rule: "These fields do not currently imply a size-based switching
+threshold. Current Lance writers store all three sequence types inline in the fragment metadata
+regardless of their encoded size and do not emit the external alternatives." Readers *can* load
+an externally stored row-id sequence; they **cannot** load external created-at or
+last-updated-at version sequences, "an implementation limitation, not an invalid encoding". A
+row-id index is built at table load by aggregating all fragments' sequences.
 
 **Change data feed** (stable row IDs only): each row tracks `created_at_version` and
 `last_updated_at_version`, queryable via SQL predicates on `_row_created_at_version` and
@@ -702,7 +723,7 @@ Removed with it: `CacheBackend::invalidate_prefix`, `LanceCache::keys`, `CacheKe
 `Dataset URI, fragment_id, row_id_meta`, up from `Dataset URI, fragment_id`. This was a
 correctness fix, not a tuning change - keyed on `fragment_id` alone, a `WriteMode::Overwrite`
 against a shared `Session` served the *previous* generation's sequence, corrupting stable row
-ids. See the data-loss roundup in `changelog-v7-v12.md`. Java can now also select a registered
+ids. See the data-loss roundup in `changelog-v7-v13.md`. Java can now also select a registered
 native cache backend by URI (e.g. `moka://?capacity=1048576`) or `CacheBackendConfig`, mutually
 exclusive with the size options (#8446).
 
@@ -815,7 +836,7 @@ either; reimplementing bucketing from anything else will not interoperate.
 ### MemWAL is a parallel stack, not an integration into `Dataset`
 
 Three properties decide whether MemWAL is adoptable for a given system, and none of them are
-stated in the spec pages. All three were verified at `v12.0.0-beta.15`.
+stated in the spec pages. All three were re-verified at `v13.0.0-beta.4`.
 
 - **`Dataset::scanner()` has no MemWAL integration.** The whole of
   `rust/lance/src/dataset/scanner.rs` mentions MemWAL exactly once, in an unrelated comment about
@@ -937,4 +958,24 @@ A related system index (`docs/src/format/index/system/frag_reuse.md`): it lets a
 **defer index remap**. Normally compaction must remap every index (so it conflicts with index
 optimization); with a fragment reuse index, a compaction that removes fragments A,B and
 produces C records the mapping, and at query time row addresses for A,B are translated to C.
-This removes the compaction-vs-index-build conflict at the cost of a small per-load remap.
+This removes the compaction-vs-index-build conflict at the cost of a small per-load remap -
+though upstream now qualifies the claim: "FRI does not remove conflicts between overlapping
+rewrites."
+
+**At v13 the FRI has a versioned on-disk contract** (#9136). `InlineContent` field 1 was renamed
+`versions` -> `legacy_versions`, and a `transitions` list added at field 2, gated on
+`IndexMetadata.index_version >= 1`; each transition is a oneof of `OrderedCompaction` or
+`StablePartition`. "Legacy groups can be read as ordered-compaction transitions", so one history
+can mix both. A **stable partition** "assigns source rows to destination fragments while
+preserving their relative source order within each destination", which lets FRI reuse existing
+indices after reclustering - not just after compaction. Its payload is an immutable row-map Lance
+file under `_fri/<map_id>/stable_partition.lance` with `uint16` labels and an `LSPC`-magic
+28-byte-header counts matrix in a global buffer.
+
+Two hard rules come with it. **Stable row IDs and tagged histories are mutually exclusive**:
+"Tables using stable row IDs do not support tagged histories; writers must not publish
+`index_version >= 1` on them." And cleanup is no longer "trim anything fully rebuilt past" -
+it "must retain intermediate transitions still needed to translate old addresses", while
+"external mapping files can be deleted only when no retained dataset version references them."
+The manifest bit that would advertise all this (`FLAG_FRAGMENT_REUSE_INDEX`, 1024) is documented
+but not implemented - see section 7.

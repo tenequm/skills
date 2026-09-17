@@ -7,6 +7,99 @@ and this skill adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.h
 
 ## [Unreleased]
 
+## [0.20.0] - 2026-09-17
+
+### Added
+
+- The `v12.0.0` final delta (`beta.15 -> v12.0.0`, 55 commits) and a new **v13 line** section
+  (`release-root/13.0.0-beta.N -> v13.0.0-beta.4`, 66 commits, 2 labeled breaking PRs) in
+  `references/changelog-v7-v13.md`, plus a "The v13 delta" section in `SKILL.md`.
+- #9192 (`WriteParams.file_writer_options`, the single labeled PR that re-rooted the major),
+  #7465 (lazy page-metadata init: `StructuralFieldScheduler` signature, the
+  `init_ranges`/`init_from_buffers` split, and the `FieldDataCacheKey` -> `PageDataCacheKey`
+  change that cold-misses every warm or persisted metadata cache), and #9101 (`json_extract` /
+  `json_get` no longer route to JSON indices, with the three wrong-answer bugs it fixed and the
+  silent full-scan fallback it costs).
+- #9072: the caller-provided Writer / `open_part` flow and `FileFragment::write_columns_from_parts`
+  were removed in favour of `Dataset::concat_data_file_parts`, with caller-owned staging
+  lifecycle - superseding the skill's #8923 note.
+- The FRI versioned on-disk contract (#9136): `versions` -> `legacy_versions`, tagged
+  `transitions` at field 2, the OrderedCompaction/StablePartition oneof, the `LSPC` counts-matrix
+  physical format, the stable-row-ID exclusion, and the stricter cleanup retention rule.
+- The FSL all-null compatibility fence (#9130) in both directions, and the upstream doc bug that
+  cites a never-released "Lance >= 11.1.0" for a fix that shipped in `v12.0.0`.
+- Rebuild/repair-class fixes #9053 (HNSW stranded nodes, a second trigger alongside #8834),
+  #8507, #9204, #8941, #9084 and #8944, plus #9254 as the read-path-only contrast case.
+- `hf://` object store and `hf_enable_resolve_cache` with its staleness hazard; `object_store`
+  0.14 / OpenDAL 0.59; `LANCE_COMMIT_RETRY_TIMEOUT_SECS` as a third real `LANCE_*` env var.
+- Net-new API surface: `Dataset::frag_reuse_index()`, `OverlayWriter`, `lance.bitmap.Bitmap`,
+  `deep_clone()`, `base_paths()`, `update_columns(with_offsets=True)`, Java `DataStorageVersion`
+  and `FileWriteOptions`, and bounded namespace listing (#9165).
+- The stable-row-ID migration procedure with its prerequisite checklist and legacy-manifest
+  pre-step, in `references/ops.md`.
+- Field-verified practice: FM-Index sizing and residency (~1:1 on disk with the raw column;
+  `prewarm_partitions` warms every partition, so `num_segments` cuts build RSS but not query
+  RSS); the absent dataset-level identity and the `take_rows` validity test for external caches;
+  why an index-free copy cannot be a dataset root minus `_indices`; the per-IVF-partition round
+  trip behind remote fold latency; the `lance_arrow::json` vs `lance::arrow::json` import trap;
+  time travel not being an archive mechanism; and LanceDB `create_table` being unable to enable
+  stable row IDs.
+
+### Changed
+
+- **Breaking:** tracked tag moves to `v13.0.0-beta.4`; the **stable pin moves `v11.0.0` ->
+  `v12.0.0`** (released 2026-09-17), with crates.io `lance` and PyPI `pylance` both at `12.0.0`
+  and fury.io carrying `pylance-13.0.0b1` through `b4`.
+- **Breaking:** `FLAG_MIXED_DATA_FILE_VERSIONS` (256) became a supported capability in the
+  `v12.0.0` final and `FLAG_UNKNOWN` moved `1 << 8` -> `1 << 9`; mixed data-file versions shipped
+  (#8581-#8585), so "reserved without being spent" and "still 1 of 6" are both superseded. A
+  half-set paired manifest is now a hard error.
+- **Breaking:** `data_storage_version` is **no longer fixed at dataset creation** - it is the
+  write-time default, with per-operation targeting on update, merge-insert and compaction, and
+  binary-copy compaction. V1 and V2 still cannot be mixed.
+- **Breaking:** `covering_fields` is no longer a trailing suffix of `fields` (#8856); a keyed
+  column may also be carried, coverage is per-segment, and V3 IVF writers do now materialize
+  carried values - so "no index builder writes carried values yet" is removed.
+- The v12 line's final numbers: **225 commits and 7 `breaking-change`-labeled PRs**, not 170
+  and 5.
+- The release train has now re-rooted on **four consecutive lines**; the 12.1 line took a
+  `chore: bump main to 12.1.0-beta.0` commit and was re-rooted to 13 four commits later without
+  ever being tagged.
+- `lance-namespace`: Java moved to 0.12.0 (#8979), so only Python still holds 0.11.1.
+- `inline_optimization_enabled` default flipped `true` -> `false` (#9180), carrying neither a
+  `breaking-change` label nor a `!`.
+- `references/maintenance.md` records that the `!`-vs-label signals agreed in this window (the
+  inverse of the v12 case) and that the spec pages can run ahead of the code.
+- Docs mirror refreshed to `v13.0.0-beta.4` (10 mirrored files changed; still 45 markdown + 4
+  diagrams, so every SKILL.md directory count stands).
+- `references/changelog-v7-v12.md` renamed to `references/changelog-v7-v13.md`.
+
+### Fixed
+
+- **Bit 1024 is documented but not implemented.** `format/table/versioning.md` lists
+  `FLAG_FRAGMENT_REUSE_INDEX` as reader/writer `Yes` with the unknown boundary at 2048, while
+  `feature_flags.rs` declares it above `FLAG_UNKNOWN` (512) and never reads it again, so
+  `supported_flags() = FLAG_UNKNOWN - 1` refuses it. The skill now records the split and says the
+  code wins.
+- Row-ID sequences: upstream explicitly repudiates the 200KB inline/external threshold the skill
+  stated - writers always store inline, and readers cannot load external version sequences.
+- `references/ops.md` no longer claims stable row IDs must be enabled at creation, no longer
+  calls 2.1 the default, and no longer marks 2.2 unstable.
+- The claim that `docs/src/format/file/versioning.md` is byte-identical across the range; it
+  gained a 29-line "Compatibility Caveats" section in the `v12.0.0` final.
+- `references/performance.md` provenance note now records the `v13.0.0-beta.1` change to
+  `guide/performance.md` (#9112), the first since `v12.0.0-beta.12`, and three code citations
+  were re-resolved to their current line numbers.
+- Dropped a stale usage-derived report: the `RowAddrTreeMap::from_sorted_iter` panic is fixed
+  upstream - `FlatIndex::try_new` now sorts by row id before building the bitmap.
+
+### Security
+
+- rustls 0.23.40 -> 0.23.45 for RUSTSEC-2026-0285 (#9212). PyO3 RUSTSEC-2026-0176 and
+  RUSTSEC-2026-0177 remain outstanding behind the still-open #8997.
+
+Verified against: lance-format/lance@v13.0.0-beta.4
+
 ## [0.19.0] - 2026-09-09
 
 ### Added
