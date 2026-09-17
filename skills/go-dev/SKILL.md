@@ -2,7 +2,7 @@
 name: go-dev
 description: Opinionated Go setup with golangci-lint v2, gofumpt, gotestsum, golang-migrate, and just. Use when starting a Go project, configuring lint, format, test, coverage or CI, writing a Justfile, wiring migrations, or leaving a Makefile workflow.
 metadata:
-  version: "0.4.0"
+  version: "0.4.1"
   categories: "development"
   topics: "go, golangci-lint, gofumpt, testing, just"
   upstream: "go@1.27.1, golangci-lint@v2.13.2, gofumpt@v0.12.0, gotestsum@v1.13.0, golang-migrate@v4.20.1, just@1.58.0, lefthook@v2.1.14"

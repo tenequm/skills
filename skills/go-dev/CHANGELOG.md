@@ -7,6 +7,35 @@ and this skill adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.h
 
 ## [Unreleased]
 
+## [0.4.1] - 2026-09-17
+
+### Changed
+- lefthook pins moved `v2.1.12` -> `v2.1.14` (released 2026-09-14) across `metadata.upstream`,
+  the install command, and `min_version`.
+
+### Fixed
+- **`stage_fixed` re-stages the substituted file list, not the files the command touched** - a
+  file the command created, or fixed while absent from that list, is left unstaged and the commit
+  goes through without the fix.
+- **The claim that lefthook hides all unstaged changes for a hook run was wrong.** Only
+  *partially staged* files are hidden: if no file is dirty in both the index and the worktree,
+  the hook runs with no stash, so a file carrying only unstaged edits is judged as it sits on
+  disk. Verified live against 2.1.14.
+- **`assert_lefthook_installed` is not a runtime guard** - it is baked into the generated hook
+  script at `lefthook install` time and never read by `lefthook run`, so flipping it changes
+  nothing until reinstall and does nothing for CI that calls `lefthook run` directly.
+
+### Added
+- `commands:` is a map that lefthook sorts before running (priority, then numeric name prefix,
+  then alphabetical), so written order is not run order; `jobs:` is a list, preserves declaration
+  order, and has no `priority` at all.
+- Worktree hazard: the partial-stage backup patch and the `lefthook auto backup` stash both
+  resolve through the *common* git dir, so linked worktrees contend for one patch file and one
+  stash entry and concurrent commits can destroy each other's unstaged changes. Two open upstream
+  issues, both unfixed in 2.1.14.
+
+Verified against: lefthook@v2.1.14
+
 ## [0.4.0] - 2026-09-09
 
 ### Fixed
