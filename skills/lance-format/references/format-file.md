@@ -1,8 +1,8 @@
 # Lance v12 reference - file format (sections 1-4)
 
-Part of the Lance v12 reference (`lance-format/lance@v12.0.0-beta.15`). Citations are `path:line`
+Part of the Lance v13 reference (`lance-format/lance@v13.0.0-beta.4`). Citations are `path:line`
 relative to the repo root; build a permalink as
-`https://github.com/lance-format/lance/blob/v12.0.0-beta.15/<path>`. Line numbers drift between
+`https://github.com/lance-format/lance/blob/v13.0.0-beta.4/<path>`. Line numbers drift between
 tags - treat them as approximate. Cross-references written as "section N" use the original
 16-section numbering; `lance-reference.md` maps every number to its file.
 
@@ -25,7 +25,7 @@ reference is still authoritative for the format underneath it.
 - [4. Data types](#4-data-types)
 
 Other files: `format-table.md` (5-10), `indexes.md` (11-12), `ops.md` (13, 15, 16),
-`changelog-v7-v12.md` (14).
+`changelog-v7-v13.md` (14).
 
 ---
 
@@ -163,7 +163,7 @@ instead of panicking or yielding garbage - a file that previously "read" may now
 **Published vs tagged.** crates.io carries only final releases - `lance 9.0.1` (2026-08-06) is
 the newest, preceded that same day by the sibling patch finals 8.0.1, 7.1.0, 6.1.0, 4.0.2, and
 3.0.2. **No 10.x or 11.x version, and no pre-release of any kind, is published.** Beta and rc
-tags exist in git only (beta artifacts go to fury.io), so building against `v12.0.0-beta.15`
+tags exist in git only (beta artifacts go to fury.io), so building against `v13.0.0-beta.4`
 means a git dependency, not a registry one.
 
 **Building.** Five workspace crates carry a protobuf build script - `lance-encoding`,
@@ -241,9 +241,36 @@ unset no longer means "never sparse". The policy decision is kept out of seriali
 "adds no wire-format fields" (PR #7756).
 `next` encodings can change and files written with them may become unreadable - "should only
 be used for experimentation and benchmarking" (`docs/src/format/file/versioning.md:8-11`).
-The default storage version became 2.1 in Lance 5.0.0 (`docs/src/guide/migration.md`); 2.2 is
-required for the Map type and Blob v2. Selected per-dataset via `data_storage_version` and
-**fixed at dataset creation** - to change it you write a new dataset.
+The default storage version became 2.1 in Lance 5.0.0 (`docs/src/guide/migration.md`), and 2.2
+as of `v12.0.0-beta.15` (#8657); 2.2 is required for the Map type and Blob v2. Selected
+per-dataset via `data_storage_version` - which, **as of the `v12.0.0` final, is no longer fixed
+at creation**. It is the write-time default, not a description of the dataset: "The dataset's
+`data_storage_version` property is the default for writes that omit a target, not a summary of
+its existing files. Create and overwrite establish this default; append, update, merge-insert,
+and compaction do not change it." An existing V2 dataset accepts `"2.0"`, `"2.1"`, `"2.2"` or
+`"2.3"` per operation "without rewriting the other files", so one dataset can carry several exact
+V2 versions at once and "each DataFile's version is authoritative for decoding". **V1 and V2
+still cannot be mixed.** The capability is gated on the paired
+`FLAG_MIXED_DATA_FILE_VERSIONS` bits (section 7), which the commit sets automatically - "there is
+no separate activation API" - and which never clear afterwards.
+
+Compaction can retarget versions by copying rather than reencoding: "`try_binary_copy` falls back
+to reencoding when inputs are ineligible; `force_binary_copy` rejects them", and a persistent
+target can be set with the `lance.compaction.data_storage_version` table-config key. Before any
+of this, upgrade every reader and writer: "Drain, restart, or fence writers that opened the
+dataset using an older release" - the flags cannot fence an older writer retroactively.
+
+**A FixedSizeList whose inner values are all null is a two-way compatibility fence** (#9130,
+`v12.0.0`). Before the fix, `FSL<2> = [[NULL, NULL], [NULL, NULL]]` - each list non-null, every
+*element* null - was stored with `bits_per_values=0` and "the resulting file would be
+unreadable"; such files must be **rewritten**, not just read by a newer build. After the fix the
+fence points the other way: "Files containing this pattern written by Lance >= 11.1.0 are **not
+readable by Lance < 11.1.0**. Old readers encounter the `Compression::Constant` inner encoding in
+the FSL descriptor and panic rather than returning an error."
+
+Treat that version number with suspicion: **`11.1.0` was never released** (the 11.1 line was
+re-rooted into v12 without a tag), and the fix and this doc text landed in the same commit, which
+shipped in `v12.0.0`. Read the fence as "pre-`v12.0.0` readers panic".
 
 ### 3.2 Container layout
 
@@ -484,7 +511,15 @@ representation (`docs/src/guide/data_types.md`).
   read back as Arrow's JSON type. Query functions: `json_extract` (JSONPath), `json_get`
   (returns JSONB for chaining), `json_get_string/int/float/bool`, `json_exists`,
   `json_array_contains`, `json_array_length`. Indexable: a scalar index on a JSON path, or an
-  inverted (FTS) index over JSON contents (`docs/src/guide/json.md`).
+  inverted (FTS) index over JSON contents (`docs/src/guide/json.md`). **As of v13 only the four
+  typed accessors reach a scalar index** - `json_extract` and `json_get` were de-routed in #9101
+  and now fall back to a full scan with no error (section 11).
+
+  The Rust helpers live in **`lance_arrow::json`**, not `lance::arrow::json`: the `lance` facade
+  has an unrelated same-named submodule for schema serialization, so the obvious import path
+  compiles as a different thing or fails to resolve. `json_field`, `encode_json` (JSON text ->
+  JSONB on the write side) and `decode_json` (read side, called by `to_logical_stream`) are at
+  `rust/lance-arrow/src/json.rs:79,284,290`.
   **"Filter-only" is a hard limitation, not a stylistic note**: "JSON functions are currently
   only available for filtering, not for projection in query results" (`guide/json.md:433`). You
   cannot `SELECT json_get_string(col, 'k')` - extract the whole JSON column and unpack it

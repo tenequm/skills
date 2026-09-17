@@ -1,6 +1,6 @@
 # Lance performance - combined reference
 
-Everything performance-shaped for Lance (`lance-format/lance@v12.0.0-beta.15`) in one place.
+Everything performance-shaped for Lance (`lance-format/lance@v13.0.0-beta.4`) in one place.
 **Part A** routes to the official guidance - which lives verbatim in this skill's
 `references/docs/` mirror, so it is pointed at rather than re-copied - and then adds the
 performance behavior upstream has *not* documented, derived from source and commit history.
@@ -44,9 +44,11 @@ scans" section and a `row_id_meta` component to the Row Id Sequence cache key, a
 `v11.0.0-beta.16`** (#8540), which appended the "AMX Acceleration" section (+29 lines, no other
 edit). It then held byte-unchanged through `v12.0.0-beta.6` and **changed again at
 `v12.0.0-beta.12`** (#8936), which rewrote the RQ block for the 5-bit default: new per-row sizing
-formulas, a new worked example (~10.8 GiB -> ~47.3 GiB), and new `Fast`-mode guidance.
+formulas, a new worked example (~10.8 GiB -> ~47.3 GiB), and new `Fast`-mode guidance. It held
+again through `v12.0.0` and **changed at `v13.0.0-beta.1`** (#9112, +8 lines), which documented
+`Dataset::frag_reuse_index()` - the first edit to the guide since `v12.0.0-beta.12`.
 
-The mirror is refreshed to `v12.0.0-beta.15`, so every number, default, and recommendation in it
+The mirror is refreshed to `v13.0.0-beta.4`, so every number, default, and recommendation in it
 is current as written. **Any RQ sizing figure you remember from an earlier read of this guide is
 stale** - re-read the block rather than trusting a cached number. The other perf-bearing sections
 above remain byte-unchanged across the range.
@@ -104,11 +106,12 @@ is gone.
 ## Performance changes not in the guide (v11, source-derived)
 
 Same caveat as above: verified against the `v11.0.0-beta.16` source and commit history, absent
-from `docs/src/guide/performance.md`. The section is unchanged at `v12.0.0-beta.15`. The only
-edits to `docs/src/guide/performance.md` between `v12.0.0-beta.6` and `v12.0.0-beta.15` are three
-hunks from line 483 onward, all in the RQ sizing block (#8936), so the official "Tuning remote
-scans" numbers and everything else Part A routes to still stand as written - but the RQ sizing
-figures do not, and are restated in `references/indexes.md`.
+from `docs/src/guide/performance.md`. The section is unchanged at `v13.0.0-beta.4`. The edits to
+`docs/src/guide/performance.md` between `v12.0.0-beta.6` and `v13.0.0-beta.4` are three hunks
+from line 483 onward in the RQ sizing block (#8936), plus the FRI-inspection paragraph added at
+`v13.0.0-beta.1` (#9112), so the official "Tuning remote scans" numbers and everything else
+Part A routes to still stand as written - but the RQ sizing figures do not, and are restated in
+`references/indexes.md`.
 
 **Large commits got much cheaper on the manifest side** (PR #7881). Transactions serialized
 above 20 MiB are no longer inlined into the manifest and live only in their external
@@ -210,7 +213,7 @@ this is the fix; OpenDAL-backed stores were never affected and are unchanged.
 
 ## Performance changes not in the guide (v12, source-derived)
 
-Verified against `v12.0.0-beta.15`.
+Verified against `v13.0.0-beta.4`.
 
 **Latest-version resolution stopped listing the whole `_versions/` prefix** (PR #8679). The
 namespace path previously enumerated every historical manifest to find the newest: on a
@@ -454,6 +457,14 @@ analogue on object storage. Mechanism, verified at `v11.0.0-beta.2`:
   even one new row. This is what makes a row-count threshold non-optional remotely: the amortized
   cost per row falls almost linearly with how much you batch behind it, so the threshold should be
   tuned against fold *frequency*, not against how stale the tail is allowed to get.
+- **The mechanism behind that floor is one round trip per IVF partition, so fold latency tracks
+  `num_partitions`, not delta size.** Instrumenting an 81-row fold that took 445 s showed **zero
+  throttle, retry or 503 responses and zero warnings** - it was not remote-side throttling but
+  sequential object-store round trips during the index append, one per partition, exposed to
+  variable per-request latency. The "partition N is empty, skipping" lines are the visible trace
+  of Lance walking all of them (256 in that run). Two consequences: a smaller `num_partitions`
+  directly shortens every fold on remote storage, and a fold that looks throttled is worth
+  measuring before you tune retry or concurrency settings, because those are not the bottleneck.
 - **An unindexed tail is a latency concern, not a correctness one - if `fast_search` is
   off.** Lance answers FTS and vector queries as a union of the index scan and a flat
   scan of unindexed fragments. `fast_search` skips that flat arm, silently dropping the
@@ -461,7 +472,7 @@ analogue on object storage. Mechanism, verified at `v11.0.0-beta.2`:
   tail-recall regression test. On v11, an unindexed tail additionally disqualifies the
   posting-backed compound FTS scorer (section 11.3), so it costs plan quality too.
 - **Know exactly what the flat arm does, because it bounds your commit cadence.** Read the
-  branch at `rust/lance/src/dataset/scanner.rs:5662-5680` (`v12.0.0-beta.15`). It scans **every**
+  branch at `rust/lance/src/dataset/scanner.rs:3380-3403` (`v13.0.0-beta.4`). It scans **every**
   unindexed fragment, and two properties make that cost scale badly. First, the filter is applied
   as a post-scan `LanceFilterExec` over the scanned rows rather than through scalar indexes - the
   code says so outright: "we could try and use the scalar indices here to reduce the scope of this
@@ -633,9 +644,9 @@ analogue on object storage. Mechanism, verified at `v11.0.0-beta.2`:
 ## Read path and query shaping
 
 - **Freshness is poll-only, and polling is cheaper than it looks.** There is **no `subscribe`,
-  `watch`, or version-notification API anywhere in the workspace** at `v12.0.0-beta.15` - a reader
+  `watch`, or version-notification API anywhere in the workspace** at `v13.0.0-beta.4` - a reader
   that must see new commits polls, full stop. The good news is the cost model:
-  `Dataset::checkout_latest()` (`rust/lance/src/dataset.rs:556`) on an **unchanged** version costs
+  `Dataset::checkout_latest()` (`rust/lance/src/dataset.rs:559`) on an **unchanged** version costs
   a single list/head and does **not** re-read the manifest body, so a ~100 ms poll interval is
   affordable even remotely; you only pay manifest decode when the version actually moved. Budget
   for the changed case, not the steady state. The only alternatives are in-process
@@ -645,7 +656,7 @@ analogue on object storage. Mechanism, verified at `v11.0.0-beta.2`:
 - **A latent timezone smell in scalar-index coercion - worth knowing, not currently a bug.**
   `safe_coerce_scalar`'s same-unit arm is
   `DataType::Timestamp(TimeUnit::Microsecond, _) => Some(value.clone())`
-  (`rust/lance-datafusion/src/expr.rs:311`, unchanged at `v12.0.0-beta.15`): when the literal's
+  (`rust/lance-datafusion/src/expr.rs:437`, unchanged at `v13.0.0-beta.4`): when the literal's
   time unit already matches the column's, it returns the literal **unchanged, discarding the
   target timezone**. The other-unit branches clone the timezone correctly. At the pinned
   `datafusion-common` 54.x this is harmless - `ScalarValue::partial_cmp` for two same-unit
@@ -773,12 +784,14 @@ not in release notes:
 - **crates.io carries finals only.** The newest published crate is `lance 10.0.0` (2026-08-07);
   every beta and rc exists as a git tag with no crate. Pinning a beta means a git dependency,
   which also means no crates.io yank signal if one turns out bad.
-- **Do not assume a given major shipped a final.** The auto-bump has now fired on two
-  consecutive dev lines, and *neither* `v9.1.0` nor `v10.1.0` was ever released. `v10.0.0` **did**
-  ship a final (2026-08-08, on `release/v10.0`) - note that finals are cut on `release/vX.Y`
-  branches, so "not an ancestor of `main`" is normal and not a sign the release is unofficial.
-  "Upgrade to the latest major" is still not a valid plan without checking which majors actually
-  have finals - as of `v12.0.0-beta.15` that is `v11.0.0` and below.
+- **Do not assume a given major shipped a final.** The auto-bump has now fired on **four
+  consecutive dev lines**, and *none* of `v9.1.0`, `v10.1.0`, `v11.1.0` or `v12.1.0` was ever
+  released - the 12.1 line got a `chore: bump main to 12.1.0-beta.0` commit and was re-rooted to
+  13 four commits later, without ever being tagged. `v12.0.0` **did** ship a final (2026-09-17)
+  - note that finals are cut on stabilization branches, so "not an ancestor of `main`" is normal
+  and not a sign the release is unofficial. "Upgrade to the latest major" is still not a valid
+  plan without checking which majors actually have finals - as of `v13.0.0-beta.4` that is
+  `v12.0.0` and below.
 - **v11 changes fragment-id semantics** (PR #8206). Overwrite no longer restarts ids at 0, and
   any commit producing duplicate ids is now rejected. Two audit items on a bump: code that reads
   a fragment by a hardcoded id after an overwrite, and any dataset written by Lance 0.16 or
