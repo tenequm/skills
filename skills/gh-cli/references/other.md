@@ -74,17 +74,29 @@ GH_NO_UPDATE_NOTIFIER: set to any value to disable GitHub CLI update notificatio
 
 GH_NO_EXTENSION_UPDATE_NOTIFIER: set to any value to disable GitHub CLI extension update notifications. When an extension is executed, gh checks for new versions for the executed extension once every 24 hours. If a newer version was found, an upgrade notice is displayed on standard error.
 
-GH_CONFIG_DIR: the directory where gh will store configuration files. If not specified, the default value will be one of the following paths (in order of precedence):
+GH_EXTENSION: set to 1 by gh when it invokes an extension, allowing an extension to tell whether it was run as gh <extension> or directly as a standalone program.
+
+GH_CONFIG_DIR: the directory where gh will store configuration files. If not specified, the default value will be one of the following paths (in order of precedence): $XDG_CONFIG_HOME/gh (if $XDG_CONFIG_HOME is set), $AppData/GitHub CLI (on Windows if $AppData is set), or $HOME/.config/gh.
 
 GH_PROMPT_DISABLED: set to any value to disable interactive prompting in the terminal.
 
-GH_PATH: set the path to the gh executable, useful for when gh can not properly determine its own path such as in the cygwin terminal.
+GH_PATH: set the path to the gh executable, useful for when gh can not properly determine its own path such as in the cygwin terminal. gh also sets this when invoking extensions so they can call back into the same gh executable.
 
 GH_MDWIDTH: default maximum width for markdown render wrapping. The max width of lines wrapped on the terminal will be taken as the lesser of the terminal width, this value, or 120 if not specified. This value is used, for example, with pr view subcommand.
 
 GH_ACCESSIBLE_PROMPTER (preview): set to a truthy value to enable prompts that are more compatible with speech synthesis and braille screen readers.
 
+GH_TELEMETRY: set to log to print telemetry data to standard error instead of sending it. Set to false or 0 to disable telemetry. Takes precedence over DO_NOT_TRACK.
+
+DO_NOT_TRACK: set to true or 1 to disable telemetry. Ignored when GH_TELEMETRY is set, which takes precedence.
+
 GH_SPINNER_DISABLED: set to a truthy value to replace the spinner animation with a textual progress indicator.
+
+### Auth traps
+
+- `GH_TOKEN` / `GITHUB_TOKEN` take precedence over stored credentials. While one is set, `gh auth status` reports the env token as the active account (`Failed to log in to github.com using token (GH_TOKEN)` if it is invalid), and switching or refreshing stored accounts has no effect on what commands use. Unset it for the command: `env -u GH_TOKEN gh auth switch --hostname github.com --user USER`.
+- `gh auth refresh` acts on the **active** account only; switch first to refresh another one. `--scopes` adds to the existing scopes rather than replacing them (use `--remove-scopes` or `--reset-scopes` to shrink).
+- `gh auth login` and `gh auth refresh` copy the OAuth device code to the clipboard by default since gh 2.101.0. Opt out once with `--clipboard=false`, or persistently with `gh config set clipboard disabled`.
 
 ---
 
@@ -827,6 +839,8 @@ $ gh config set editor "code --wait"
 $ gh config set git_protocol ssh --host github.com
 $ gh config set prompt disabled
 ```
+
+Newer keys (`gh config --help`): `clipboard` (`enabled`|`disabled`, default `enabled`; copies OAuth device codes), and `api_host` (experimental, per host: route a host's API traffic through a gateway, e.g. `gh config set api_host gh-gateway.example.com --host github.com` - not a security boundary).
 
 ---
 

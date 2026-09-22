@@ -504,3 +504,36 @@ $ gh attestation verify example.bin --owner github --signer-repo actions/example
 ```
 
 ---
+
+## Gotchas
+
+### `gh run view` shows only the latest attempt
+
+After a re-run, `gh run view` reports attempt N only - a run can read as green or cancelled while attempt 1 held the real failure. Inspect earlier attempts explicitly:
+
+```bash
+gh run view <run-id> --repo OWNER/REPO --json attempt,conclusion
+gh run view <run-id> --repo OWNER/REPO --attempt 1
+gh api repos/OWNER/REPO/actions/runs/<run-id>/attempts/1/jobs --jq '.jobs[] | {name, conclusion}'
+```
+
+### Jobs live on `run view`, not `run list`
+
+`gh run list --json jobs` fails with `Unknown JSON field: "jobs"`. List runs first, then fetch jobs per run:
+
+```bash
+gh run list --repo OWNER/REPO --limit 5 --json databaseId,conclusion,headBranch
+gh run view <run-id> --repo OWNER/REPO --json jobs --jq '.jobs[] | {name, conclusion, databaseId}'
+```
+
+The `databaseId` here is what `gh run rerun --job` expects - not the job number shown in the browser URL.
+
+### Re-run semantics
+
+- A re-run uses the original event's commit SHA and git ref and the privileges of the actor who first triggered the workflow - not the current branch head. Push a new commit (or dispatch a new run) to test newer code or a changed PR title/body.
+- Re-runs are possible for up to 30 days after the initial run.
+- `gh run rerun --failed` can be refused while other jobs of the run are still in progress: `run <id> cannot be rerun; This workflow is already running`. Wait for the run to finish (`gh run watch <id>`), then re-run.
+
+### `--workflow` with a file name
+
+`gh run list --workflow release.yml` looks the workflow file up on the default branch; a workflow that exists only on another branch fails with `HTTP 404: workflow release.yml not found on the default branch`. Filter by branch instead (`gh run list --branch <branch>`). Pass `-a` to include disabled workflows when filtering by name.

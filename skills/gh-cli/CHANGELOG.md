@@ -7,6 +7,46 @@ and this skill adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.h
 
 ## [Unreleased]
 
+## [1.4.0] - 2026-09-22
+
+### Added
+
+- Terminal escape-sequence refusal (gh 2.97.0+) on `gh repo read-file`, raw `gh api` bodies, piped `gh pr diff`, `gh release download --output -` and `gh gist view`, with the `--allow-escape-sequences` override.
+- Scripting gotchas: `gh api` writes the error body to stdout on failure; `-f`/`-F` switch the method to POST; `--jq` takes no jq flags; `--paginate --slurp` cannot combine with `--jq`; quote endpoints containing `?` for zsh; exit codes 1/2/4 plus `gh pr checks` exit 8.
+- `gh search issues --search-type semantic|hybrid` (gh 2.98.0) with its constraints and its separate 10/min `semantic_search` rate-limit bucket; search `--state` accepts only `open|closed`; `--match comments`; phrase-vs-keyword quoting.
+- Compare API (`repos/O/R/compare/A...B`, 250 commits / 300 files, same repository network only) for codebase comparison.
+- PR gotchas: `--watch --fail-fast` instead of sleep-poll loops, inline review comments via `pulls/N/reviews`, reply and `resolveReviewThread` recipe, `gh pr diff --name-only/--exclude`, `--comments` vs `--json` exclusivity, `gh pr checkout --worktree`.
+- Actions gotchas: `gh run view` shows only the latest attempt (`--attempt N`), jobs live on `run view` not `run list`, re-runs reuse the original commit, ref and actor privileges, `rerun --failed` refusal while a run is in progress, `--workflow` file lookup on the default branch.
+- `--attach` on issue/PR create/edit/comment and `gh issue develop --worktree` (gh 2.99.0).
+- Discussion search/filter flags and the `{discussions, next, totalCount}` JSON shape, `gh skill preview`, `--template` helper functions, "Could not resolve to a Repository" and missing-`--repo` error signatures, auth traps (`GH_TOKEN` precedence, `gh auth refresh` acts on the active account, clipboard device codes).
+
+### Changed
+
+- `references/comparison.md` rebuilt on `gh repo read-dir`/`read-file`, the Git Trees API at `HEAD`, and the compare API.
+- Environment variables and config keys updated to gh 2.101.0 (`GH_EXTENSION`, `GH_TELEMETRY`, `DO_NOT_TRACK`, `GH_CONFIG_DIR` defaults, `clipboard`, `api_host`).
+- Issue JSON field lists include `blockedBy, blocking, issueType, parent, subIssues, subIssuesSummary`; `gh release list` includes `isImmutable`.
+- Hardcoded 2024 "last month" dates replaced with a computed `SINCE` date.
+
+### Fixed
+
+- Multi-qualifier queries packed into one quoted argument are sent mangled by `gh search` (gh 2.97.0+ quotes everything after the first `:`), e.g. `"language:go stars:>500"` becomes `language:"go stars:>500"`; every example now passes one qualifier per argument.
+- `gh repo read-dir --json` output is `{"entries":[...]}`; `--jq '.[].name'` failed, now `.entries[].name`.
+- Piped `gh search code` prints only matched text lines, so filename- and path-only examples (`--filename Dockerfile`, `--match path`) exited 0 with no output; they now use `--json`, and the trap is documented. The `useWallet` owner-scoped example pointed at an owner with no matches.
+- `gh search repos` with no query or filter flag fails (`Invalid search query ""`); examples now carry a qualifier.
+- Git Trees examples used `trees/main`, which 404s on repos with another default branch; now `trees/HEAD`.
+- Contents API `.content | base64 -d` examples print nothing for files over 1MB; moved to `gh repo read-file`.
+- `gh search repos` and `gh api` require authentication (exit 4); only `gh release download` works unauthenticated.
+- `gh search repos` has no `repositoryTopics` field; its `watchersCount` equals the star count.
+- Unknown-field error text is `Unknown JSON field: "X"`; search `--limit` max is 1000; `gh api` paginates only with `--paginate`; quoted `--json` field lists work; a missing jq field prints `null` rather than erroring; unquoted multi-word queries are keyword-AND, not an error.
+- `gh pr revert` is not a preview command; `gh skill install` takes `<repository> [<skill>]`.
+- "GitHub search is not semantic" no longer holds for issues.
+
+### Security
+
+- gh 2.97.0 fixed terminal escape-sequence injection (GHSA-3m3g-3wcr-px46), unescaped URL path components (GHSA-4fjg-2h4q-fwg3), partial token disclosure in `gh auth status` (GHSA-cg6r-mpgc-h9mm) and an attestation signer-matcher bypass (GHSA-mm27-mwq9-fr5g); gh 2.98.0 fixed `gh codespace ports forward` binding to all interfaces (GHSA-vfhh-p7hm-pxfh). Upgrade to 2.98.0 or later.
+
+Verified against: gh@2.101.0
+
 ## [1.3.3] - 2026-08-21
 
 ### Changed

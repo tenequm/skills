@@ -14,24 +14,35 @@ Systematic workflow for comparing repositories to identify similarities, differe
 ### Step 1: Fetch directory structures
 
 ```bash
-gh api repos/OWNER-A/REPO-A/contents/PATH > repo1.json
-gh api repos/OWNER-B/REPO-B/contents/PATH > repo2.json
+gh repo read-dir PATH --repo OWNER-A/REPO-A --json name,type > repo1.json
+gh repo read-dir PATH --repo OWNER-B/REPO-B --json name,type > repo2.json
 ```
 
-If comparing a monorepo package, specify the path (e.g., `packages/explorerkit-idls`).
+If comparing a monorepo package, specify the path (e.g., `packages/explorerkit-idls`). Omit `PATH` to list the repo root.
 
 ### Step 2: Compare file lists
 
+`read-dir --json` wraps the listing in `{"entries":[...]}`:
+
 ```bash
-jq -r '.[].name' repo1.json > repo1-files.txt
-jq -r '.[].name' repo2.json > repo2-files.txt
+jq -r '.entries[].name' repo1.json | sort > repo1-files.txt
+jq -r '.entries[].name' repo2.json | sort > repo2-files.txt
 diff repo1-files.txt repo2-files.txt
 ```
 
 This shows:
 - Files unique to repo1 (prefixed with `<`)
 - Files unique to repo2 (prefixed with `>`)
-- Common files (no prefix)
+
+For whole-repo comparisons, list every file in one request per repo:
+
+```bash
+gh api 'repos/OWNER-A/REPO-A/git/trees/HEAD?recursive=1' --jq '.tree[] | select(.type == "blob") | .path' | sort > repo1-files.txt
+gh api 'repos/OWNER-B/REPO-B/git/trees/HEAD?recursive=1' --jq '.tree[] | select(.type == "blob") | .path' | sort > repo2-files.txt
+comm -3 repo1-files.txt repo2-files.txt
+```
+
+Use `HEAD`, not a hardcoded `main` - repos with another default branch return 404.
 
 ### Step 3: Fetch key files for comparison
 
@@ -40,23 +51,24 @@ Compare the most important files:
 #### Package dependencies
 
 ```bash
-gh api repos/OWNER-A/REPO-A/contents/package.json | jq -r '.content' | base64 -d > repo1-pkg.json
-gh api repos/OWNER-B/REPO-B/contents/package.json | jq -r '.content' | base64 -d > repo2-pkg.json
+gh repo read-file package.json --repo OWNER-A/REPO-A > repo1-pkg.json
+gh repo read-file package.json --repo OWNER-B/REPO-B > repo2-pkg.json
 ```
 
 Then compare dependencies:
 
 ```bash
-jq '.dependencies' repo1-pkg.json
-jq '.dependencies' repo2-pkg.json
+diff <(jq -S '{dependencies, peerDependencies}' repo1-pkg.json) <(jq -S '{dependencies, peerDependencies}' repo2-pkg.json)
 ```
 
 #### Main entry points
 
 ```bash
-gh api repos/OWNER-A/REPO-A/contents/src/index.ts | jq -r '.content' | base64 -d > repo1-index.ts
-gh api repos/OWNER-B/REPO-B/contents/src/index.ts | jq -r '.content' | base64 -d > repo2-index.ts
+gh repo read-file src/index.ts --repo OWNER-A/REPO-A > repo1-index.ts
+gh repo read-file src/index.ts --repo OWNER-B/REPO-B > repo2-index.ts
 ```
+
+`gh repo read-file` handles files past the Contents API's 1MB inline limit; the older `gh api .../contents/FILE --jq '.content' | base64 -d` pattern silently prints nothing for them.
 
 ### Step 4: Analyze differences
 
@@ -77,39 +89,46 @@ Compare the fetched files to identify:
 - Features only in repo2
 - Similar features with different implementations
 
+## Comparing Versions of the Same Repo
+
+When both sides live in one repository network (tags, branches, or a fork), the compare API does the diff server-side:
+
+```bash
+# Commit and file summary between two tags
+gh api repos/OWNER/REPO/compare/v1.0.0...v2.0.0 --jq '{ahead_by, behind_by, total_commits, files: (.files | length)}'
+
+# Changed file names
+gh api repos/OWNER/REPO/compare/v1.0.0...v2.0.0 --jq '.files[].filename'
+
+# Fork branch vs upstream branch
+gh api repos/OWNER/REPO/compare/main...FORK-OWNER:feature --jq '.files[].filename'
+```
+
+Limits: at most 250 commits and 300 files in the response. It returns 404 for unrelated repositories - use the 4-step workflow above for those.
+
 ## Example: Compare Solana IDL Libraries
 
 ```bash
 # Repo 1: solana-fm/explorer-kit (monorepo package)
-gh api repos/solana-fm/explorer-kit/contents/packages/explorerkit-idls > repo1.json
+gh repo read-dir packages/explorerkit-idls --repo solana-fm/explorer-kit --json name > repo1.json
 
 # Repo 2: tenequm/solana-idls (standalone)
-gh api repos/tenequm/solana-idls/contents/ > repo2.json
+gh repo read-dir --repo tenequm/solana-idls --json name > repo2.json
 
 # Compare file structures
-jq -r '.[].name' repo1.json > repo1-files.txt
-jq -r '.[].name' repo2.json > repo2-files.txt
-diff repo1-files.txt repo2-files.txt
-
-# Fetch package.json from both
-gh api repos/solana-fm/explorer-kit/contents/packages/explorerkit-idls/package.json | jq -r '.content' | base64 -d > repo1-pkg.json
-gh api repos/tenequm/solana-idls/contents/package.json | jq -r '.content' | base64 -d > repo2-pkg.json
+diff <(jq -r '.entries[].name' repo1.json | sort) <(jq -r '.entries[].name' repo2.json | sort)
 
 # Compare dependencies
 echo "=== Repo 1 Dependencies ==="
-jq '.dependencies' repo1-pkg.json
+gh repo read-file packages/explorerkit-idls/package.json --repo solana-fm/explorer-kit | jq '{dependencies, peerDependencies}'
 echo "=== Repo 2 Dependencies ==="
-jq '.dependencies' repo2-pkg.json
-
-# Fetch main entry points
-gh api repos/solana-fm/explorer-kit/contents/packages/explorerkit-idls/src/index.ts | jq -r '.content' | base64 -d > repo1-index.ts
-gh api repos/tenequm/solana-idls/contents/src/index.ts | jq -r '.content' | base64 -d > repo2-index.ts
+gh repo read-file package.json --repo tenequm/solana-idls | jq '{dependencies, peerDependencies}'
 
 # Compare exports
 echo "=== Repo 1 Exports ==="
-grep -E "^export" repo1-index.ts
+gh repo read-file packages/explorerkit-idls/src/index.ts --repo solana-fm/explorer-kit | grep -E "^export"
 echo "=== Repo 2 Exports ==="
-grep -E "^export" repo2-index.ts
+gh repo read-file src/index.ts --repo tenequm/solana-idls | grep -E "^export"
 ```
 
 ## Analysis Framework
@@ -135,6 +154,10 @@ After fetching files, analyze systematically:
 - Release frequency
 - Issue/PR activity
 
+```bash
+gh repo view OWNER/REPO --json pushedAt,latestRelease,stargazerCount,isArchived
+```
+
 ### 5. Features
 - Core features both have
 - Unique to repo1
@@ -145,8 +168,8 @@ After fetching files, analyze systematically:
 **Compare READMEs first**
 
 ```bash
-gh api repos/OWNER-A/REPO-A/contents/README.md | jq -r '.content' | base64 -d > repo1-readme.md
-gh api repos/OWNER-B/REPO-B/contents/README.md | jq -r '.content' | base64 -d > repo2-readme.md
+gh repo read-file README.md --repo OWNER-A/REPO-A > repo1-readme.md
+gh repo read-file README.md --repo OWNER-B/REPO-B > repo2-readme.md
 ```
 
 This gives you a high-level understanding before diving into code.
@@ -162,7 +185,7 @@ This gives you a high-level understanding before diving into code.
 **Use git tree for overview**
 
 ```bash
-gh api repos/OWNER/REPO/git/trees/main?recursive=1 | jq '.tree[] | select(.type == "blob") | .path' | grep -E "\.(ts|js|json)$"
+gh api 'repos/OWNER/REPO/git/trees/HEAD?recursive=1' --jq '.tree[] | select(.type == "blob") | .path' | grep -E "\.(ts|js|json)$"
 ```
 
 Gets all TypeScript/JavaScript/JSON files quickly.
