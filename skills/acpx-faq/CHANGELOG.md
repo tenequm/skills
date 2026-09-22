@@ -4,6 +4,69 @@ All notable changes to this skill are documented in this file, following [Keep a
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-09-22
+
+Every claim re-tested live against acpx 0.19.1 (codex-acp 1.13.0, claude-agent-acp
+0.76.0 and 0.81.0, agy_acp_server 1.1.1).
+
+### Added
+
+- Completion: `sessions watch` and its `turn_result` event as the settlement signal
+  (`WATCH_OUTCOME_UNKNOWN` = do not resubmit blindly); `sessions read --tail` for
+  in-flight progress.
+- Sessions: `sessions list --local`, `--resume-session` (takes `sessionId:`, not `id:`),
+  closing a session whose cwd was deleted.
+- agy: fixed-choice questions fail the prompt with exit 5 even under `--approve-all`;
+  list advertised model ids with a deliberately bad `--model`; the reported
+  checkpoint-corruption failure as a reason to prefer `exec`.
+- claude: pinning a newer adapter via `agents.claude.argv` (`claude-opus-5-5` needs
+  Claude Code 2.1.280+); `~/.claude/CLAUDE.md` still loads for a `--cwd` under `$HOME`.
+- codex: `mcp_optional_startup_grace_ms = 0` for MCP servers dropped at startup.
+- Limits: `--non-interactive-permissions fail`; exit 3 leaves partial work; shared
+  `npm_config_cache` and exact adapter pins.
+- Teardown: close pre-0.19 owners before upgrading. Catalog: nine new error strings.
+
+### Changed
+
+- **Breaking:** invariant 4 rewritten. Claude permission requests do reach acpx:
+  the adapter starts in the Claude settings' `permissions.defaultMode`, and
+  `--deny-all` refuses whatever that mode escalates (exit 5). codex's real control is
+  its workspace-write sandbox rooted at `--cwd`.
+- **Breaking:** the agy recipe now carries `--approve-all` (without it every write is
+  refused) and double-quotes the prompt (single quotes passed a literal `$D`).
+- agy: the built-in `acpx antigravity` (acpx 0.17.1) needs the `.par` on PATH or a
+  config override; the registry archive is a valid source.
+- agy auth rewritten: no `auth.type` fails fast with exit 1; a hang means `auth.type`
+  is set but never signed in. On macOS the credential lives in the Keychain, and
+  `GEMINI_HOME` alone does not isolate it.
+- Invariant 2: the lookup stops at the nearest `.git` directory or file (worktrees);
+  outside git only the exact `--cwd` is checked.
+- Teardown: SIGKILL no longer strands the adapter stack on 0.19. Liveness uses PIDs
+  and `comm` only, with a pattern that actually matches queue owners.
+- claude: bundled Claude Code is 2.1.257 via the built-in adapter `^0.76.0`.
+
+### Removed
+
+- The Fable model-id example: adapters now advertise a different id; pass the exact
+  advertised id with `--model`.
+
+### Fixed
+
+- A global flag after the agent exits 1, not 2.
+- claude has an effort knob: `set effort`.
+- `set model` fuzzy-matches rather than rejecting; an unknown `--model` reads
+  `Model '<id>' not found`.
+- Status: an owner that is gone reads `idle`; JSON reports `alive`; `dead` means an
+  unhealthy lease or an abnormal exit.
+- `--format quiet` no longer contradicts the log-based supervision advice.
+- An object-shaped `--mcp-config` fails with one clean line, not a stack trace; agy
+  MCP failures read `failed to initialize`.
+- `ACPX_TERMINAL_MAX_OUTPUT_BYTES` only lowers the 64 KiB default. Exit 130 is racy.
+- The previous `pgrep -fl` liveness command could print secrets from wrapper-shell
+  command lines.
+
+Verified against: acpx 0.19.1, claude-agent-acp 0.76.0, agy 1.2.8, agy_acp_server 1.1.1.
+
 ## [0.5.1] - 2026-09-11
 
 ### Removed
