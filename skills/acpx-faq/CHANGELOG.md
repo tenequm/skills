@@ -4,6 +4,14 @@ All notable changes to this skill are documented in this file, following [Keep a
 
 ## [Unreleased]
 
+## [0.6.1] - 2026-09-22
+
+### Fixed
+
+- Restored the Fable bullet, re-tested live: `--model 'claude-fable-5[1m]'` runs on
+  claude-agent-acp 0.76.0 and 0.81.0 even though the id is absent from the
+  advertised model list.
+
 ## [0.6.0] - 2026-09-22
 
 Every claim re-tested live against acpx 0.19.1 (codex-acp 1.13.0, claude-agent-acp

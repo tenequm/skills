@@ -2,7 +2,7 @@
 name: acpx-faq
 description: Run coding agents (codex, claude, agy/Antigravity) through the acpx ACP CLI - the headless lane outside a herdr pane (no HERDR_ENV). Use before launching or prompting a subagent, and when a command fails, a session is not found, or a prompt is lost.
 metadata:
-  version: "0.6.0"
+  version: "0.6.1"
   categories: "agents, operations"
   topics: "acpx, acp, agent-orchestration, troubleshooting, headless-agents"
   upstream: "acpx@0.19.1, @agentclientprotocol/claude-agent-acp@0.76.0, agy@1.2.8, agy_acp_server@1.1.1"
@@ -211,6 +211,8 @@ acpx --cwd "$D" claude sessions close work  # ALWAYS - the run is not over until
   different entry (e.g. `opus[1m]`); only an id with no match fails
   (`Invalid value for config option model`). An unknown `--model` fails with
   `RUNTIME: Model '<id>' not found`. Quote ids with brackets (`'...[1m]'`) - globs.
+- **Fable runs**: `--model 'claude-fable-5[1m]'`. It is absent from the advertised
+  list, but `--model` forwards it as given (adapters 0.76.0 and 0.81.0).
 - **The bundled Claude Code is whatever the adapter pins.** Built-in adapter
   `^0.76.0` = Claude Code 2.1.257, and a caret on 0.x locks the minor, so upgrading
   acpx does not reach newer builds. `claude-opus-5-5` needs 2.1.280+ (`Claude Code
