@@ -389,17 +389,52 @@ Run any command with a bare `--json` to print its valid field list.
 
 ### Write queries as keywords + qualifiers, not sentences
 
-GitHub search is not semantic. A natural-language sentence returns near-nothing; use keywords plus qualifiers.
+Default (lexical) search is not semantic. A natural-language sentence returns near-nothing; use keywords plus qualifiers.
 
 ```bash
 # ✅ Correct
-gh search repos "rate limiting middleware language:go stars:>500"
+gh search repos rate limiting middleware language:go "stars:>500"
 
 # ❌ Returns almost nothing
 gh search repos "what is the best go library for rate limiting middleware"
 ```
 
 The search *type* (code vs repos vs issues) is never part of the query string - it is the subcommand.
+
+### Quoting decides phrase vs keywords
+
+`gh` joins its arguments into one query. Separate words become AND-ed keywords; a single argument containing spaces is sent as an **exact phrase**. An argument containing a `:` is split at its first colon and everything after it is quoted when it contains a space - so `"rate limiting language:go stars:>500"` is sent as `rate limiting language:"go stars:>500"` and the language filter is lost. Give every qualifier its own argument (see [syntax.md](syntax.md#one-qualifier-per-argument)).
+
+```bash
+# Keywords: matches issues containing both words anywhere
+gh search issues worktree checkout --repo cli/cli
+
+# Exact phrase: can return nothing, with exit 0
+gh search issues "worktree checkout" --repo cli/cli
+```
+
+### Semantic and hybrid issue search (gh 2.98.0+)
+
+`gh search issues --search-type {lexical|semantic|hybrid}` ranks issues by meaning instead of keyword match. Semantic and hybrid search are scoped to issues (not PRs), relevance-ranked (`--sort`/`--order` are rejected), return a single page of results, and are not available on GitHub Enterprise Server.
+
+```bash
+gh search issues worktree checkout --repo cli/cli --search-type hybrid --limit 10
+gh search issues login fails after upgrade --repo OWNER/REPO --search-type semantic
+```
+
+They draw on a separate `semantic_search` rate-limit bucket of 10 requests/min, which `gh api rate_limit` does not list; a burst of calls ends in `HTTP 403: API rate limit exceeded`. Combining them with `--include-prs` or `--web` errors.
+
+### `--state` is open|closed only
+
+`gh search issues` and `gh search prs` accept `--state open` or `--state closed`; `--state all` fails with `valid values are {open|closed}`. Omit the flag to get both. (`gh issue list` / `gh pr list` do accept `--state all`.)
+
+### Comments are not searched by default
+
+Issue and PR search matches title and body. To match comment text, add `--match comments` (or the `in:comments` qualifier):
+
+```bash
+gh search issues segfault --repo OWNER/REPO --match comments
+```
 
 ### Date-scoped listing without paginating everything
 

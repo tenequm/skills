@@ -265,7 +265,7 @@ gh release download v2.96.0 --repo cli/cli
 
 ### There is no upsert, and exit codes are coarse
 
-`gh release create` has **no `--clobber`** (only `gh release upload` does), and exit code 1 covers everything - not found, already exists, transient API error alike. So the common `gh release view TAG || gh release create TAG` guard is unreliable.
+`gh release create` has **no `--clobber`** (only `gh release upload` does), and exit codes are coarse (`gh help exit-codes`): 1 covers every failure - not found, already exists, transient API error alike - with only 2 (cancelled) and 4 (authentication required) split out. So the common `gh release view TAG || gh release create TAG` guard is unreliable.
 
 Idempotent pattern - try create, fall back to edit:
 

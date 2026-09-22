@@ -301,7 +301,7 @@ $ gh project item-edit --id <item-id> --field-id <field-id> --project-id <projec
 
 Show status of relevant issues
 
-assignees, author, body, closed, closedAt, closedByPullRequestsReferences, comments, createdAt, id, isPinned, labels, milestone, number, projectCards, projectItems, reactionGroups, state, stateReason, title, updatedAt, url
+assignees, author, blockedBy, blocking, body, closed, closedAt, closedByPullRequestsReferences, comments, createdAt, id, isPinned, issueType, labels, milestone, number, parent, projectCards, projectItems, reactionGroups, state, stateReason, subIssues, subIssuesSummary, title, updatedAt, url
 
 **Examples:**
 
@@ -373,7 +373,7 @@ Display the title, body, and other information about an issue.
 
 With --web flag, open the issue in a web browser instead.
 
-assignees, author, body, closed, closedAt, closedByPullRequestsReferences, comments, createdAt, id, isPinned, labels, milestone, number, projectCards, projectItems, reactionGroups, state, stateReason, title, updatedAt, url
+assignees, author, blockedBy, blocking, body, closed, closedAt, closedByPullRequestsReferences, comments, createdAt, id, isPinned, issueType, labels, milestone, number, parent, projectCards, projectItems, reactionGroups, state, stateReason, subIssues, subIssuesSummary, title, updatedAt, url
 
 By default, we will display items in the terminal.
 
@@ -475,3 +475,34 @@ gh issue close {<number> | <url>} [flags]
 ```
 
 ---
+
+## Gotchas
+
+### Attach images and videos (gh 2.99.0+)
+
+`gh issue create`/`edit`/`comment` and `gh pr create`/`edit`/`comment` take a repeatable `--attach` flag that uploads local images or videos and adds them to the body. Up to 50 files per command; alt text follows the path after `#`. Available on github.com and GitHub Enterprise Cloud only.
+
+```bash
+gh issue create --repo OWNER/REPO --title "Login error" --body "Steps below" --attach './login.png#The login error state'
+gh issue comment 123 --repo OWNER/REPO --body "Recording:" --attach ./repro.mp4
+```
+
+If an upload fails partway, the command exits non-zero but still prints the new issue's URL - check for it before retrying, or you create a duplicate.
+
+### Work on an issue in a separate worktree (gh 2.99.0+)
+
+```bash
+gh issue develop 123 --checkout --worktree ../wt-issue-123
+```
+
+### Sub-issues, blockers and issue types
+
+`gh issue view`/`list --json` expose `parent`, `subIssues`, `subIssuesSummary`, `blockedBy`, `blocking` and `issueType`:
+
+```bash
+gh issue view 123 --repo OWNER/REPO --json subIssuesSummary,blockedBy,issueType
+```
+
+### `--comments` vs `--json`
+
+`gh issue view 123 --comments --json title` fails with `specify only one of --comments or --json` (gh 2.99.0+). Use `--json comments` to get comments as data.

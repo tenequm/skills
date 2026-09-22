@@ -824,6 +824,31 @@ gh pr ready [<number> | <url> | <branch>] [flags]
 
 ## Gotchas
 
+### `gh pr checks` exit codes are not just pass/fail
+
+`gh pr checks` exits **8** while any check is still pending, and exits **1** with `no checks reported on the '<branch>' branch` when nothing has run yet. Both break `&&` chains even though nothing failed. To wait for CI, let `gh` block instead of looping over `sleep`:
+
+```bash
+gh pr checks 123 --repo OWNER/REPO --watch --fail-fast     # add --required to ignore optional checks
+gh run watch <run-id> --repo OWNER/REPO --exit-status
+```
+
+Do not pipe a watch into `| tail`: the pipeline's exit status becomes `tail`'s, hiding the failure.
+
+### `gh pr checks` can surface stale check runs
+
+A cancelled or superseded run from an earlier push may still show as failing (often with a `0s` duration) even after a green re-run. Confirm against the latest run for the head SHA before declaring CI broken.
+
+CI triage loop that works:
+
+```bash
+gh pr checks                              # find the failing check
+gh run view --log-failed --job <job-id>   # read only the failing job's log
+gh run rerun <run-id> --failed            # retry just the failed jobs
+```
+
+`gh run watch --exit-status` exits non-zero only when the run *concludes* failed - exit 0 means the run succeeded.
+
 ### Review threads and resolved state require GraphQL
 
 `gh pr view` cannot show review threads or whether they are resolved, and thread IDs exist only in GraphQL. To count unresolved threads:
@@ -840,23 +865,54 @@ gh api graphql -f query='
   --jq '[.data.repository.pullRequest.reviewThreads.nodes[] | select(.isResolved | not)] | length'
 ```
 
-### `gh pr checks` can surface stale check runs
-
-A cancelled or superseded run from an earlier push may still show as failing (often with a `0s` duration) even after a green re-run. Confirm against the latest run for the head SHA before declaring CI broken.
-
-CI triage loop that works:
+Reply to a thread, then resolve it. Pass values as GraphQL variables (`-f`/`-F`) rather than splicing them into the query string - hand-built queries break on quotes and braces with errors like `Expected NAME, actual: (none)`:
 
 ```bash
-gh pr checks                              # find the failing check
-gh run view --log-failed --job <job-id>   # read only the failing job's log
-gh run rerun <run-id> --failed            # retry just the failed jobs
+# Reply (REST): the comment ID must be a top-level review comment, and the PR number is part of the path
+gh api -X POST repos/OWNER/REPO/pulls/123/comments/COMMENT_ID/replies -f body='Fixed in abc123'
+
+# Resolve (GraphQL): THREAD_ID is a reviewThreads node id (PRRT_...)
+gh api graphql -f query='
+  mutation($id:ID!) { resolveReviewThread(input:{threadId:$id}) { thread { isResolved } } }' \
+  -f id=THREAD_ID
 ```
 
-`gh run watch --exit-status` exits non-zero only when the run *concludes* failed - exit 0 means the run succeeded.
+Resolving threads does not dismiss a `CHANGES_REQUESTED` review - that is a separate action (`dismissPullRequestReview`), or the reviewer re-reviews.
+
+### Inline review comments need the API
+
+`gh pr review` only takes `--approve`, `--comment`, `--request-changes` and a body - it cannot anchor comments to a file and line. `gh pr view --json comments,reviews` also omits inline comment text. Use the REST endpoints:
+
+```bash
+# Read inline review comments
+gh api repos/OWNER/REPO/pulls/123/comments --paginate --jq '.[] | {path, line, user: .user.login, body}'
+
+# Post a review with inline comments (review.json)
+# {"event":"COMMENT","body":"Review summary","comments":[{"path":"src/app.ts","line":42,"side":"RIGHT","body":"Consider a guard here"}]}
+gh api -X POST repos/OWNER/REPO/pulls/123/reviews --input review.json
+```
+
+Leaving out `event` creates a **pending** review that nobody sees until it is submitted.
+
+### `gh pr diff` for remote review
+
+```bash
+gh pr diff 123 --repo OWNER/REPO --name-only                 # changed file names only
+gh pr diff 123 --repo OWNER/REPO --exclude '*.lock' --exclude 'dist/*'
+```
+
+When piped, a diff containing terminal escape sequences fails with `the diff contains terminal escape sequences; pass --allow-escape-sequences to output it anyway` (gh 2.97.0+). Pass the flag when piping a patch to another program.
+
+### Other flag and field traps
+
+- `--comments` and `--json` cannot be combined on `gh pr view` / `gh issue view` (gh 2.99.0+): `specify only one of --comments or --json`. Fetch comments with `--json comments` instead.
+- `gh pr view` has no `merged` field - use `state` or `mergedAt`.
+- `gh pr checkout 123 --worktree ../pr-123` (gh 2.98.0+) checks the PR out into a separate worktree, leaving the current checkout untouched.
+- `gh pr create`/`edit`/`comment` accept `--attach FILE` (gh 2.99.0+, github.com and GHEC only) to upload images or videos into the body - see [issues.md](issues.md).
 
 ### `gh pr revert`
 
-Reverts a merged pull request, opening a new PR with the reverting commit:
+Reverts a merged pull request, opening a new PR with the reverting commit. It is a regular command, not a preview:
 
 ```bash
 gh pr revert 123 --repo OWNER/REPO

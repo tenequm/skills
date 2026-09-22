@@ -790,7 +790,7 @@ $ gh issue edit 23 34 --add-label "help wanted"
 
 List releases in a repository
 
-createdAt, isDraft, isLatest, isPrerelease, name, publishedAt, tagName
+createdAt, isDraft, isImmutable, isLatest, isPrerelease, name, publishedAt, tagName
 
 **Examples:**
 
@@ -1499,7 +1499,7 @@ The search query syntax is documented here: https://docs.github.com/en/search-gi
 
 On supported GitHub hosts, advanced issue search syntax can be used in the --search query. For more information about advanced issue search, see: https://docs.github.com/en/issues/tracking-your-work-with-issues/using-issues/filtering-and-searching-issues-and-pull-requests#building-advanced-filters-for-issues
 
-assignees, author, body, closed, closedAt, closedByPullRequestsReferences, comments, createdAt, id, isPinned, labels, milestone, number, projectCards, projectItems, reactionGroups, state, stateReason, title, updatedAt, url
+assignees, author, blockedBy, blocking, body, closed, closedAt, closedByPullRequestsReferences, comments, createdAt, id, isPinned, issueType, labels, milestone, number, parent, projectCards, projectItems, reactionGroups, state, stateReason, subIssues, subIssuesSummary, title, updatedAt, url
 
 You will see the most recent 30 open items.
 

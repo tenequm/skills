@@ -52,13 +52,32 @@ gh search repos "query" --json forkCount
 |------|----------------|-------------------|
 | Stars | `stargazerCount` | `stargazersCount` |
 | Forks | `forkCount` | `forksCount` |
-| Topics | `repositoryTopics` | `repositoryTopics` |
+| Topics | `repositoryTopics` | not available |
+| Watchers | `watchers` (`{totalCount}`) | `watchersCount` - actually the star count |
 | Description | `description` | `description` |
 | URL | `url` | `url` |
 
+## One Qualifier per Argument
+
+Since gh 2.97.0, `gh search` splits each query argument at its **first** `:` and, if the remainder contains a space, wraps the remainder in quotes. A single quoted string holding several qualifiers is therefore sent mangled - the search still returns results, just not filtered the way you asked:
+
+```bash
+# ❌ Sent as stars:">1000 pushed:>2026-09-01"
+gh search repos "stars:>1000 pushed:>2026-09-01"
+
+# ❌ Sent as topic:"blockchain topic:typescript"
+gh search repos "topic:blockchain topic:typescript"
+
+# ✅ One argument per qualifier; quote the ones containing > or < so the shell does not redirect
+gh search repos "stars:>1000" "pushed:>2026-09-01"
+gh search repos topic:blockchain topic:typescript
+```
+
+Check what is actually sent with `GH_DEBUG=api` (the query is in the logged request URL). `gh pr list --search` and `gh issue list --search` are not affected - they pass the string through as-is.
+
 ## Negative Qualifiers
 
-A negative qualifier (prefixed with `-`) inside a quoted query is fine as long as the query does not **begin** with the hyphen:
+A negative qualifier (prefixed with `-`) is fine as its own argument, or at the end of a quoted query, as long as the query does not **begin** with the hyphen:
 
 ```bash
 # ✅ Works without `--` - query starts with a word
@@ -75,10 +94,10 @@ gh search issues "-label:wontfix bug"
 
 ```bash
 # ✅ Correct - flags precede `--`
-gh search issues --limit 5 -- "-label:wontfix bug"
+gh search issues --limit 5 -- -label:wontfix bug
 
 # ❌ Wrong - `--limit 5` becomes search text; returns the default 30 results
-gh search issues -- "-label:wontfix bug" --limit 5
+gh search issues -- -label:wontfix bug --limit 5
 ```
 
 ### PowerShell
@@ -98,19 +117,19 @@ gh search issues "bug report -label:wontfix"
 
 ```bash
 # Exclude labels
-gh search issues -- "bug -label:wontfix -label:duplicate"
+gh search issues -- bug -label:wontfix -label:duplicate
 
 # Exclude topics
 gh search repos -- "web framework -topic:deprecated"
 
 # Exclude archived repos
-gh search repos -- "stars:>100 -archived:true"
+gh search repos -- "stars:>100" -archived:true
 
 # Exclude specific languages
 gh search code -- "config -language:json"
 
 # Exclude filenames
-gh search code -- "authentication -filename:test -filename:spec"
+gh search code -- authentication -filename:test -filename:spec
 ```
 
 ## Date Format Quirks
@@ -145,16 +164,17 @@ gh search repos "created:>2024-10-01"  # Without time (00:00:00)
 
 ### Spaces in queries
 
-Wrap multi-word queries in quotes:
+Quoting changes the meaning. Separate words are AND-ed keywords; one quoted argument with spaces is sent as an exact phrase:
 
 ```bash
-# ✅ Correct
-gh search code "error handling" --language=python
-gh search repos "machine learning" --sort stars
-
-# ❌ Wrong - treats each word as separate argument
+# Keywords - files containing both "error" and "handling" anywhere
 gh search code error handling --language=python
+
+# Exact phrase - files containing "error handling"
+gh search code "error handling" --language=python
 ```
+
+An exact phrase can legitimately return nothing (exit 0). If a quoted search comes back empty, retry with unquoted words.
 
 ### Boolean operators
 
@@ -162,7 +182,7 @@ GitHub search doesn't support traditional AND/OR/NOT:
 
 ```bash
 # ✅ Use qualifiers instead
-gh search repos "topic:react topic:typescript"  # Implicit AND
+gh search repos topic:react topic:typescript  # Implicit AND
 gh search issues -- "bug -label:wontfix"  # Implicit NOT
 
 # ❌ Wrong - literal text search
@@ -207,11 +227,11 @@ gh search repos "topic:rust" --json name
 ### Null handling
 
 ```bash
-# ✅ Correct - handle nulls
-gh api repos/owner/repo/contents/path | jq -r '.content // empty'
+# ✅ Correct - prints nothing when the field is missing
+gh api repos/owner/repo/contents/path --jq '.content // empty'
 
-# ❌ Wrong - errors on null
-gh api repos/owner/repo/contents/path | jq -r '.content'
+# ❌ Misleading - a missing field prints the literal string "null" (exit 0)
+gh api repos/owner/repo/contents/path --jq '.content'
 ```
 
 ## API Endpoint Quirks
@@ -234,18 +254,27 @@ gh api repos/owner/repo/contents/file.ts --jq '.content' | base64 -d
 gh api repos/owner/repo/contents/file.ts --template '{{.content | base64decode}}'
 ```
 
-The Contents API only inlines files up to **1MB**; past that, `.content` comes back empty. `gh repo read-file` falls back to raw fetching automatically, which is why it is the safer default.
+The Contents API only inlines files up to **1MB**; between 1MB and 100MB, `.content` comes back as an empty string with `"encoding": "none"`, so the base64 pipe silently prints nothing. `gh repo read-file` falls back to raw fetching automatically, which is why it is the safer default.
+
+The functions that *do* exist for `--template` (`gh help formatting`): `join`, `pluck`, `tablerow`, `tablerender`, `timeago`, `timefmt`, `truncate`, `hyperlink`, `color`, `autocolor`, plus the Sprig functions `contains`, `hasPrefix`, `hasSuffix`, `regexMatch`. Sprig's `b64dec` is not available either.
+
+```bash
+gh repo list cli --limit 3 --json name,updatedAt --template '{{range .}}{{tablerow .name (timeago .updatedAt)}}{{end}}'
+```
 
 ### Recursive tree flag
 
 For recursive directory listings, use query parameter:
 
 ```bash
-# ✅ Correct
-gh api repos/owner/repo/git/trees/main?recursive=1
+# ✅ Correct - HEAD resolves to the default branch; quote the URL (zsh globs an unquoted ?)
+gh api 'repos/owner/repo/git/trees/HEAD?recursive=1'
 
 # ❌ Wrong - returns only top level
-gh api repos/owner/repo/git/trees/main
+gh api repos/owner/repo/git/trees/HEAD
+
+# ❌ Wrong - 404 on repos whose default branch is not main (e.g. cli/cli uses trunk)
+gh api 'repos/cli/cli/git/trees/main?recursive=1'
 ```
 
 ### Ref parameter
@@ -253,12 +282,12 @@ gh api repos/owner/repo/git/trees/main
 Specify branch/tag/commit with `ref`:
 
 ```bash
-# ✅ Correct
-gh api repos/owner/repo/contents/file.ts?ref=dev
-gh api repos/owner/repo/contents/file.ts?ref=v1.0.0
-gh api repos/owner/repo/contents/file.ts?ref=abc123
+# Quote the endpoint - zsh treats an unquoted ? as a glob ("no matches found")
+gh api 'repos/owner/repo/contents/file.ts?ref=dev'
+gh api 'repos/owner/repo/contents/file.ts?ref=v1.0.0'
+gh repo read-file file.ts --repo owner/repo --ref abc123
 
-# ❌ Wrong - uses default branch
+# Without ref, the default branch is used
 gh api repos/owner/repo/contents/file.ts
 ```
 
@@ -272,11 +301,11 @@ Different commands have different default limits:
 # gh search commands default to 30 results
 gh search repos "topic:rust"  # Returns max 30
 
-# Specify limit explicitly
-gh search repos "topic:rust" --limit 100  # Max 100
+# Specify limit explicitly (1-1000)
+gh search repos "topic:rust" --limit 100
 
-# API commands may paginate automatically
-gh api repos/owner/repo/issues  # May return all or paginate
+# gh api returns only the first page unless you pass --paginate
+gh api repos/owner/repo/issues  # 30 items
 ```
 
 ### Manual pagination
@@ -289,20 +318,21 @@ gh api --paginate repos/owner/repo/issues
 gh search repos "topic:python" --limit 1000
 ```
 
+`--paginate --slurp` wraps all pages in one array but cannot be combined with `--jq`/`--template` (`the --slurp option is not supported with --jq or --template`); pipe to `jq` instead.
+
 ## Permission Errors
 
 ### Authentication required
 
-Some operations require authentication:
+Almost every `gh` command needs a token, even against public repos. Without one it prints `To get started with GitHub CLI, please run:  gh auth login` and exits **4**. The exception is `gh release download` from a public repo.
 
 ```bash
-# Works without auth
+# Fails unauthenticated (exit 4)
 gh search repos "topic:rust"
 gh api repos/owner/repo/contents/README.md
 
-# Requires auth
-gh repo view owner/private-repo
-gh search repos "is:private"
+# Works unauthenticated
+gh release download v2.101.0 --repo cli/cli --pattern '*checksums.txt'
 
 # Set token
 export GH_TOKEN="your_token"
@@ -312,13 +342,14 @@ gh auth login
 
 ### Rate limiting
 
-Rate limits are **per-resource**, and search is far tighter than the core budget most people quote:
+Rate limits are **per-resource**, and search is far tighter than the core budget most people quote. The unauthenticated column applies to raw API calls (e.g. `curl`); `gh` itself always sends a token:
 
 | Resource | Unauthenticated | Authenticated |
 |----------|-----------------|---------------|
 | `core` (`gh api`, `gh repo view`, `gh repo read-file`) | 60/hr | 5000/hr |
 | `search` (repos, issues, prs, commits) | 10/min | 30/min |
 | `code_search` | n/a | 10/min |
+| `semantic_search` (`gh search issues --search-type semantic\|hybrid`) | n/a | 10/min - absent from `gh api rate_limit` |
 | `graphql` | n/a | 5000/hr |
 
 ```bash
@@ -349,10 +380,10 @@ gh search repos "name with \"quotes\""
 # ✅ Comma-separated field list
 gh repo view owner/repo --json name,description,stargazerCount
 
-# ❌ Wrong - no quotes around field names
+# ✅ Also fine - the shell strips the quotes before gh sees them
 gh repo view owner/repo --json "name","description"
 
-# ❌ Wrong - spaces
+# ❌ Wrong - the space splits it into two arguments
 gh repo view owner/repo --json name, description
 ```
 
@@ -364,14 +395,16 @@ gh repo view owner/repo --json name, description
 
 ```bash
 # ✅ Available scoping flags
-gh search code "useWallet" --language=typescript --owner=vercel
-gh search code --filename Dockerfile --extension dockerfile
-gh search code react --match path   # match file path vs file contents {file|path}
+gh search code "useWallet" --language=typescript --owner=anza-xyz
+gh search code --filename Dockerfile --json repository,path
+gh search code react --match path --json repository,path   # match file path vs file contents {file|path}
 
 # ❌ Wrong - no such flag on code search
 gh search code "useWallet" --sort indexed
 gh search code "useWallet" --sort stars
 ```
+
+When piped (scripts, agents), `gh search code` prints only matched text lines, so a filename- or path-only match exits 0 with **no output** even though the API found results. Use `--json path,repository` for those queries.
 
 `--sort`/`--order` *do* work on `gh search repos` ({forks|help-wanted-issues|stars|updated}) and `gh search issues`/`gh search prs` - it is only code search that dropped them.
 
@@ -401,17 +434,32 @@ gh api repos/owner/repo --jq '.stargazers_count'
 
 ## Common Errors
 
-### "No field named X"
+### `Unknown JSON field: "X"`
 
-You used the wrong field name for the command:
+You used the wrong field name for the command; the error is followed by the valid field list:
 
 ```bash
-# Error: "No field named stargazersCount"
+# Error: Unknown JSON field: "stargazersCount"
 gh repo view owner/repo --json stargazersCount
 
 # Fix: use stargazerCount for gh repo view
 gh repo view owner/repo --json stargazerCount
 ```
+
+Other common misses: `gh pr view` has no `merged` (use `mergedAt` or `state`), `gh search prs` has no `mergedAt` (use `closedAt`), `gh run list` has no `jobs` (use `gh run view <id> --json jobs`), `gh search repos` has no `repositoryTopics`.
+
+### `Could not resolve to a Repository with the name 'OWNER/REPO'`
+
+For a repo you know exists, this usually means the **active account has no access** - GitHub reports private repos you cannot see as missing. Check which account is in use before hunting for typos:
+
+```bash
+gh api user --jq .login
+gh auth status
+```
+
+### `failed to run git: fatal: not a git repository`
+
+The command needed a repository and fell back to the current directory. Pass `--repo OWNER/REPO` (or set `GH_REPO`). In a git repo with no remotes the message is `no git remotes found`.
 
 ### "Not Found (404)"
 
@@ -427,7 +475,7 @@ gh api repos/owner/repo/contents/path/file.ts?ref=dev
 
 ### "Bad credentials"
 
-Authentication issue:
+Authentication issue (a `GH_TOKEN` in the environment takes precedence over stored credentials, so an expired env token wins even after `gh auth login`):
 
 ```bash
 # Check auth status
