@@ -98,8 +98,8 @@ optional but encouraged):
 | `type` | Kind of concept, producer-defined: `Decision`, `Finding`, `Reference`, `Runbook`, ... The bundle preamble may fix a vocabulary. |
 | `title`, `description` | Display name; one-sentence summary reused by indexes and search. |
 | `tags` | Cross-cutting labels, a YAML list of short strings. |
-| `status` | `draft` / `stable` (default). The spec also allows `deprecated`; this skill never writes it (invariant 5). |
-| `stale_after` | Absolute ISO 8601 instant after which the content needs review. |
+| `status` | `draft` / `stable` (default). The spec's `deprecated` is never written here (invariant 5). |
+| `stale_after` | Absolute ISO 8601 instant after which the content must be re-verified before use. |
 | `generated` | `{ by, at }` - who produced the current content and when it last meaningfully changed. |
 | `verified` | List of `{ by, at }` confirmation events. See Actors below for who may write it. |
 | `sources` | What the concept derives from. Each entry has a `resource` (URL, bundle-relative path, or an honest scope descriptor for things no link reaches) and an `id` when body claims cite it. |
@@ -146,12 +146,16 @@ unverified concept is honest, not deficient; consumers derive trust tiers
    Hand-edit `index.md` (a bullet with title, link, and the concept's
    description) only in a bundle without a generator. There is no `log.md`:
    git history is the log.
-5. **Delete what stops being true.** A concept that is no longer true is
-   deleted, not deprecated - git history keeps it. Remove every inbound link
-   with it, rewriting the sentence that carried the link rather than leaving
-   a dangling reference. A concept that is only partly outdated is updated in
-   place; when a successor replaces it, the successor states what is true now
-   and needs no pointer back.
+5. **Only what is true now.** An outdated concept is a hallucination waiting
+   to happen, so a concept that stops being true is deleted, not deprecated -
+   git history is the archive. This covers a fact that changed upstream, a
+   decision about something since retired, and a reversed decision; a
+   successor may state what it replaced and why, in the present tense, never
+   as a link back. Fix it in the same commit as the change that made it
+   false: a change that retires, replaces or upgrades something searches the
+   bundle for it and deletes or rewrites what it falsified, including the
+   sentences that linked there. A concept only partly outdated is rewritten
+   in place.
 6. **Progressive disclosure on read.** Enter through `index.md` and open only
    the concepts the task needs; never bulk-dump a bundle into context.
 7. **Verify before claiming conformance.** After writing, confirm what the
@@ -182,11 +186,14 @@ one line in the instruction file, linking here.
 
 **Recall** ("why did we choose X", "have we established Y"): find the bundle
 by its marker, read the index, open only matching concepts. Treat `status`,
-`stale_after`, and the trust tier as part of the answer - a stale concept is
-reported as such, not as current truth. A concept found to be no longer true is
-deleted (invariant 5), not reported as current.
+`stale_after`, and the trust tier as part of the answer. A concept past its
+`stale_after` is checked against its source before use: if it holds, propose a
+new `stale_after`; if not, it is false. A concept found false is never used or
+reported as current: say so in the answer and propose deleting it - never
+delete it during a recall.
 
 **End-of-task review** (after substantial work, when the repo's instruction
 file asks for it): scan the work for decisions taken, findings established,
-or rules adopted; capture what passes the fences; say plainly when nothing
-does.
+or rules adopted; capture what passes the fences; search the bundle for
+anything the work retired, replaced or upgraded (invariant 5); say plainly
+when nothing does.
