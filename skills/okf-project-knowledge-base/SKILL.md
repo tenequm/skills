@@ -2,7 +2,7 @@
 name: okf-project-knowledge-base
 description: Durable project knowledge as Git-native OKF bundles (docs/knowledge/, one concept per file, with provenance and trust tiers). Use to record a decision, finding, or rule that must outlive the session. Not session state or agent instructions.
 metadata:
-  version: "0.2.0"
+  version: "0.3.0"
   categories: "agents, knowledge"
   topics: "okf, knowledge-base, agent-memory, provenance, documentation"
   openclaw:
@@ -98,7 +98,7 @@ optional but encouraged):
 | `type` | Kind of concept, producer-defined: `Decision`, `Finding`, `Reference`, `Runbook`, ... The bundle preamble may fix a vocabulary. |
 | `title`, `description` | Display name; one-sentence summary reused by indexes and search. |
 | `tags` | Cross-cutting labels, a YAML list of short strings. |
-| `status` | `draft` / `stable` (default) / `deprecated`. |
+| `status` | `draft` / `stable` (default). The spec also allows `deprecated`; this skill never writes it (invariant 5). |
 | `stale_after` | Absolute ISO 8601 instant after which the content needs review. |
 | `generated` | `{ by, at }` - who produced the current content and when it last meaningfully changed. |
 | `verified` | List of `{ by, at }` confirmation events. See Actors below for who may write it. |
@@ -146,9 +146,12 @@ unverified concept is honest, not deficient; consumers derive trust tiers
    Hand-edit `index.md` (a bullet with title, link, and the concept's
    description) only in a bundle without a generator. There is no `log.md`:
    git history is the log.
-5. **Deprecate, never delete.** A concept that stops being true gets
-   `status: deprecated` and, when replaced, a link to its successor. History
-   and inbound links survive.
+5. **Delete what stops being true.** A concept that is no longer true is
+   deleted, not deprecated - git history keeps it. Remove every inbound link
+   with it, rewriting the sentence that carried the link rather than leaving
+   a dangling reference. A concept that is only partly outdated is updated in
+   place; when a successor replaces it, the successor states what is true now
+   and needs no pointer back.
 6. **Progressive disclosure on read.** Enter through `index.md` and open only
    the concepts the task needs; never bulk-dump a bundle into context.
 7. **Verify before claiming conformance.** After writing, confirm what the
@@ -179,8 +182,9 @@ one line in the instruction file, linking here.
 
 **Recall** ("why did we choose X", "have we established Y"): find the bundle
 by its marker, read the index, open only matching concepts. Treat `status`,
-`stale_after`, and the trust tier as part of the answer - a deprecated or
-stale concept is reported as such, not as current truth.
+`stale_after`, and the trust tier as part of the answer - a stale concept is
+reported as such, not as current truth. A concept found to be no longer true is
+deleted (invariant 5), not reported as current.
 
 **End-of-task review** (after substantial work, when the repo's instruction
 file asks for it): scan the work for decisions taken, findings established,
