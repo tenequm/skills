@@ -6,13 +6,13 @@ gofumpt is a **strict superset of gofmt** - any code formatted by gofumpt produc
 
 **Upgrading to v0.12.0 reformats imports.** Four fixes change output on real code, so expect a one-time diff: a std import carrying a comment is "no longer moved into the top import group, as the comment stayed behind and ended up detached at the bottom of the group"; moving a std import up "no longer leaves an empty line where it used to be"; a copyright header or package doc "no longer makes gofumpt treat a single-line first declaration as multi-line"; and an assignment whose right-hand side is split by a comment "is now left alone".
 
-**golangci-lint lags gofumpt.** golangci-lint v2.13.2 vendors `mvdan.cc/gofumpt v0.11.0`, so `golangci-lint fmt` and a standalone v0.12.0 binary disagree on exactly the cases above. Do not use one as fixer and the other as gate.
+**golangci-lint lags gofumpt.** golangci-lint v2.14.0 bundles `mvdan.cc/gofumpt v0.12.0`, so today `golangci-lint fmt` and a standalone v0.12.0 binary agree (v2.13.2 still vendored v0.11.0 and disagreed on exactly the cases above). The lag recurs whenever gofumpt releases first: master already carries 33 unreleased commits (2026-09-22/23), 16 of them output-changing `format:` fixes such as "format: don't join imports whose comments would be left behind". Do not use one as fixer and the other as gate.
 
 ## Installation
 
 ```bash
 # From source (recommended)
-go install mvdan.cc/gofumpt@latest
+go install mvdan.cc/gofumpt@v0.12.0
 
 # Pre-built binaries from GitHub Releases
 # Available for darwin/linux/windows on amd64/arm64
@@ -28,8 +28,8 @@ gofumpt -w .                  # Format all Go files recursively, in-place
 gofumpt -l .                  # List files that differ from gofumpt style
 gofumpt -d main.go            # Show diff without modifying (non-zero exit if diff exists)
 gofumpt -w main.go            # Format single file in-place
-gofumpt -extra .              # Enable all extra rules
-gofumpt -extra=group_params,clothe_returns .  # Enable specific extra rules
+gofumpt -extra=group_params,clothe_returns .  # Explicit extra rules (the "=" is required)
+gofumpt -extra .              # All three extra rules, balance_calls included
 gofumpt -lang=go1.27 .        # Specify language version
 gofumpt -modpath=github.com/org/repo .  # Specify module path
 gofumpt -version              # Print version
@@ -40,7 +40,7 @@ cat main.go | gofumpt         # Format from stdin
 - `-w` - write result to file (instead of stdout)
 - `-l` - list files that differ
 - `-d` - display diff (non-zero exit if any diff, since v0.8.0)
-- `-extra` - enable extra rules. **Changed in v0.10.0:** "The `-extra` flag now accepts a comma-separated list of rule names to enable individual extra rules, rather than enabling all of them at once." Bare `-extra` still enables all of them; `-extra=group_params,clothe_returns,balance_calls` selects individually
+- `-extra` - enable extra rules. **Changed in v0.10.0:** "The `-extra` flag now accepts a comma-separated list of rule names to enable individual extra rules, rather than enabling all of them at once." Bare `-extra` still enables all of them: `Extra` reports `IsBoolFlag() == true` (format/format.go), so the flag package calls `Set("true")`, the same branch that sets `GroupParams`, `ClotheReturns` **and** `BalanceCalls`. Prefer the explicit `-extra=group_params,clothe_returns` to stay off the controversial `balance_calls`. Names are underscore-separated, comma-joined, and must follow `=` - as a bool flag, `-extra group_params` would treat `group_params` as a path. An unknown name fails with `unknown rule`
 - `-e` - report all errors (not just the first 10 on different lines)
 - `-lang` - language version (default: from go.mod)
 - `-modpath` - module path (affects import grouping)

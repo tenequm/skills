@@ -153,7 +153,7 @@ func TestWithContext(t *testing.T) {
 
 ### t.ArtifactDir() - Go 1.26
 
-Directory for test artifacts that persists after the test. Set the location with `-outputdir`; emit a manifest with `-artifacts`:
+Directory for test output files. It is **not** persisted by default: "When the `-artifacts` flag is provided to `go test`, this directory will be located under the output directory (specified with `-outputdir`, or the current directory by default). Otherwise, artifacts are stored in a temporary directory which is removed after the test completes." With `-artifacts`, the first call logs the location as `=== ARTIFACTS TestName /path/to/artifact/dir`:
 
 ```go
 func TestRender(t *testing.T) {
@@ -447,6 +447,27 @@ go test -race ./...
 - Only detects races on actually executed paths
 - **Always use `-race` in CI** - the single most important testing flag
 - Combine with `-count=N` for better detection
+- Set `-timeout` explicitly for heavy packages under `-race` - the default is "10 minutes (10m)", and a large package on a busy CI machine can hit it and panic
+
+### Goroutine Leak Profile (Go 1.27)
+
+Go 1.27 made the leak profile GA: "A new profile type that reports leaked goroutines, previously available as an experiment in Go 1.26, is now generally available. The new profile type, named `goroutineleak`, is supported in the `runtime/pprof` package. It is also available as the `net/http/pprof` endpoint `/debug/pprof/goroutineleak`." A leaked goroutine is one "blocked on some concurrency primitive ... that cannot possibly become unblocked", detected via GC reachability, so leaks through globals or live locals can be missed. Drop any `GOEXPERIMENT=goroutineleakprofile` from build scripts - "The `goroutineleakprofile` `GOEXPERIMENT` setting is now deleted."
+
+`WriteTo` runs the leak-detecting GC before writing; `Count` then reports that run's result:
+
+```go
+func TestNoLeaks(t *testing.T) {
+    runWorkload()
+    leaks := pprof.Lookup("goroutineleak") // runtime/pprof
+    var buf bytes.Buffer
+    if err := leaks.WriteTo(&buf, 1); err != nil {
+        t.Fatal(err)
+    }
+    if n := leaks.Count(); n > 0 {
+        t.Errorf("%d leaked goroutines:\n%s", n, buf.String())
+    }
+}
+```
 
 ## Fuzz Testing
 
@@ -580,28 +601,50 @@ Latest: **v0.44.0**. Spin up ephemeral infrastructure for integration tests.
 Use the module-specific `Run` constructor, not `GenericContainer` - "`GenericContainer` is the old way to create a container, and we recommend using `Run` instead, as it could be deprecated in the future." Note also that v0.43.0 changed `wait.ForSQL`: "Users of `wait.ForSQL` need to follow the new API contract, using Moby's `network.Port` instead of `string`".
 
 ```go
-func TestPostgres(t *testing.T) {
+import (
+    "database/sql"
+    "testing"
+
+    _ "github.com/jackc/pgx/v5/stdlib" // registers the "pgx" database/sql driver
+    "github.com/stretchr/testify/require"
+    "github.com/testcontainers/testcontainers-go"
+    "github.com/testcontainers/testcontainers-go/modules/postgres"
+)
+
+func TestUserRepo(t *testing.T) {
     ctx := t.Context()
 
     container, err := postgres.Run(ctx, "postgres:17",
-        postgres.WithDatabase("testdb"),
+        postgres.WithDatabase("testdb"), // must not be "postgres": Restore drops and recreates it
         postgres.WithUsername("test"),
         postgres.WithPassword("test"),
-        testcontainers.WithWaitStrategy(
-            wait.ForLog("database system is ready"),
-        ),
+        postgres.WithSQLDriver("pgx"), // driver Snapshot/Restore pass to sql.Open
+        postgres.BasicWaitStrategies(),
     )
+    testcontainers.CleanupContainer(t, container)
     require.NoError(t, err)
-    t.Cleanup(func() { container.Terminate(ctx) })
 
     connStr, err := container.ConnectionString(ctx, "sslmode=disable")
     require.NoError(t, err)
+    require.NoError(t, runMigrations(connStr)) // e.g. golang-migrate, see go-migrate-reference.md
+    require.NoError(t, container.Snapshot(ctx))
 
-    db, err := sql.Open("postgres", connStr)
-    require.NoError(t, err)
-    // Run tests against real database
+    t.Run("create", func(t *testing.T) {
+        require.NoError(t, container.Restore(t.Context()))
+        db, err := sql.Open("pgx", connStr) // open after Restore: it force-drops the database
+        require.NoError(t, err)
+        t.Cleanup(func() { db.Close() })
+        // Test against a freshly migrated database
+    })
 }
 ```
+
+Why each piece:
+
+- **`postgres.BasicWaitStrategies()`**, not a hand-rolled log wait. Upstream: it waits for "`database system is ready to accept connections` twice, because it will restart itself after the first startup", then for the port. A single-log or port-only wait races that restart and fails with `57P03 the database system is starting up`.
+- **`testcontainers.CleanupContainer(t, container)`** right after `Run`, before the error check - "This should be the first call after [GenericContainer](...) or a module's Run(...) in a test before any error check. If container is nil, it's a no-op." Do not write `t.Cleanup(func() { container.Terminate(ctx) })` with `ctx := t.Context()`: that context "is canceled just before Cleanup-registered functions are called", so `Terminate` gets a dead context. `CleanupContainer` terminates with `context.Background()`.
+- **Migrate once, `Snapshot`, then `Restore` per test** instead of re-running migrations for every test, which can dominate suite time. `Snapshot(ctx, ...SnapshotOption)` copies the database into a template (default name `migrated_template`, override with `postgres.WithSnapshotName`); `Restore(ctx, ...SnapshotOption)` drops and recreates the database from it. Restore mutates the shared database, so tests using it cannot run in parallel. Both connect through `database/sql` with the driver name from `postgres.WithSQLDriver` (default `"postgres"`, i.e. `lib/pq`); if that driver is not registered they log and fall back to `docker exec psql`.
+- **Ephemeral CI runners:** set `TESTCONTAINERS_RYUK_DISABLED=true`. Ryuk's reaper has nothing to collect on a runner that is thrown away, and many packages starting containers in parallel can time out waiting for it.
 
 ## synctest (Go 1.25+)
 
@@ -642,8 +685,8 @@ go test -fuzz=FuzzParse ./...          # Fuzzing
 go test -coverprofile=c.out ./...      # Coverage
 go test -covermode=atomic ./...        # Atomic coverage
 go test -coverpkg=./... ./...          # Cross-package coverage
-go test -artifacts ./...               # Emit an artifact manifest (Go 1.26+)
-go test -outputdir=./out ./...         # Where t.ArtifactDir() writes
+go test -artifacts ./...               # Keep t.ArtifactDir() output (Go 1.26+)
+go test -artifacts -outputdir=./out ./...  # Keep it under ./out instead of CWD
 ```
 
 **Go 1.27 annotates the JSON stream.** `go test -json` "now annotates `"Action":"output"` lines with an optional new field `"OutputType"`", distinguishing framework output from a test's own writes. Anything parsing `go test -json` - gotestsum, CI report generators, custom tooling - sees this field appear after a toolchain bump; consumers that validate the schema strictly may need updating.
