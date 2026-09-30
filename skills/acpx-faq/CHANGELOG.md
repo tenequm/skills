@@ -4,6 +4,48 @@ All notable changes to this skill are documented in this file, following [Keep a
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-09-30
+
+### Added
+
+- Traps: changing `agents.<name>.argv` or a project `.acpxrc.json` re-keys sessions
+  (close before re-pinning); a Claude executor that fans out to background subagents
+  can end its turn before they report; executors inherit the user's global
+  instruction files; a fresh HOME on macOS hides the login Keychain from the claude
+  adapter.
+- agy: `ANTIGRAVITY_HARNESS_PATH`; neither acpx nor `agy update` refreshes the `.par` -
+  compare `--version` `Build label:` against the ACP registry.
+- `--allowed-tools` / `--max-turns` reach only claude (and qoder); no effect on codex
+  or agy.
+- Completion: codex rollout JSONL for watching an `exec` run; the quiet-mode
+  `[acpx] error:` line.
+- Catalog: `Cannot apply --model ... did not advertise that model`, `MCP config file
+  not found`.
+
+### Changed
+
+- Invariant 5 now names API errors (401 during a token refresh, 400 model rejection)
+  as exit-0 `[done] end_turn` failures, with a preflight `exec`.
+- codex: adapter package named; a stale pin rejects newer model ids; 2.x is outside
+  the built-in `^1.1.5` range; pin example added.
+- claude: newer-adapter pin example 0.81.0 -> 0.84.0.
+- Exit 5 is per turn and includes `--non-interactive-permissions fail`.
+
+### Fixed
+
+- `--resume-session` with an open record's `id:` retires that owner first; a failed
+  resume leaves the record closed.
+- `sessions watch` replays the retained window without `--cursor` - match `requestId`.
+- `Queue owner disconnected ... outcome unknown` also means a slow reader was dropped
+  while the prompt kept running.
+- A failed reconnect silently falls back to `session/new`, so re-prompted context is
+  not guaranteed.
+- Prune needs `--include-history` to reclaim event streams; a lingering-owner TTL can
+  come from a project `.acpxrc.json` (`acpx config show`).
+
+Verified against: acpx 0.19.3, claude-agent-acp 0.84.0, codex-acp 2.0.1, agy 1.2.14,
+agy_acp_server 1.2.1.
+
 ## [0.6.1] - 2026-09-22
 
 ### Fixed
