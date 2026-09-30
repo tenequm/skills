@@ -91,12 +91,14 @@ One refinement: for a **published library**, also keep at least one integration 
 
 Put test data files - sample inputs, golden outputs, config samples - in `tests/fixtures/` by default. Cargo's flat `tests/` discovery ignores subdirectories, so `tests/fixtures/` is a safe home for pure data; it is never compiled as a test binary. Mirror the source layout under it - `tests/fixtures/adapter/claude-code/` for `src/adapter/claude-code.rs` - so a fixture's path is predictable from the module it belongs to.
 
-Build fixture paths from `env!("CARGO_MANIFEST_DIR")`, the compile-time absolute path to the crate root. It resolves identically from a unit test in `src/` and an integration test in `tests/`, regardless of the process working directory - this is what lets a test co-located with the code load a shared `tests/fixtures/` file cleanly:
+Build fixture paths from the crate root read at **runtime**. Cargo runs every test and bench binary with `CARGO_MANIFEST_DIR` set and the working directory at the package root, so `"tests/fixtures/sample.json"` works as a plain relative path. Read the variable instead when something may change the process cwd (for example `figment::Jail`) or when the path goes to a child process:
 
 ```rust
-let path = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/fixtures/sample.json");
-let input = std::fs::read_to_string(path).unwrap();
+let root = std::path::PathBuf::from(std::env::var_os("CARGO_MANIFEST_DIR").unwrap());
+let input = std::fs::read_to_string(root.join("tests/fixtures/sample.json")).unwrap();
 ```
+
+Do not use `env!("CARGO_MANIFEST_DIR")` (or `env!("CARGO_BIN_EXE_<name>")`; read that at runtime too, Cargo 1.94+). `env!` bakes the absolute checkout path into the test binary, so a compiler cache (sccache, kache) keys it per checkout and every new git worktree recompiles it. Snapshot crates can do this behind your back: insta's assertion macros expand `env!("CARGO_MANIFEST_DIR")`, while expect-test resolves paths at runtime. To enforce the rule, use a unit test that scans `src/`, `tests/` and `benches/` for `env!("CARGO_MANIFEST_DIR"` and friends: clippy's `disallowed_macros` cannot see an `env!` nested in `concat!`.
 
 The one justified exception: a small, rarely-changing fixture tied to one module can be co-located with the source and pulled in with `include_str!` / `include_bytes!` (which resolve relative to the current file). That bakes the data into the binary and forces a recompile whenever it changes, so keep it for small, stable fixtures only - and note `include_*!` cannot pull in a directory tree, so multi-file fixtures must live under `tests/fixtures/` regardless.
 

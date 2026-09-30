@@ -7,6 +7,10 @@ and this skill adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.h
 
 ## [Unreleased]
 
+### Changed
+
+- references/testing.md: fixture paths come from the crate root read at runtime (a cwd-relative path, or `std::env::var_os("CARGO_MANIFEST_DIR")`), not `concat!(env!("CARGO_MANIFEST_DIR"), ...)`. `env!` bakes the checkout path into the test binary, so a compiler cache keys it per checkout and every new worktree recompiles it; the same goes for `CARGO_BIN_EXE_<name>` and insta's snapshot macros.
+
 ## [0.6.0] - 2026-09-09
 
 ### Added
