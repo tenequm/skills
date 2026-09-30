@@ -71,11 +71,14 @@ jobs:
           CLAWHUB_DISABLE_TELEMETRY: "1"
         run: just release-publish "${{ steps.prepare.outputs.manifest_path }}"
 
+      # Without target_commitish the tag lands on main's current tip, so a merge that
+      # lands mid-run gets tagged as released and the next run skips it.
       - name: Create GitHub release with bundles
         if: steps.prepare.outputs.publishable == 'true'
         uses: softprops/action-gh-release@v3
         with:
           tag_name: ${{ steps.prepare.outputs.tag }}
+          target_commitish: ${{ github.sha }}
           name: ${{ steps.prepare.outputs.title }}
           body_path: ${{ steps.prepare.outputs.notes_path }}
           files: |
@@ -88,6 +91,7 @@ jobs:
         uses: softprops/action-gh-release@v3
         with:
           tag_name: ${{ steps.prepare.outputs.tag }}
+          target_commitish: ${{ github.sha }}
           name: ${{ steps.prepare.outputs.title }}
           body_path: ${{ steps.prepare.outputs.notes_path }}
           files: |
