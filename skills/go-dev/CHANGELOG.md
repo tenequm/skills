@@ -7,6 +7,35 @@ and this skill adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.h
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-09-30
+
+### Changed
+- golangci-lint pinned `v2.13.2` -> `v2.14.0` (bundles gofumpt v0.12.0; fixes the cached-facts reload behind phantom nolintlint reports) and lefthook `v2.1.14` -> `v2.1.15`, across `metadata.upstream`, install lines, the CI `version:`, the schema URL and `min_version`.
+- Two-formatter footgun reframed: resolved in v2.14.0, but it recurs whenever gofumpt releases ahead of golangci-lint.
+- govulncheck footgun: it scans against the `go` on PATH, which is the `toolchain` line only under `GOTOOLCHAIN=auto`; setup-go exports `GOTOOLCHAIN=local`, so the lint and security jobs now use `go-version-file: go.mod`.
+- Stale-cache footgun names its root cause (golangci-lint #6807) and replaces "clean the cache before every gate" with upgrading or moving the suppression into `exclusions.rules`.
+
+### Fixed
+- CI template ran a redundant `golangci-lint config verify` step; golangci-lint-action already verifies before linting whenever a config exists.
+- testcontainers example: a single `wait.ForLog` races Postgres' post-init restart (`57P03`), and `Terminate(ctx)` in `t.Cleanup` ran with an already-cancelled `t.Context()`.
+- golang-migrate timestamp names use `20060102150405`, not unix seconds; `docker/docker` is still an indirect dependency in v4.20.1.
+- gotestsum `--raw-command`: stderr from the script is treated as an error, not a safe side channel.
+- `t.ArtifactDir` is a temporary directory removed after the test unless `-artifacts` is set; there is no manifest.
+- just: only `set lists` is unstable (not `guards`/`lazy`); user-defined functions landed in 1.49.0 and are unstable; `set indentation` affects `--fmt`/`--dump` only.
+- golangci-lint reference still configured the deprecated `extra-rules: true`; bare `gofumpt -extra` also enables `balance_calls`; `@latest` installs in the references now pinned.
+
+### Added
+- setup-go restores exact cache keys only; `oldstable` matrix breaks once the `go` directive passes it; `pull-requests: read` for `only-new-issues`; action monorepo/`go.work` inputs, setup-just, govulncheck-action.
+- Justfile `tidy-check` recipe (`go mod tidy -diff`), and why `check` leaves out `vuln`.
+- Linter catalog: `depguard`, `gomoddirectives`, and others; `linters.default: all` breaks CI reproducibility on every bump.
+- Go 1.27: JSON error-text changes and `GOEXPERIMENT=nojsonv2`, the `waitgroupgo` rename, `go mod tidy` require-block merge, `goroutineleak` profile GA; `//go:fix inline` directives.
+- v2.14.0 upgrade notes: three new revive rules under `enable-all-rules`, gosec G407 re-enabled.
+- lefthook: `skip` for merge/rebase, `setup`, `templates`, `exclude`, `core.hooksPath` dormancy, lefthook and hook tools via `go tool`, the vulnerable x/mod and x/text pins in v2.1.15, and a note on the cost of the `pre-push` race suite.
+- testcontainers `BasicWaitStrategies`, `CleanupContainer`, `Snapshot`/`Restore` to migrate once, Ryuk on ephemeral CI; gotestsum `-args`; golang-migrate `pgx5`; just `set default-list`.
+- When not to apply the skill: forks that regularly merge from upstream.
+
+Verified against: golangci-lint@v2.14.0, lefthook@v2.1.15
+
 ## [0.4.1] - 2026-09-17
 
 ### Changed

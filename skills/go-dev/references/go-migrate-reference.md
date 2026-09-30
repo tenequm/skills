@@ -8,7 +8,7 @@ v4.20.0 is worth upgrading for regardless of the pin mechanics:
 
 - **S3 sources silently truncated at 1000 migrations** - "fix(source/aws_s3): paginate ListObjects to load >1000 migrations".
 - **Quadratic startup cost removed** - "perf(source): build migrations index lazily to avoid quadratic startup".
-- **Security:** the `docker/docker` dependency was swapped for `moby/moby` modules to clear a scanner finding.
+- **Security, partial:** migrate's own code moved from `docker/docker` to the `moby/moby/api` and `moby/moby/client` modules, but v4.20.1's `go.mod` still lists `github.com/docker/docker v28.5.2+incompatible // indirect`, pulled in by `dhui/dktest`. Scanners keep flagging it - open issue [golang-migrate/migrate#1444](https://github.com/golang-migrate/migrate/issues/1444) "Dependencies still trigger CVE-2026-41568" (milestone v4.21.0).
 
 ## Installation
 
@@ -67,14 +67,16 @@ Two more `create` flags: `-format` takes "a Go time format string" for the versi
 migrate create -ext sql -dir migrations create_users_table
 ```
 
-Produces:
+Produces (default `-format` is `20060102150405`, a UTC timestamp):
 ```
 migrations/
-  1712345678_create_users_table.up.sql
-  1712345678_create_users_table.down.sql
+  20240405123456_create_users_table.up.sql
+  20240405123456_create_users_table.down.sql
 ```
 
 Eliminates version conflicts when multiple developers create migrations simultaneously.
+
+For unix-epoch versions pass `-format unix` - "If the string `"unix"` or `"unixNano"` is specified, then the seconds or nanoseconds since January 1, 1970 UTC respectively will be used." Combining `-seq` with any non-default `-format` fails with "the seq and format options are mutually exclusive".
 
 ## CLI Commands
 
@@ -263,6 +265,14 @@ URL format: `postgres://user:password@host:port/dbname?query`
 | `sslmode` | disable, require, verify-ca, verify-full |
 
 Uses `pg_advisory_lock` for safe concurrent migrations.
+
+### pgx v5 driver
+
+For projects already on `jackc/pgx/v5`, use the `pgx5` driver instead of `postgres` (which uses `lib/pq`). Same query parameters; different URL scheme, build tag, and import:
+
+- URL: `pgx5://user:password@host:port/dbname?query`
+- CLI: `go install -tags 'pgx5' github.com/golang-migrate/migrate/v4/cmd/migrate@v4.20.1`
+- Library: `_ "github.com/golang-migrate/migrate/v4/database/pgx/v5"`
 
 ## Transaction Handling
 

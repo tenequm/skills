@@ -7,10 +7,10 @@ A test runner that wraps `go test -json` with readable output, watch mode, JUnit
 ## Installation
 
 ```bash
-go install gotest.tools/gotestsum@latest
+go install gotest.tools/gotestsum@v1.13.0
 
 # Or run without installing
-go run gotest.tools/gotestsum@latest
+go run gotest.tools/gotestsum@v1.13.0
 
 # Homebrew
 brew install gotestsum
@@ -125,7 +125,12 @@ gotestsum --rerun-fails --rerun-fails-run-root-test --packages="./..."
 
 # Abort rerun on data race (v1.12.3+)
 gotestsum --rerun-fails --rerun-fails-abort-on-data-race --packages="./..."
+
+# Flags for the test binary (not go test) go after -args
+gotestsum --rerun-fails --packages="./..." -- -count=2 -args -update-golden
 ```
+
+With `--rerun-fails`, "if any of the `go test` args should be passed to the test binary, instead of `go test` itself, the `-args` flag must be used to separate the two groups of arguments."
 
 ## Tools
 
@@ -152,7 +157,12 @@ go list ./... | gotestsum tool ci-matrix --timing-files ./*.log --partitions 4 >
 
 ## Custom Commands with `--raw-command`
 
-`--raw-command` tells gotestsum to run your command verbatim instead of prepending `go test -json`. The contract is strict: "The stdout produced by the script must only contain the `test2json` output, or `gotestsum` will fail." Send anything else to stderr.
+`--raw-command` tells gotestsum to run your command verbatim instead of prepending `go test -json`. The contract is strict on both streams:
+
+- stdout: "The stdout produced by the script must only contain the `test2json` output, or `gotestsum` will fail." If the script cannot avoid it, "you can use `--ignore-non-json-output-lines` (added in version 1.7.0) to ignore non-JSON lines and write them to `gotestsum`'s stderr instead."
+- stderr: "Any stderr produced by the script will be considered an error (this behaviour is necessary because package build errors are only reported by writing to stderr, not the `test2json` stdout)." Stderr written by the tests themselves is fine - it arrives inside the `test2json` stdout.
+
+So script chatter must be silenced or printed to stdout under `--ignore-non-json-output-lines` - never sent to stderr.
 
 This is how you run an already-compiled test binary - useful for cross-compiled or long-lived test binaries you do not want to rebuild:
 
@@ -166,7 +176,7 @@ gotestsum --raw-command -- go tool test2json -t -p pkgname ./binary.test -test.v
 
 ```bash
 # Desktop notifications
-go install gotest.tools/gotestsum/contrib/notify@latest
+go install gotest.tools/gotestsum/contrib/notify@v1.13.0
 gotestsum --post-run-command notify
 
 # Print slowest tests after run
