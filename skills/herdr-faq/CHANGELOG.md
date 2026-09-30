@@ -4,6 +4,49 @@ All notable changes to this skill are documented in this file, following [Keep a
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-09-30
+
+### Added
+
+- `agent_not_idle` in the catalog: a `--lines N` history read on a working/blocked
+  claude returns it; use `--source visible`.
+- codex: a symlinked cwd is rejected by the codex sandbox - the recipe resolves a
+  physical path (`pwd -P`).
+- A start timeout releases the name without killing the process (invariant 3).
+- claude: `--permission-mode auto` in the launch recipe; `acceptEdits` blocks on
+  routine approvals.
+- agy: command-permission prompts are undetected too (read as `idle`/`done`).
+- `agent_prompt_stalled` cause: the user acting in the pane (e.g. switching model) as
+  the prompt lands.
+- `herdr server reload-agent-manifests` after editing a local override;
+  `herdr server agent-manifests` shows active sources.
+- `completion_seq` as the turn counter, independent of `done`/`idle` seen state.
+
+### Changed
+
+- Invariant 2: codex falls back to `unknown`, not `idle`, and can stay `unknown` after
+  a response, so `--wait` on codex can run to its timeout.
+- Wrapper processes (`docker exec`, `podman exec`, `ssh -t`) are detectable with a
+  host-side `HERDR_AGENT=<kind>` prefix on the wrapper, no longer "permanently
+  undetectable".
+- `agent start --timeout` range is >3000 and <=300000; `herdr --skill` is ~14k chars.
+- `tab close` `confirmation_required` also fires when closing a workspace's last tab.
+- claude default model is `claude-opus-5-5`.
+- Minimum herdr raised to 0.9.2.
+
+### Removed
+
+- `agent focus` viewport no-op (fixed in 0.9.1) and first turn skipping `done` (fixed
+  in 0.9.2) from Silent failures.
+- Name regex and bare-pane-id target note, both stated verbatim by `herdr --skill`.
+
+### Fixed
+
+- `agent wait --until idle done` fails with `unknown option: done`; `--until` takes one
+  state and is repeated (`--until idle --until done`).
+
+Verified against: herdr 0.9.3
+
 ## [0.4.1] - 2026-09-11
 
 ### Removed

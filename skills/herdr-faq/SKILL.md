@@ -2,10 +2,10 @@
 name: herdr-faq
 description: Launch and drive coding agents (codex, claude, agy) through the Herdr CLI; requires a herdr pane (HERDR_ENV=1). Use before starting or prompting a herdr subagent, and when a herdr command fails or an agent seems stuck or silently lost a prompt.
 metadata:
-  version: "0.4.1"
+  version: "0.5.0"
   categories: "agents, operations"
   topics: "herdr, troubleshooting, agent-orchestration, terminal-multiplexer"
-  upstream: "herdr@0.9.0"
+  upstream: "herdr@0.9.3"
   openclaw:
     homepage: https://github.com/tenequm/skills/tree/main/skills/herdr-faq
     emoji: "🐑"
@@ -13,12 +13,12 @@ metadata:
 
 # Herdr FAQ
 
-Launch and drive coding agents through [Herdr](https://herdr.dev) (>= 0.9.0) without
+Launch and drive coding agents through [Herdr](https://herdr.dev) (>= 0.9.2) without
 losing prompts.
 
 ## Syntax authority
 
-`herdr --skill` (~13k chars) is the vendor reference: command model, IDs, lifecycle
+`herdr --skill` (~14k chars) is the vendor reference: command model, IDs, lifecycle
 states, prompt and wait mechanics, read sources, safety rules. Read it once per session
 before your first herdr command - this file assumes it and repeats none of it. For
 flags, run the command group bare (`herdr agent`, `herdr pane`) or `--help`; never bare
@@ -40,11 +40,13 @@ an untargeted command lands on whatever pane the USER has focused. Use acpx inst
 1. **Exit 0 is submission, never completion** - and `send-keys` can return
    `{"type":"ok"}` for keystrokes that never reach the pane. Confirm by effect: state
    moved, or the text is visible in the pane.
-2. **Screens no detection rule matches read as `idle`.** agy has no idle rule at all,
-   so every agy `idle` is a guess. Read the screen before the first prompt, always.
+2. **Screens no detection rule matches read as `idle`** - codex's read as `unknown`
+   instead. agy has no idle rule at all, so every agy `idle` is a guess. Read the
+   screen before the first prompt, always.
 3. **`agent start` timeout = the child never launched** (bad flag, PATH, or a wrapper
-   process). `pane read` has the real error; `pane process-info` and herdr's own
-   message do not.
+   process), or it launched into an undetected gate. `pane read` has the real error;
+   `pane process-info` and herdr's own message do not. The timeout frees the name but
+   leaves the process running - close the pane before reusing it.
 4. **`idle` is not "finished".** A claude turn that spawned background shells or a
    background MCP task ends and reports `idle` while that work runs on; `--wait`
    tracks lifecycle state, not turns.
@@ -57,13 +59,14 @@ an untargeted command lands on whatever pane the USER has focused. Use acpx inst
 
 Model defaults unless the task argues otherwise: codex `gpt-5.6-sol` at
 `reasoning_effort high` (set via codex's own flags/config - check `codex --help`),
-claude `claude-opus-5`, agy `gemini-3.7-flash-medium` (measured on par with Opus for
+claude `claude-opus-5-5`, agy `gemini-3.7-flash-medium` (measured on par with Opus for
 rubric-driven bulk work and far faster; `gemini-3.8-flash-high` measured worse on the
 same task). One directory per agent, always.
 
 ### codex
 
 ```bash
+D=$(cd "$D" && pwd -P)       # codex's sandbox rejects a writable root with a symlink component
 P=$(herdr pane split --current --direction right --cwd "$D" --no-focus | jq -r .result.pane.pane_id)
 herdr agent start cx1 --kind codex --pane "$P" --timeout 90000 -- --approve-for-me --no-alt-screen
 herdr agent read cx1 --source detection --lines 40        # ALWAYS, before the first prompt
@@ -75,7 +78,9 @@ the pane in startup-pending. The trust-directory and startup-update dialogs are
 detected, so an untrusted dir fails fast with `agent_not_ready` rather than eating the
 first prompt. The one-time post-`integration install` hooks-review gate is NOT
 detected (WONTFIX) - answer it once per machine. Session ref binds at the first prompt
-for a fresh start; an explicit `-- resume <id>` is persisted at launch.
+for a fresh start; an explicit `-- resume <id>` is persisted at launch. A plain
+title and composer cannot prove a turn ended, so codex can sit at `unknown` after
+answering and `--wait` then runs to its timeout - wait on the report file.
 
 ### claude (alias `claude-code`)
 
@@ -87,7 +92,8 @@ printf '{"projects":{"%s":{"hasTrustDialogAccepted":true}}}' "$D" > "$CFG/.claud
 
 P=$(herdr pane split --current --cwd "$D" --no-focus --env CLAUDE_CONFIG_DIR="$CFG" \
     | jq -r .result.pane.pane_id)
-herdr agent start cl1 --kind claude --pane "$P" --timeout 90000 -- --model claude-opus-5
+herdr agent start cl1 --kind claude --pane "$P" --timeout 90000 \
+  -- --model claude-opus-5-5 --permission-mode auto   # acceptEdits blocks on routine approvals
 herdr agent read cl1 --source detection --lines 40        # ALWAYS, before the first prompt
 herdr agent prompt cl1 "Carry out $D/brief.md." --wait --timeout 1800000 &
 ```
@@ -161,7 +167,8 @@ herdr agent prompt ag1 "Carry out $D/brief.md. Write your report to $D/report.md
   other's output. Own directory each, and `md5` any rerun before believing an
   agreement number: byte-identical multi-KB prose is copying, not consensus.
 - **Premature `done`** lasts up to ~50s mid-turn while the pane visibly streams -
-  wait on the report file, never a settled state. A first prompt
+  wait on the report file, never a settled state. Command-permission prompts are
+  undetected too and read as `idle`/`done` - `--mode accept-edits` avoids most. A first prompt
   can be swallowed entirely with `agent_prompt_stalled` and no trace in the composer;
   re-prompt, never `send-keys`. No session ref until the first prompt. Integration
   install target is `antigravity-cli`; `~/.gemini/config` must exist (or
@@ -180,14 +187,13 @@ detection - and their hooks silently no-op without `python3` on PATH.
   its state from detection (which sees only the pane's own rows; fallback 24).
 - Always `agent read --source detection` before the first prompt (invariant 2) and
   branch on it - never blind-fire a key at a dialog. After answering one, gate on
-  `agent wait <n> --until idle done --timeout 60000`: a bare `wait` returns the
+  `agent wait <n> --until idle --until done --timeout 60000` (one state per `--until`;
+  `--until idle done` fails with `unknown option: done`): a bare `wait` returns the
   still-`blocked` state within milliseconds, a no-op that looks like the key never
   landed.
 - Names die with the agent and freed names get recycled - namespace them
   (`myproj-reviewer`). After a killed `agent start`, one
-  `herdr agent get <name>` frees the reservation (reconciliation is lazy). An agent
-  TARGET can be a bare pane id (`agent prompt w1K:p1 '<text>'`) - how you reach an
-  unnamed agent without renaming someone else's.
+  `herdr agent get <name>` frees the reservation (reconciliation is lazy).
 - Test `-n "$P"` after capturing a pane id: an empty one makes later parsers blame the
   wrong token.
 
@@ -200,7 +206,7 @@ detection - and their hooks silently no-op without `python3` on PATH.
 - `pane read <id>` takes the pane **positionally** and has no `--pane` at all
   (`unknown option: --pane`); `pane close` likewise. When in doubt read the `Usage:`
   line - it names positionals in angle brackets.
-- `agent start --timeout` defaults to 30000 and caps at 300000. `agent prompt
+- `agent start --timeout` defaults to 30000 and must be >3000 and <=300000. `agent prompt
   --timeout` has **no cap** (1800000 is fine) but is rejected with
   `--timeout requires --wait` when `--wait` is absent - and backgrounded, that failure
   is invisible and the prompt is never written. Fire-and-forget sends take no flags.
@@ -222,7 +228,8 @@ detection - and their hooks silently no-op without `python3` on PATH.
   for the whole life of a claude background MCP task (invariant 4) - a watcher on
   `!= working` false-alarms on every one of those.
 - Gate decisions on `agent_status`, never `interactive_ready` (it stays true while
-  blocked).
+  blocked). To count finished turns, compare `completion_seq` across reads - it marks
+  completed work regardless of whether anyone has seen it, unlike `done` vs `idle`.
 - Long text is safe through `agent prompt` (bracketed paste; 8 KB arrives intact); the
   1024-byte macOS tty truncation applies to `pane send-text` and keystrokes. Pass file
   paths anyway - it also keeps brief content out of the shell command (invariant 5).
@@ -243,15 +250,18 @@ Triage first:
   `process-info` looks innocent and herdr reports a bare `timeout`. Then
   `process-info`: a foreign foreground process = busy/race; an agent under a wrapper
   (`node`, a bare version string) = relaunch via `HERDR_AGENT=<kind> exec <cmd>`, then
-  `agent rename`; under `docker exec`, `podman exec`, or `ssh -t` = permanently
-  undetectable (WONTFIX).
+  `agent rename`; under `docker exec`, `podman exec`, or `ssh -t` = undetectable
+  unless the host-side wrapper itself is prefixed (`HERDR_AGENT=codex docker exec
+  -it ...`) - set inside the container, herdr never sees it.
 - **Any wrong state** -> `agent explain <target> --verbose` + `agent read --source
   detection`. Matched rule null + `default_known_agent_idle_fallback` = herdr is
   guessing. Stale manifest -> `herdr server update-agent-manifests` (no restart).
-  Local rule patch: `~/.config/herdr/agent-detection/<kind>.toml`. Logs:
+  Local rule patch: `~/.config/herdr/agent-detection/<kind>.toml`, applied by
+  `herdr server reload-agent-manifests`; `herdr server agent-manifests` shows which
+  sources are active. Logs:
   `~/.config/herdr/herdr-server.log`, `HERDR_LOG=herdr=debug`.
 - **After a binary update, do NOT reflexively `server stop`** - it kills every pane
-  process and in-flight turn, unresumably. 0.9.0 leaves a compatible server and its
+  process and in-flight turn, unresumably. An update leaves a compatible server and its
   agents untouched; trust `herdr status` (`endpoint_compatible`, `restart_needed`,
   `server_binary_stale`). A stale CLIENT inverts the picture: it calls the server
   "old" while `pane list` correctly says `client protocol N is older than server`.
@@ -262,7 +272,7 @@ Catalog:
 
 - `agent_not_ready` (start) - a dialog is on screen; exit 1 but the agent is running
   and the name is bound. Read, answer via `send-keys` (safe keys in Per kind), gate
-  `--until idle done`, prompt. A blocked launch never times out (`launch_pending`
+  `--until idle --until done`, prompt. A blocked launch never times out (`launch_pending`
   stays true until answered). agy's trust dialog is NOT detected and reads as `idle`
   instead - see agy.
 - `timeout` (start) - invariant 3; read the pane. `command not found` in a non-login
@@ -284,11 +294,11 @@ Catalog:
   `agent get` shows `working`. Use 1800000+, background it, never resend on timeout
   alone.
 - `agent_prompt_stalled` - **not proof of non-delivery**; the text may have landed and
-  been consumed. Causes in observed order: stale manifest; a dialog-opening prompt; a
-  target-side paste modal swallowing Enter (omp's Large Paste Menu triggers on *line
-  count*, not bytes - disable it in omp `/settings`). Never blind-resend and never
-  recover with a lone `send-keys enter`. Read
-  the pane, then re-send with a fresh `agent prompt`:
+  been consumed. Causes in observed order: stale manifest; a dialog-opening prompt; the
+  user acting in the pane (e.g. switching model) as the prompt lands; a target-side
+  paste modal swallowing Enter (omp's Large Paste Menu triggers on *line count*, not
+  bytes - disable it in omp `/settings`). Never blind-resend and never recover with a
+  lone `send-keys enter`. Read the pane, then re-send with a fresh `agent prompt`:
 
   ```bash
   for i in 1 2 3; do
@@ -299,15 +309,18 @@ Catalog:
 
 - `agent_blocked` (prompt) - refused before anything is written. Read detection,
   surface the dialog, answer via send-keys.
-- `invalid_agent_name` - `[a-z][a-z0-9_-]{0,31}`; uppercase from shell loops cascades
-  into a wall of `agent_not_found`s.
+- `agent_not_idle` (read) - `agent read --lines N` needs alternate-screen history,
+  which is only captured while idle; a working/blocked/unknown claude refuses it. Use
+  `--source visible`, or wait for idle and retry.
+- `invalid_agent_name` - uppercase from shell loops cascades into a wall of
+  `agent_not_found`s.
 - `pane_not_found` / `workspace_not_found` / `unknown option: <valid-looking value>` -
   IDs are runtime-only, never reused: re-list at session start, recreate only what is
   missing. `unknown option` on a whole flag string is the zsh variable trap (see
   Composing traps); on a lone token it is usually an empty `$P`.
 - `workspace_group_close_required` - closing a primary workspace with open worktree
   workspaces needs `workspace close --group`; `tab close` can likewise return
-  `confirmation_required` for a worktree group.
+  `confirmation_required` for a worktree group or a workspace's last tab.
 - Harness blocks - classifier denial on dangerous passthrough flags: put
   permissiveness in the child agent's own config ("Stage 2 classifier error" is
   transient - retry once). Allowlist the read-only commands
@@ -316,8 +329,6 @@ Catalog:
 
 Silent failures (exit 0, no error): fallback-idle prompt swallowing (invariant 2);
 `send-keys` returning ok without delivering; a bare `agent prompt` leaving text
-unsubmitted in an out-of-view pane; a first turn going straight
-`unknown -> working -> idle` skips `done` and its notification; a tall dialog partly
-invisible in a short pane (detection sees only the pane's own rows);
-`pane wait-output` matching the echoed command itself - never use it for readiness;
-`agent focus` returning ok without moving the viewport in 0.9.0 - use `tab focus`.
+unsubmitted in an out-of-view pane; a tall dialog partly invisible in a short pane
+(detection sees only the pane's own rows); `pane wait-output` matching the echoed
+command itself - never use it for readiness.
