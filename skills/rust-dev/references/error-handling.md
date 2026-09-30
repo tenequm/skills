@@ -198,6 +198,19 @@ fn outer() -> Result<(), MyError> {
 
 If you derived `#[from]` on a variant with `thiserror`, this Just Works. If you wrote the enum by hand, write the `From` impl. If you use `anyhow::Error`, all errors that impl `std::error::Error` convert automatically.
 
+## Collecting `Result`s
+
+An iterator of `Result`s collects into a `Result` of a collection: the first `Err` stops the iteration and becomes the value, otherwise you get every `Ok` value. This is how you apply a fallible operation to every element without a manual loop:
+
+```rust
+let nums: Vec<i32> = ["1", "2", "3"]
+    .iter()
+    .map(|s| s.parse::<i32>())
+    .collect::<Result<Vec<_>, _>>()?;   // Err on the first bad input
+```
+
+`Option` works the same way (`collect::<Option<Vec<_>>>()`). If you need every error rather than the first, collect into a `Vec<Result<..>>` and `partition` it.
+
 ## `Result` in `main`
 
 `fn main` can return a `Result`. With `anyhow`:

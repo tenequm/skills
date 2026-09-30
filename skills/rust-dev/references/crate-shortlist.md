@@ -217,6 +217,16 @@ async fn main() -> anyhow::Result<()> {
 }
 ```
 
+**Three defaults that bite in production.** Build one `Client` and reuse it: it pools connections and is already reference-counted inside, so clone it freely instead of wrapping it in an `Arc`. The `reqwest::get` shortcut "creates a new internal `Client` on each call, and so should not be used if making many requests". There is no request timeout unless you set one - the builder says plainly "Default is no timeout" - so a hung server hangs your task forever. And a 404 or a 500 is a *successful* `send()`: the `Result` only covers transport failure, so call `error_for_status()` wherever a non-2xx should be an error.
+
+```rust
+let client = reqwest::Client::builder()
+    .timeout(std::time::Duration::from_secs(10))
+    .build()?;
+
+let body = client.get(url).send().await?.error_for_status()?.text().await?;
+```
+
 **0.13 notes** (if you find a 0.12 tutorial): `rustls` is now the default TLS backend (was `native-tls`), and the `rustls-tls` feature is renamed to `rustls`; `query` and `form` are now opt-in crate features. The `json` example above is unaffected.
 
 Three more 0.13 changes that alter what you actually link, not just what you type. The rustls crypto provider "defaults to aws-lc instead of _ring_" - a different native dependency in your tree, and `rustls-no-provider` exists if you need to choose another. The rustls roots features were removed in favour of `rustls-platform-verifier`, so certificate validation now goes through the OS trust store by default rather than a bundled root set. And `native-tls` now includes ALPN, with `native-tls-no-alpn` to turn it back off.
@@ -308,18 +318,52 @@ async fn main() -> anyhow::Result<()> {
 
 Path params, query params, JSON body, state, middleware all extract via the `FromRequest`/`FromRequestParts` traits. The axum docs are excellent.
 
+**Shared state** - a database pool, an HTTP client, config - goes in one `Clone` struct handed to the router with `with_state` and pulled out in handlers with the `State` extractor. It is cloned per request, so hold expensive things behind an `Arc`, or use types that are already cheap handles (`PgPool`, `reqwest::Client`):
+
+```rust
+use axum::extract::State;
+
+#[derive(Clone)]
+struct AppState {
+    db: sqlx::PgPool,
+    http: reqwest::Client,
+}
+
+async fn pool_size(State(state): State<AppState>) -> String {
+    format!("pool size {}", state.db.size())
+}
+
+let app = Router::new()
+    .route("/pool", get(pool_size))
+    .with_state(state);
+```
+
 **Scope middleware to the routes it exists for.** A `.layer(...)` attached to the whole `Router` runs on every route, which is fine for tracing and wrong for almost anything with a budget. A rate limiter meant to protect one expensive endpoint, hung on the root router, puts your static assets and health checks in the same bucket - and the first page load exhausts it. Layer the sub-router instead, and merge:
 
 ```rust
+use axum::{error_handling::HandleErrorLayer, http::StatusCode};
+use tower::{ServiceBuilder, buffer::BufferLayer, limit::RateLimitLayer}; // tower: features ["buffer", "limit"]
+use tower_http::trace::TraceLayer;                                        // tower-http: features ["trace"]
+
 let expensive = Router::new()
     .route("/search", get(search))
-    .layer(RateLimitLayer::new(5, Duration::from_secs(1)));
+    .layer(
+        ServiceBuilder::new()
+            // axum layers must be Clone and infallible; tower's RateLimit is neither.
+            .layer(HandleErrorLayer::new(|_: tower::BoxError| async {
+                StatusCode::SERVICE_UNAVAILABLE
+            }))
+            .layer(BufferLayer::new(1024))
+            .layer(RateLimitLayer::new(5, Duration::from_secs(1))),
+    );
 
 let app = Router::new()
     .route("/health", get(health))       // no rate limit
     .merge(expensive)
     .layer(TraceLayer::new_for_http());  // this one genuinely is global
 ```
+
+The `ServiceBuilder` stack is not decoration. `RateLimitLayer` alone does not compile under `Router::layer`, because tower's `RateLimit` is not `Clone`; `BufferLayer` makes it shareable, and `HandleErrorLayer` turns the buffer's errors into a response. Note what that stack does: requests over the limit *queue* rather than being rejected. If you want a per-client limiter that answers 429, reach for `tower_governor` instead.
 
 **0.8 breaking changes** (if you find a 0.7 tutorial): path captures use `/{id}` and `/{*rest}` instead of `/:id` and `/*rest`; `Option<T>` extractors require the new `OptionalFromRequestParts` trait; `Host` extractor moved to `axum-extra`; WebSocket `Message` uses `Bytes`/`Utf8Bytes` instead of `Vec<u8>`/`String`. MSRV is 1.80 (raised in 0.8.9).
 
@@ -366,7 +410,7 @@ Migrations: `sqlx migrate add init`, write SQL, `sqlx migrate run`.
 Dates and times. As of Jan 2026 the chrono maintainer announced soft-deprecation and recommends `jiff` (BurntSushi) for new code. Reality in September 2026:
 
 - `chrono` 0.4 is still production-safe and integrates cleanly with `serde`, `sqlx`, `serde_json`, and the rest of the ecosystem. Note the deprecation notice lives in the maintainer's issue thread, not in chrono's README, so the crate page looks entirely healthy.
-- `jiff` is the recommended successor, but still pre-1.0 (0.2.35 as of September 2026, with the 1.0 tracking issue open), and its author says plainly: "I don't currently have a timeline for a Jiff 1.0 release." Migration across the ecosystem is partial rather than done - kube-rs and k8s-openapi have landed, while the arrow-rs and jj-vcs changes are still open PRs.
+- `jiff` is the recommended successor, but still pre-1.0 (0.2.37 as of September 2026, with the 1.0 tracking issue open), and its author says plainly: "I don't currently have a timeline for a Jiff 1.0 release." Migration across the ecosystem is partial rather than done - kube-rs and k8s-openapi have landed, while the arrow-rs and jj-vcs changes are still open PRs.
 - Two things that lower the risk of picking `jiff` now: `jiff-sqlx` tracks sqlx 0.9, and `jiff-chrono-conversions` gives you `ToJiff`/`ToChrono` traits so a codebase can hold both during a migration. jiff also commits to critical bug fixes on 0.2 for a year after 1.0 ships.
 
 Pick `chrono` if you need ecosystem integration today. Pick `jiff` for new code that can tolerate pre-1.0 churn and where you want correct timezone-aware arithmetic out of the box.
