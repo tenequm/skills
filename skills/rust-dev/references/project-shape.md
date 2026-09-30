@@ -37,12 +37,12 @@ rust-version.workspace = true
 [dependencies]
 my-lib = { path = "../my-lib" }
 serde  = { workspace = true }
-tokio  = { workspace = true, features = ["fs"] }   # add features, never remove them
+tokio  = { workspace = true, features = ["fs"] }   # add features on top of the workspace entry
 ```
 
 Two things worth internalizing:
 
-- **Inherited dependencies unify.** Every member resolves to one version of `serde`, which is the point - it prevents the diamond where two crates in your own repo disagree and you compile both. A member can *add* features on top of the workspace entry, but cannot subtract them.
+- **Inherited dependencies unify.** Every member resolves to one version of `serde`, which is the point - it prevents the diamond where two crates in your own repo disagree and you compile both. A member can *add* features on top of the workspace entry. Subtracting is newer and narrower: from Rust 1.99 (2026-10-01) an edition 2024 member can write `default-features = false` to turn off the inherited default features. On earlier editions it "is ignored with a warning", and explicitly listed features can never be removed.
 - **`target/` is shared.** A workspace build reuses artifacts across members, which is why splitting a big crate into several rarely costs build time and often saves it.
 
 `cargo test`, `cargo clippy`, and `cargo build` operate on the whole workspace from the root; `-p <crate>` scopes to one member.
@@ -94,6 +94,8 @@ Three pieces of syntax, all worth knowing because older guides predate them:
 - **`foo?/bar`** enables dependency `foo`'s `bar` feature *only if* `foo` is otherwise enabled - the `?` is what stops it from pulling `foo` in.
 - **Features must be additive.** Two crates in one build can both enable features of a shared dependency, and cargo unifies them; a feature that *removes* or *changes* behavior will break somebody. If you find yourself wanting `no-std` and `std` as mutually exclusive features, that is the shape fighting you.
 
+A binary can be gated too, with `required-features = ["admin"]` on its `[[bin]]`: "If any of the required features are not enabled, the target will be skipped." Skipped silently - `cargo build`, `cargo test`, and `cargo install` without that feature all leave it out with no warning, so a CI job that never enables the feature never compiles the binary either. If you gate one, add a CI step that builds it with the feature on.
+
 In code, gate with `#[cfg(feature = "json")]`. Test the combinations you actually ship - and see `dev-environment.md` on why `--all-features` in CI is a trap, and `releasing.md` on how feature unification bites across cross-compilation targets.
 
 ## Build scripts (`build.rs`)
@@ -106,11 +108,12 @@ fn main() {
     // Re-run only when this actually changes - without it, cargo re-runs
     // the script whenever any file in the package changes.
     println!("cargo::rerun-if-changed=proto/api.proto");
+    println!("cargo::rustc-check-cfg=cfg(has_fancy_backend)");  // declare it (1.80+)
     println!("cargo::rustc-cfg=has_fancy_backend");
 }
 ```
 
-The syntax changed: directives use a **double colon** (`cargo::rerun-if-changed`) as of Rust 1.77. The old single-colon form still works but is deprecated, and tutorials are full of it.
+The syntax changed: directives use a **double colon** (`cargo::rerun-if-changed`) as of Rust 1.77. The old single-colon form still works but is deprecated, and tutorials are full of it. The `rustc-check-cfg` line is the other thing tutorials omit: "Custom cfgs must either be expected using the `cargo::rustc-check-cfg` instruction or usage will need to allow the `unexpected_cfgs` lint" - and under `build.warnings = "deny"` that warning fails the build.
 
 Two costs to weigh before adding one. A build script is a compile-time dependency for everyone who builds you, including in environments you cannot see - a script that shells out to `cmake` or `protoc` makes those tools a hard install requirement, which is exactly the class of thing that breaks `cargo install` for users while working fine in your repo. And build scripts are opaque to compiler caches: files a macro or script reads are invisible to the cache key unless you declare them (see the `extra_inputs` row in `dev-environment.md`).
 
@@ -120,7 +123,7 @@ Two costs to weigh before adding one. A build script is a compile-time dependenc
 
 Edition 2024 defaults to `resolver = "3"`, which flips `resolver.incompatible-rust-versions` from `allow` to **`fallback`**: cargo will prefer an older version of a dependency when the newest one requires a newer Rust than you declare. That is usually what you want - it stops `cargo update` from silently breaking your MSRV promise - but it means a stale `rust-version` now quietly holds your whole dependency tree back.
 
-Set it to a version you actually test against, and raise it deliberately. If you support an MSRV, test it in CI with that toolchain, not just the latest.
+Set it to a version you actually test against, and raise it deliberately. If you support an MSRV, test it in CI with that toolchain, not just the latest. The Cargo guide's own recipe is one line - `cargo hack check --rust-version --workspace --all-targets --ignore-private` (from `cargo-hack`), which checks each member against its own declared `rust-version` - and `cargo-msrv` finds the real minimum when you do not know it.
 
 ## `#[non_exhaustive]`
 

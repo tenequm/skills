@@ -8,7 +8,7 @@ There are two viable routes. Pick by how much control you need.
 
 [`dist`](https://github.com/axodotdev/cargo-dist) (formerly `cargo-dist`) plans the release, cross-compiles the binaries, generates installers (shell, PowerShell, npm, Homebrew), and **writes its own CI workflow** - `dist init` emits a `release.yml` implementing the whole plan/build/host/publish/announce pipeline. For most projects this is the right answer, and you should try it before hand-rolling anything.
 
-A note on its history, because a stale memory will otherwise scare you off: `dist` was built by axo, who wound down; maintenance was picked up by the community, the Astral fork's features were merged back in, and it has shipped steady releases since (0.32.0 in May 2026). It is maintained.
+A note on its history, because a stale memory will otherwise scare you off: `dist` was built by axo, who wound down; maintenance was picked up by the community, the Astral fork's features were merged back in, and it has shipped steady releases since (0.33.0 in September 2026, on GitHub Releases; crates.io still lists 0.32.0). It is maintained.
 
 Reach for Route B only when you need something dist does not model - an unusual cross-compilation setup, a bespoke distribution fan-out, or strict control over the order in which things publish.
 
@@ -32,6 +32,8 @@ It runs as two different commands, and the split matters:
 **Two bump behaviors that surprise people.** On a `0.x` version, a `feat:` commit produces a **patch** bump, not a minor one - `0.2.7` + `feat:` is `0.2.8`. This is deliberate (Cargo treats `0.x` → `0.(x+1)` as the breaking-change channel, so features cannot claim it), and it means a `feat!:` breaking change on `0.2.3` gives you `0.3.0`, not `1.0.0`. The first is overridable in config with `features_always_increment_minor`; the second is **not** - `breaking_always_increment_major` exists only as a Rust API on release-plz's version updater, not as a `release-plz.toml` key, so do not go looking for it there. The defaults are the correct ones anyway. Expect them rather than fighting them.
 
 **Squash-merge can silently erase your release.** The version bump is computed from *commit messages*. Squash-merging a PR replaces its commits with a single commit whose message is the **PR title** - so a PR titled `ci: tidy workflow` that happens to contain the `feat:` commit produces no `feat:` in history, and therefore no release at all. The commit you cared about is gone. Either title the PR conventionally (so the squashed message carries the right type), or use a merge commit for release-worthy PRs. This is not a release-plz quirk - it bites every conventional-commit release tool.
+
+**Only commits that touch packaged files count.** release-plz "opens a PR when any of the files packaged in the crate changes", and it judges each commit the same way: a commit whose files are all outside `cargo package --list` (docs, CI config, a manifest excluded from the crate) never bumps the version or reaches the changelog - even with a `!` breaking marker. A change that must release has to touch something that ships.
 
 ### Build the binaries *before* you publish
 
@@ -139,6 +141,8 @@ Worse, the leak does not have to come from *your* manifest. A crate three levels
 
 If you build macOS binaries with Zig, expect to re-sign them (an ad-hoc `rcodesign sign` is enough); Zig's recorded SDK metadata can otherwise trip newer macOS loaders.
 
+**Pin `cargo-zigbuild` and Zig together, and run the release build before release day.** They version independently, and a pairing can break linking outright: cargo-zigbuild 0.23.4 with Zig 0.16 broke Apple `cdylib` links, because rewriting `-Wl,<path>` "detaches the operand from `-exported_symbols_list`" (issue #479; the fix is merged but unreleased as of September 2026). The general trap: a job that only runs on release meets every toolchain bump for the first time *during* a release. Run the dist build on any PR that changes the Rust toolchain, Zig, or cargo-zigbuild.
+
 ### Fan out to installers from a single build
 
 Every channel is fed from the same artifacts, so build once and derive the rest. Compute the tarball checksums once, then template them into whatever you publish:
@@ -165,7 +169,7 @@ With clap, the crate for this is `clap_complete`, and the API you want is `gener
 
 ### Guard what the published crate actually contains
 
-`exclude` in `Cargo.toml` keeps your published crate small by dropping tests, fixtures, and docs from the `.crate` file. It is also a loaded gun: **exclude a file the code embeds with `include_str!`/`include_bytes!` and `cargo install` breaks for everyone while `cargo build` in your repo keeps working perfectly.** The failure is invisible locally and can survive several releases.
+`exclude` in `Cargo.toml` keeps your published crate small by dropping tests, fixtures, and docs from the `.crate` file. It is also a loaded gun: **exclude a file the code embeds with `include_str!`/`include_bytes!` and `cargo install` breaks for everyone while `cargo build` in your repo keeps working perfectly.** The failure is invisible locally and can survive several releases. It is not hypothetical: jiff 0.2.36 reached crates.io unable to compile ("couldn't read `.../jiff-0.2.36/src/../../../../COMPARE.md`") and was yanked the same day; 0.2.37 is "a redux release of `0.2.36` that fixes a compilation bug."
 
 The same blind spot applies to the install path itself. If you ship through Homebrew, Nix, or `cargo-binstall`, nobody on your team ever runs the plain `cargo install <crate>` that compiles from the published `.crate` - so a packaging break can sit undiscovered for weeks while every channel you actually use keeps working. Test that path directly, in a container with nothing pre-installed and no local checkout to fall back on:
 
@@ -184,7 +188,7 @@ done
 
 ### Stop storing a registry token: use Trusted Publishing
 
-The pipeline above hands CI a long-lived `CARGO_REGISTRY_TOKEN` out of repository secrets. crates.io now supports **Trusted Publishing**, which removes that secret entirely: "It uses OpenID Connect (OIDC) to verify that your workflow is running from your repository, then provides a short-lived token for publishing." Tokens expire after 30 minutes, and the configuration binds publishing to a specific repository *and workflow filename*, so a compromised unrelated workflow cannot publish.
+The pipeline above hands CI a long-lived `CARGO_REGISTRY_TOKEN` out of repository secrets. crates.io now supports **[Trusted Publishing](https://crates.io/docs/trusted-publishing)**, which removes that secret entirely: "It uses OpenID Connect (OIDC) to verify that your workflow is running from your repository, then provides a short-lived token for publishing." Tokens expire after 30 minutes, and the configuration binds publishing to a specific repository *and workflow filename*, so a compromised unrelated workflow cannot publish.
 
 Configure the crate once under Settings → Trusted Publishing on crates.io (naming the repo and the workflow file), then drop the stored secret:
 
@@ -211,7 +215,7 @@ The tempting fix is `--allow-dirty`. That is the wrong lever - it disables the c
 Two release-plz settings worth understanding rather than cargo-culting:
 
 - `publish_no_verify = true` skips the verification build `cargo publish` runs by default. Legitimate **only** when CI has already compiled that exact code, and only once you have a packaging gate like the one above - it is precisely the check you are turning off. It saves a cold rebuild of the whole dependency tree at publish time.
-- `semver_check = false` disables [`cargo-semver-checks`](https://github.com/obi1kenobi/cargo-semver-checks). Reasonable for a binary whose library target exists only so the binary and its tests can share code. If anyone actually depends on your library, **leave it on** - it is the thing that stops you shipping a breaking change as a patch bump.
+- `semver_check = false` disables [`cargo-semver-checks`](https://github.com/obi1kenobi/cargo-semver-checks). Reasonable for a binary whose library target exists only so the binary and its tests can share code. If anyone actually depends on your library, **leave it on** - it is the thing that stops you shipping a breaking change as a patch bump. And keep release-plz current: before 0.3.168 it silently skipped the check for crates declaring `crate-type = ["cdylib", "rlib"]` and for private workspace libraries.
 
 ### Why there is no task runner here
 

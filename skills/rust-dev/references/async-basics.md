@@ -83,7 +83,7 @@ tokio = { version = "1", features = ["macros", "rt-multi-thread", "net", "fs", "
 Common ones:
 - `macros` - `#[tokio::main]`, `#[tokio::test]`, `tokio::select!`, `tokio::join!`
 - `rt-multi-thread` - the default work-stealing runtime
-- `rt` - single-threaded runtime (use this in WASM, embedded, or to avoid `Send` bounds)
+- `rt` - the current-thread runtime (WASM, embedded, small tools). It does **not** lift the `Send` bound: `tokio::spawn` requires `Send` on every runtime flavor. For `!Send` futures (an `Rc`, a non-thread-safe FFI handle), use `#[tokio::main(flavor = "local")]` or `LocalRuntime` (stable since tokio 1.51) with `tokio::task::spawn_local`
 - `net` - TCP/UDP
 - `fs` - async filesystem
 - `sync` - `Mutex`, `RwLock`, `mpsc`, `broadcast`, `oneshot`, `Notify`
@@ -193,6 +193,8 @@ Async runtimes assume tasks yield quickly. CPU-bound work (parsing big files, en
 let result = tokio::task::spawn_blocking(|| expensive_computation()).await?;
 ```
 
+The blocking pool is sized for threads that wait (up to 512 by default), not for CPU work. For many CPU-bound jobs tokio's own docs say "a semaphore or some other synchronization primitive should be used to limit the number of computations executed in parallel" - or hand the work to `rayon`, which is sized to your cores.
+
 **`tokio::task::block_in_place`** runs a blocking section inside the current async task without starving sibling tasks. It **panics on a `current_thread` runtime** - that is the constraint to remember. (Outside any runtime it is simply allowed, and just calls the closure normally, so a helper using it still works in a plain sync test.) It also suspends any other code running concurrently in the same task, e.g. under `join!`. Prefer `spawn_blocking`; reach for `block_in_place` only when the blocking work genuinely cannot move into its own task:
 ```rust
 tokio::task::block_in_place(|| do_blocking_thing());
@@ -236,6 +238,29 @@ while let Some(res) = set.join_next().await {
 }
 ```
 
+That starts all 100 at once. Against a real API or database, that is a self-inflicted outage: every task opens a connection in the same instant. Bound it. `buffer_unordered(n)` from `futures::StreamExt` keeps at most `n` futures in flight, and a `tokio::sync::Semaphore` does the same for spawned tasks:
+
+```rust
+use futures::stream::{self, StreamExt};
+
+// At most 8 requests in flight; results arrive in completion order
+let results: Vec<_> = stream::iter(0..100)
+    .map(fetch_user)
+    .buffer_unordered(8)
+    .collect()
+    .await;
+
+// The same limit for spawned tasks: the permit lives until the task ends
+let permits = Arc::new(tokio::sync::Semaphore::new(8));
+for id in 0..100 {
+    let permit = Arc::clone(&permits).acquire_owned().await?;
+    set.spawn(async move {
+        let _permit = permit;
+        fetch_user(id).await
+    });
+}
+```
+
 ## Cancellation
 
 Dropping a future cancels it. The future stops being polled at its next `.await` point. There is no "cancellation token" by default; structuring code so that dropping is a clean shutdown is the idiom.
@@ -251,6 +276,8 @@ match timeout(Duration::from_secs(5), slow_op()).await {
     Err(_) => { /* timed out */ }
 }
 ```
+
+**`abort()` is not a fence.** `JoinHandle::abort` requests cancellation; it does not guarantee it. In tokio's words, "aborting a task does not guarantee that it fails with a cancelled error, since it may complete normally first." So a debounce or cancel-and-replace loop (abort the previous search, start a new one) can still receive the old task's result after the abort. Tag each request with a generation counter and drop any result whose generation is stale.
 
 ### Handle SIGTERM, not just Ctrl-C
 
@@ -269,6 +296,29 @@ async fn shutdown_signal() {
 ```
 
 Two things that bite after you fix that. A server's `with_graceful_shutdown` waits for **all** connections to close, so one long-lived streaming connection (SSE, a websocket, a follow-style tail) holds shutdown open forever - cancel that stream's own token as well, and put a bounded `timeout` around the drain as a backstop. And check that the handler is actually installed in the shipped artifact: on Linux, `grep SigCgt /proc/<pid>/status` tells you which signals the process is catching, which is how you find out that the binary in the container is not the one you tested.
+
+Cancelling is half of shutdown; the other half is waiting for what you cancelled. `tokio_util::task::TaskTracker` is the pair to `CancellationToken`: spawn through it, and once the token fires, `close()` it and `wait()` for every tracked task to finish.
+
+```rust
+use tokio_util::{sync::CancellationToken, task::TaskTracker};
+
+let token = CancellationToken::new();
+let tracker = TaskTracker::new();
+for id in 0..4 {
+    let token = token.clone();
+    tracker.spawn(async move {
+        tokio::select! {
+            _ = token.cancelled() => {}    // shutdown requested
+            _ = worker(id) => {}
+        }
+    });
+}
+
+shutdown_signal().await;
+token.cancel();
+tracker.close();                            // accept no new tasks
+tracker.wait().await;                       // every tracked task has finished
+```
 
 ## Channels (`tokio::sync`)
 
@@ -337,7 +387,7 @@ The fix is in the *production* code, not the test: use `tokio::time::Instant` th
 
 ## Debugging a Running Runtime
 
-When a service is stalling and the profiler shows nothing hot, the problem is usually a task that is not being polled rather than one burning CPU. `tokio-console` is the debugger for exactly that: it attaches over a `tracing` subscriber and shows live per-task state, poll counts, busy versus idle time, and warnings for tasks that have blocked the runtime. It needs the `tokio_unstable` cfg flag set at build time, which is why it is a deliberate step rather than something you leave on.
+When a service is stalling and the profiler shows nothing hot, the problem is usually a task that is not being polled rather than one burning CPU. `tokio-console` is the debugger for exactly that: it attaches over a `tracing` subscriber and shows live per-task state, poll counts, busy versus idle time, and warnings for tasks that have blocked the runtime. It needs the `tokio_unstable` cfg flag set at build time, which is why it is a deliberate step rather than something you leave on. If your own code gates on `#[cfg(tokio_unstable)]`, declare the cfg (`[lints.rust] unexpected_cfgs = { level = "warn", check-cfg = ['cfg(tokio_unstable)'] }`), or the `unexpected_cfgs` lint fires - a hard error under `build.warnings = "deny"`.
 
 ## What to Defer
 

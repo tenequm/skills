@@ -48,6 +48,22 @@ fn greet3(x: &dyn Greet) {
 | `impl Trait` | Static (monomorphized) | Larger | Same as above; cleaner for one trait bound |
 | `&dyn Trait` / `Box<dyn Trait>` | Dynamic (vtable) | Smaller, one copy | Heterogeneous collections, plugin-like APIs, when you need to store mixed types |
 
+### `impl Trait` in return position
+
+As a *return* type, `impl Trait` means something different: the function picks one concrete type and hides its name. That is how you return an iterator chain or a closure, whose real types you cannot write:
+
+```rust
+fn evens(xs: &[i32]) -> impl Iterator<Item = i32> {
+    xs.iter().copied().filter(|n| n % 2 == 0)
+}
+
+fn make_adder(n: i32) -> impl Fn(i32) -> i32 {
+    move |x| x + n
+}
+```
+
+It is still exactly one type: returning a `Vec` iterator from one branch and a `HashSet` iterator from another does not compile - that is a job for `Box<dyn Iterator>`. Edition 2024 changed what the hidden type may borrow: "all in-scope generic parameters, including lifetime parameters, are implicitly captured", which is why `evens` needs no `+ '_`. When that over-captures (the returned value does not actually borrow the input, but callers cannot drop the input while holding it), narrow it with a precise capture list: `-> impl Iterator<Item = usize> + use<>`.
+
 ### When you actually need `dyn Trait`
 
 ```rust

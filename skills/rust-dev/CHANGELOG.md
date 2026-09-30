@@ -7,9 +7,43 @@ and this skill adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.h
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-09-30
+
+### Added
+
+- references/crate-shortlist.md: reqwest's three production defaults - build one `Client` and reuse it (`reqwest::get` "creates a new internal `Client` on each call"), set a timeout because the builder's "Default is no timeout", and call `error_for_status()` because a 404 or 500 is a successful `send()`. Plus axum shared state with `State<T>` and `with_state`, which the skill mentioned only in passing.
+- references/async-basics.md: bounded concurrency - the `JoinSet` example spawned 100 tasks at once, so `buffer_unordered(n)` and a `Semaphore` now cap it. `TaskTracker` as the pair to `CancellationToken`, so shutdown waits for the tasks it cancelled. And `abort()` is not a fence: "aborting a task does not guarantee that it fails with a cancelled error, since it may complete normally first", so cancel-and-replace loops need a generation tag.
+- references/error-handling.md: collecting an iterator of `Result`s into `Result<Vec<_>, _>`.
+- references/traits-and-generics.md: `impl Trait` in return position (iterator chains, closures), and the edition 2024 rule that the hidden type captures every in-scope lifetime, with `use<>` to narrow it.
+- references/dev-environment.md: a "Keeping `target/` in check" section - Cargo never garbage-collects `target/`, a shared `CARGO_TARGET_DIR` serializes parallel builds on its lock (`Blocking waiting for file lock on build directory`), and `build.build-dir` (stable since 1.91) splits intermediate artifacts out.
+- references/releasing.md: release-plz only counts commits that touch files in `cargo package --list`, so a docs- or CI-only commit never releases, even with `!`. Pin cargo-zigbuild and Zig together and run the release build on toolchain-bump PRs (cargo-zigbuild 0.23.4 with Zig 0.16 broke Apple `cdylib` links, issue #479). jiff 0.2.36 as a real instance of the `include_str!` packaging break the file already warned about. release-plz before 0.3.168 skipped semver checks for `cdylib`+`rlib` crates. A link to the crates.io Trusted Publishing docs.
+- references/project-shape.md: a `required-features` binary is skipped silently by `cargo build`, `cargo test`, and `cargo install`, so CI must build it with the feature on. MSRV verification with the Cargo guide's `cargo hack check --rust-version` recipe, and `cargo-msrv`.
+- references/testing.md: a test for a shutdown or cancellation fix passes whenever the timeout backstop finishes the job, so it must assert the backstop was not taken. insta's compile-time `INSTA_WORKSPACE_ROOT` escape hatch from its `env!` path baking.
+- references/performance.md: `malloc_trim` is glibc-only, so cutting the peak remains the portable fix for retained memory.
+- SKILL.md: `src/bin/` and `examples/` in the project layout.
+
 ### Changed
 
 - references/testing.md: fixture paths come from the crate root read at runtime (a cwd-relative path, or `std::env::var_os("CARGO_MANIFEST_DIR")`), not `concat!(env!("CARGO_MANIFEST_DIR"), ...)`. `env!` bakes the checkout path into the test binary, so a compiler cache keys it per checkout and every new worktree recompiles it; the same goes for `CARGO_BIN_EXE_<name>` and insta's snapshot macros.
+- references/dev-environment.md: the kache section re-verified against 0.28.1 (pin was 0.18.0). Upgrading across 0.27.0 is a fully cold cache - the key schema moved from 31 to 32, so "no entry written by 0.26.x matches any more, locally or on a remote" - which replaces the claim that upgrades cost only a partial recompile. New quirks rows: kache itself forces CI to read-only unless the job is a push to a protected branch; S3 permission failures now read as misses (`kache doctor`); the daemon deletes orphaned target directories and seeds new checkouts; a different kache on `PATH` misses everything. Also: clippy and build-script caching (0.23.0), adaptive incremental in a normal edit loop (0.27.0), `cache.bypass_crates`, and `why-miss` across checkouts.
+- references/dev-environment.md: the CI recipe now runs `cargo clippy --locked --all-targets` - with no target flags clippy lints only the library and binaries - and the SKILL.md dev loop matches. `build.warnings = "deny"` in `.cargo/config.toml` is now weighed against the Cargo guide's advice to deny in CI and stay lax locally.
+- references/async-basics.md: `spawn_blocking` for CPU-bound work needs a cap - the pool allows 512 threads, and tokio's docs call for "a semaphore or some other synchronization primitive", or `rayon`.
+- Rust 1.99 (2026-10-01): an edition 2024 workspace member can now turn off inherited `default-features`, so "cannot subtract them" in references/project-shape.md is narrowed; Cargo disables incremental compilation in CI by itself, so `CARGO_INCREMENTAL=0` becomes redundant there; and the new built-in `debug` profile is noted next to the custom `[profile.debugging]` recipe.
+- Version stamps: jiff 0.2.37 (0.2.36 was yanked), dist 0.33.0 (GitHub Releases; crates.io still lists 0.32.0).
+
+### Fixed
+
+- references/crate-shortlist.md: the axum rate-limit example did not compile. `Router::layer` needs a `Clone` service and tower's `RateLimit` is `#[derive(Debug)]` only, so the example now wraps it in `ServiceBuilder` with `BufferLayer` and `HandleErrorLayer`, names the `tower-http` crate `TraceLayer` comes from, and says that over-limit requests queue rather than get a 429.
+- references/project-shape.md: the `build.rs` example emitted a custom cfg without `cargo::rustc-check-cfg`, which trips `unexpected_cfgs` and fails the build under the `build.warnings = "deny"` the skill recommends. The same note now covers `#[cfg(tokio_unstable)]` in async-basics.md.
+- references/async-basics.md: tokio's `rt` feature was said to "avoid `Send` bounds". It does not - `tokio::spawn` requires `Send` on every runtime - so `!Send` work now points at `#[tokio::main(flavor = "local")]` / `LocalRuntime` (stable since tokio 1.51) and `spawn_local`.
+- SKILL.md: the `rust-toolchain.toml` example used `channel = "stable"`, which pins nothing - it is whatever stable each machine last installed. It now pins an exact version and notes that only rustup reads the file.
+- references/dev-environment.md: kache restores were described as "a reflink ..., a hardlink otherwise". Current kache tries a copy-on-write clone, then a restricted hardlink fallback for immutable artifacts, and otherwise copies.
+
+### Security
+
+- references/dev-environment.md: RUSTSEC-2026-0285 (2026-09-14), "TLS 1.3 handshake messages incorrectly accepted across encryption level boundaries" in rustls, patched in 0.23.45, is now the concrete case for `cargo audit`. rustls is reqwest 0.13's default TLS backend, so it sat in ordinary HTTP-client binaries. This supersedes 0.6.0's note that no new advisory touched a crate this skill names.
+
+Verified against: tokio@1.53.1, jiff@0.2.37, kache@0.28.1, dist@0.33.0, release-plz-action@0.5.139
 
 ## [0.6.0] - 2026-09-09
 

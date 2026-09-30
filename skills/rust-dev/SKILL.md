@@ -2,10 +2,10 @@
 name: rust-dev
 description: Day-1 guide to building well in Rust - ownership, errors as values, String vs &str, Box/Rc/Arc, anyhow vs thiserror, and a crate shortlist (tokio, serde, axum, sqlx). Use when starting a Rust project, fighting the borrow checker, or picking crates.
 metadata:
-  version: "0.6.0"
+  version: "0.7.0"
   categories: "development"
   topics: "rust, ownership, cargo, crates, tokio"
-  upstream: "rust@1.98.1, axum@0.8.9, reqwest@0.13.5, sqlx@0.9.0, jiff@0.2.35, kache@0.18.0, dist@0.32.0, release-plz-action@0.5.135"
+  upstream: "rust@1.98.1, tokio@1.53.1, axum@0.8.9, reqwest@0.13.5, sqlx@0.9.0, jiff@0.2.37, kache@0.28.1, dist@0.33.0, release-plz-action@0.5.139"
   openclaw:
     homepage: https://github.com/tenequm/skills/tree/main/skills/rust-dev
     emoji: "🦀"
@@ -41,7 +41,7 @@ cargo new --lib my-lib    # library (src/lib.rs)
 cargo check     # fast type-check, no codegen
 cargo run       # build and run (binary)
 cargo test      # build and run tests (incl. doctests)
-cargo clippy    # lint (run before pushing)
+cargo clippy --all-targets   # lint, incl. tests/ and benches/ (run before pushing)
 cargo fmt       # format
 
 # 5. Manage dependencies without editing Cargo.toml by hand
@@ -311,14 +311,16 @@ Run `cargo fmt` before you start editing (or commit any pre-existing drift on it
 
 ## rust-toolchain.toml (optional but recommended)
 
-Pins the toolchain per-project so everyone on the team uses the same Rust.
+Pins the toolchain per project so everyone on the team uses the same Rust - but only with an exact version. `channel = "stable"` means "whatever stable this machine last installed", so two machines disagree silently, and a compiler cache keyed on the exact `rustc` never shares artifacts between them. Bump the pin deliberately (see `references/dev-environment.md`).
 
 ```toml
 [toolchain]
-channel    = "stable"
+channel    = "1.98.1"
 components = ["rustfmt", "clippy", "rust-src"]
 profile    = "minimal"
 ```
+
+The file is a rustup feature. A `rustc` from Nix, a distro package, or Homebrew ignores it, so on those machines you get whatever compiler is installed.
 
 ## .gitignore
 
@@ -339,6 +341,8 @@ my-app/
     api/           # nested module
       mod.rs       # OR `api.rs` next to api/ folder (2018+ style preferred)
       users.rs
+    bin/           # extra binaries: src/bin/admin.rs -> `cargo run --bin admin`
+  examples/        # runnable examples: `cargo run --example demo`
   tests/           # integration tests (each file is its own crate)
     smoke.rs
   Cargo.toml
@@ -373,10 +377,10 @@ Detailed material lives in `references/`. Read each when you hit the topic.
 - **ownership-and-types.md** - ownership, borrowing, lifetimes, `String`/`&str`/`Cow`, why a string is not indexable, slices, `HashMap` and the `entry` API, smart pointers, the self-referential struct trap
 - **error-handling.md** - `Result`, `?`, `anyhow` vs `thiserror` patterns, wrapping at the boundary rather than before it, custom error enums, when `panic!` is appropriate
 - **traits-and-generics.md** - traits as bounds, `dyn` vs `impl Trait` vs generics, common derives, `From`/`Into`/`Display`/`Debug`, closures and the `Fn`/`FnMut`/`FnOnce` family, blanket impls, the orphan rule
-- **async-basics.md** - threads and `mpsc` before async, `tokio`, `#[tokio::main]`, `.await`, `Send`/`Sync`, graceful shutdown on SIGTERM, common pitfalls (blocking in async, `MutexGuard` across `.await`)
+- **async-basics.md** - threads and `mpsc` before async, `tokio`, `#[tokio::main]`, `.await`, `Send`/`Sync`, bounded concurrency, cancellation and graceful shutdown on SIGTERM, common pitfalls (blocking in async, `MutexGuard` across `.await`)
 - **crate-shortlist.md** - minimal usage example for each of the 8 crates above
 - **project-shape.md** - past one crate: workspaces and inherited dependencies, `[workspace.lints]`, feature flags, `build.rs`, what `rust-version` controls, `#[non_exhaustive]`
 - **testing.md** - what to test and what to skip, pragmatic test organization, keeping the suite fast, the minimal high-value tool kit
-- **dev-environment.md** - the fast build loop, build caching (kache setup and its quirks, sccache, rust-cache), platform-aware linker guidance, CI, file watchers
+- **dev-environment.md** - the fast build loop, build caching (kache setup and its quirks, sccache, rust-cache), keeping `target/` in check, platform-aware linker guidance, CI, file watchers
 - **releasing.md** - shipping a binary: `dist` vs a hand-rolled `release-plz` + `cargo-zigbuild` pipeline, `[profile.dist]`, cross-compiling every target from one runner, fanning out to binstall/Homebrew/Nix, and guarding what the published crate contains
 - **performance.md** - profiling before optimizing, benchmarking with criterion/divan, the real runtime wins
