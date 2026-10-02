@@ -4,6 +4,30 @@ All notable changes to this skill are documented in this file, following [Keep a
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-10-02
+
+### Changed
+
+- Default is now a named persistent session (ensure once, follow up with `--no-wait`,
+  close when the task is done); `exec` is for true one-shots. The claude recipe no
+  longer closes after every run.
+- Invariant 6 and Teardown: the idle TTL frees the stack between turns and the session
+  stays resumable; close ends the task.
+- claude: settings from `ACPX_CLAUDE_INCLUDE_USER_SETTINGS` are re-applied whenever the
+  session's process spawns, not only at creation; set account env vars on every call.
+- When this lane: no longer routes to another tool.
+- upstream: acpx 0.19.4.
+
+### Added
+
+- Talking to a live session: queue order, cancel-then-prompt, `BLOCKED:` answered in
+  the same session, a mid-turn progress/answer file channel, recovery after a failed or
+  timed-out turn, the `sessionId` check after a respawn.
+- Completion: `sessions watch` under the Claude Code Monitor tool; `--no-wait` prints
+  nothing under `--format quiet`.
+- claude: edits need no `--approve-all` under `auto`/`acceptEdits`; the child refuses
+  long foreground sleeps; subagents inside a child work; send prompts as `-f <file>`.
+
 ## [0.7.0] - 2026-09-30
 
 ### Added

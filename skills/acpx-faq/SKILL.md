@@ -1,11 +1,11 @@
 ---
 name: acpx-faq
-description: Run coding agents (codex, claude, agy/Antigravity) through the acpx ACP CLI - the headless lane outside a herdr pane (no HERDR_ENV). Use before launching or prompting a subagent, and when a command fails, a session is not found, or a prompt is lost.
+description: Run coding agents (codex, claude, agy) through the acpx ACP CLI - headless persistent sessions you can queue to, watch and resume. Use before launching or prompting a subagent, or when a command fails, a session is missing, or a prompt is lost.
 metadata:
-  version: "0.7.0"
+  version: "0.8.0"
   categories: "agents, operations"
   topics: "acpx, acp, agent-orchestration, troubleshooting, headless-agents"
-  upstream: "acpx@0.19.3, @agentclientprotocol/claude-agent-acp@0.84.0, @agentclientprotocol/codex-acp@2.0.1, agy@1.2.14, agy_acp_server@1.2.1"
+  upstream: "acpx@0.19.4, @agentclientprotocol/claude-agent-acp@0.84.0, @agentclientprotocol/codex-acp@2.0.1, agy@1.2.14, agy_acp_server@1.2.1"
   openclaw:
     homepage: https://github.com/tenequm/skills/tree/main/skills/acpx-faq
     emoji: "🔌"
@@ -35,9 +35,8 @@ shipped reference omits.
 
 ## When this lane
 
-acpx is the headless out-of-process executor lane. Inside a herdr pane (`HERDR_ENV=1`)
-prefer herdr (herdr-faq): it gives you screen reads and dialog detection. Everywhere
-else (plain terminal, ssh, cron) herdr is untargetable and acpx is the lane.
+acpx is the headless out-of-process executor lane: another agent, vendor or account,
+driven from a script or from another agent, in a plain terminal, ssh or cron.
 In-session fan-out stays on the harness's own subagent tool.
 
 ## Invariants
@@ -73,20 +72,23 @@ In-session fan-out stays on the harness's own subagent tool.
    rejection), or a truncated turn all end that way. Read the stream, or require the
    agent to write a result file you can check. Before a fan-out, one cheap `exec`
    ("Reply OK") per agent and model catches auth and model errors.
-6. **A persistent session leaves a resident process stack until you close it.** Every
-   `-s` prompt elects a queue owner holding `npm exec -> node <adapter> -> <agent>`
-   (plus the agent's MCP servers), roughly 550-650 MB before MCP. `sessions close` is
-   the supported teardown; the idle TTL (default 300s) is the backstop, and `--ttl 0`
-   removes it. See Teardown.
+6. **A persistent session holds a resident process stack only while it is busy or
+   warm.** Every `-s` prompt elects a queue owner holding `npm exec -> node <adapter>
+   -> <agent>` (plus the agent's MCP servers), roughly 550-650 MB before MCP. After
+   the idle TTL (default 300s) the owner exits and the session stays resumable; the
+   next prompt respawns it. `sessions close` ends the task; `--ttl 0` removes the
+   self-reap. See Teardown.
 
 ## Per agent
 
-**Default to `exec` for dispatched work.** `exec` runs a temporary session: no saved
-record, not queue-aware, so it never elects a queue owner and leaves nothing to clean
-up. Use `-s <name>` only to queue follow-ups onto a live run or to read
-`sessions history` afterwards - and then the closing `sessions close` is part of the
-recipe (invariant 6). One directory (ideally one worktree) per parallel executor:
-sessions key on cwd.
+**Default to a named persistent session for dispatched work** - it is what lets you
+answer a blocker, queue a correction, or continue after a failure with the agent's
+context intact: `sessions ensure` once, prompt with `-s <name>`, queue follow-ups with
+`--no-wait`, and `sessions close` only when the task is done (see Talking to a live
+session). Use `exec` for true one-shots - a preflight "Reply OK", a single question -
+where nothing will follow: no saved record, no queue owner, nothing to clean up.
+Sessions key on agent command + cwd + name; give each parallel executor its own name
+and, when it writes files, its own directory (ideally one worktree).
 
 Adapters run through `npm exec`. A fresh HOME per job re-downloads them (hundreds of
 MB each); share one `npm_config_cache`. On macOS a fresh HOME also hides the login
@@ -218,12 +220,14 @@ One-shot: `exec --config-option reasoning_effort=low` sets model and effort inli
 
 ```bash
 D=/abs/dir
-acpx --cwd "$D" --model claude-opus-5 claude sessions ensure -s work
+acpx --cwd "$D" --model claude-opus-5 claude sessions ensure --name work
 acpx --cwd "$D" claude set effort high -s work                 # optional; after any model change
 acpx --cwd "$D" --model claude-opus-5 --approve-all --suppress-reads --timeout 2400 \
      claude -s work -f /abs/brief.md >> run.log 2>&1 &
-# ...after the run finishes and you have read what you need:
-acpx --cwd "$D" claude sessions close work  # ALWAYS - the run is not over until this returns
+# follow-up, answer or correction - same session, queues behind a running turn:
+acpx --cwd "$D" --model claude-opus-5 --approve-all claude -s work --no-wait -f /abs/next.md
+# only when the task is done:
+acpx --cwd "$D" claude sessions close work
 ```
 
 - **Effort is `set effort <level>`**; `set reasoning_effort` is the codex name and
@@ -243,16 +247,30 @@ acpx --cwd "$D" claude sessions close work  # ALWAYS - the run is not over until
   in `~/.acpx/config.json`. Any command containing `claude-agent-acp` keeps acpx's
   claude handling.
 - **User settings are excluded on purpose** - user skills are missing (`/polish`
-  "isn't available"). Fix with `ACPX_CLAUDE_INCLUDE_USER_SETTINGS=1` - and settings
-  bind at session **creation**, so recreate the session, do not re-prompt it. A
+  "isn't available"). Fix with `ACPX_CLAUDE_INCLUDE_USER_SETTINGS=1`. acpx reads it
+  from its own environment and re-applies settings whenever the session's process
+  spawns (create, load, resume); a live owner keeps what it started with, so after
+  changing it close the session or let the owner idle out, then prompt again. A
   `--cwd` under `$HOME` still loads `~/.claude/CLAUDE.md` through the ancestor
   CLAUDE.md walk.
 - **Second account**: export `CLAUDE_CONFIG_DIR` and `CLAUDE_SECURESTORAGE_CONFIG_DIR`
-  before `acpx`; the child inherits them.
-- **An executor that spawns background subagents can end its turn before they
-  report** - `[done] end_turn`, exit 0, no report. The brief must say to wait for every
-  subagent and write the report before the final message, or forbid background
-  subagents.
+  before `acpx`; the child inherits them. Set them on **every** call, not only the
+  first - whichever call respawns an idle session decides its account. A tiny wrapper
+  script that exports them and execs acpx makes that hard to forget.
+- **Edits need no `--approve-all` when Claude's own `permissions.defaultMode` is
+  `auto` or `acceptEdits`** (invariant 4); pass it on every prompt anyway so
+  escalated requests are not denied.
+- **The child's harness refuses long foreground sleeps** (`sleep 90` blocked outright),
+  so a child cannot own a long wait or poll loop - and a loop it backgrounds dies when
+  its owner exits. Long waits belong to the driving side (`sessions watch`, a
+  result-file poll).
+- **Subagents inside a child work** (verified with the Agent tool), but an executor
+  that spawns them in the background can end its turn before they report -
+  `[done] end_turn`, exit 0, no report. The brief must say to wait for every subagent
+  and write the report before the final message, and never to end a turn with a
+  background loop running.
+- **Prompt text the driving harness blocks** (a hook or classifier reading a brief
+  that mentions gates, secrets or approvals): send every prompt as `-f <file>`.
 
 ## Sessions
 
@@ -295,8 +313,20 @@ waiting for `idle` spins past real completion (invariant 3). What is actually co
   `sessions read <n> --tail N` (shows in-flight tool calls);
 - best: a **result file** the brief required the agent to write - poll for the file.
 
-`--no-wait` acknowledges enqueueing (`[queued] <id>`), which is neither delivery nor
-completion - behind a running turn the prompt waits for the turn boundary.
+`--no-wait` acknowledges enqueueing (`[queued] <id>`; nothing is printed under
+`--format quiet`), which is neither delivery nor completion - behind a running turn
+the prompt waits for the turn boundary.
+
+From a Claude Code driver, run `sessions watch` under the Monitor tool so each turn
+arrives as a notification:
+
+```bash
+acpx --format json --cwd "$D" claude sessions watch -s work --cursor "$LAST" \
+  | jq --unbuffered -c 'select(.type=="turn_started" or .type=="turn_result")
+      | {type, requestId, status: .result.status}'
+```
+
+Keep the last `cursor` when re-arming, or the stream replays earlier turns.
 
 Supervise a backgrounded text-format run by counting tool lines and mtime
 (`rg -c '^\[tool\]' run.log`, `stat -f '%Sm' run.log`). `--format quiet` prints only
@@ -309,8 +339,10 @@ nothing to watch; for codex, `tail -f` the newest
 ## Teardown
 
 `sessions close <n>` takes down the whole resident stack (owner -> `npm exec` ->
-`node <adapter>` -> agent binary -> its MCP servers). Make it the last line of every
-scripted persistent run: forgotten owners hold hundreds of MB each for hours.
+`node <adapter>` -> agent binary -> its MCP servers) and marks the task finished.
+Close when the task is done, not after every turn - between turns the idle TTL frees
+the stack and the session stays resumable. A `"ttl": 0` config makes forgotten
+owners resident for hours; with the default they exit after 300s idle.
 
 Liveness and leak check - never `pgrep -l` or `ps -o args`: command lines of wrapper
 shells can carry secrets, and the bracketed first letter keeps the pattern from
@@ -394,13 +426,33 @@ The turn still exits **0** and ends `[done] end_turn` - grep for
 - Pass long briefs as `-f <path>` or a path in the prompt, never inlined - inlined
   content in a shell command is what a driving harness's classifier blocks on.
 
+## Talking to a live session
+
+Verified end to end with acpx 0.19.4 and the claude adapter:
+
+- **Queue:** `--no-wait` prompts run in submission order after the running turn.
+- **Redirect:** `cancel -s <name>`, then a new prompt. Nothing reaches a running turn
+  otherwise (see below).
+- **Blockers:** have the brief tell the agent to stop with `BLOCKED: <what, where>` at
+  the top of its result file and end the turn; answer with a follow-up prompt into the
+  same session - it continues with full context.
+- **Mid-turn channel:** when a brief may need an answer mid-turn, tell the agent to
+  append `PROGRESS:` / `QUESTION:` lines to a progress file and to poll an answer file
+  with short foreground sleeps. Tail the progress file from the driving side (under
+  the Monitor tool from Claude Code) and write the answer file.
+- **Recovery:** a failed or timed-out turn (exit 3, `turn_result: failed`) leaves the
+  session intact - prompt the same name again. After the idle owner exits, the next
+  prompt respawns and resumes the same conversation. After any respawn check that
+  `sessionId` in `sessions show` is unchanged: a failed reconnect silently falls back
+  to a new conversation.
+
 ## What acpx cannot do
 
 Structural, not bugs. Do not design around them.
 
 - **An ACP session does not wake.** An externally injected message lands in the
   transcript but starts no turn; the only inbound channel is acpx itself
-  (`-s <name>`, optionally `--no-wait`).
+  (`-s <name>`, optionally `--no-wait`), plus a file the brief told the agent to poll.
 - **`codex queue --thread` does not reach an acpx-driven codex session** (it does wake
   a plain interactive codex).
 - **acpx-spawned Claude sessions bind no IPC socket**, so `ListAgents` /
