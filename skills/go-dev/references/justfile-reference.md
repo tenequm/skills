@@ -19,7 +19,7 @@ cargo install just
 
 ```just
 set shell := ["bash", "-euo", "pipefail", "-c"]   # Strict bash: errexit, undefined vars, pipefail
-set dotenv-load := true                            # Load .env file
+set dotenv-load                                    # Load .env file
 
 # Recipe with doc comment
 recipe-name:
@@ -129,7 +129,7 @@ slow-task:
     go test -run TestBigIntegration ./...
 
 # Treat the body as a script for one interpreter (no per-line shells)
-[script('bash', '-euo', 'pipefail', '-c')]
+[script('bash', '-euo', 'pipefail')]   # no `-c`: just passes the script's *path* as the last argument
 release:
     VERSION=$(git describe --tags --always)
     goreleaser release --clean
@@ -151,30 +151,32 @@ Invoke as `just deploy --environment prod` instead of `just deploy prod`.
 
 ```just
 set shell := ["bash", "-euo", "pipefail", "-c"]   # Shell and flags
-set dotenv-load := true                            # Auto-load .env
-set export := true                # Export all variables as env vars
-set quiet := true                 # Suppress command echo by default
-set positional-arguments := true  # Pass args as $1, $2, etc.
+set dotenv-load                                    # Auto-load .env
+set export                        # Export all variables as env vars
+set quiet                         # Suppress command echo by default
+set positional-arguments          # Pass args as $1, $2, etc.
 
 set dotenv-path := ".env.local"   # Load a specific env file
-set dotenv-required := true       # Fail if the env file is missing
-set dotenv-override := true       # .env wins over the ambient environment
+set dotenv-required               # Fail if the env file is missing
+set dotenv-override               # .env wins over the ambient environment
 set working-directory := "backend"  # Default dir for every recipe
 set indentation := "    "         # Indentation --fmt/--dump write (validates nothing)
 set minimum-version := "1.58.0"   # Error if `just` is older than this
 set script-interpreter := ["bash", "-euo", "pipefail"]  # Default for [script] recipes
-set fallback := true              # Search parent directories for a recipe
-set no-exit-message := true       # Suppress just's own error line on failure
+set fallback                      # Search parent directories for a recipe
+set no-exit-message               # Suppress just's own error line on failure
 set dotenv-command := 'sops -d .enc.env'  # Run a command, load its output as the env file
-set default-script := true        # Recipes default to script mode instead of shell mode
-set default-list := true          # Bare `just` lists recipes instead of running the default
+set default-script                # Recipes default to script mode instead of shell mode
+set default-list                  # Bare `just` lists recipes instead of running the default
 ```
 
 This is a catalog, not a copy-pasteable header - `dotenv-command` and `dotenv-load` are mutually exclusive, and `just` rejects a file setting both.
 
 `set default-list` (1.52.0) - "List recipes instead of running the default recipe." - can replace the `[private] default: @just --list --unsorted` recipe used below, but the setting has no `--unsorted` counterpart, so a bare `just` lists alphabetically. Keep the recipe when declaration order matters.
 
-`set minimum-version` is worth adding to any Justfile that uses recent attributes: without it, an older `just` fails with a confusing parse error instead of a version message.
+Write boolean settings bare (`set dotenv-load`, `set export`): `just --fmt` rewrites `set x := true` to that form, so a Justfile written the long way fails `just --fmt --check`.
+
+`set minimum-version` (1.55.0+) is worth adding to any Justfile that uses recent attributes: without it, an older `just` fails with a confusing parse error instead of a version message. A `just` older than 1.55.0 does not know the setting either, so it still gets a parse error - just a more obvious one.
 
 ## Shebang Recipes
 
@@ -237,7 +239,7 @@ deploy env:
 
 ```just
 set shell := ["bash", "-euo", "pipefail", "-c"]
-set dotenv-load := true
+set dotenv-load
 
 export PATH := home_directory() + "/go/bin:" + env('PATH')
 
@@ -477,6 +479,8 @@ lint:
     go tool golangci-lint run ./...
 ```
 
+**Fail fast on a missing tool with `require()`** (1.39.0) - it returns the executable's full path "or halt[s] with an error if no executable with `name` exists". Call it inside the recipe body, `{{ require("golangci-lint") }} run ./...`, so only that recipe fails; a top-level `tool := require(...)` assignment is evaluated for every recipe. The error names the missing binary instead of a bare `exit 127`.
+
 **A version-manager shim is a fourth install path**, alongside binary, Homebrew, and `go install`. If a tool is on PATH via mise, asdf, or similar and no version is pinned for the project, the recipe fails inside the shim rather than in the tool - `mise ERROR No version is set for shim: golangci-lint` - which reads like a Justfile bug. Pin the tool version in the version manager's config, or call an absolute path.
 
 **`GOFLAGS=-trimpath` lets worktrees share one warm cache.** `-trimpath` "remove[s] all file system paths from the resulting executable", which also makes the build and test cache keys path-independent. Without it, every git worktree recompiles the whole dependency tree (with `-race`, expensively) because its absolute paths differ:
@@ -492,7 +496,7 @@ Set it at the top of the Justfile so `build`, `test`, and the linter's own packa
 - Use `set shell := ["bash", "-euo", "pipefail", "-c"]` to catch command failures, undefined variables, and broken pipelines
 - Group related recipes with `[group('name')]` for organized `--list` output
 - Use `[private]` for helper recipes that shouldn't appear in `--list`
-- `set dotenv-load := true` loads `.env` automatically - no separate tooling needed
+- `set dotenv-load` loads `.env` automatically - no separate tooling needed
 - `export PATH` to include `$(go env GOPATH)/bin` so Go-installed tools are always available
 - Prefer `just` over `make` for Go projects: no `.PHONY`, better variable handling, cross-platform, readable syntax
 

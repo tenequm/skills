@@ -2,10 +2,10 @@
 name: go-dev
 description: Opinionated Go setup with golangci-lint v2, gofumpt, gotestsum, golang-migrate, and just. Use when starting a Go project, configuring lint, format, test, coverage or CI, writing a Justfile, wiring migrations, or leaving a Makefile workflow.
 metadata:
-  version: "0.5.0"
+  version: "0.6.0"
   categories: "development"
   topics: "go, golangci-lint, gofumpt, testing, just"
-  upstream: "go@1.27.1, golangci-lint@v2.14.0, gofumpt@v0.12.0, gotestsum@v1.13.0, golang-migrate@v4.20.1, just@1.58.0, lefthook@v2.1.15"
+  upstream: "go@1.27.1, golangci-lint@v2.14.0, gofumpt@v0.12.0, gotestsum@v1.13.0, golang-migrate@v4.20.1, just@1.58.0, lefthook@v2.1.17"
   openclaw:
     homepage: https://github.com/tenequm/skills/tree/main/skills/go-dev
     emoji: "🐹"
@@ -76,7 +76,7 @@ go install -tags 'postgres' github.com/golang-migrate/migrate/v4/cmd/migrate@v4.
 Two Go-command behaviours worth knowing before the first commit:
 
 - `go mod init` under a 1.N toolchain writes `go 1.(N-1).0`, not `1.N` - "Running `go mod init` using a toolchain of version `1.N.X` will create a `go.mod` file specifying the Go version `go 1.(N-1).0`." Bump the directive deliberately if you want 1.N language features.
-- Pin the toolchain for reproducibility with a `toolchain go1.27.1` line in `go.mod` (or `GOTOOLCHAIN=go1.27.1` in CI). Pin the current patch, not the `.0`: under the default `GOTOOLCHAIN=auto` this line selects the `go` that `govulncheck` scans stdlib advisories against, so a stale patch red-lights CI on its own - see Footguns below.
+- Set a `toolchain go1.27.1` line in `go.mod`, but know it is a floor, not a pin: under the default `GOTOOLCHAIN=auto` the `go` command switches only "if ... `<tname>` is newer than the default Go toolchain", so a newer local `go` wins. For an exact toolchain set `GOTOOLCHAIN=go1.27.1` (CI or `go env -w`); `GODEBUG=toolchaintrace=1 go version` shows which one was picked. Keep the line at the current patch, not the `.0`: it selects the `go` that `govulncheck` scans stdlib advisories against on any machine whose own `go` is older, so a stale patch red-lights CI on its own - see Footguns below.
 
 ## .golangci.yml
 
@@ -85,6 +85,8 @@ version: "2"
 
 run:
   timeout: 5m
+  build-tags:
+    - integration   # otherwise files behind the Justfile's integration tag are never linted
 
 linters:
   default: standard
@@ -151,7 +153,6 @@ linters:
     rules:
       - path: _test\.go
         linters:
-          - gocyclo
           - errcheck
           - dupl
           - gosec
@@ -190,7 +191,7 @@ output:
 
 ```just
 set shell := ["bash", "-euo", "pipefail", "-c"]
-set dotenv-load := true
+set dotenv-load
 
 binary := "myapp"
 
@@ -326,7 +327,7 @@ clean:
 Lefthook is preferred over pre-commit for Go projects - it is a single Go binary, runs hooks in parallel, and needs no Python.
 
 ```bash
-go install github.com/evilmartians/lefthook/v2@v2.1.15   # needs Go 1.26+
+go install github.com/evilmartians/lefthook/v2@v2.1.17   # needs Go 1.26+
 lefthook install
 ```
 
@@ -370,7 +371,9 @@ Four more worth wiring:
 - In a monorepo, give each job a `root:` pointing at its module directory; without it `go mod tidy` and `go tool` run against the repo root and fail.
 - `skip: [merge, rebase]` on the `mod-tidy` and lint jobs keeps them out of commits made while a merge or rebase is in progress, so resolving conflicts does not also restage a tidy rewrite or `--fix` edits.
 
-The `pre-push` race suite repeats what CI already runs. Once it takes minutes, drop it or scope it to changed packages - otherwise developers learn to push with `LEFTHOOK=0`.
+The `pre-push` race suite repeats what CI already runs. Once it takes minutes, drop it or scope it to changed packages - otherwise developers learn to push with `LEFTHOOK=0`. Tests run from a hook also inherit git's hook environment (`GIT_DIR`, `GIT_INDEX_FILE`, `GIT_WORK_TREE`), so a test helper that runs `git init` or `git commit` in `t.TempDir()` acts on the real repository - clear those variables in `cmd.Env`.
+
+A conflict-free `git merge` never runs `pre-commit`: git invokes `pre-merge-commit` instead, and runs `pre-commit` only when you finish a conflicted merge with `git commit`. Mirror the checks under a `pre-merge-commit:` key, or merges land unlinted.
 
 Hook commands resolve tools from the caller's PATH, so a missing binary fails the commit with a bare `exit 127`. Running them as `go tool <name>` (tool directive) makes the hook as reproducible as the build.
 
@@ -423,12 +426,14 @@ just tidy         # go mod tidy + verify
 
 `go fix` is the toolchain-native complement to the `modernize` linter: Go 1.26 rebuilt it as a codebase modernizer - "The venerable `go fix` command has been completely revamped and is now the home of Go's *modernizers*. It provides a dependable, push-button way to update Go code bases to the latest idioms and core library APIs." Run `go fix ./...` after a toolchain bump, before the linter has to complain. Go 1.27 added four more modernizers - "The go fix command contains several new modernizers (atomictypes, embedlit, slicesbackward, and unsafefuncs)" - and removed `fmtappendf`, so a 1.27 bump is a good moment to run it. It also renamed one: "The existing `waitgroup` analyzer was renamed to `waitgroupgo`", which matters if you disable it by name. For your own API migrations, annotate a deprecated function with a `//go:fix inline` directive and `go fix` (and golangci-lint's `govet` `inline` analyzer) rewrites its callers.
 
-Four other Go 1.27 changes touch this stack directly:
+Other Go 1.27 changes that touch this stack directly:
 
 - **Generic methods.** "Go 1.27 now supports generic methods: a method declaration may declare its own type parameters."
 - **`encoding/json/v2`.** "The encoding/json package is now backed by the v2 implementation" - "Marshaling and unmarshaling behavior is preserved, but the exact text of error messages may differ", so tests that assert on JSON error strings break. The escape hatch is `GOEXPERIMENT=nojsonv2` at build time.
 - **`go test -json` gained an `OutputType` field**, annotating `"Action":"output"` lines. gotestsum v1.13.0 does not use it yet ([gotestsum#571](https://github.com/gotestyourself/gotestsum/issues/571)).
 - **`go mod tidy` reshapes `go.mod`** to "at most two require blocks". The first tidy after the bump rewrites the file, and the lefthook `mod-tidy` job stages that rewrite into whatever you commit next.
+- **Removed GODEBUG settings fail the build.** The `go` command now recognizes removed settings (`asynctimerchan`, `gotypesalias`, `tls10server`, `tlsrsakex`, `tls3des`, `tlsunsafeekm`, `x509keypairleaf`) in `go.mod` `godebug` lines and `//go:debug` comments - "If they are set to an old value, the go command will fail." Delete them before bumping.
+- **gofmt alignment changed.** Go 1.27 warns that "running gofmt from Go 1.27 on previously formatted code may produce minor whitespace changes", and gofumpt v0.12.0 inherits it - expect a one-time formatting diff alongside the toolchain bump.
 
 ## Footguns
 
@@ -446,7 +451,7 @@ Seven failure modes that cost real debugging time, none of which produce an obvi
 
 **A pinned linter older than your Go toolchain fails outright.** This is the same trap as the version floor above, and it usually surfaces first as a config-schema rejection: a config authored against a newer golangci-lint hits `additional properties ... not allowed` under the pinned CI version. Bump the CI pin and the local install together.
 
-**`govulncheck` fails on stdlib advisories, not just your code.** It scans against "the Go version specified by the `go` command found on the PATH". Locally, `GOTOOLCHAIN=auto` makes that the `toolchain` line in `go.mod`. In CI, setup-go exports `GOTOOLCHAIN=local`, so it is whatever `go-version` installed unless you use `go-version-file: go.mod`. Either way, a lagging toolchain red-lights CI on commits that touch zero Go code - and a failed test-and-lint job typically skips the release job downstream. When `govulncheck` reports vulnerabilities "in the Go standard library" all marked fixed in a patch you don't have, the fix is bumping the toolchain, not editing code.
+**`govulncheck` fails on stdlib advisories, not just your code.** It scans against "the Go version specified by the `go` command found on the PATH". Locally, under `GOTOOLCHAIN=auto`, that is the newer of your installed `go` and the `toolchain` line in `go.mod`. In CI, setup-go exports `GOTOOLCHAIN=local`, so it is whatever `go-version` installed unless you use `go-version-file: go.mod`. Either way, a lagging toolchain red-lights CI on commits that touch zero Go code - and a failed test-and-lint job typically skips the release job downstream. When `govulncheck` reports vulnerabilities "in the Go standard library" all marked fixed in a patch you don't have, the fix is bumping the toolchain, not editing code.
 
 ## CI/CD Pipeline (GitHub Actions)
 
@@ -540,7 +545,7 @@ golangci-lint run --fix ./...
 
 For incremental adoption on large codebases, use `only-new-issues: true` in the GitHub Action to only lint changed code. Outside the Action, `--new-from-merge-base=main` and `--new-from-rev=<rev>` do the same locally - see the [golangci-lint Reference](references/golangci-lint-reference.md) for the full set.
 
-Expect new findings after a toolchain bump: since Go 1.27, "`go test` now invokes the `stdversion` vet check by default. This reports the use of standard library symbols that are too new for the Go version in force in the referring file". Adjust the `go` directive or the call site rather than suppressing it. A linter bump does the same: on v2.14.0, `revive: enable-all-rules: true` switches on three new rules (`marshal-receiver`, `multiline-if-init`, `use-slices-concat`) and gosec re-enables G407, so budget for new findings on existing code.
+Expect new findings after a toolchain bump: since Go 1.27, "`go test` now invokes the `stdversion` vet check by default. This reports the use of standard library symbols that are too new for the Go version in force in the referring file". Adjust the `go` directive or the call site rather than suppressing it. A linter bump does the same: on v2.14.0, `revive: enable-all-rules: true` switches on three new rules (`marshal-receiver`, `multiline-if-init`, `use-slices-concat`) and gosec re-enables G407, so budget for new findings on existing code. Go 1.27's vet adds a second `go test` failure: "The printf analyzer now reports calls such as `fmt.Errorf("...: %w", p)` in which the `%w` operand `p` has type `*E`, where the type `E` itself implements `error`" - wrap the value, or make `*E` the error type.
 
 ## Adjacent Tools
 
