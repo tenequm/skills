@@ -1,22 +1,26 @@
 # Vite 8
 
-Build tooling and dev server. Vite 8 (stable, latest `8.1.2`) ships **Rolldown** - a Rust-based bundler from the Vite team - as its single default bundler, replacing both esbuild and Rollup. It is ESM-only and requires Node.js 20.19+ / 22.12+.
+Build tooling and dev server. Vite 8 (stable, latest `8.3.3`) ships **Rolldown** - a Rust-based bundler from the Vite team - as its single default bundler, replacing both esbuild and Rollup. It is ESM-only and requires Node.js 20.19+ / 22.12+ (the rest of this stack - Vitest 5, `@rolldown/plugin-babel` - needs 22.12+).
 
 ## Vite 8 essentials
 
 - **Rolldown is the default**, no opt-in. "Vite 8 ships with Rolldown as its single, unified, Rust-based bundler." Build times drop dramatically vs the old esbuild+Rollup split.
-- **ESM-only config.** `vite.config.ts` must use `import`/`export`; `require()` is not supported in config files.
-- **Default browser target** is `'baseline-widely-available'`, which in Vite 8 resolves to `['chrome111', 'edge111', 'firefox114', 'safari16.4']` (bumped from Vite 7's 107/107/104/16). Override with `build.target: 'es2022'` or an explicit list.
+- **ESM-only config.** `vite.config.ts` must use `import`/`export`; `require()` is not supported in config files. Set `"type": "module"` in `package.json`: since 8.2 a `.ts` config loaded as CommonJS warns that it uses features unsupported by `configLoader: 'native'`, which "is planned to become the default in a future major version" (native TS config loading needs Node 22.18+).
+- **Default browser target** is `'baseline-widely-available'`, which in Vite 8 resolves to `['chrome111', 'edge111', 'firefox114', 'safari16.4', 'ios16.4']` (bumped from Vite 7's 107/107/104/16). Override with `build.target: 'es2022'` or an explicit list.
 - **Default minifiers changed:** JavaScript is minified by **Oxc** (`build.minify` default `'oxc'`), CSS by **Lightning CSS** (`build.cssMinify` default `'lightningcss'`). `build.minify: 'esbuild'` still works but is deprecated and requires installing `esbuild` yourself.
 - **Install grew ~15 MB** vs Vite 7 (Lightning CSS + the Rolldown binary are now regular dependencies).
 
-## New in Vite 8.1
+## New in Vite 8.1 - 8.3
 
 - **Wasm ESM integration (stable)** - import a `.wasm` file and call its exports directly: `import { add } from './add.wasm'`. No plugin needed.
 - **Experimental Bundled Dev Mode** (`experimental.bundledDev: true` or `--experimental-bundle`) - serves bundled files in dev instead of the classic unbundled server. Aimed at huge apps that suffer from module count (~15x faster startup in a 10k-component test); may not work with all third-party plugins yet.
 - **Experimental Chunk Import Map** (`build.chunkImportMap`) - uses an import map so a changed chunk's hash doesn't cascade new hashes to every importer, improving long-term cache hit rates. Does not compose with `experimental.renderBuiltUrl`.
 - **Lightning CSS as the future default** - Vite is working toward making Lightning CSS the default CSS transformer in the next major. Opt in early with `css: { transformer: 'lightningcss' }`.
 - `import.meta.glob` gained a `caseSensitive` option; `html.additionalAssetSources` lets asset discovery see custom HTML elements/attributes.
+- **Top-level `input`** (8.2) - one place to declare entry points; it becomes the default for `build.rolldownOptions.input`, `build.lib.entry`, `build.ssr`, and `optimizeDeps.entries`.
+- **Top-level `tsconfig`** (8.3) - forces one tsconfig for all files. Discouraged: it "overrides Vite's per-file tsconfig discovery."
+- **`devtools`** option (8.3) - Vite DevTools now covers the dev server too: install `@vitejs/devtools-vite` (dev) and/or `@vitejs/devtools-rolldown` (build analysis); it runs for both `serve` and `build` unless limited with `apply`.
+- Dynamic `import()` accepts `#` subpath imports (from `package.json` `imports`).
 
 ## Configuration
 
@@ -77,7 +81,7 @@ Or **new in Vite 8**, let Vite read tsconfig `paths` directly so you don't mirro
 resolve: { tsconfigPaths: true }
 ```
 
-Caveat: the native resolver does **not** follow tsconfig project references. In a solution-style setup (`tsconfig.json` -> `tsconfig.app.json` via `references`) where the `paths` live in the referenced file, `tsconfigPaths: true` silently fails to resolve `@/*` - fall back to an explicit `resolve.alias` there.
+It is no longer experimental (8.2) and does follow project references - "A config referenced by that config's `references` field is used when it matches the file" - so solution-style setups (`tsconfig.json` -> `tsconfig.app.json`) work. The real limits: `paths` only apply to a file matched by a tsconfig's `files`/`include` (non-TS files such as CSS must be included explicitly), and they do not apply inside `.less` files. Footgun: Rolldown resolves tsconfig `paths` on its own at build time, so with `tsconfigPaths` off and no `resolve.alias`, `vite build` succeeds while `vite dev` fails with `Failed to resolve import "@/..."` - set one or the other deliberately.
 
 ### Environment variables
 
@@ -125,7 +129,7 @@ Setting it to `true` disables the check entirely and is a DNS-rebinding risk - s
 
 ### forwardConsole (new in Vite 8)
 
-`server.forwardConsole` forwards browser runtime console output to the Vite server terminal. It defaults to auto - **on when an AI coding agent is detected**, off otherwise - which is handy when an agent is driving the build and can't see the browser console.
+`server.forwardConsole` forwards browser runtime errors to the Vite server terminal - `true` forwards unhandled errors plus `console.error`/`console.warn` (not every log). It defaults to auto - **on when an AI coding agent is detected**, off otherwise - which is handy when an agent is driving the build and can't see the browser console.
 
 ### HMR troubleshooting
 
@@ -135,6 +139,7 @@ Setting it to `true` disables the check entirely and is a DNS-rebinding risk - s
 | HMR not connecting behind a proxy | Set `server.ws.clientPort` (e.g. `443`) |
 | CSS not updating | Confirm `@tailwindcss/vite` is in plugins and `@import "tailwindcss";` is in your CSS entry |
 | Stale chunk after a build | Hard-refresh (`Cmd/Ctrl+Shift+R`) to bust the cached bundle |
+| `Tsconfig not found` from `builtin:vite-transform` in Docker/CI only | Vite's transform reads the full tsconfig `extends` chain - copy every extended tsconfig (e.g. the repo-root one) into the image |
 
 The WebSocket knobs (`protocol`/`host`/`port`/`path`/`clientPort`/`timeout`/`server`) moved from `server.hmr.*` to `server.ws.*`. The old `server.hmr.*` keys are deprecated but auto-synced, so existing configs keep working; write new ones under `server.ws`.
 
@@ -152,14 +157,14 @@ server: { warmup: { clientFiles: ['./src/routes/__root.tsx', './src/components/*
 
 ### Code splitting (Rolldown)
 
-The object form of `output.manualChunks` is **removed** in Vite 8 and the function form is deprecated - both will break or warn. Use Rolldown's `codeSplitting` via `build.rolldownOptions` (note: `build.rollupOptions` is now a deprecated alias of `build.rolldownOptions`):
+The object form of `output.manualChunks` is **removed** in Vite 8 and the function form is deprecated - both will break or warn. Use Rolldown's `codeSplitting` via `build.rolldownOptions` (note: `build.rollupOptions` is now a deprecated alias of `build.rolldownOptions`, and the earlier `advancedChunks` name is deprecated - same shape, Vite warns `advancedChunks option is deprecated, please use codeSplitting instead`):
 
 ```ts
 build: {
   rolldownOptions: {
     output: {
-      // Rolldown's advanced chunking; see https://rolldown.rs/in-depth/manual-code-splitting
-      advancedChunks: {
+      // see https://rolldown.rs/in-depth/manual-code-splitting
+      codeSplitting: {
         groups: [
           { name: 'react-vendor', test: /node_modules\/(react|react-dom)\// },
           { name: 'tanstack', test: /node_modules\/@tanstack\// },
@@ -192,7 +197,22 @@ import { visualizer } from 'rollup-plugin-visualizer'
 mode === 'analyze' && visualizer({ filename: 'stats.html', open: true, gzipSize: true })
 ```
 
-Vite 8 also ships **Vite DevTools for Rolldown** (`@vitejs/devtools-rolldown`) for analyzing production builds. Run analysis with `pnpm vite build --mode analyze`.
+Vite DevTools (`devtools` option, `@vitejs/devtools-rolldown`) analyzes production builds without a plugin. Run the visualizer variant with `pnpm vite build --mode analyze`.
+
+### Noisy `INVALID_ANNOTATION` warnings
+
+Rolldown warns when a dependency ships a misplaced `/*#__PURE__*/` hint. It is the dependency's bug, not yours - filter that one code from `node_modules` rather than silencing logs wholesale, so real warnings still surface:
+
+```ts
+build: {
+  rolldownOptions: {
+    onLog(level, log, defaultHandler) {
+      if (log.code === 'INVALID_ANNOTATION' && log.id?.includes('/node_modules/')) return
+      defaultHandler(level, log)
+    },
+  },
+}
+```
 
 ### Tree shaking
 

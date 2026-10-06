@@ -1,56 +1,61 @@
-# TypeScript 6.0
+# TypeScript 7.0 (6.0-compatible)
 
-Strict TypeScript for React. **TS 6.0** (latest `6.0.3`) is a deliberate bridge release: "the last release based on the current JavaScript codebase," pre-staging the breaking changes that the Go-native rewrite (tsgo / TS 7.0) will enforce. Target 6.0 today - it is stable and shippable, and most of its new defaults bake in settings you used to set by hand.
+Strict TypeScript for React. **TS 7.0** (latest `7.0.2`, GA 2026-07-08) is the Go-native port - "a 10x faster native port of TypeScript" - and is what a plain `npm i -D typescript` installs today. Its type checker is a methodical port of 6.0, so the 6.0 defaults and deprecations below are the 7.0 rules too; 7.0 turns the 6.0 deprecations into hard errors.
 
-## What changed in 6.0 (and why your tsconfig shrinks)
+## What changed in 6.0/7.0 (and why your tsconfig shrinks)
 
 Several flags the old hand-tuned React tsconfig set manually are now **defaults**, so you delete them:
 
 - `strict` is **on by default**.
 - `noUncheckedSideEffectImports` is **on by default**.
 
-Two new defaults will **break builds** if ignored:
+New defaults that **break builds** if ignored:
 
-- `types` now defaults to `[]`. Ambient `@types/*` no longer leak in globally - add what you need explicitly (`"types": ["node"]`).
-- `module` defaults to `esnext` and `target` to a floating current-year ES version (currently `es2025`); they no longer default to `nodenext`. Pick deliberately per project type (below).
-- `rootDir` now defaults to the tsconfig directory rather than being inferred from inputs - set it explicitly for non-trivial layouts.
+- `types` defaults to `[]`. Ambient `@types/*` no longer leak in globally - list what you need (`"types": ["vite/client", "node"]`). `["*"]` restores the old include-everything behavior.
+- Side-effect imports are checked, so `import "./styles.css"` errors (TS2882) unless something declares the module - in a Vite app that is `vite/client` in `types`.
+- `module` defaults to `esnext` and `target` to a floating current-year ES version; they no longer default to `nodenext`. Pick deliberately per project type (below).
+- `rootDir` defaults to the tsconfig directory rather than being inferred from inputs - set it explicitly for non-trivial layouts.
+- 7.0 only: `libReplacement` is `false` by default and `stableTypeOrdering` is always on.
 
-Deprecations and removals to migrate off:
+Deprecated in 6.0, **errors in 7.0**:
 
-- `baseUrl` is **deprecated** - use prefixed `paths` (`"@/*": ["./src/*"]`) only.
-- `moduleResolution: classic` is **removed**; `node`/`node10` is deprecated. Use `bundler` or `nodenext`.
-- `esModuleInterop` and `allowSyntheticDefaultImports` can no longer be set to `false` (safe interop is always on).
-- `target: es5` is deprecated (lowest target is now ES2015); `downlevelIteration` errors.
-- `--module amd|umd|systemjs|none` and `--outFile` are removed.
-- Import-assertion `assert {}` syntax errors - use import-attributes `with {}`.
-- Legacy `module Foo {}` namespace syntax is a hard error - use `namespace`.
+- `baseUrl` - use prefixed `paths` (`"@/*": ["./src/*"]`) only.
+- `moduleResolution: classic` / `node` / `node10` - use `bundler` or `nodenext`.
+- `esModuleInterop`, `allowSyntheticDefaultImports`, `alwaysStrict` set to `false`.
+- `target: es5` (lowest is ES2015) and `downlevelIteration`.
+- `--module amd|umd|systemjs|none` and `--outFile`.
+- Import-assertion `assert {}` syntax - use import-attributes `with {}`.
+- Legacy `module Foo {}` namespace syntax - use `namespace`.
 
-You can silence 6.0 deprecation errors temporarily with `"ignoreDeprecations": "6.0"`, but TS 7.0 removes the flags outright - treat it as a migration window, not a fix.
+`"ignoreDeprecations": "6.0"` silences these on 6.0 only - 7.0 removes the flags outright, so treat it as a migration window, not a fix.
 
 ## Strict tsconfig for a Vite React app
 
 ```jsonc
 {
   "compilerOptions": {
-    // strict, noUncheckedSideEffectImports: ON by default in 6.0
+    // strict, noUncheckedSideEffectImports: ON by default since 6.0
     "target": "es2023",
     "module": "preserve",
     "moduleResolution": "bundler",
     "moduleDetection": "force",
     "jsx": "react-jsx",
     "verbatimModuleSyntax": true,
-    "isolatedModules": true,
     "erasableSyntaxOnly": true,
     "noUncheckedIndexedAccess": true,
     "exactOptionalPropertyTypes": true,
     "skipLibCheck": true,
-    "types": [],
+    "noEmit": true,
+    "types": ["vite/client"],
     "paths": { "@/*": ["./src/*"] }
-  }
+  },
+  "include": ["src"]
 }
 ```
 
 **`bundler` vs `nodenext`.** For code a bundler consumes (a Vite app), `module: preserve` + `moduleResolution: bundler` is correct - it lets you write extensionless imports and leaves module syntax for Vite/Rolldown. For code Node runs directly (scripts, a server entry), use `module: nodenext` (which sets resolution to match) and write real `.js` extensions on relative imports.
+
+**`exactOptionalPropertyTypes`** distinguishes "absent" from "present but `undefined`": an optional prop that may be passed `undefined` (e.g. forwarding an optional field) must be declared `prop?: T | undefined`.
 
 **`erasableSyntaxOnly`** (since 5.8) forbids TS constructs that emit runtime code (enums, parameter properties, namespaces with values), so your `.ts` files are pure type-erasable. This is what makes **Node's native type stripping** - now stable (Node 24.12 / 25.2) - work: Node can run `.ts` directly when paired with `erasableSyntaxOnly` + `verbatimModuleSyntax`. Keep it on for portability.
 
@@ -145,16 +150,37 @@ if (!result.success) {
 }
 ```
 
-## tsgo / TypeScript 7
+## TypeScript 7 in practice
 
-The native (Go) compiler - "about 10 times faster than TypeScript 6.0" - is now at **Release Candidate** (`npm i -D typescript@rc`, `tsc` drop-in), with the team planning to "release TypeScript 7.0 within the next month." The type-checking logic is a methodical port of 6.0 and is "structurally identical," so results match; the remaining gap is a stable programmatic API (deferred to 7.1). Try it on real CI/editor workflows today.
+**No JS API in 7.0.** The `typescript@7` package exposes only `version` plus `unstable/*` subpaths - "it does not ship with an API. We expect TypeScript 7.1 to ship with a new (and different) API." Tools that `import ts from "typescript"` break on 7.0. In this stack, Biome, `@vitejs/plugin-react`, and the shadcn CLI (bundles its own TS via ts-morph) are unaffected; **typescript-eslint** (peer `typescript <6.1.0`), and Volar-based checkers for **Vue, Astro, Svelte, and MDX** still need 6.0.
 
-- **Side-by-side with 6.0:** 7.0 ships its own `tsc`; the compat package `@typescript/typescript6` provides a `tsc6` binary and re-exports the 6.0 API. Because tools like typescript-eslint import `typescript` directly, coexist via npm aliases: `"typescript": "npm:@typescript/typescript6@^6.0.0"` plus `"typescript-7": "npm:typescript@rc"`. Nightlies still publish as `@typescript/native-preview` (binary `tsgo`).
-- **Parallelism controls:** `--checkers` (default 4 type-check workers), `--builders` (parallel project-reference builds), and `--singleThreaded` (for debugging or resource-limited CI). Watch mode was rebuilt on a Go port of Parcel's file-watcher.
-- **7.0 hardens 6.0's deprecations into errors:** `target: es5`, `downlevelIteration`, `moduleResolution: node/node10/classic`, `module: amd/umd/systemjs/none`, and `baseUrl` are no longer supported; `esModuleInterop`/`allowSyntheticDefaultImports`/`alwaysStrict` cannot be `false`. Adopting 6.0's defaults now makes the 7.0 jump a no-op.
+**Side-by-side with 6.0** - the official alias pair keeps the 6.0 API for tools while `tsc` is 7.0:
+
+```json
+{
+  "devDependencies": {
+    "@typescript/native": "npm:typescript@^7.0.2",
+    "typescript": "npm:@typescript/typescript6@^6.0.2"
+  }
+}
+```
+
+`tsc` then runs 7.0 and `tsc6` runs 6.0; `require("typescript")` resolves to the 6.0 API for typescript-eslint and friends. If a framework checker (`astro check`, `vue-tsc`) needs 6.0, keep it as the library and run 7.0 `tsc --noEmit` as a separate step for plain `.ts`.
+
+**Migrating:** "Practically any TypeScript code that compiles cleanly with TypeScript 6.0 (with the `stableTypeOrdering` flag on, and without any `ignoreDeprecations` flag set) should compile identically in TypeScript 7.0." Get 6.0 clean under those two conditions first, then switch.
+
+**7.0-only behavior changes:**
+
+- `tsc file.ts` in a directory with a `tsconfig.json` errors (TS5112) unless you pass `--ignoreConfig`.
+- `/// <reference no-default-lib />` is no longer respected under `skipDefaultLibCheck`.
+- Template-literal inference treats Unicode code points as single characters.
+
+**Parallelism:** `--checkers` (default 4 type-check workers), `--builders` (parallel project-reference builds), `--singleThreaded`. On small CI runners lower `--checkers`, and fix the number across environments for reproducible results.
+
+**Nightlies** resume under the `typescript` package's `next` tag (`typescript@next`); `@typescript/native-preview` is frozen. TS 7.1 (new API, `es2026` target) is in beta.
 
 ## Resources
 
+- TS 7.0 announcement: https://devblogs.microsoft.com/typescript/announcing-typescript-7-0/
 - TS 6.0 announcement: https://devblogs.microsoft.com/typescript/announcing-typescript-6-0/
-- TS 7.0 RC: https://devblogs.microsoft.com/typescript/announcing-typescript-7-0-rc/ - tsgo / TS 7: https://github.com/microsoft/typescript-go
-- Release notes: https://www.typescriptlang.org/docs/handbook/release-notes/
+- Source and issues: https://github.com/microsoft/TypeScript - Release notes: https://www.typescriptlang.org/docs/handbook/release-notes/

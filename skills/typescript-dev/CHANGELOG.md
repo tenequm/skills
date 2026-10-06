@@ -7,6 +7,33 @@ and this skill adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.h
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-10-06
+
+### Changed
+- **Breaking:** TypeScript target moved to 7.0 (GA); typescript.md rewritten around TS 7 with a 6.0 compat path (`@typescript/typescript6` alias pair for typescript-eslint and other API consumers; Vue/Astro/Svelte/MDX stay on 6.0).
+- **Breaking:** Vitest target moved to 5.0 (requires Vite >= 6.4, Node >= 22.12); vitest.md covers the v4->v5 migration (clearMocks default, projects inherit by default, `.vitest/` output dir, unawaited async assertions fail, strict browser locators).
+- React 19.3: `<ViewTransition>`/`addTransitionType` now stable, Fragment refs, `use(browser())`.
+- shadcn CLI 4.21: Base UI is the default base, React Aria added, Sera style, `cn` package replaces clsx+tailwind-merge in `lib/utils`; `--pointer` description corrected.
+- Hono 4.13: `hono/<adapter>` imports deprecated in favor of `@hono/<runtime>` packages; v5 in development; Node >= 20 with `@hono/node-server@2`; zod-openapi 415 on mismatched Content-Type.
+- Vite 8.2/8.3: `codeSplitting` replaces deprecated `advancedChunks`; `resolve.tsconfigPaths` caveat corrected (it does follow references); `devtools` option; ESM config `"type": "module"` warning.
+- Version targets refreshed across SKILL.md and references; effective Node floor for the stack is 22.12.
+
+### Added
+- plugin-react 6.1 experimental native React Compiler (`react({ compiler: true })`).
+- Biome: Tailwind domain rules, `useReactCompiler`, ancestor-matching `!**/` exclusion gotcha.
+- Vitest: mocking basics, `vitest doctor`/`fsModuleCache`, test-speed guidance.
+- Hono: QUERY method, Method Not Allowed and Mount middleware, `hono/dev`, Vite `server.cors: false` seam.
+
+### Fixed
+- Canonical tsconfig: `"types": ["vite/client"]` (`types: []` broke CSS side-effect imports and `import.meta.env`).
+- Biome: domains never enable nursery rules - `noFloatingPromises` and friends must be enabled individually.
+- Tailwind: invalid `mask-linear-to-b` example; Vite `build.target` list missing `ios16.4`; stray tool-call markup at the end of hono.md.
+
+### Security
+- Vitest 4.1.9 affected by GHSA-p63j-vcc4-9vmv (critical) and GHSA-82fw-gwwq-j7x9; React 19.2.0-19.2.7 RSC by GHSA-wx67-qw84-cm4g; Hono < 4.13.11 by 9 advisories, `@hono/node-server` < 2.1.3 by GHSA-rmxm-3fg6-px4f.
+
+Verified against: vite@8.3.3, @vitejs/plugin-react@6.1.2, react@19.3.0, typescript@7.0.2, tailwindcss@4.3.3, @biomejs/biome@2.5.15, vitest@5.0.3, hono@4.13.13, shadcn@4.21.3, cn@0.4.0
+
 ## [0.3.5] - 2026-09-09
 
 ### Changed

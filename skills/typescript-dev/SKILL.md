@@ -2,44 +2,46 @@
 name: typescript-dev
 description: Full-stack TypeScript with Vite 8, React 19, Tailwind v4, shadcn/ui, Biome, Vitest, and Hono 4. Use when setting up or working in a TypeScript project - components, styling, build and HMR, tests, lint/CI, or a Hono API with type-safe RPC.
 metadata:
-  version: "0.3.5"
+  version: "0.4.0"
   categories: "development"
   topics: "typescript, vite, react, tailwind, hono"
   openclaw:
     homepage: https://github.com/tenequm/skills/tree/main/skills/typescript-dev
     emoji: "🟦"
-  upstream: "vite@8.1.2, @vitejs/plugin-react@6.0.3, react@19.2.7, typescript@6.0.3, tailwindcss@4.3.2, @biomejs/biome@2.5.2, vitest@4.1.9, babel-plugin-react-compiler@1.0.0, class-variance-authority@0.7.1, hono@4.12.27"
+  upstream: "vite@8.3.3, @vitejs/plugin-react@6.1.2, react@19.3.0, typescript@7.0.2, tailwindcss@4.3.3, @biomejs/biome@2.5.15, vitest@5.0.3, babel-plugin-react-compiler@1.0.0, class-variance-authority@0.7.1, hono@4.13.13, shadcn@4.21.3, cn@0.4.0"
 ---
 
 # TypeScript Frontend Development
 
-One coherent stack for building type-safe TypeScript apps: **Vite 8** (build + dev server, Rolldown-powered), **React 19.2** with the React Compiler, **TypeScript 6.0** (strict), **Tailwind CSS v4.3 + shadcn/ui** for styling, **Biome 2.4** for linting and formatting, **Vitest 4** for testing, and **Hono 4** for the backend/edge API. The pieces are designed to fit together - this skill covers how they wire up and the sharp edges that span more than one of them. Hono's RPC client (`hc`) shares server types directly with the React frontend, so the front and back end stay type-safe end to end without codegen.
+One coherent stack for building type-safe TypeScript apps: **Vite 8** (build + dev server, Rolldown-powered), **React 19.3** with the React Compiler, **TypeScript 7.0** (strict, Go-native), **Tailwind CSS v4.3 + shadcn/ui** for styling, **Biome 2.5** for linting and formatting, **Vitest 5** for testing, and **Hono 4** for the backend/edge API. The pieces are designed to fit together - this skill covers how they wire up and the sharp edges that span more than one of them. Hono's RPC client (`hc`) shares server types directly with the React frontend, so the front and back end stay type-safe end to end without codegen.
 
 The body below is the cross-cutting layer: the rules that bite when these tools meet, plus one working end-to-end setup. Each tool also has a deep-dive reference - read the one you need:
 
 - **[references/vite.md](references/vite.md)** - Vite 8 config, dev server, proxy, HMR, Rolldown, code splitting, build optimization, deployment.
-- **[references/react.md](references/react.md)** - React 19 patterns: Actions, `use()`, Activity, `useEffectEvent`, document metadata, and the React Compiler.
-- **[references/typescript.md](references/typescript.md)** - Strict TypeScript 6.0 config and patterns: tsconfig defaults, generics, utility types, `import defer`, tsgo.
+- **[references/react.md](references/react.md)** - React 19 patterns: Actions, `use()`, Activity, `<ViewTransition>`, Fragment refs, `useEffectEvent`, document metadata, and the React Compiler.
+- **[references/typescript.md](references/typescript.md)** - Strict TypeScript 7.0 config and patterns: tsconfig defaults, the 6.0 compat path for API-consuming tools, generics, `import defer`.
 - **[references/tailwind.md](references/tailwind.md)** - Tailwind CSS v4 CSS-first config, OKLCH theming, dark mode, v4.3 utilities.
-- **[references/shadcn.md](references/shadcn.md)** - shadcn/ui CLI, component authoring with CVA + `data-slot`, registries, Radix vs Base UI.
+- **[references/shadcn.md](references/shadcn.md)** - shadcn/ui CLI, component authoring with CVA + `data-slot`, the `cn` package, registries, Base UI / Radix / React Aria.
 - **[references/biome.md](references/biome.md)** - Biome config, `biome check`, domains, type-aware linting, GritQL, ESLint/Prettier migration.
-- **[references/vitest.md](references/vitest.md)** - Vitest config, Testing Library, jsdom/happy-dom, coverage, browser mode, projects.
+- **[references/vitest.md](references/vitest.md)** - Vitest 5 config, Testing Library, mocking, coverage, browser mode, projects, v4->v5 migration, test speed.
 - **[references/hono.md](references/hono.md)** - Hono 4 web framework: routing, context, middleware, validation (Zod), end-to-end type-safe RPC, OpenAPI, helpers, and multi-runtime deployment (Workers/Node/Bun/Deno).
 
 ## Version targets
 
 | Tool | Version | Note |
 |------|---------|------|
-| Vite | 8.1.2 | Rolldown is the single default bundler |
-| @vitejs/plugin-react | 6.0.3 | v6 removed the inline `babel` option |
-| React / react-dom | 19.2.7 | React Compiler is stable (1.0) |
+| Vite | 8.3.3 | Rolldown is the single default bundler |
+| @vitejs/plugin-react | 6.1.2 | v6 removed the inline `babel` option |
+| React / react-dom | 19.3.0 | React Compiler is stable (1.0) |
 | babel-plugin-react-compiler | 1.0.0 | pin with `--save-exact` |
-| TypeScript | 6.0.3 | last JS-based TS; TS 7.0 (tsgo) now RC |
-| Tailwind CSS | 4.3.2 | CSS-first config, no JS config file |
-| shadcn/ui CLI | 4.12.0 | `create` is an alias of `init` |
-| Biome | 2.5.2 | single binary for lint + format + imports |
-| Vitest | 4.1.9 | Vite-native test runner; reuses vite.config |
-| Hono | 4.12.27 | Web Standards backend/edge framework; no v5 |
+| TypeScript | 7.0.2 | Go-native, ~10x faster; ships no JS API (6.0 compat path in typescript.md) |
+| Tailwind CSS | 4.3.3 | CSS-first config, no JS config file |
+| shadcn/ui CLI | 4.21.3 | Base UI is the default base; `cn` is its own package |
+| Biome | 2.5.15 | single binary for lint + format + imports |
+| Vitest | 5.0.3 | Vite-native test runner; reuses vite.config |
+| Hono | 4.13.13 | Web Standards backend/edge framework; v5 in development |
+
+**Node.js 22.12+** is the effective floor for the stack: Vite alone accepts 20.19+, but Vitest 5 and `@rolldown/plugin-babel` both require 22.12+.
 
 ## Cross-cutting critical rules
 
@@ -70,6 +72,8 @@ plugins: [react(), babel({ presets: [reactCompilerPreset()] })]
 
 Install: `pnpm add -D @rolldown/plugin-babel @babel/core babel-plugin-react-compiler @types/babel__core`.
 
+plugin-react 6.1 also ships an **experimental** native (Rust) compiler path, `react({ compiler: true })`, that skips Babel entirely - see [react.md](references/react.md) for its install trap. The Babel wiring above remains the stable route.
+
 This also ripples into Biome: `useExhaustiveDependencies` can't tell the compiler is handling deps for you, so most compiler users turn it off (see [biome.md](references/biome.md)).
 
 ### Tailwind v4 is CSS-first - there is no `tailwind.config.js`
@@ -85,9 +89,11 @@ Tailwind v4 configures everything in CSS via `@theme`, `@utility`, `@plugin`, `@
 
 And never assemble class names from fragments (`bg-${color}-500`) - Tailwind's scanner only sees complete literal strings, so dynamic names silently produce no CSS. Use a lookup map of full class strings.
 
-### TypeScript 6.0 changed the defaults - lean on them, don't fight them
+### TypeScript 7.0: lean on the new defaults, and know it has no JS API
 
-TS 6.0 bakes in much of what used to be manual: `strict` and `noUncheckedSideEffectImports` are now **on by default**, so drop them from a fresh tsconfig. But two new defaults will break builds if you ignore them: `types` now defaults to `[]` (add `"types": ["node"]` if you use Node globals) and `module`/`target` shifted (`module` defaults to `esnext`, not `nodenext`). `baseUrl` is deprecated - use prefixed `paths` instead. See [typescript.md](references/typescript.md) for the full 6.0 tsconfig and migration notes.
+TS 6.0 and 7.0 bake in much of what used to be manual: `strict` and `noUncheckedSideEffectImports` are **on by default**, so drop them from a fresh tsconfig. Two defaults break a Vite app if ignored: `types` defaults to `[]`, and side-effect imports are now checked - so `import "./styles.css"` fails (TS2882) and `import.meta.env` is untyped (TS2339) until you add `"types": ["vite/client"]` (append `"node"` etc. as needed). `baseUrl` is deprecated - use prefixed `paths`.
+
+A plain `pnpm add -D typescript` now installs **7.0**, which ships the `tsc` binary but **no programmatic API** (it returns until 7.1). This stack is fine - Biome, plugin-react, and the shadcn CLI never import `typescript` - but typescript-eslint, framework checkers (Vue, Astro, Svelte, MDX), and anything else that does `import ts from "typescript"` need the official 6.0 alias pair. See [typescript.md](references/typescript.md).
 
 ### One Biome command, and `files.includes` is the only include key
 
@@ -101,7 +107,9 @@ works if **both sides run the same Hono version** and both `tsconfig.json` set `
 (a mismatch throws "Type instantiation is excessively deep"). Two more rules that bite at this
 seam: handlers must specify status codes (`c.json(data, 200)`) for the client to infer
 responses, and routes the client calls must not use `c.notFound()`. As the route count grows,
-compile the client type once (`hcWithType`) so the IDE stays fast. Full details in
+compile the client type once (`hcWithType`) so the IDE stays fast. Run `pnpm why hono` to catch a
+second copy pulled in by an adapter's peer range. If Hono handles CORS behind the Vite dev server,
+set `server.cors: false` in `vite.config.ts` so the two CORS layers don't conflict. Full details in
 [hono.md](references/hono.md).
 
 ## End-to-end setup
@@ -130,30 +138,31 @@ export default defineConfig({
 
 `import.meta.url` is the ESM-correct way to resolve paths - there is no `__dirname` in an ESM config, and Vite configs are ESM-only.
 
-### tsconfig.json (TypeScript 6.0)
+### tsconfig.json (TypeScript 7.0, also valid on 6.0)
 
 ```jsonc
 {
   "compilerOptions": {
-    // strict + noUncheckedSideEffectImports are ON by default in 6.0 - omitted on purpose
+    // strict + noUncheckedSideEffectImports are ON by default since 6.0 - omitted on purpose
     "target": "es2023",
     "module": "preserve",
     "moduleResolution": "bundler",
     "moduleDetection": "force",
     "jsx": "react-jsx",
     "verbatimModuleSyntax": true,
-    "isolatedModules": true,
     "noUncheckedIndexedAccess": true,
     "exactOptionalPropertyTypes": true,
     "erasableSyntaxOnly": true,
     "skipLibCheck": true,
-    "types": [],
+    "noEmit": true,
+    "types": ["vite/client"],
     "paths": { "@/*": ["./src/*"] }
-  }
+  },
+  "include": ["src"]
 }
 ```
 
-`module: preserve` + `moduleResolution: bundler` is the right pairing for a Vite-bundled app; use `nodenext` instead only for Node-executed code. `types: []` keeps ambient `@types/*` from leaking in globally - add `["node"]` (or others) explicitly when needed.
+`module: preserve` + `moduleResolution: bundler` is the right pairing for a Vite-bundled app; use `nodenext` instead only for Node-executed code. `"types": ["vite/client"]` is load-bearing: it declares CSS/asset modules and `import.meta.env`, without which the default-on side-effect-import check rejects `import "./styles.css"`. Other ambient types stay out until you list them (`"node"`, `"vitest/globals"`). `exactOptionalPropertyTypes` means an optional prop that may receive `undefined` must be declared `prop?: T | undefined`.
 
 ### biome.json
 
@@ -261,7 +270,8 @@ Note the `cn()` order: defaults first, consumer `className` last, so tailwind-me
 ## Resources
 
 - Vite: https://vite.dev/guide/ - Vite 8 blog: https://vite.dev/blog/announcing-vite8
-- React 19.2: https://react.dev/blog/2025/10/01/react-19-2 - Compiler: https://react.dev/learn/react-compiler
-- TypeScript 6.0: https://devblogs.microsoft.com/typescript/announcing-typescript-6-0/
+- React 19.3: https://react.dev/blog/2026/09/09/react-19-3 - Compiler: https://react.dev/learn/react-compiler
+- TypeScript 7.0: https://devblogs.microsoft.com/typescript/announcing-typescript-7-0/
+- Vitest 5: https://vitest.dev/blog/vitest-5 - Hono: https://hono.dev/docs/
 - Tailwind CSS: https://tailwindcss.com/docs - shadcn/ui: https://ui.shadcn.com/docs
 - Biome: https://biomejs.dev/
