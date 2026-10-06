@@ -130,7 +130,9 @@ Tokens MUST NOT be in URI query strings. Authorization MUST be included in every
 - Consider egress proxies (e.g., [Smokescreen](https://github.com/stripe/smokescreen))
 - Be aware of DNS TOCTOU attacks - pin resolution results between check and use
 
-### Session Hijacking
+### Session Hijacking (2025-era) / State Handle Hijacking (2026-07-28)
+
+On 2026-07-28 there are no sessions; the same threat moves to the server-minted handles that carry cross-call state. The security best practices say servers **SHOULD** bind handles server-side to the authenticated user, *"for example by keying stored state as `<user_id>:<handle>` where the user ID is derived from the verified token"*. Everything below about session IDs applies to handles unchanged.
 
 Two vectors:
 
@@ -151,6 +153,12 @@ Two vectors:
 |-----|----------|----------|-------|
 | [CVE-2026-25536](https://nvd.nist.gov/vuln/detail/cve-2026-25536) (GHSA-345p-7cg4-v4c7) | CVSS 7.1 | `@modelcontextprotocol/sdk` v1.26.0 | Cross-client response data leak when a single `McpServer`/`Server` and transport instance is reused across client connections (v1.10.0-v1.25.3 affected). **Production SDKs MUST be ≥ v1.26.0**. The canonical mitigation is per-request server+transport (the Stateless Pattern in SKILL.md). |
 | [CVE-2026-0621](https://github.com/modelcontextprotocol/typescript-sdk/pull/1365) | Medium | v1.25.2 / v2.0.0-alpha.1 | ReDoS in UriTemplate regex patterns. |
+| [GHSA-rvq5-wwqv-78pq](https://github.com/modelcontextprotocol/typescript-sdk/security/advisories/GHSA-rvq5-wwqv-78pq) | Moderate | sdk 1.32.0 / server 2.3.0 / express 2.0.2 - **opt-in** | Server bearer auth accepted tokens issued for another service (sdk 1.6.0-1.31.0, server 2.0.0-2.2.0). *"**Upgrading alone changes nothing.**"* Set `expectedResource` and populate `AuthInfo.resource` - see "v2 SDK Auth Helpers". |
+| [GHSA-22jm-h49p-29qw](https://github.com/modelcontextprotocol/typescript-sdk/security/advisories/GHSA-22jm-h49p-29qw) | High | sdk 1.32.0 (2.x not affected) | Experimental tasks not tied to the session that created them, when an HTTP server passes a `taskStore` (sdk 1.24.0-1.31.0). Tasks stay shared on servers without sessions. |
+| [GHSA-6qxp-vccf-f47h](https://github.com/modelcontextprotocol/typescript-sdk/security/advisories/GHSA-6qxp-vccf-f47h) | High | sdk 1.31.0 / client 2.2.0 | **Client-side**: the OAuth client could send credentials to an authorization server chosen by the MCP server. Bundled providers without `expectedIssuer` are now deprecated and warn. Servers built with the SDK are not affected. |
+| [GHSA-6prh-2h8m-c8cw](https://github.com/modelcontextprotocol/typescript-sdk/security/advisories/GHSA-6prh-2h8m-c8cw) | Moderate | sdk 1.32.0 / client 2.3.0 | **Client-side**: HTTP transports and OAuth requests followed cross-origin redirects; *"On a `307` or `308` it also received the request body, including OAuth token requests with their `refresh_token` and `client_secret`."* Only same-origin redirects are followed now (`redirectPolicy: 'follow'` restores the old behavior). |
+
+**Floor: `@modelcontextprotocol/sdk` >= 1.32.0, `@modelcontextprotocol/server` >= 2.3.0, `@modelcontextprotocol/client` >= 2.3.0.**
 
 ### Stdio Config Command Injection
 
@@ -178,6 +186,8 @@ sudo rm -rf /important/system/files && echo "MCP server installed!"
 - SHOULD highlight dangerous patterns (`sudo`, `rm -rf`, network operations)
 - SHOULD sandbox MCP server processes with minimal privileges
 - SHOULD warn that servers run with same privileges as the client
+
+**Should it be local at all?** The spec's local-server security guide is blunt: wrapping a remote API is not a reason to ship a local server - *"Prefer the remote version where one exists."* A remote server keeps credentials and code off the user's machine.
 
 **Mitigation** (for MCP servers intended for local use):
 - Use `stdio` transport to limit access to just the MCP client
@@ -289,13 +299,31 @@ The general principle this case establishes: **absorb client bugs server-side wh
 
 Bearer tokens are bearer tokens - anything that steals one can use it. DPoP binds an access token to a client-held key pair, so a stolen token is useless without the private key. It is the Agent Identity WG's headline item on the 2026-08-22 roadmap: *"Finalize the specification for Demonstrating Proof of Possession (DPoP) and focus on getting widespread adoption."*
 
-Client-side support has already landed in the TypeScript SDK (`@modelcontextprotocol/client`, `client/dpop` module) on `main`, unreleased as of `2.0.0`. Nothing is required of your server yet, and none of it is normative in 2026-07-28. What it changes today is a design decision: if you are choosing how to bind credentials now, DPoP is the direction of travel, so avoid architectures that assume a plain bearer token is the permanent shape - notably anything that copies tokens between components.
+Client-side support shipped in `@modelcontextprotocol/client` **2.1.0** (exported from the package root, no subpath): a client opts in by implementing `OAuthClientProvider.dpop()` returning a `DpopSession` (helpers `generateDpopKeyPair`, `accessTokenHash`, `isDpopNonceChallenge`). Nothing is required of your server yet, and none of it is normative in 2026-07-28. What it changes today is a design decision: if you are choosing how to bind credentials now, DPoP is the direction of travel, so avoid architectures that assume a plain bearer token is the permanent shape - notably anything that copies tokens between components.
 
 Related and still earlier-stage: Workload Identity Federation (SEP-1933) and ID-JAG / RFC 8693 token exchange, both under the same working group.
 
 ### v2 SDK Auth Helpers (2.0.0)
 
 `@modelcontextprotocol/server` ships runtime-neutral helpers for web-standard `fetch(request)` hosts (Cloudflare Workers, Deno, Bun, Hono): `requireBearerAuth` gates requests via an `OAuthTokenVerifier`, and `oauthMetadataResponse` serves the RFC 9728 Protected Resource Metadata and RFC 8414 Authorization Server metadata documents ([PR #2420](https://github.com/modelcontextprotocol/typescript-sdk/pull/2420), [PR #2422](https://github.com/modelcontextprotocol/typescript-sdk/pull/2422)). The insecure-issuer escape hatch is an explicit `dangerouslyAllowInsecureIssuerUrl` option, no longer an env read.
+
+**Audience checking is opt-in** (GHSA-rvq5-wwqv-78pq). Without `expectedResource`, `requireBearerAuth` never compares the token's audience with anything:
+
+```typescript
+const mcpServerUrl = new URL("https://mcp.example.com/mcp");
+const gate = requireBearerAuth({ verifier, requiredScopes: ["mcp"], expectedResource: mcpServerUrl });
+const handler = createMcpHandler(buildServer);
+
+export default {
+  async fetch(request: Request): Promise<Response> {
+    const auth = await gate(request);
+    if (auth instanceof Response) return auth;          // 401/403 challenge, ready to return
+    return handler.fetch(request, { authInfo: auth });  // handlers read ctx.http.authInfo
+  },
+};
+```
+
+The verifier must report the audience in `AuthInfo.resource` (from the JWT `aud` claim or the introspection response) - with `expectedResource` set and `resource` unset, every request gets `401`. `aud` can be a list: report this server's entry. On Express, upgrade `@modelcontextprotocol/express` to >= 2.0.2 together with `server`; 2.0.1 silently drops the option.
 
 ## Scope Management
 
@@ -308,6 +336,18 @@ Initial request -> 401 with scope="mcp:tools-basic"
   -> Client requests mcp:tools-basic mcp:files-write
   -> Tool call succeeds
 ```
+
+### Per-operation step-up in the SDK (server >= 2.1.0)
+
+`requiredScopes` on `requireBearerAuth` gates the whole endpoint. For a single tool, resource, or prompt, set `scopeChallenge` on its registration; the SDK answers `403 insufficient_scope` (same `WWW-Authenticate` format, `resource_metadata` taken from the gate) before the handler or any SSE setup runs:
+
+```typescript
+server.registerTool("purge-notes", { scopeChallenge: requireScopes("notes:write") }, async () => ({
+  content: [{ type: "text", text: "All notes deleted" }],
+}));
+```
+
+`requireScopes` is a static all-of check; pass a callback `({ request, authInfo }) => undefined | { scopes, errorDescription }` when the scope depends on the arguments. Return the exact, complete scope set; a throw fails closed.
 
 ### Scope Challenge Response (HTTP 403)
 
@@ -353,4 +393,7 @@ The spec describes what clients ought to do. These are behaviors observed in shi
 - **Serve wildcard `.well-known` handlers.** Clients build discovery URLs by inserting the **resource** path, not the issuer path - so register `/.well-known/oauth-authorization-server/*` and `/.well-known/oauth-protected-resource/*` wildcards rather than one fixed route under your auth-server path.
 - **Keep an opaque-token/introspection fallback.** Not every client sends the RFC 8707 `resource` parameter - some send it in neither the authorize request nor registration. A server that *requires* resource-bound tokens locks those clients out. Honor `resource` when present; don't mandate it.
 - **Audience misconfiguration degrades silently.** When the audience the client binds to isn't in the provider's accepted-audience set, OAuth fails at *token issuance*, and the symptom is not an auth error - it is silent degradation to the unauthenticated path, so your server just sees anonymous traffic. Verify the exact MCP endpoint URL is in the provider's `validAudiences`.
+- **DCR success is `201 Created`, not `200`.** RFC 7591 section 3.2.1: *"The successful registration response uses an HTTP 201 Created status code."* Some auth libraries answer `200`. Lenient clients (the TS SDK checks only `response.ok`) don't notice; a strict client aborts OAuth setup and then connects **without a token**, so the user lands on your anonymous or paywall path instead of a login. Normalize the status in your registration route.
+- **Registered clients go stale.** Clients cache their `client_id` and rarely re-register, and many authorization servers enforce each client's *registered* scopes at `/authorize`. Add a scope (say `offline_access`) after clients registered and those clients fail with `invalid_scope` from then on. Some other clients re-register on every start, so registration rows pile up and DCR rate limits fire. Plan for both: widen stale registrations to scopes you now support, and size DCR rate limits for re-registering clients.
+- **"Connected" is not "authenticated."** On an endpoint that serves both anonymous and signed-in users, clients split: some start OAuth only after a `401` + `WWW-Authenticate`, others probe `/.well-known/oauth-protected-resource` on connect. A server that answers credential-less `tools/list` with `200` never triggers the first kind - they report "connected, N tools" and every call then hits the auth or payment wall. A blanket `401` gate fixes them and breaks payment clients that expect a `200` + `isError` challenge (see `error-handling.md`). Decide per endpoint which population you serve.
 - **A stale refresh token can be a hard dead-end.** Some clients exit the handshake on `400 invalid_grant` at refresh with no automatic re-registration. Keep signing secrets stable across deploys and avoid deleting registered clients, or you strand existing sessions.
