@@ -60,13 +60,15 @@ golangci-lint run --default=none --enable=govet  # Run specific linters
 
 Config file: `.golangci.yml` (searched in CWD, then parent dirs, then home).
 
-JSON Schema: use the **versioned** URL matching your binary, e.g. `https://golangci-lint.run/jsonschema/golangci.v2.14.jsonschema.json`. The unversioned `golangci.jsonschema.json` tracks master and already contains options your released binary rejects, so validating against it produces false positives. `golangci-lint config verify` against the installed binary is the authoritative check.
+JSON Schema: use the **versioned** URL matching your binary, e.g. `https://golangci-lint.run/jsonschema/golangci.v2.14.jsonschema.json`. The unversioned `golangci.jsonschema.json` follows the *latest release* - the release bot rewrites it after each tag ("docs: update documentation assets") - so it drifts ahead of an older pinned binary. Master is `golangci.next.jsonschema.json`, the file embedded in the binary for `config verify` (`jsonschema/jsonschema.go:12`). `golangci-lint config verify` against the installed binary is the authoritative check.
 
 `.golangci.reference.yml` in the repo lists every supported option with descriptions and defaults - "There is a `.golangci.reference.yml` file with all supported options, their descriptions, and default values."
 
 **Cache isolation:** golangci-lint honours `GOLANGCI_LINT_CACHE`. Give each git worktree its own value so a deleted branch's cached results cannot resurface as issues in files that no longer exist. The cache does not reliably invalidate on config, tool-version, or dependency changes, so if a phantom issue keeps returning, fold those inputs into the cache path rather than clearing by hand each time.
 
 `GOLANGCI_LINT_CACHE` overrides the default `golangci-lint` dir under the user cache dir, and "the path must be absolute" (docs/content/docs/configuration/cli.md). `golangci-lint cache clean` deletes whatever `GOLANGCI_LINT_CACHE` resolves to in the shell that runs it (`cache.DefaultDir()`), so running it by hand outside a recipe that sets the var wipes the default dir and leaves the recipe's cache untouched. Clean from inside the same environment the lint runs in.
+
+**Exit 7 after "0 issues." is a failure, not a pass.** Exit codes are `1` issues found, `3` failure, `4` timeout, `7` an error was logged (`pkg/exitcodes/exitcodes.go`) - e.g. a typecheck error the linter "couldn't parse and ... just logged" (`pkg/commands/run.go:479`). The common trigger is a cache that cannot be written - a sandboxed agent, read-only `HOME`, a locked-down CI runner - which logs `operation not permitted` under `go-build` and also drops analyzer facts on every run, the same root cause as the phantom-nolintlint footgun. Point both `GOCACHE` and `GOLANGCI_LINT_CACHE` at writable absolute paths, and read stderr before trusting the summary line.
 
 **Cache isolation does not buy you concurrency.** The run lock is a single file in the system temp dir - `filepath.Join(os.TempDir(), "golangci-lint.lock")` - so two runs collide no matter how their caches are separated. A second run retries for five seconds and then exits with `parallel golangci-lint is running`. Two knobs change this:
 
@@ -115,7 +117,7 @@ linters:
       - common-false-positives
     rules:
       - path: _test\.go
-        linters: [gocyclo, errcheck, dupl, gosec]
+        linters: [errcheck, dupl, gosec]
     paths:
       - third_party$
       - vendor$
@@ -174,6 +176,8 @@ Enabled when `default: standard` (the default):
 
 | Linter | Description | Autofix |
 |--------|-------------|---------|
+| asasalint | `[]any` passed as a single `any` to a `...any` func | |
+| bidichk | "Checks for dangerous unicode character sequences" (Trojan Source) | |
 | bodyclose | HTTP response body not closed | |
 | contextcheck | Non-inherited context usage | |
 | durationcheck | Two durations multiplied together | |
@@ -186,9 +190,12 @@ Enabled when `default: standard` (the default):
 | govet | Suspicious constructs (default) | Yes |
 | makezero | Slices with non-zero initial length | |
 | musttag | Field tags in marshaled structs | |
+| loggercheck | Odd key-value pairs in slog/zap/logr/klog calls | |
 | nilerr | Returns nil when err is not nil | |
 | nilnesserr | err != nil but returns different nil error | |
 | noctx | Missing context.Context usage | |
+| nosprintfhostport | `Sprintf` building `host:port` (breaks IPv6; use `net.JoinHostPort`) | |
+| reassign | Package variables reassigned (e.g. `io.EOF = ...`) | |
 | rowserrcheck | Rows.Err not checked | |
 | sqlclosecheck | sql.Rows/Stmt not closed | |
 | staticcheck | Comprehensive static analysis (default) | Yes |
@@ -257,6 +264,7 @@ Enabled when `default: standard` (the default):
 | gomoddirectives | Validates go.mod directives: `toolchain-pattern`, `tool-forbidden`, `go-version-pattern`, `replace-*` - the enforcement side of pinning the toolchain | |
 | gomodguard_v2 | Allow/blocklist direct module dependencies | |
 | iface | Interface misuse, incl. unused methods | |
+| importas | "Enforces consistent import aliases" | Yes |
 | iotamixing | Mixed iota and explicit values in a const block | |
 | nilnil | Returning both a nil value and a nil error | |
 | noinlineerr | Inline `if err := f(); err != nil` declarations | |
@@ -265,6 +273,8 @@ Enabled when `default: standard` (the default):
 | recvcheck | Mixed pointer/value receivers on one type | |
 | spancheck | OpenTelemetry/Census span mistakes | |
 | tagalign | Struct tag alignment | Yes |
+| testableexamples | Examples without an `// Output:` comment (compiled, never run) | |
+| testpackage | Requires the external `_test` package | |
 | tparallel | "detects inappropriate usage of t.Parallel() method in your Go test codes" | |
 | unqueryvet | `SELECT *`, N+1 queries, SQL injection, tx leaks | |
 
@@ -484,7 +494,8 @@ formatters:
         clothe-returns: true
         balance-calls: false
     goimports:
-      local-prefixes: github.com/myorg/myrepo
+      local-prefixes:          # a list in v2 - a bare string fails `config verify`
+        - github.com/myorg/myrepo
 ```
 
 Run: `golangci-lint fmt`, `golangci-lint fmt --diff`, or `golangci-lint fmt --diff-colored`.
@@ -572,7 +583,8 @@ The single-job alternative is `experimental: "automatic-module-directories"`, wh
 
 ### Other CI pieces
 
-- **govulncheck:** `golang/govulncheck-action@v1` takes `go-version-file`, `cache-dependency-path`, `work-dir`, and `output-format` (`text`, `json`, `sarif`). Only `text` gates the job - "Specifying the output format 'json' or 'sarif' will return success even if there are some vulnerabilities detected." Use `sarif` for the Security tab, `text` for a failing check.
+- **govulncheck:** `golang/govulncheck-action@v1` takes `go-version-file`, `cache-dependency-path`, `work-dir`, and `output-format` (`text`, `json`, `sarif`). Only `text` gates the job - "Specifying the output format 'json' or 'sarif' will return success even if there are some vulnerabilities detected." Use `sarif` for the Security tab, `text` for a failing check. **`go-version-file` alone is silently ignored:** `go-version-input` defaults to `'stable'` and setup-go prefers `go-version` ("Both go-version and go-version-file inputs are specified, only go-version will be used"), so stdlib advisories are judged against the newest Go, not yours. Pass `go-version-input: ''` with it. The action also installs `govulncheck@latest`, so for a pinned scanner use the plain `go install ...@v1.8.0` step from SKILL.md.
+- **Keeping pins current:** "Renovate can update both the action and the `golangci-lint` version it uses" (action README) through its github-actions manager, which beats bumping the `version:` input by hand.
 - **just:** CI never runs the Justfile unless the job installs `just`. `extractions/setup-just@v4` (latest tag v4.0.0, input `just-version`) or `taiki-e/install-action@just`:
 
 ```yaml
@@ -589,6 +601,16 @@ The single-job alternative is `experimental: "automatic-module-directories"`, wh
 {
   "go.lintTool": "golangci-lint",
   "go.lintFlags": ["--path-mode=abs", "--fast-only"]
+}
+```
+
+Format on save through golangci-lint itself, so the editor runs the same formatter set and settings as the `fmt --diff` gate (gopls' own `gofumpt` switch cannot select `extra.*` rules or run goimports):
+
+```json
+{
+  "go.formatTool": "custom",
+  "go.alternateTools": { "customFormatter": "golangci-lint" },
+  "go.formatFlags": ["fmt", "--stdin"]
 }
 ```
 

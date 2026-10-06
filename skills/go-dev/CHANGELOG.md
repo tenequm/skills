@@ -7,6 +7,32 @@ and this skill adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.h
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-10-06
+
+### Changed
+- lefthook pinned `v2.1.15` -> `v2.1.17`; the vulnerable x/mod and x/text note is resolved (fixed in v2.1.16).
+- lefthook #1480 (bare `git checkout .` on a failed re-apply) fixed in v2.1.16; #1529 (shared backup across linked worktrees) still open and now covers two patch files. Source citations refreshed to v2.1.17.
+- `{push_files}` without `@{push}` diffs against the merge base with the default branch since v2.1.17.
+
+### Fixed
+- The `toolchain` line is a floor under `GOTOOLCHAIN=auto`, not a pin: a newer local `go` wins. An exact pin needs `GOTOOLCHAIN=go1.27.1`.
+- `goimports.local-prefixes` written as a string fails `config verify` (exit 3); the v2 schema requires a list.
+- `[script('bash', '-euo', 'pipefail', '-c')]` fails with exit 126: just passes the script path as an argument, so `-c` runs the path as a command.
+- Justfile templates failed `just --fmt --check`: `just --fmt` rewrites every boolean `set x := true` to bare `set x`.
+- The unversioned golangci-lint JSON Schema tracks the latest release, not master; master is `golangci.next.jsonschema.json`.
+- govulncheck-action ignores `go-version-file` unless `go-version-input: ''` is also set, and installs govulncheck `@latest`.
+- `.golangci.yml` template now sets `run.build-tags: [integration]`, so files under the Justfile's integration tag are linted.
+- `set minimum-version` exists only since just 1.55.0; a dead `gocyclo` test exclusion removed.
+
+### Added
+- Go 1.27: `go test` vet `printf` now flags `%w` wrapping a `*E` where `E` implements `error`; removed GODEBUG settings set to an old value fail the `go` command; gofmt column-alignment change produces a one-time whitespace diff.
+- A clean `git merge` runs `pre-merge-commit`, not `pre-commit`; git hook env vars (`GIT_DIR`, `GIT_INDEX_FILE`) leak into tests run from hooks.
+- golangci-lint exits 7 after printing "0 issues." when an error was logged, typically an unwritable cache dir.
+- Editor formatting through `golangci-lint fmt --stdin`; Renovate for pin upkeep; eight linters added to the catalog.
+- just `require()`; lefthook `only`, `fail_on_changes_diff`, `run --job/--tag/--file`; gotestsum env vars; migrate-once template DB for SQLite.
+
+Verified against: lefthook@v2.1.17
+
 ## [0.5.0] - 2026-09-30
 
 ### Changed
