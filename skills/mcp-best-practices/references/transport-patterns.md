@@ -10,6 +10,7 @@ Deep dive on Streamable HTTP transport, session management, stateless deployment
 - [HTTP/2 Gotchas](#http2-gotchas)
 - [CORS Configuration](#cors-configuration)
 - [Framework Examples](#framework-examples)
+- [stdio](#stdio)
 
 ## Streamable HTTP Protocol
 
@@ -56,7 +57,7 @@ The duplication is deliberate, and the spec generalizes it into a server duty fo
 
 > Servers that process the request body **MUST** reject requests where the values specified in the headers do not match the corresponding values in the request body. This prevents potential security vulnerabilities when different components in the network rely on different sources of truth (e.g., a load balancer routing on the header value while the MCP server executes based on the body value).
 
-So `Mcp-Method` and `Mcp-Name` need the same cross-check, after base64-sentinel decoding (see `spec-2026-07-28.md`). A header-less request is not automatically fatal: a server that supports pre-`2025-06-18` clients **MAY** treat it as `2025-03-26`; one that does not **MUST** reject it. The TS SDK closed the permissive gap on `main` - a modern POST with a valid `_meta` envelope but no header used to be classified modern, dispatched, and answered `200` with tool handlers running.
+So `Mcp-Method` and `Mcp-Name` need the same cross-check, after base64-sentinel decoding (see `spec-2026-07-28.md`). A header-less request is not automatically fatal: a server that supports pre-`2025-06-18` clients **MAY** treat it as `2025-03-26`; one that does not **MUST** reject it. The TS SDK closed the permissive gap in `server@2.1.0` - before that, a modern POST with a valid `_meta` envelope but no header was classified modern, dispatched, and answered `200` with tool handlers running.
 
 Validate `Origin` only when it is **present** - the spec's MUST-403 is scoped to *"present and invalid"*, and clients exist that omit it entirely.
 
@@ -91,13 +92,26 @@ The recommended pattern for K8s, Cloudflare Workers, and any horizontally-scaled
 const transport = new WebStandardStreamableHTTPServerTransport({
   sessionIdGenerator: undefined,    // no session tracking
   enableJsonResponse: true,         // always return JSON, never SSE
-  enableDnsRebindingProtection: true,          // defaults to FALSE
-  allowedOrigins: ["https://app.example.com"], // unset by default
-  allowedHosts: ["mcp.example.com"],           // unset by default
+  enableDnsRebindingProtection: true,          // defaults to FALSE; @deprecated
+  allowedOrigins: ["https://app.example.com"], // unset by default; @deprecated
+  allowedHosts: ["mcp.example.com"],           // unset by default; @deprecated
 });
 ```
 
-**The last three lines are not boilerplate.** `enableDnsRebindingProtection` defaults to `false`, and `allowedOrigins`/`allowedHosts` default to unset - so the two-option constructor everyone copies validates neither `Origin` nor `Host`, no matter what the spec says a server MUST do. The check is also all-or-nothing: with protection off the validator returns early, and with it on but a list empty, that list is skipped. The `@modelcontextprotocol/express` and `/hono` factories turn Host validation on for localhost; the raw transport does not.
+**The last three lines are not boilerplate - but they are on their way out.** `enableDnsRebindingProtection` defaults to `false`, and `allowedOrigins`/`allowedHosts` default to unset - so the two-option constructor everyone copies validates neither `Origin` nor `Host`, no matter what the spec says a server MUST do. The check is also all-or-nothing: with protection off the validator returns early, and with it on but a list empty, that list is skipped. All three options are marked `@deprecated` (*"Use external middleware for DNS rebinding protection instead."*) on both lines; they still work, but new v2 code guards in front of the handler instead:
+
+```typescript
+import { hostHeaderValidationResponse, originValidationResponse } from "@modelcontextprotocol/server";
+
+const rejected =
+  hostHeaderValidationResponse(request, ["mcp.example.com"]) ??
+  originValidationResponse(request, ["app.example.com"]);
+if (rejected) return rejected;   // 403 before the MCP handler runs
+```
+
+Both helpers take hostnames (port-agnostic); a request without an `Origin` header always passes. `localhostAllowedHostnames()` / `localhostAllowedOrigins()` replace the lists for a localhost-only process.
+
+**Framework factories are not a blanket guarantee.** `createMcpExpressApp`/`createMcpHonoApp` validate Host *and* Origin by default only for loopback binds (`127.0.0.1`, `localhost`, `::1`). Bound to `0.0.0.0` they warn; bound to any other specific host (`192.168.1.10`, `mcp.internal`) they silently skip both checks ([#2843](https://github.com/modelcontextprotocol/typescript-sdk/issues/2843)) - pass `allowedHosts` explicitly. `createMcpHandler` itself never validates (*"the entry itself is deliberately validation-free"*, [#2844](https://github.com/modelcontextprotocol/typescript-sdk/issues/2844)).
 
 ### Operational Gotchas
 
@@ -109,8 +123,9 @@ const transport = new WebStandardStreamableHTTPServerTransport({
 - **Exclude GET from request-rate metrics.** SSE keep-alive traffic outnumbers real work by roughly two orders of magnitude - a keep-alive `GET /mcp` runs on the order of ~5 req/s per connection against ~0.01 req/s for actual tool calls. Any rate limit, autoscaling signal, or usage-billing filter on `/mcp` that counts GET is measuring noise.
 - **SSE keep-alive is now built in.** Both lines write `: keepalive` comment frames to open SSE streams so idle connections survive intermediaries and idle timeouts, configurable via `keepAliveMs` (default `15000`; `0` disables). Shipped in v1.30.0 ([PR #2538](https://github.com/modelcontextprotocol/typescript-sdk/pull/2538), with per-stream timer lifecycle fixed in [PR #2547](https://github.com/modelcontextprotocol/typescript-sdk/pull/2547)) and in v2 via `createMcpHandler` ([PR #2541](https://github.com/modelcontextprotocol/typescript-sdk/pull/2541)). Don't hand-roll keep-alive on a current SDK.
 - **Non-JSON POSTs are rejected with 415.** Since v1.30.0 / v2, the Content-Type is parsed as a media type rather than substring-matched, so a sloppy `Content-Type` that used to pass now fails ([PR #2444](https://github.com/modelcontextprotocol/typescript-sdk/pull/2444)). Custom transports composing `classifyInboundRequest`/`PerRequestHTTPServerTransport` must apply `isJsonContentType()` themselves.
-- **Reusing a stateless transport surfaces as an opaque empty 500.** The assertion that guards single-use never reaches your error handling through the Node wrapper: *"The Node wrapper (`StreamableHTTPServerTransport` via `@hono/node-server`) converts that assertion into a bare `500` with an empty body - no `onerror`, no rejection"* ([#2704](https://github.com/modelcontextprotocol/typescript-sdk/issues/2704)). A bodyless 500 with silent logs is the signature of a transport being reused, not of a handler throwing.
-- **Coming on `main`, not yet released** (`server@2.0.0` has none of it): every SDK-owned body read stops at a `maxRequestBodySize` of **4 MiB** and answers `413 Payload Too Large` before parsing, JSON-RPC batch arrays are capped at **100 messages**, and a modern POST without `MCP-Protocol-Version` is rejected rather than served. Size your own edge limits with those numbers in mind so the SDK's default is not the first thing your users discover.
+- **Reusing a stateless transport surfaces as an opaque empty 500.** The assertion that guards single-use never reaches your error handling through the Node wrapper: *"The Node wrapper (`StreamableHTTPServerTransport` via `@hono/node-server`) converts that assertion into a bare `500` with an empty body - no `onerror`, no rejection"* ([#2704](https://github.com/modelcontextprotocol/typescript-sdk/issues/2704)). A bodyless 500 with silent logs is the signature of a transport being reused, not of a handler throwing. Since `server@2.3.0` the web-standard transport throws on reuse too, so this now hits v2 Node users as well.
+- **Built-in request limits** (`server@2.1.0`, backported to `sdk@1.30.1`): every SDK-owned body read stops at a `maxRequestBodySize` of **4 MiB** and answers `413 Payload Too Large` before parsing, and JSON-RPC batch arrays are capped at **100 messages**. Size your own edge limits with those numbers in mind so the SDK's default is not the first thing your users discover. For a finer bound on argument shape, see `maxToolInputElements` in `SKILL.md`.
+- **Claude Code's HTTP first-byte timer** is max(60 s, the server's tool timeout, `MCP_TIMEOUT`) and covers each request up to its first response byte. With `enableJsonResponse: true` nothing is sent until the tool finishes, so a slow tool behind a JSON-mode endpoint can time out where an SSE response would not.
 
 ### K8s Specifics
 
@@ -193,11 +208,11 @@ const corsHeaders = {
 };
 ```
 
-**Origin validation** (spec 2025-11-25): Servers MUST validate the `Origin` header on all requests. Invalid Origin MUST receive HTTP 403 Forbidden. The `@modelcontextprotocol/express` v2 middleware includes DNS rebinding protection by default for localhost servers.
+**Origin validation** (spec 2025-11-25): servers MUST validate the `Origin` header; a **present and invalid** Origin MUST receive HTTP 403 Forbidden (a missing one is not grounds for rejection). The `@modelcontextprotocol/express` v2 factory includes DNS rebinding protection by default for loopback binds only. Browser-extension clients send their extension ID as `Origin` - since 2.3.0, `allowedOrigins` accepts `<scheme>://*` entries such as `moz-extension://*` (`http://*` and `https://*` are not honoured).
 
 ## Framework Examples
 
-### Hono (Web Standard)
+### Hono (v1, web-standard transport)
 
 ```typescript
 import { Hono } from "hono";
@@ -225,7 +240,7 @@ app.post("/mcp", async (c) => {
 });
 ```
 
-### Cloudflare Workers
+### Cloudflare Workers (v1)
 
 Same pattern as Hono - `WebStandardStreamableHTTPServerTransport` works natively:
 
@@ -252,22 +267,40 @@ export default {
 };
 ```
 
-### Express (v2 with middleware)
+### v2: `createMcpHandler` (web-standard and Express)
+
+`createMcpHandler` takes a factory and calls it once per request, replacing the per-request transport + `connect()` wiring above. `handler.fetch` is a web-standard `(Request) => Promise<Response>`, so Workers, Deno, Bun and Hono serve it directly; Express goes through `toNodeHandler` once:
 
 ```typescript
 import express from "express";
 import { createMcpExpressApp } from "@modelcontextprotocol/express";
+import { toNodeHandler } from "@modelcontextprotocol/node";
+import { createMcpHandler, McpServer } from "@modelcontextprotocol/server";
 
-const mcpApp = createMcpExpressApp(
-  (server) => {
-    registerTools(server);
-  },
-  { name: "api", version: "1.0.0" },
-);
+const handler = createMcpHandler(() => {
+  const server = new McpServer({ name: "api", version: "1.0.0" });
+  registerTools(server);
+  return server;
+});
 
-const app = express();
-app.use("/mcp", mcpApp);
+// express() + express.json() + Host/Origin checks (loopback binds only by default)
+const app = createMcpExpressApp({ host: "0.0.0.0", allowedHosts: ["api.example.com"] });
+const node = toNodeHandler(handler);
+app.all("/mcp", (req, res) => void node(req, res, req.body));
 app.listen(3000);
 ```
 
-Note: `createMcpExpressApp` includes DNS rebinding protection by default for localhost.
+`createMcpExpressApp(options)` and `createMcpHonoApp(options)` take options and return an app - they do not take a registration callback. With Hono, forward the pre-parsed body: `app.all("/mcp", (c: Context) => handler.fetch(c.req.raw, { parsedBody: c.get("parsedBody") }))`.
+
+Pass verified auth as `handler.fetch(request, { authInfo })`; handlers read it as `ctx.http.authInfo`, and the factory receives `{ era, authInfo, requestInfo }` so it can build a different tool set per caller. By default the handler also serves 2025-era traffic per request (`legacy: 'stateless'`); pass `legacy: 'reject'` to refuse it.
+
+For tests, drive `handler.fetch` with an in-process `Client` instead of a listening port - see the SDK's [testing guide](https://ts.sdk.modelcontextprotocol.io/v2/).
+
+## stdio
+
+Two spec rules a local server must not break:
+
+- *"The server **MUST NOT** write anything to its `stdout` that is not a valid MCP message."* Logs go to stderr - a stray `console.log` corrupts the stream.
+- *"Servers **SHOULD** exit promptly when their standard input is closed or reads return end-of-file."* Since `server@2.1.0`, `StdioServerTransport` closes on stdin EOF and aborts in-flight requests (handlers observe `signal.aborted`).
+
+The pre-initialization probe rules (answer an unknown method, never exit; don't latch an era) live in `spec-2026-07-28.md`.
