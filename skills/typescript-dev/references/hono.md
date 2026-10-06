@@ -7,15 +7,21 @@ dependencies; the `hono/tiny` preset is under 14kB. It is the backend/edge count
 this stack's React frontend - its RPC client (`hc`) shares server types directly with
 React, giving end-to-end type safety without code generation.
 
-Version target: **hono@4.12.27** (Hono 4 is current; there is no v5). Node.js >= 18.14.1.
-Adapters/middleware are versioned independently (`@hono/node-server@2`, `@hono/zod-validator`,
-`@hono/zod-openapi@1`).
+Version target: **hono@4.13.13** (Hono 4 is current; v5 is in development on a `v5` branch -
+ESM-only, Node.js 22.12+ - with no npm release yet). On Node, use `@hono/node-server@2`, which
+requires Node.js >= 20. Adapters/middleware are versioned independently (`@hono/node-server@2`,
+`@hono/zod-validator`, `@hono/zod-openapi@1`, and the runtime adapters `@hono/cloudflare-workers`,
+`@hono/bun`, `@hono/deno`).
 
-> **Keep Hono patched - the 4.12.x line has shipped frequent security fixes.** 4.12.27 alone
-> fixes two SSR issues: `hono/jsx` stored context process-wide instead of per request, so a value
-> read after an `await` in an async component could leak across concurrent requests
-> (GHSA-hvrm-45r6-mjfj), and `hono/css` `cx()` marked its output as pre-escaped, allowing XSS via
-> untrusted class names (GHSA-w62v-xxxg-mg59). Pin to the latest patch, not an older 4.12.x.
+> **Keep Hono patched - it ships security fixes frequently.** Since 2026-08 alone: `serveStatic`
+> double-decoding the path, bypassing middleware on static routes (GHSA-5r4p-p66f-jhc7, fixed
+> 4.13.11; the same bug in `@hono/node-server` is GHSA-rmxm-3fg6-px4f, fixed **only** in 2.1.3 -
+> the 1.x line has no fix); `hono/jsx` boundary components rendering strings unescaped (XSS,
+> GHSA-hxh3-vqpv-xpqv, 4.13.7); unbounded `parseBody({ dot: true })` nesting (memory DoS,
+> GHSA-g6gw-c38x-mqfc, 4.13.5); query parsing past the URL fragment (GHSA-crvj-82cr-hjcx, 4.13.5);
+> `toSSG()` path escape (GHSA-gqvv-2mrq-wpjv, 4.13.5); `memo()` leaking SSR output across users
+> (GHSA-f23p-vx2j-j53r, 4.12.34); CORS ReDoS when `allowHeaders` is unset (GHSA-8j4g-w8fx-2239,
+> 4.12.34). Pin `hono >= 4.13.11` and `@hono/node-server >= 2.1.3`, and track the latest patch.
 
 > **For anything this file does not cover, fetch Hono's own LLM-optimized docs** - they are
 > the fastest authoritative source and are kept in sync with releases:
@@ -29,6 +35,7 @@ Adapters/middleware are versioned independently (`@hono/node-server@2`, `@hono/z
 ```sh
 npm create hono@latest my-app          # scaffold (prompts for a template)
 npm create hono@latest my-app -- --template cloudflare-workers --pm pnpm --install
+npm create hono@latest my-app -- --template cloudflare-workers+vite   # full-stack Workers + Vite (recommended)
 npm i hono                              # add to an existing project
 ```
 
@@ -61,6 +68,7 @@ app.post('/', (c) => c.text('POST /'))
 app.put('/', (c) => c.text('PUT /'))
 app.delete('/', (c) => c.text('DELETE /'))
 app.all('/hello', (c) => c.text('Any method'))          // any HTTP method
+app.query('/search', (c) => c.json({ hits: [] }))       // HTTP QUERY (4.13): safe + idempotent, carries a body
 app.on('PURGE', '/cache', (c) => c.text('PURGE'))       // custom method
 app.on(['PUT', 'DELETE'], '/post', (c) => c.text('..')) // multiple methods
 app.on('GET', ['/a', '/b'], (c) => c.text('..'))        // multiple paths
@@ -111,6 +119,10 @@ const app = new Hono()
 app.route('/books', books)
 const api = new Hono().basePath('/api')   // all routes under /api
 ```
+
+To mount another framework's fetch handler, use the Mount middleware -
+`app.all('/itty/*', mount(ittyRouter.handle))` from `hono/mount`; `app.mount()` is deprecated
+(removed in v5).
 
 Watch grouping order: `app.route('/two', two)` snapshots `two`'s routes *at call time*, so
 register child routes onto `two` before mounting `two` onto `app`, or you get 404s.
@@ -169,7 +181,7 @@ app.get('/', async (c) => {
 ## HonoRequest (`c.req`)
 
 ```ts
-c.req.param('id')          // single path param (literal-typed from the route)
+c.req.param('id')          // single path param (literal-typed from the route; string | undefined on a bare Context)
 c.req.param()              // all path params
 c.req.query('q')           // single query value
 c.req.query()              // all query values
@@ -189,12 +201,12 @@ c.req.path                 // pathname
 c.req.url                  // full URL string
 c.req.method               // 'GET'
 c.req.raw                  // the underlying Web `Request` (e.g. c.req.raw.cf on Workers)
-await cloneRawRequest(c.req) // clone even after body was consumed by a validator
+await cloneRawRequest(c.req) // from 'hono/request': clone even after a validator consumed the body
 ```
 
 `parseBody()` notes: `body['foo[]']` is always `(string | File)[]`; `{ all: true }` collects
 repeated same-name fields into arrays; `{ dot: true }` expands `obj.key` keys into nested
-objects.
+objects (nesting depth is bounded since 4.13.5 - older versions could be memory-DoSed).
 
 ## Middleware
 
@@ -251,8 +263,14 @@ middleware never ran, hiding `undefined` bugs. Prefer the `Variables` generic or
 Auth & security: `basic-auth`, `bearer-auth`, `jwt`, `jwk`, `cors`, `csrf`, `secure-headers`,
 `ip-restriction`. Body/response: `body-limit`, `compress`, `etag`, `cache`, `pretty-json`,
 `trailing-slash`. Observability: `logger`, `timing`, `request-id`. Control flow: `combine`,
-`method-override`, `context-storage`, `timeout`, `language`. Plus the `powered-by` and
-`jsx-renderer` middleware.
+`method-override`, `method-not-allowed` (4.13: 405 with a correct `Allow` header when the path
+matches but the method doesn't), `mount`, `context-storage`, `timeout`, `language`. Plus the
+`powered-by` and `jsx-renderer` middleware.
+
+4.13 behavior changes to know when upgrading: the `cache` middleware's internal key format
+changed (entries live under `/.hono/cache?__hono_cache_key=...`, so `caches.delete(url)` by plain
+URL no longer hits them); CORS default `allowMethods` now includes `QUERY`; and `RegExpRouter`
+rejects unsupported path combinations at registration, so a bad pattern fails at boot.
 
 ```ts
 import { cors } from 'hono/cors'
@@ -265,6 +283,8 @@ app.use('/api/*', cors({
   maxAge: 600,
 }))
 // `origin`/`allowMethods` accept callbacks for per-origin logic. CORS must run before routes.
+// Behind the Vite dev server, set `server.cors: false` in vite.config.ts so Vite's CORS
+// doesn't conflict with Hono's.
 
 import { jwt } from 'hono/jwt'
 import type { JwtVariables } from 'hono/jwt'
@@ -316,7 +336,9 @@ const app = new Hono().post(
 ```
 
 Or `@hono/standard-validator`'s `sValidator` for any [Standard Schema](https://standardschema.dev)
-library (Zod, Valibot, ArkType) with one adapter. Run multiple validators to check different
+library (Zod, Valibot, ArkType) with one adapter (0.4+ exports `flattenErrors` to group issues
+into form and field errors). `zValidator`'s default failure is typed: it surfaces in
+`hc<typeof app>` as a `400` branch. Run multiple validators to check different
 parts: `validator('param', ...)`, `validator('query', ...)`, `validator('json', ...)`.
 
 Gotchas: validating `json`/`form` requires the matching `Content-Type` on the request or the
@@ -366,7 +388,8 @@ const res2 = await client.posts[':id'].$get({ param: { id: '123' }, query: { pag
 Status codes flow through types: `c.json(data, 404)` makes `res.status === 404` narrow the
 JSON type. Helpers: `InferRequestType<typeof client.x.$post>`, `InferResponseType<...>`,
 `client.x.$url()` (needs absolute base URL), `client.x.$path()`, `parseResponse(...)` (parses
-by Content-Type and throws on non-ok). Pass `{ init: { credentials: 'include' } }` or
+by Content-Type and throws on non-ok). `app.query()` routes get a typed `$query`. Customize query
+serialization (e.g. bracket arrays) with `hc<AppType>(url, { buildSearchParams })`. Pass `{ init: { credentials: 'include' } }` or
 `{ headers: { Authorization: '...' } }` to `hc` for cookies/auth.
 
 **Do not** use `c.notFound()` on routes the client calls - its result can't be inferred. Use
@@ -424,9 +447,12 @@ app.openapi(route, (c) => {
 app.doc('/doc', { openapi: '3.0.0', info: { version: '1.0.0', title: 'My API' } })
 ```
 
-`OpenAPIHono` is a drop-in `Hono` (supports `.route()`, RPC `typeof`, etc.). Same
-Content-Type rule as validation: a JSON body needs `Content-Type: application/json` or
-`c.req.valid('json')` is `{}`.
+`OpenAPIHono` is a drop-in `Hono` (supports `.route()`, RPC `typeof`, etc.). Unlike plain
+`zValidator`, since 1.6.3 a body whose `Content-Type` matches none of the route's declared media
+types is rejected with **415** (it used to validate as `{}`); a request with no body still reaches
+the handler with `{}` unless the body is marked `required: true` (then 400). Since 1.5.0 a mounted
+sub-app without its own `defaultHook` inherits the parent's. For many routes, `defineOpenAPIRoute`
++ `openapiRoutes` register them in one typed batch.
 
 ## Error handling
 
@@ -486,7 +512,8 @@ const currentUser = () => getContext<Env>().var.user  // works anywhere downstre
 
 Other helpers: `hono/factory` (`createFactory`, `createMiddleware`, `createHandlers`,
 `createApp`), `hono/jwt` (sign/verify/decode utilities), `hono/adapter` (`env(c)` for
-runtime-agnostic env access), `hono/html`, `hono/css`, `hono/ssg`, `hono/proxy`,
+runtime-agnostic env access), `hono/dev` (`showRoutes(app)` prints the route table,
+`inspectRoutes`, `getRouterName`), `hono/html`, `hono/css`, `hono/ssg`, `hono/proxy`,
 `hono/conninfo`, `hono/accepts`, `hono/route`, `hono/testing` (`testClient`).
 
 The Factory helper keeps `Env` types DRY and enables RoR-style "controllers" without losing
@@ -509,7 +536,9 @@ app.get('/posts', ...handlers)
 `hono/jsx` renders HTML on the server (and works on the client). Configure
 `tsconfig.json`: `"jsx": "react-jsx"`, `"jsxImportSource": "hono/jsx"`, and use a `.tsx`
 file. Components are plain functions typed with `FC`. This is separate from the React
-frontend - use it for server-rendered HTML responses, not as a React replacement.
+frontend - use it for server-rendered HTML responses, not as a React replacement. Since 4.13 its
+`useRef`/`RefObject` types match React 19: `RefObject<T>` is `{ current: T }`, so type nullable
+refs as `RefObject<T | null>` and call `useRef(undefined)` rather than `useRef()`.
 
 ```tsx
 import type { FC } from 'hono/jsx'
@@ -523,7 +552,15 @@ Same app, different entry point. Pick the matching `create-hono` template.
 
 **Cloudflare Workers** (`export default app`) - develop/deploy with Wrangler (`npm run dev`
 serves on :8787, `npm run deploy`). Bindings (KV/D1/R2/secrets) come in via `c.env`; type
-them with the `Bindings` generic and generate types with `wrangler types`.
+them with the `Bindings` generic and generate types with `wrangler types`. Serve static files
+with Workers Static Assets (`assets.directory` in `wrangler.jsonc`), not `serveStatic`.
+`hono/cloudflare-pages` is deprecated with no replacement - Cloudflare recommends Workers + Static
+Assets.
+
+**Runtime adapters moved to their own packages (4.13.10).** `hono/cloudflare-workers`,
+`hono/bun`, `hono/deno`, etc. "still work in v4 but [are] deprecated and will be removed in v5";
+install `@hono/cloudflare-workers`, `@hono/bun`, or `@hono/deno` (also on JSR) and change the
+import - the API is identical.
 
 **Node.js** - needs the adapter `@hono/node-server`:
 
@@ -533,37 +570,41 @@ import { serveStatic } from '@hono/node-server/serve-static'
 const app = new Hono()
 app.use('/static/*', serveStatic({ root: './' }))
 serve({ fetch: app.fetch, port: 3000 }, (info) => console.log(info.port))
+// 2.1+: Early Hints via `earlyHints` from '@hono/node-server/early-hints'; WebSockets are built
+// in (`@hono/node-ws` is deprecated)
 // graceful shutdown:
 const server = serve(app)
 process.on('SIGINT', () => { server.close(); process.exit(0) })
 ```
 
 **Bun** - `export default { port: 3000, fetch: app.fetch }`. **Deno** -
-`Deno.serve(app.fetch)`; import from `jsr:@hono/hono` and keep all hono imports on one
-version. **Vercel / Netlify / AWS Lambda / Lambda@Edge / Fastly / Supabase Edge Functions /
+`Deno.serve(app.fetch)`; import from `jsr:@hono/hono` (adapter: `jsr:@hono/deno`) and keep all
+hono imports on one version. **Vercel / Netlify / AWS Lambda / Lambda@Edge / Fastly / Supabase Edge Functions /
 Next.js** each have a template and a thin adapter; the handler logic is identical.
 
-**Static files** - `serveStatic` is runtime-specific: `hono/cloudflare-workers`,
-`@hono/node-server/serve-static`, `hono/bun`, or `hono/deno`. All take `{ root, path,
+**Static files** - `serveStatic` is runtime-specific: `@hono/node-server/serve-static`,
+`@hono/bun`, or `@hono/deno` (on Workers use Static Assets instead). Since 4.13.11 / node-server
+2.1.3 paths that still contain `%` after decoding are rejected (opt out with
+`allowPercentInPath: true`). All take `{ root, path,
 rewriteRequestPath, onFound }`; mount it on a wildcard route (`app.use('/static/*', serveStatic({ root: './' }))`).
 
 ## Realtime (WebSocket)
 
-`upgradeWebSocket()` adds server-side WebSockets, imported from the runtime adapter
-(`hono/cloudflare-workers`, `hono/deno`, `hono/bun`, or `@hono/node-server`). It returns a
+`upgradeWebSocket()` adds server-side WebSockets, imported from the runtime adapter package
+(`@hono/cloudflare-workers`, `@hono/deno`, `@hono/bun`, or `@hono/node-server`). It returns a
 handler that supplies `onOpen`/`onMessage`/`onClose`/`onError` callbacks. WS routes also work
 with RPC: the client gets a typed `client.ws.$ws()`.
 
 ```ts
 // Cloudflare Workers / Deno
-import { upgradeWebSocket } from 'hono/cloudflare-workers'
+import { upgradeWebSocket } from '@hono/cloudflare-workers'
 const wsApp = app.get('/ws', upgradeWebSocket((c) => ({
   onMessage(event, ws) { ws.send(`echo: ${event.data}`) },
   onClose() { console.log('closed') },
 })))
 export type WsApp = typeof wsApp   // hc<WsApp>(...).ws.$ws() on the client
 
-// Bun: export `{ fetch: app.fetch, websocket }` (import websocket from 'hono/bun')
+// Bun: export `{ fetch: app.fetch, websocket }` (import websocket from '@hono/bun')
 // Node: install `ws`; pass a WebSocketServer to serve({ fetch, websocket: { server: wss } })
 ```
 
@@ -607,8 +648,9 @@ On Cloudflare Workers, Cloudflare recommends `@cloudflare/vitest-pool-workers`. 
 ## Best practices
 
 1. **Write handlers inline after the path** - `app.get('/books/:id', (c) => ...)`. A separate
-   `const handler = (c: Context) => ...` loses path-param inference. If you must extract,
-   use `factory.createHandlers()`.
+   `const handler = (c: Context) => ...` loses path-param inference - on a bare `Context`,
+   `c.req.param('id')` is `string | undefined`. If you must extract (e.g. a shared route
+   table), use `factory.createHandlers()` or narrow the param explicitly.
 2. **Chain routes** (`.get(...).post(...)`) and export `typeof app` - that's what makes RPC
    types work. Split large apps with `.route()`, chaining the mounts.
 3. **Let the compiler accumulate types** via chained `.use()` instead of hand-writing a
@@ -618,8 +660,9 @@ On Cloudflare Workers, Cloudflare recommends `@cloudflare/vitest-pool-workers`. 
 5. **Avoid `c.notFound()`** on RPC routes; return `c.json({ error }, 404)`.
 6. **Order matters**: middleware and specific routes before wildcards; CORS before routes.
 7. **Set `Content-Type`** on `json`/`form` requests (including tests) or the body is `{}`.
-8. **Keep Hono one version** across client/server, and compile the RPC client type
-   (`hcWithType`) once the route count grows, to keep the IDE fast.
+8. **Keep Hono one version** across client/server (`pnpm why hono` - an adapter's peer range can
+   pull in a second copy), and compile the RPC client type (`hcWithType`) once the route count
+   grows, to keep the IDE fast.
 9. **Pick the right preset/router**: `hono` (default, `SmartRouter` = fast + full features),
    `hono/quick` (fast registration, good for per-request init like some edges), `hono/tiny`
    (smallest). Override with `new Hono({ router: new RegExpRouter() })` only if needed.
@@ -658,5 +701,3 @@ On Cloudflare Workers, Cloudflare recommends `@cloudflare/vitest-pool-workers`. 
 `@hono/zod-openapi` + `@hono/swagger-ui` (OpenAPI), `@hono/node-server` (Node), Zod
 (https://zod.dev), Valibot (https://valibot.dev), ArkType (https://arktype.io), Standard
 Schema (https://standardschema.dev).
-</content>
-</invoke>

@@ -1,6 +1,6 @@
 # Tailwind CSS v4
 
-Utility-first styling, CSS-first configuration. Tailwind **v4.3** (latest `4.3.2`) configures everything in CSS - there is no `tailwind.config.js`. In a Vite project the integration is the `@tailwindcss/vite` plugin (no PostCSS config). For shadcn/ui component authoring see [shadcn.md](shadcn.md).
+Utility-first styling, CSS-first configuration. Tailwind **v4.3** (latest `4.3.3`) configures everything in CSS - there is no `tailwind.config.js`. In a Vite project the integration is the `@tailwindcss/vite` plugin (no PostCSS config). For shadcn/ui component authoring see [shadcn.md](shadcn.md).
 
 ## CSS-first configuration
 
@@ -107,7 +107,7 @@ Dark mode: prefer semantic colors (auto-flip) over manual `dark:` overrides. Use
 
 ```tsx
 <h1 className="text-shadow-sm">                          // text shadows (4.1)
-<div className="mask-linear-to-b">                       // gradient masks (4.1)
+<div className="mask-b-from-50%">                        // gradient masks (4.1)
 <input className="user-valid:border-success user-invalid:border-destructive" /> // (4.1)
 <div className="pbs-4 pbe-8 mbs-2 border-bs-2">          // logical block props (4.2)
 <div className="bg-mauve-100 text-olive-900">            // new palettes: mauve/olive/mist/taupe (4.2)
@@ -142,7 +142,9 @@ shadcn/ui colors use `oklch(lightness chroma hue)`: lightness 0-1, chroma 0-0.4 
 
 ## Notes
 
-- A first-class `@tailwindcss/webpack` loader exists (added v4.2) for Next.js/webpack/Turbopack projects - relevant if you're not on Vite.
+- A first-class `@tailwindcss/webpack` loader exists (added v4.2) for webpack projects, and `@tailwindcss/turbopack` for Next.js - relevant only if you're not on Vite.
+- 4.3.3 fixes `@tailwindcss/vite` triggering full page reloads for scanned files Vite processed but hadn't loaded as modules yet - upgrade if HMR keeps full-reloading.
+- To enforce semantic tokens in CI, Biome's nursery `noTailwindRawColors` rule flags palette classes like `bg-pink-500` (see [biome.md](biome.md)).
 - If you lint CSS with Biome, enable `css.parser.tailwindDirectives` so it understands `@theme`/`@utility`/`@apply` (see [biome.md](biome.md)).
 
 ## Troubleshooting

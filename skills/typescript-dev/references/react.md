@@ -1,6 +1,6 @@
 # React 19
 
-Patterns for type-safe React 19.2 components. The headline shift from older React: **the React Compiler handles memoization**, `ref` is a normal prop, and `use()` reads context and promises without the old hook-placement rules. Write plain components and let the tooling optimize. For TypeScript specifics (props typing, generics, tsconfig) see [typescript.md](typescript.md).
+Patterns for type-safe React 19.3 components (latest `19.3.0`). The headline shift from older React: **the React Compiler handles memoization**, `ref` is a normal prop, and `use()` reads context and promises without the old hook-placement rules. Write plain components and let the tooling optimize. For TypeScript specifics (props typing, generics, tsconfig) see [typescript.md](typescript.md).
 
 ## Critical rules
 
@@ -134,6 +134,36 @@ function ChatRoom({ roomId, theme }: { roomId: string; theme: string }) {
 
 Rules: only call from inside effects/other effect events, never pass to children or list in dependency arrays, never call during render. (`useExhaustiveDependencies` in Biome and the react-hooks ESLint rule both understand it - upgrade to the latest plugin version.)
 
+### `<ViewTransition>` (19.3, stable)
+
+Animate UI changes with the browser View Transitions API. Wrap what should animate; only updates inside a Transition (`startTransition`, `useDeferredValue`, Suspense reveals) trigger it - "updates not marked as Transitions don't trigger animations." DOM only.
+
+```tsx
+import { ViewTransition, addTransitionType, startTransition } from "react"
+
+<ViewTransition update="auto" default="none">
+  <Suspense fallback={<Skeleton />}><Feed /></Suspense>
+</ViewTransition>
+
+startTransition(() => {
+  addTransitionType("navigate-forward")   // tag the transition so CSS can pick an animation
+  setPage(next)
+})
+```
+
+### Fragment refs (19.3)
+
+Pass a `ref` to `<Fragment>` to get a `FragmentInstance` - add event listeners, observe, or focus across a group of children without a wrapper `<div>`:
+
+```tsx
+const ref = useRef<React.FragmentInstance>(null)   // DOM methods typed via @types/react-dom
+<Fragment ref={ref}><Item /><Item /></Fragment>
+```
+
+### `use(browser())` (19.3)
+
+`browser()` (`import { browser } from "react-dom"`) is a resource for `use()`: "A component can call `use(browser())` to opt out of server-side rendering" - it renders the nearest Suspense fallback on the server and renders for real on the client. Replaces the `useEffect`-mounted-flag pattern for client-only widgets.
+
 ### Document metadata
 
 Render `<title>`, `<meta>`, `<link>` directly in components - React hoists them to `<head>`:
@@ -178,9 +208,11 @@ pnpm add -D @rolldown/plugin-babel @babel/core @types/babel__core
 
 `reactCompilerPreset({ compilationMode: 'annotation' })` compiles only components marked `"use memo"`; `target: '17' | '18'` supports older React (needs `react-compiler-runtime`).
 
+**Experimental native compiler (plugin-react 6.1+):** `react({ compiler: true })` runs the compiler in Rust via Oxc, no Babel. Install trap: its peer is `oxc-transform-react ^0.152.0`, so `pnpm add -D oxc-transform-react@latest` can fail with ERESOLVE once a newer minor ships - install the version the peer range names (`oxc-transform-react@0.152`). The old `compiler.logDiagnostics` option is deprecated in favor of `compiler.reportDiagnostics`. Stay on the Babel path for production until this graduates.
+
 ### ESLint integration
 
-The compiler's lint rules now ship **inside `eslint-plugin-react-hooks`** (current major v7, flat config by default, rules in the `recommended` preset). The standalone `eslint-plugin-react-compiler` is merged in - remove it if present. New compiler-powered rules catch things like `setState` in render (`set-state-in-render`).
+The compiler's lint rules now ship **inside `eslint-plugin-react-hooks`** (v7.1, flat config by default, ESLint 10 supported): `recommended` carries the stable rules, `recommended-latest` adds the newest compiler-powered ones. If you lint with Biome instead, its nursery `useReactCompiler` rule surfaces the same compiler diagnostics (see [biome.md](biome.md)). The standalone `eslint-plugin-react-compiler` is merged in - remove it if present. New compiler-powered rules catch things like `setState` in render (`set-state-in-render`).
 
 ### What not to do
 
@@ -196,7 +228,9 @@ Manual memoization still applies when you need a **stable value as an effect dep
 ## Worth knowing (newer surface)
 
 - **Partial Pre-rendering (19.2, stable)**: pre-render the static shell of a page, then finish it at request time. New react-dom APIs `prerender` (produce a prelude + a resumable state) and `resume`/`resumeToPipeableStream`/`resumeAndPrerender` continue rendering where the prerender left off. This is a framework/SSR-layer feature - reach for it through your framework, not hand-wired in an SPA.
-- **`<ViewTransition>`** is **Canary/Experimental only** in 19.2 - do not ship it as a stable API.
+- **19.3 behavior changes:** Transitions now render independently instead of entangling into one render; StrictMode double-invokes effects during hydration (matching client roots); a DEV warning fires when a library calls `use()` to suspend but skips `use()` once its cache is warm.
+- **Trusted Types**: React passes `TrustedHTML`/`TrustedScript` values through without coercion. Server Components can render `<Context>` imported from a `'use client'` module directly.
+- **RSC security:** GHSA-wx67-qw84-cm4g (CVE-2026-44907, DoS in Server Functions) affects `react-server-dom-webpack`/`-parcel`/`-turbopack` 19.0.0-19.0.7, 19.1.0-19.1.8, 19.2.0-19.2.7; fixed in 19.0.8/19.1.9/19.2.8 and 19.3. Pure client SPAs are unaffected.
 - **`cacheSignal`** (RSC) tells you when a `cache()` lifetime is over.
 - **`captureOwnerStack()`** (dev-only) returns the component owner stack for better debugging.
 - **Performance Tracks**: React 19.2 adds Scheduler/Components tracks to Chrome DevTools profiles.
@@ -204,7 +238,7 @@ Manual memoization still applies when you need a **stable value as an effect dep
 
 ## Resources
 
-- React 19.2 blog: https://react.dev/blog/2025/10/01/react-19-2
+- React 19.3 blog: https://react.dev/blog/2026/09/09/react-19-3 - 19.2 blog: https://react.dev/blog/2025/10/01/react-19-2
 - React Compiler: https://react.dev/learn/react-compiler
 - Compiler 1.0: https://react.dev/blog/2025/10/07/react-compiler-1
 - API reference: https://react.dev/reference/react
