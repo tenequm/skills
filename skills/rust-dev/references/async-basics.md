@@ -112,6 +112,18 @@ async fn main() {
 
 `spawn` returns a `JoinHandle<T>`. Awaiting it gives you the task's return value (wrapped in `Result` to handle panic).
 
+That `Result` is the only place a task's panic goes. tokio catches it - "panics in the spawned task are caught by Tokio" - and hands it back as a `JoinError`, so a panic in a spawned task does **not** take the process down. A `main` that logs the `JoinError` and returns normally exits with status 0: the container reports `Completed`, the supervisor never restarts it, and the crash is visible only if someone reads the log. Decide what a task panic should mean, and make it happen:
+
+```rust
+match handle.await {
+    Ok(v) => v,
+    Err(e) if e.is_panic() => std::panic::resume_unwind(e.into_panic()), // re-raise in this task
+    Err(e) => return Err(e.into()),                                       // cancelled
+}
+```
+
+For a service where any panic is a bug, `panic = "abort"` under `[profile.release]` makes every panic, in any task, end the process.
+
 ## `Send`, `Sync`, and `'static` Bounds
 
 Tasks spawned with `tokio::spawn` must be `Send + 'static` because the runtime moves them across threads.
@@ -379,11 +391,38 @@ pub trait Greeter {
 7. **One giant `tokio::main` task with no concurrency**: if your `main` is awaiting things sequentially, you may not need async at all. Async pays off when you have concurrent I/O.
 8. **Assuming `impl Stream` means the body streams.** The signature promises an incremental *type*, not incremental *behavior* - a function returning `impl Stream` can happily read an entire file into a `String`, parse every record into a `Vec`, and only then yield item one. Nothing in the type system catches that. If a stream exists to bound memory, check that its body never materializes the whole input; the same trap hides inside `async_stream::stream!` blocks, where a plain `std::fs` call also blocks a runtime thread for the whole operation.
 
+## Windows: The Main Thread Has a 1 MiB Stack
+
+An `async fn` compiles to a state machine sized for everything live across every `.await`, and nested futures inline into their parent. A big application's top-level future can reach hundreds of KiB, and `#[tokio::main]` runs it with `block_on` on the **main thread**. On Linux and macOS that thread gets 8 MiB. On Windows the stack reserve comes from the executable, and Microsoft's linker documents "the default stack size is 1 MB" - so the same binary that runs fine everywhere else overflows on Windows before it parses its arguments, and even `--version` crashes.
+
+Two fixes. Shrink the future: `Box::pin` the large sub-futures so they live on the heap (clippy's `large_futures` lint finds them). Or give the runtime a thread whose stack you choose:
+
+```rust
+fn main() -> anyhow::Result<()> {
+    std::thread::Builder::new()
+        .stack_size(8 * 1024 * 1024)
+        .spawn(|| -> anyhow::Result<()> {
+            tokio::runtime::Builder::new_multi_thread()
+                .enable_all()
+                .build()?
+                .block_on(run())
+        })?
+        .join()
+        .expect("runtime thread panicked")
+}
+
+async fn run() -> anyhow::Result<()> { Ok(()) }
+```
+
+Worker threads have their own size, set with the runtime builder's `thread_stack_size`. Only a run on real Windows catches this; see `releasing.md`.
+
 ## Testing Time-Dependent Async Code
 
 `tokio::time::pause` (and `#[tokio::test(start_paused = true)]`, which needs the `test-util` feature and the current-thread runtime) lets a test advance the clock instantly instead of sleeping. There is a precondition nobody mentions until it bites: **it can only control `tokio::time::Instant`, not `std::time::Instant`.** If your cache expiry, rate limiter, or backoff computes deadlines from `std::time::Instant::now()`, a paused test has no effect on it and you are back to real sleeps.
 
-The fix is in the *production* code, not the test: use `tokio::time::Instant` there. Outside a paused runtime it is `std::time::Instant::now()`, so behavior is identical - you are only buying testability. Inside the test, advance explicitly with `tokio::time::advance()` rather than `sleep`, because a paused runtime auto-advances whenever it goes idle and a `sleep` will not mean what you think it means.
+The fix is in the *production* code, not the test: use `tokio::time::Instant` there. Outside a paused runtime it is `std::time::Instant::now()`, so behavior is identical - you are only buying testability.
+
+Inside the test, let time pass with `tokio::time::sleep`, not `advance`. A paused runtime auto-advances to the next timer whenever every task is idle, so `sleep(Duration::from_secs(5)).await` returns instantly with every timer due in those 5 seconds fired in order. `advance` is the sharper tool and the easier one to misuse: tokio's own docs say that to "reliably trigger a timeout, prefer using [`sleep`] with auto-advance rather than `advance`", because `advance` "jumps time forward but doesn't guarantee that all timers will be processed before your code continues".
 
 ## Debugging a Running Runtime
 

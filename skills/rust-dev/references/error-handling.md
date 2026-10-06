@@ -225,6 +225,26 @@ fn main() -> anyhow::Result<()> {
 
 If `main` returns `Err`, the program exits with a non-zero status and prints the error chain via `Debug`.
 
+A CLI usually wants more control than "0 or 1": distinct codes a calling script can branch on, and its own error message instead of the `Debug` dump. Return `std::process::ExitCode` (stable since 1.61), print the message yourself with `eprintln!` so it goes to stderr, and keep stdout for real output:
+
+```rust
+use std::process::ExitCode;
+
+fn main() -> ExitCode {
+    match run() {
+        Ok(()) => ExitCode::SUCCESS,
+        Err(e) => {
+            eprintln!("error: {e:#}");     // {:#} prints anyhow's chain on one line
+            ExitCode::from(2)
+        }
+    }
+}
+
+fn run() -> anyhow::Result<()> { Ok(()) }
+```
+
+Prefer this over `std::process::exit`, which ends the process on the spot without running destructors - buffered writers are not flushed.
+
 ## Common Pitfalls
 
 - **Returning `Result<T, String>`**: tempting in early days, but you lose the error chain (`source()`), and you cannot `?`-convert from other error types. Use `anyhow` or `thiserror`.

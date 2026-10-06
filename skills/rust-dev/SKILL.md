@@ -2,10 +2,10 @@
 name: rust-dev
 description: Day-1 guide to building well in Rust - ownership, errors as values, String vs &str, Box/Rc/Arc, anyhow vs thiserror, and a crate shortlist (tokio, serde, axum, sqlx). Use when starting a Rust project, fighting the borrow checker, or picking crates.
 metadata:
-  version: "0.7.0"
+  version: "0.8.0"
   categories: "development"
   topics: "rust, ownership, cargo, crates, tokio"
-  upstream: "rust@1.98.1, tokio@1.53.1, axum@0.8.9, reqwest@0.13.5, sqlx@0.9.0, jiff@0.2.37, kache@0.28.1, dist@0.33.0, release-plz-action@0.5.139"
+  upstream: "rust@1.99.0, tokio@1.53.2, axum@0.8.9, reqwest@0.13.5, sqlx@0.9.0, jiff@0.2.37, kache@1.0.0, dist@0.33.0, release-plz-action@0.5.139"
   openclaw:
     homepage: https://github.com/tenequm/skills/tree/main/skills/rust-dev
     emoji: "🦀"
@@ -175,7 +175,7 @@ let Some(name) = user.name else { return Err(anyhow!("no name")); };
 
 **Derive macros.** `#[derive(Debug, Clone, PartialEq)]` gets you 80% of the boilerplate for free. Add `#[derive(Serialize, Deserialize)]` for JSON.
 
-**Recent sugar.** Stabilized features worth knowing, newest first: `cfg_select!` is a compile-time `match` over `cfg` predicates, replacing most uses of the `cfg-if` crate, and `if let` guards work on `match` arms (`match x { Some(v) if let Ok(n) = v.parse::<i32>() => ... }`) - both 1.95. `assert_matches!` and `debug_assert_matches!` (1.96) assert on a pattern rather than equality, which is the natural assertion for an enum. Two older ones you will see constantly and should not mistake for exotic: **let-chains** (`if let Some(x) = a && x > 3 { ... }`), stable in edition 2024 since 1.88, and **async closures** (`async || { ... }`, with the `AsyncFn` family of bounds), stable since 1.85.
+**Recent sugar.** Stabilized features worth knowing, newest first: `bool::ok_or` and `ok_or_else` (1.98) turn a condition straight into a `Result` (`ready.ok_or(Error::NotReady)?`). `cfg_select!` is a compile-time `match` over `cfg` predicates, replacing most uses of the `cfg-if` crate, and `if let` guards work on `match` arms (`match x { Some(v) if let Ok(n) = v.parse::<i32>() => ... }`) - both 1.95. `assert_matches!` and `debug_assert_matches!` (1.96) assert on a pattern rather than equality, which is the natural assertion for an enum. Two older ones you will see constantly and should not mistake for exotic: **let-chains** (`if let Some(x) = a && x > 3 { ... }`), stable in edition 2024 since 1.88, and **async closures** (`async || { ... }`, with the `AsyncFn` family of bounds), stable since 1.85.
 
 ## Coming From X, Here Is What Bites You
 
@@ -185,7 +185,8 @@ let Some(name) = user.name else { return Err(anyhow!("no name")); };
 - No exceptions. `Result<T, E>` and `?`. The compiler will not let you ignore errors.
 - No inheritance. Composition + traits + enums.
 - Variables are immutable by default. Add `mut` to mutate. Same for references: `&` vs `&mut`.
-- Integer types are explicit and indexing requires `usize`. They also overflow differently depending on the build: debug "includes checks for integer overflow that cause your program to _panic_ at runtime", while `--release` drops them and performs "_two's complement wrapping_". A test suite that passes can still wrap in production, so use `checked_*`/`saturating_*`/`wrapping_*` where the arithmetic can actually reach the edge, rather than relying on the debug panic to find it.
+- Re-declaring a name is allowed and idiomatic: `let input = input.trim();` *shadows* the old binding with a new one, possibly of a different type. It is not mutation, and it is how Rust code converts a value in place without inventing `input2`.
+- Integer types are explicit and indexing requires `usize`. They also overflow differently depending on the build: debug "includes checks for integer overflow that cause your program to _panic_ at runtime", while `--release` drops them and performs "_two's complement wrapping_". A test suite that passes can still wrap in production, so use `checked_*`/`saturating_*`/`wrapping_*` where the arithmetic can actually reach the edge, rather than relying on the debug panic to find it. `strict_add` and friends (stable since 1.91) panic on overflow in every build, and `overflow-checks = true` under `[profile.release]` keeps the debug behavior in production. And `as` between integer types silently truncates (`300_u32 as u8` is `44`) - use `u8::try_from(x)?` wherever the value might not fit.
 - A `String` is not indexable. `s[0]` does not compile - see `references/ownership-and-types.md` for what to reach for instead.
 
 **From Go:**
@@ -243,6 +244,7 @@ These are the mistakes that show up in every newcomer's code review. Avoid them.
 6. **Trying to inherit via `Deref`**. `Deref` is for smart-pointer-like wrappers, not for OOP-style "extends". Use composition.
 7. **Reaching for `unsafe`.** App developers should essentially never need it. `unsafe` does not turn off the borrow checker; it lets you do five specific things (deref raw pointers, call unsafe functions, access mutable statics, implement unsafe traits, access union fields) with the contract that you have manually verified the invariants.
 8. **Reading untrusted input with `.lines()` or `read_line`.** These allocate without bound. `BufRead::read_line`'s own docs warn that "it is possible for an attacker to continuously send bytes without ever sending a newline or EOF" - and `.lines()` inherits that behavior, since each item is a `read_line` under the hood. Either way a hostile or malformed peer can drive your process out of memory. Bound the read with `Read::take(n)`, and use `BufRead::skip_until` (stable since 1.83) to discard an over-long line. `for line in reader.lines()` is the first thing every tutorial teaches and almost none mention this.
+9. **Trusting `std::fs::write` with data you cannot lose.** It truncates and then writes in place, so a crash or power loss mid-write leaves a zero-length or half-written file - and a successful return does not mean the bytes reached the disk. For state files and manifests: write to a temp file *in the same directory*, call `File::sync_all()`, `rename` it over the target, and on Unix also `sync_all()` the parent directory so the rename itself survives a reboot. (`tempfile::NamedTempFile::persist` does the rename, not the syncs.)
 
 ## What to Defer
 
@@ -298,6 +300,8 @@ todo        = "warn"
 print_stdout = "warn"   # use `tracing::info!` instead in real apps
 ```
 
+When you do need to silence a lint, prefer `#[expect(clippy::lint_name, reason = "why")]` (stable since 1.81) over `#[allow]`: `expect` warns once the lint stops firing, so stale suppressions surface instead of piling up. Clippy's `allow_attributes` and `allow_attributes_without_reason` (both in the opt-in `restriction` group) enforce it. One catch: a lint that fires on only one OS needs `#[cfg_attr(unix, expect(...))]`, or the `expect` is unfulfilled - and warns - everywhere else.
+
 ## rustfmt.toml
 
 ```toml
@@ -305,7 +309,7 @@ style_edition = "2024"
 edition       = "2024"
 ```
 
-That is enough. rustfmt's defaults are good. Some teams add `use_small_heuristics = "Max"` to keep more code on single lines. Fancy options like `imports_granularity` and `group_imports` are still nightly-only as of September 2026 (rustfmt tracking issues #4991 and #5083).
+That is enough. rustfmt's defaults are good. Some teams add `use_small_heuristics = "Max"` to keep more code on single lines. Fancy options like `imports_granularity` and `group_imports` are still nightly-only as of October 2026 (rustfmt tracking issues #4991 and #5083).
 
 Run `cargo fmt` before you start editing (or commit any pre-existing drift on its own) so formatting noise stays out of your diff, and make `cargo fmt --check` its own CI step.
 
@@ -315,12 +319,12 @@ Pins the toolchain per project so everyone on the team uses the same Rust - but 
 
 ```toml
 [toolchain]
-channel    = "1.98.1"
+channel    = "1.99.0"
 components = ["rustfmt", "clippy", "rust-src"]
 profile    = "minimal"
 ```
 
-The file is a rustup feature. A `rustc` from Nix, a distro package, or Homebrew ignores it, so on those machines you get whatever compiler is installed.
+The file is a rustup feature. A `rustc` from Nix, a distro package, or Homebrew ignores it, so on those machines you get whatever compiler is installed. Even under rustup it is not the top of the precedence list: a `rustup override set` for the directory (and `RUSTUP_TOOLCHAIN`, and `cargo +toolchain`) wins over it, so a forgotten override silently makes the file dead weight. `rustup show` tells you which toolchain is active and why; `rustup override unset` clears it.
 
 ## .gitignore
 

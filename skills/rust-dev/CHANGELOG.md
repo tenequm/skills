@@ -7,6 +7,37 @@ and this skill adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.h
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-10-06
+
+### Added
+
+- SKILL.md: shadowing (`let input = input.trim();`) in "Coming From Python or JavaScript"; `as` truncation (`300_u32 as u8` is `44`) with `try_from`, `strict_*` ops (1.91), and `overflow-checks = true` in the overflow bullet; `bool::ok_or` (1.98) in "Recent sugar"; anti-pattern #9, `std::fs::write` is not crash-safe (temp file in the same directory, `sync_all`, rename, fsync the parent); `#[expect(lint, reason = ...)]` (1.81) over `#[allow]`, with clippy's `allow_attributes` lints and the per-OS `cfg_attr` catch; a `rustup override` outranks `rust-toolchain.toml`.
+- references/traits-and-generics.md: inherent `impl` blocks, methods vs associated functions, and `fn new` as convention ("`new` isn't a special name").
+- references/ownership-and-types.md: `mem::take`, `mem::replace`, `Option::take`, and `as_deref` for "cannot move out of" errors; `Weak<T>` for back-pointers and `Rc` cycles; edition 2024 dropping `if let` scrutinee temporaries before `else`.
+- references/error-handling.md: `std::process::ExitCode` and `eprintln!` for CLI exit codes, and why not `process::exit`.
+- references/testing.md: `#[should_panic(expected = ...)]`, `#[ignore = "reason"]`, `cargo test -- --ignored`, name filters, and `--show-output`.
+- references/project-shape.md: `[patch.crates-io]` for an unreleased fix (root-manifest only, pin `rev`); dev-dependency features unify only while dev-dependencies are being built, so `cargo build` and `cargo test` resolve different feature sets.
+- references/crate-shortlist.md: serde ignores unknown fields by default, so add `deny_unknown_fields` (not with `flatten`); tracing-subscriber's ANSI default checks only `NO_COLOR`, never the writer, so set `.with_ansi(stderr().is_terminal())`.
+- references/async-basics.md: a spawned task's panic becomes a `JoinError`, so a `main` that only logs it exits 0 (`is_panic` + `resume_unwind`, or `panic = "abort"`); the 1 MiB Windows main-thread stack overflows large async state machines before argument parsing.
+- references/dev-environment.md: heavy transitive crates usually arrive through default features, so trim them with `cargo tree -e features -i` and `default-features = false`.
+
+### Changed
+
+- Rust 1.99.0: `rust-toolchain.toml` pin bumped from 1.98.1. dev-environment.md uses 1.99 as the concrete case for bumping deliberately: `semicolon_in_expressions_from_non_local_macros` fails a `build.warnings = "deny"` test build with insta 1.48 and builds clean with 1.49.0 (both reproduced locally), and three new clippy lints land in denied groups. The built-in `debug` profile is "no different" from `dev` yet, so `[profile.debug] debug = true` is needed, and 1.98 rejects that name as reserved.
+- references/dev-environment.md: kache re-verified against 1.0.0 (pin was 0.28.1). `why-miss` is now `explain`, `report` is `stats --full`, `targets` is `clean --dry-run`; 1.0.0 kept key schema 32, but "Cache-key recipes ... can change during 1.x"; `cache.auto_share_target_files` (on by default) and the opt-in `cache.auto_recover_min_free_bytes`; the OCI remote, which stays read-only for PRs even with `pull_request_prefix`; `kache init --check`/`-y`/`--no-shell` and what init sets beyond the wrapper; pin `kache-action`'s `version` input, which defaults to "latest".
+- references/releasing.md: Windows moves from `x86_64-pc-windows-gnu` (whose rustc page says "do not have any maintainers") to msvc built with `cargo-xwin`, `+crt-static` to drop the `vcruntime140.dll` dependency, an explicit `--target`, and a mandatory run on real Windows.
+- references/project-shape.md: on edition 2024 with Rust 1.85-1.98, overriding inherited `default-features` was rejected outright, not ignored.
+- Date stamps re-verified to October 2026: rustfmt `imports_granularity`/`group_imports` still unstable; cargo-zigbuild #479 fix still unreleased.
+
+### Fixed
+
+- references/async-basics.md: the paused-clock advice was reversed. tokio says to "prefer using [`sleep`] with auto-advance rather than `advance`", which "doesn't guarantee that all timers will be processed"; the skill said the opposite.
+- references/crate-shortlist.md: the SIGPIPE `SIG_DFL` recipe kills any process that also does network I/O on Linux, because std's `TcpStream::write_vectored` goes to `writev` without `MSG_NOSIGNAL`. It now shows the `BrokenPipe`-at-the-write-site fix and limits `SIG_DFL` to pure filters.
+- references/crate-shortlist.md: `sqlx.toml` is read only with the `sqlx-toml` feature, which "`sqlx-cli` has ... enabled by default, but `sqlx` does **not**"; the tracing `format::Json` quote is now verbatim.
+- references/dev-environment.md: kache's automatic GC starts at 110% of `local_max_size` (evicting to 90%), not at the cap.
+
+Verified against: rust@1.99.0, tokio@1.53.2, kache@1.0.0
+
 ## [0.7.0] - 2026-09-30
 
 ### Added

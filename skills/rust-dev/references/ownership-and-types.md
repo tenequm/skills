@@ -166,6 +166,7 @@ Writing that as a `contains_key` check followed by an `insert` hashes the key tw
 
 - **Single owner, just needs to be on the heap** (e.g., recursive types, large structs in enums): `Box<T>`.
 - **Shared ownership across one thread** (e.g., a tree where multiple parents point to the same child): `Rc<T>`. Reach for it sparingly; it usually signals a graph structure that could be flattened.
+- **A back-pointer** (child to parent, observer to subject): `Weak<T>`, from `Rc::downgrade` or `Arc::downgrade`. Two `Rc`s pointing at each other never reach a count of zero, so neither is ever freed - a real leak in safe Rust. A `Weak` does not keep its target alive; `upgrade()` returns `None` once the target is gone.
 - **Shared ownership across threads** (e.g., shared state in a `tokio::spawn`'d task): `Arc<T>`.
 - **Need to mutate through a shared pointer**:
   - Single thread: `Rc<RefCell<T>>` (not recommended as default)
@@ -197,6 +198,36 @@ let state = Arc::new(Mutex::new(Counter::new()));
 }                                  // guard dropped here
 do_async_thing().await;
 ```
+
+### Edition 2024 shortened some lock lifetimes
+
+Older advice warns that `if let Some(x) = map.lock().unwrap().get(k) { ... } else { map.lock()... }` deadlocks, because the first guard lives until the end of the whole `if let`/`else`. That was true through edition 2021. In edition 2024, "the temporary values generated from evaluating `$expr` will be dropped before the program enters the `else` branch instead of after", so that particular deadlock is gone. The guard still lives through the `if` body, so do not lock again *there*.
+
+## Moving Out of Something You Only Borrow
+
+`cannot move out of ... which is behind a mutable reference` is the error you get when you try to take ownership of a field through `&mut self`. The fix is not `.clone()` - it is to leave something valid behind:
+
+```rust
+use std::mem;
+
+enum State { Idle, Running(String) }
+
+struct Job { output: Vec<String>, current: Option<String>, state: State }
+
+impl Job {
+    fn drain(&mut self) -> Vec<String> {
+        mem::take(&mut self.output)           // moves the Vec out, leaves Vec::new()
+    }
+    fn finish(&mut self) -> Option<String> {
+        self.current.take()                   // moves out, leaves None
+    }
+    fn stop(&mut self) -> State {
+        mem::replace(&mut self.state, State::Idle)   // returns the old value
+    }
+}
+```
+
+`mem::take` works for any `Default` type; `mem::replace` when there is no sensible default, like `State` here. (For an `Option`, `self.current.replace(new)` is the shorthand, and clippy flags the `mem::replace` spelling.) And to *look at* an `Option<String>` without moving it, `as_deref()` turns `&Option<String>` into `Option<&str>` - the shape a function taking `Option<&str>` wants.
 
 ## Lifetimes (When You Cannot Avoid Them)
 

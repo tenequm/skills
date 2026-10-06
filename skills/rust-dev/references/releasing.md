@@ -18,7 +18,7 @@ Reach for Route B only when you need something dist does not model - an unusual 
 
 What follows is **one pipeline that works in production**, not the only correct shape. Copy the parts that fit. The value here is less the YAML than the reasoning behind each decision - most of these were learned by breaking something.
 
-The pieces: [`release-plz`](https://release-plz.dev) drives versioning and publishing, [`cargo-zigbuild`](https://github.com/rust-cross/cargo-zigbuild) cross-compiles every target from a single Linux runner, and a handful of plain shell steps fan the built binaries out to GitHub Releases, Homebrew, and Nix.
+The pieces: [`release-plz`](https://release-plz.dev) drives versioning and publishing, [`cargo-zigbuild`](https://github.com/rust-cross/cargo-zigbuild) (with [`cargo-xwin`](https://github.com/rust-cross/cargo-xwin) for Windows) cross-compiles every target from a single Linux runner, and a handful of plain shell steps fan the built binaries out to GitHub Releases, Homebrew, and Nix.
 
 ### release-plz drives versioning
 
@@ -121,14 +121,14 @@ Then build artifacts with `--profile dist`. See `performance.md` for the fuller 
 `cargo-zigbuild` uses Zig as the linker, which cross-links glibc (and Mach-O, given an SDK) without Docker, without QEMU, and without a per-OS CI matrix. One Linux runner produces every artifact:
 
 ```sh
-rustup target add aarch64-apple-darwin x86_64-pc-windows-gnu \
+rustup target add aarch64-apple-darwin x86_64-pc-windows-msvc \
                   aarch64-unknown-linux-gnu x86_64-unknown-linux-gnu
 
 cargo zigbuild --locked --profile dist --target aarch64-apple-darwin
 cargo zigbuild --locked --profile dist \
   --target aarch64-unknown-linux-gnu \
   --target x86_64-unknown-linux-gnu
-cargo zigbuild --locked --profile dist --target x86_64-pc-windows-gnu
+cargo xwin build --locked --profile dist --target x86_64-pc-windows-msvc
 ```
 
 **The trap - and why those are three commands, not one.** Cargo resolves and **unifies features across every `--target` in a single invocation**. A dependency that a `cfg`-gated feature pulls in for one platform therefore leaks into the others: a macOS-only GPU backend gets enabled for the Windows build, or a `cfg(not(windows))` assembly feature drags a crate that `compile_error!`s on Windows into the Windows build. Grouping only the targets that share a feature set into one invocation - and giving the platform-divergent ones their own - is what avoids it. If a cross build fails with an error about a dependency that has no business being there, this is why.
@@ -141,7 +141,23 @@ Worse, the leak does not have to come from *your* manifest. A crate three levels
 
 If you build macOS binaries with Zig, expect to re-sign them (an ad-hoc `rcodesign sign` is enough); Zig's recorded SDK metadata can otherwise trip newer macOS loaders.
 
-**Pin `cargo-zigbuild` and Zig together, and run the release build before release day.** They version independently, and a pairing can break linking outright: cargo-zigbuild 0.23.4 with Zig 0.16 broke Apple `cdylib` links, because rewriting `-Wl,<path>` "detaches the operand from `-exported_symbols_list`" (issue #479; the fix is merged but unreleased as of September 2026). The general trap: a job that only runs on release meets every toolchain bump for the first time *during* a release. Run the dist build on any PR that changes the Rust toolchain, Zig, or cargo-zigbuild.
+**Pin `cargo-zigbuild` and Zig together, and run the release build before release day.** They version independently, and a pairing can break linking outright: cargo-zigbuild 0.23.4 with Zig 0.16 broke Apple `cdylib` links, because rewriting `-Wl,<path>` "detaches the operand from `-exported_symbols_list`" (issue #479; the fix is merged but unreleased as of October 2026). The general trap: a job that only runs on release meets every toolchain bump for the first time *during* a release. Run the dist build on any PR that changes the Rust toolchain, Zig, or cargo-zigbuild.
+
+### Windows: ship msvc, link the CRT statically, and run it once
+
+Zig makes `x86_64-pc-windows-gnu` the easy Windows target, but the rustc book's page for it carries the banner "These targets do not have any maintainers and are not properly maintained." The mainstream target is `x86_64-pc-windows-msvc`, and `cargo-xwin` cross-builds it from Linux or macOS by fetching the MSVC CRT and Windows SDK for you.
+
+An msvc binary links the C runtime dynamically by default - the Reference: "Typically targets are linked dynamically by default" - which means `vcruntime140.dll`. That DLL ships with the Visual C++ Redistributable, not with Windows, so the `.exe` dies with `STATUS_DLL_NOT_FOUND` on a clean machine while working on every developer box. Link the CRT statically:
+
+```toml
+# .cargo/config.toml
+[target.x86_64-pc-windows-msvc]
+rustflags = ["-C", "target-feature=+crt-static"]
+```
+
+Always build it with an explicit `--target x86_64-pc-windows-msvc`, even on a Windows host. With `--target`, target rustflags apply only to the artifacts for that target; without it, they also reach build scripts and proc macros, which cannot be built with a static CRT.
+
+Then **execute the artifact on real Windows** at least once per release - a `windows-latest` job that runs `my-app --version` is enough. A cross-built binary that no job ever runs can ship broken for months: a missing DLL, or the 1 MiB main-thread stack that overflows a large async state machine before argument parsing (see `async-basics.md`), both crash on the first invocation and on nothing else.
 
 ### Fan out to installers from a single build
 
@@ -156,7 +172,7 @@ Every channel is fed from the same artifacts, so build once and derive the rest.
   pkg-fmt = "txz"
   bin-dir = "{ bin }{ binary-ext }"
 
-  [package.metadata.binstall.overrides."x86_64-pc-windows-gnu"]
+  [package.metadata.binstall.overrides."x86_64-pc-windows-msvc"]
   pkg-fmt = "zip"
   ```
 

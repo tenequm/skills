@@ -2,6 +2,26 @@
 
 Traits are how Rust does polymorphism. Generics give you static dispatch (zero runtime cost). Trait objects (`dyn Trait`) give you dynamic dispatch (one vtable lookup). Traits are not Java/C# interfaces in the way that matters most: there is no runtime cost by default.
 
+## Methods and Constructors: Inherent `impl`
+
+Before traits: a type's own methods live in an `impl` block with no trait name. Methods take `self` in one of its forms; functions without a `self` are *associated functions*, called with `Type::name(...)`, and the conventional constructor is one of them.
+
+```rust
+pub struct Account { id: u64, balance: i64 }
+
+impl Account {
+    pub fn new(id: u64) -> Self {             // associated function: Account::new(1)
+        Self { id, balance: 0 }
+    }
+    pub fn deposit(&mut self, amount: i64) {  // method: account.deposit(5)
+        self.balance += amount;
+    }
+    pub fn balance(&self) -> i64 { self.balance }
+}
+```
+
+The Book is explicit that "`new` isn't a special name and isn't built into the language" - it is convention, so add other constructors freely (`with_capacity`, `from_file`). Rust has no constructor overloading; when a type has many optional settings, use a builder or `Default` plus struct-update syntax (`Config { verbose: true, ..Default::default() }`).
+
 ## Defining and Implementing a Trait
 
 ```rust
