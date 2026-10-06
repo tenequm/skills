@@ -1,11 +1,11 @@
 ---
 name: acpx-faq
-description: Run coding agents (codex, claude, agy) through the acpx ACP CLI - headless persistent sessions you can queue to, watch and resume. Use before launching or prompting a subagent, or when a command fails, a session is missing, or a prompt is lost.
+description: Run coding agents (codex, claude, agy) through the acpx ACP CLI - one-shot dispatch into named sessions you can watch live. Use before launching or prompting a subagent, or when a command fails, a session is missing, or a prompt is lost.
 metadata:
-  version: "0.8.0"
+  version: "0.9.0"
   categories: "agents, operations"
   topics: "acpx, acp, agent-orchestration, troubleshooting, headless-agents"
-  upstream: "acpx@0.19.4, @agentclientprotocol/claude-agent-acp@0.84.0, @agentclientprotocol/codex-acp@2.0.1, agy@1.2.14, agy_acp_server@1.2.1"
+  upstream: "acpx@0.19.4, @agentclientprotocol/claude-agent-acp@0.85.1, @agentclientprotocol/codex-acp@2.1.1, agy@1.2.14, agy_acp_server@1.2.1"
   openclaw:
     homepage: https://github.com/tenequm/skills/tree/main/skills/acpx-faq
     emoji: "🔌"
@@ -76,19 +76,29 @@ In-session fan-out stays on the harness's own subagent tool.
    warm.** Every `-s` prompt elects a queue owner holding `npm exec -> node <adapter>
    -> <agent>` (plus the agent's MCP servers), roughly 550-650 MB before MCP. After
    the idle TTL (default 300s) the owner exits and the session stays resumable; the
-   next prompt respawns it. `sessions close` ends the task; `--ttl 0` removes the
-   self-reap. See Teardown.
+   next prompt respawns it. `sessions close` ends the task - chain it into the launch
+   line (see Per agent) so teardown never depends on anyone remembering; `--ttl 0`
+   removes the self-reap. See Teardown.
 
 ## Per agent
 
-**Default to a named persistent session for dispatched work** - it is what lets you
-answer a blocker, queue a correction, or continue after a failure with the agent's
-context intact: `sessions ensure` once, prompt with `-s <name>`, queue follow-ups with
-`--no-wait`, and `sessions close` only when the task is done (see Talking to a live
-session). Use `exec` for true one-shots - a preflight "Reply OK", a single question -
-where nothing will follow: no saved record, no queue owner, nothing to clean up.
-Sessions key on agent command + cwd + name; give each parallel executor its own name
-and, when it writes files, its own directory (ideally one worktree).
+**Dispatch one-shot: `sessions ensure && prompt && sessions close`, one chained
+call.** One named session per task, one prompt, closed when the result file is read.
+The `&&` chain makes teardown mechanical - nothing reaps open records, and orphans
+come from unchained closes - while a turn that fails nonzero (timeout 3, permission 5)
+skips the close on its own, leaving the session open for recovery (see Talking to a
+live session). An externally cancelled turn still exits 0, so the result file, not
+the exit code, is the success check (invariant 5). Do not park a session for expected
+follow-ups: a blocker's state lives outside the conversation (creds are machine-level,
+partials belong in the result file) - answer it with a fresh session fed the brief
+plus that file. Rework - a correction, review, or polish of a session's output - also
+gets a fresh session: an agent re-reading its own context misses what fresh eyes
+catch. Never `--no-wait` into a session whose launch line carries the close: owner
+shutdown drops pending prompts silently and cancels the active turn (verified 0.19.4);
+a blocking prompt before the close is safe. Use `exec` for a stateless answer with no
+record worth keeping (a preflight "Reply OK"). Sessions key on agent command + cwd +
+name; give each parallel executor its own name and, when it writes files, its own
+directory (ideally one worktree).
 
 Adapters run through `npm exec`. A fresh HOME per job re-downloads them (hundreds of
 MB each); share one `npm_config_cache`. On macOS a fresh HOME also hides the login
@@ -187,10 +197,10 @@ D=/abs/dir
 acpx --cwd "$D" codex sessions ensure --name work            # idempotent; -s cannot create
 acpx --cwd "$D" codex set model gpt-5.6-sol -s work
 acpx --cwd "$D" codex set reasoning_effort high -s work
-acpx --cwd "$D" --approve-all --timeout 5400 --suppress-reads \
-     codex -s work 'Carry out ./brief.md. Write your report to ./report.md.' > run.log 2>&1 &
-# ...after the run finishes and you have read what you need:
-acpx --cwd "$D" codex sessions close work   # ALWAYS - the run is not over until this returns
+{ acpx --cwd "$D" --approve-all --timeout 5400 --suppress-reads \
+     codex -s work 'Carry out ./brief.md. Write your report to ./report.md.' && \
+  acpx --cwd "$D" codex sessions close work; } > run.log 2>&1 &
+# a failed turn skips the close - re-prompt -s work to recover, then close yourself
 ```
 
 One-shot: `exec --config-option reasoning_effort=low` sets model and effort inline
@@ -208,8 +218,8 @@ One-shot: `exec --config-option reasoning_effort=low` sets model and effort inli
   re-prompting the same `-s <name>` (context survives unless the reconnect fails -
   acpx then silently falls back to `session/new`) with the artifact renamed
   neutrally and the remaining steps listed explicitly.
-- **Queue a follow-up onto a live session** by prompting the same name again - it runs
-  after the current turn. This is how you course-correct without relaunching.
+- **Re-prompting the same name queues behind the current turn** - the recovery path
+  after a content-filter kill (above), not a dispatch pattern; close once recovered.
 - **Handing off to a human TUI**: `sessions close` first, then `codex resume
   <sessionId>` (id from `sessions show` - it is the ordinary codex rollout id).
 - **MCP servers still starting when codex builds its tool list are dropped** (1s shared
@@ -222,12 +232,11 @@ One-shot: `exec --config-option reasoning_effort=low` sets model and effort inli
 D=/abs/dir
 acpx --cwd "$D" --model claude-opus-5 claude sessions ensure --name work
 acpx --cwd "$D" claude set effort high -s work                 # optional; after any model change
-acpx --cwd "$D" --model claude-opus-5 --approve-all --suppress-reads --timeout 2400 \
-     claude -s work -f /abs/brief.md >> run.log 2>&1 &
-# follow-up, answer or correction - same session, queues behind a running turn:
-acpx --cwd "$D" --model claude-opus-5 --approve-all claude -s work --no-wait -f /abs/next.md
-# only when the task is done:
-acpx --cwd "$D" claude sessions close work
+{ acpx --cwd "$D" --model claude-opus-5 --approve-all --suppress-reads --timeout 2400 \
+     claude -s work -f /abs/brief.md && \
+  acpx --cwd "$D" claude sessions close work; } >> run.log 2>&1 &
+# failed turn (exit 3/5) = close skipped: re-prompt -s work to recover with context,
+# then close; anything after a clean close is a fresh session fed the result file
 ```
 
 - **Effort is `set effort <level>`**; `set reasoning_effort` is the codex name and
@@ -307,7 +316,8 @@ waiting for `idle` spins past real completion (invariant 3). What is actually co
   the retained window, earlier turns included - match the `requestId` from
   `[queued] <id>`, and break out yourself (it never exits on an open session).
   `WATCH_OUTCOME_UNKNOWN` means the owner died mid-turn - the prompt may have run;
-  check before resubmitting. `WATCH_OWNER_UNSUPPORTED` is an older owner - close it;
+  check before resubmitting (`requestId` is not an idempotency key: a resubmit runs
+  twice). `WATCH_OWNER_UNSUPPORTED` is an older owner - close it;
 - the foreground stream's terminating `[done] end_turn`, plus the process exit code;
 - `sessions show <n>` (`lastActivity`, `historyEntries`), `sessions history <n>`, and
   `sessions read <n> --tail N` (shows in-flight tool calls);
@@ -340,9 +350,11 @@ nothing to watch; for codex, `tail -f` the newest
 
 `sessions close <n>` takes down the whole resident stack (owner -> `npm exec` ->
 `node <adapter>` -> agent binary -> its MCP servers) and marks the task finished.
-Close when the task is done, not after every turn - between turns the idle TTL frees
-the stack and the session stays resumable. A `"ttl": 0` config makes forgotten
-owners resident for hours; with the default they exit after 300s idle.
+With chained one-shot dispatch the close runs itself; a separate close is owed only
+after a failed turn's recovery or a deliberately tended multi-turn session - there
+the idle TTL frees only the process stack, and the record stays open until you close
+it. A `"ttl": 0` config makes forgotten owners resident for hours; with the default
+they exit after 300s idle.
 
 Liveness and leak check - never `pgrep -l` or `ps -o args`: command lines of wrapper
 shells can carry secrets, and the bracketed first letter keeps the pattern from
@@ -428,23 +440,31 @@ The turn still exits **0** and ends `[done] end_turn` - grep for
 
 ## Talking to a live session
 
-Verified end to end with acpx 0.19.4 and the claude adapter:
+For the one live turn of a one-shot dispatch, and for recovery after a failed one.
+Verified end to end with acpx 0.19.4 and claude-agent-acp 0.85.1:
 
 - **Queue:** `--no-wait` prompts run in submission order after the running turn.
 - **Redirect:** `cancel -s <name>`, then a new prompt. Nothing reaches a running turn
   otherwise (see below).
 - **Blockers:** have the brief tell the agent to stop with `BLOCKED: <what, where>` at
-  the top of its result file and end the turn; answer with a follow-up prompt into the
-  same session - it continues with full context.
+  the top of its result file - and dump everything gathered so far below it - then end
+  the turn. Close the session and answer with a fresh one fed the brief plus that
+  file: the blocking state lives outside the conversation (creds are machine-level,
+  results belong in files), and a resumed child's memory is not what you assume (a
+  failed reconnect silently starts a new conversation - see Recovery).
 - **Mid-turn channel:** when a brief may need an answer mid-turn, tell the agent to
   append `PROGRESS:` / `QUESTION:` lines to a progress file and to poll an answer file
   with short foreground sleeps. Tail the progress file from the driving side (under
-  the Monitor tool from Claude Code) and write the answer file.
+  the Monitor tool from Claude Code) and write the answer file. A blocker answered
+  this way resolves inside the turn - no session outlives it. (The claude adapter
+  ships a `_session/steering` extension since 0.84.0, but acpx exposes no verb for it
+  yet - openclaw/acpx#836 - so the file poll stays the only mid-turn inbound.)
 - **Recovery:** a failed or timed-out turn (exit 3, `turn_result: failed`) leaves the
   session intact - prompt the same name again. After the idle owner exits, the next
   prompt respawns and resumes the same conversation. After any respawn check that
   `sessionId` in `sessions show` is unchanged: a failed reconnect silently falls back
-  to a new conversation.
+  to a new conversation. After recovery the close is yours to run - the chain already
+  skipped it.
 
 ## What acpx cannot do
 
@@ -530,4 +550,9 @@ Error catalog - string -> fix:
 Silent failures worth an explicit check: content-filter kills and MCP load failures
 both end `[done] end_turn` with exit 0; a denied agy write ends `[done] end_turn`
 with exit 5; a `--no-wait` prompt that "sent" may still be queued behind a running
-turn; `status` reads `running` long after completion.
+turn; `status` reads `running` long after completion; `sessions close` drops pending
+`--no-wait` prompts with no error and cancels the active turn, whose submitter exits
+0 with `[done] cancelled`; killing a blocking submitter kills the child's turn with
+it (SIGTERM: exit 143, nothing reaches the transcript); and a `completed`
+`turn_result` does not prove provider success - a codex provider error can end as a
+clean `end_turn` (openclaw/acpx#850) - the result file remains the check.

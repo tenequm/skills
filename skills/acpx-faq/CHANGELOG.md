@@ -4,6 +4,35 @@ All notable changes to this skill are documented in this file, following [Keep a
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-10-06
+
+### Changed
+
+- Default reversed from 0.8.0: dispatch is one-shot - `ensure && prompt && close` in
+  one chained call. Two weeks of fleet data showed ~95% of persistent sessions never
+  got a second prompt, while unchained closes produced multi-day orphaned records and
+  reused sessions grew to ~6x a fresh brief's context, degrading rework quality.
+- Blockers are answered with a fresh session fed the brief plus the result file
+  (which must carry the partial findings), never a follow-up into the old session:
+  the blocking state (credentials, browser, partials) lives outside the conversation.
+- Rework - correction, review, polish of a session's output - goes to a fresh session;
+  an agent re-reading its own context misses what fresh eyes catch.
+- Teardown: with chained dispatch the close runs itself; a failed turn (exit 3/5)
+  skips the chain's close, leaving the session open for recovery (verified 0.19.4).
+- upstream: claude-agent-acp 0.85.1, codex-acp 2.1.1.
+
+### Added
+
+- Trap: `sessions close` drops pending `--no-wait` prompts silently and cancels the
+  active turn (submitter exits 0, `[done] cancelled`) - never `--no-wait` into a
+  session whose launch line carries the close; a blocking prompt before close is safe.
+- Trap: killing a blocking submitter kills the child's turn (SIGTERM: exit 143).
+- A `completed` turn_result does not prove provider success (openclaw/acpx#850);
+  `requestId` is not an idempotency key.
+- Mid-turn steering status: claude-agent-acp ships `_session/steering` since 0.84.0;
+  acpx has no verb for it yet (openclaw/acpx#836) - the progress/answer file poll
+  remains the only mid-turn inbound, and resolves blockers inside the turn.
+
 ## [0.8.0] - 2026-10-02
 
 ### Changed
