@@ -10,6 +10,7 @@ Complete Zod-to-JSON-Schema conversion rules, known breakage, outputSchema, and 
 - [Non-Text Content Types](#non-text-content-types)
 - [Other Tool-Definition Fields](#other-tool-definition-fields)
 - [Tool Design Patterns](#tool-design-patterns)
+- [Spec Security Duties for Tool Servers](#spec-security-duties-for-tool-servers)
 - [Other Server Primitives](#other-server-primitives)
 
 ## Zod Schema Conversion
@@ -22,7 +23,7 @@ The SDK's `normalizeObjectSchema()` gates Zod schemas through `toJsonSchemaCompa
 
 Key constraint: The MCP protocol requires `Tool.inputSchema` to have `type: "object"` at the top level. Any Zod type that doesn't produce this is silently dropped or produces an empty schema.
 
-### v2 Path (current, 2.0.0)
+### v2 Path (current)
 
 v2 uses Standard Schema interfaces (`StandardSchemaWithJSON`). The conversion delegates to the schema library's native `toJSONSchema()`. Zod v4's native `z.toJSONSchema()` produces correct JSON Schema 2020-12 output.
 
@@ -259,7 +260,7 @@ server.registerTool("get_weather", {
 - Client SHOULD validate `structuredContent` against the schema
 - Server SHOULD also include serialized JSON in `content` for backward compatibility
 - "Soft contracts" - tools SHOULD produce schema-compliant outputs but the spec acknowledges AI-generated outputs may vary
-- **No precedence rule.** The spec never defines which field a client prefers when both `content` and `structuredContent` are present - left client-defined, which is why clients diverge; a clarification is in flight via SEP-1624 -> SEP-2200 (see SKILL.md "Tool Result Delivery: content vs structuredContent" for the empirical Claude Code 2.1.165 matrix, the cross-client table, and the maintainer confirmation). VS Code's maintainers frame `structuredContent` as PTC-only and not model-facing ([microsoft/vscode#290063](https://github.com/microsoft/vscode/issues/290063)); other clients disagree, so a portable server cannot rely on it either way.
+- **No precedence rule.** The spec never defines which field a client prefers when both `content` and `structuredContent` are present - left client-defined, which is why clients diverge. The clarification SEPs (1624, 2200) were both closed unmerged; the live track is the roadmap's tool-result-shape redesign (see SKILL.md "Tool Result Delivery: content vs structuredContent" for the empirical Claude Code 2.1.165 matrix, the cross-client table, and the maintainer confirmation). VS Code's maintainers frame `structuredContent` as PTC-only and not model-facing ([microsoft/vscode#290063](https://github.com/microsoft/vscode/issues/290063)); other clients disagree, so a portable server cannot rely on it either way.
 
 ### Token Reality (not a free channel)
 
@@ -339,6 +340,10 @@ return {
   ],
 };
 ```
+
+### Bulk Exports: Don't Hand the Agent Only a `resource_link`
+
+A `resource_link` to a large artifact looks like the right shape, but for an agent it is a dead end: the only way to follow it is `resources/read`, which pulls the bytes straight into context - impossible for a multi-megabyte export. For outputs far beyond any context budget, also return something the agent can act on without reading it: a download URL (remote servers) or a local file path (stdio servers on the same machine).
 
 ### Image-Returning Tools
 
@@ -466,18 +471,32 @@ server.tool("list_models", "List available models", {
 }, handler);
 ```
 
+### Spec Security Duties for Tool Servers
+
+The 2026-07-28 tools page states them as MUSTs, not hygiene tips: *"Servers **MUST**: Validate all tool inputs; Implement proper access controls; Rate limit tool invocations; Sanitize tool outputs"*. Output sanitization is the one most servers skip - tool output is model input, so strip or neutralize upstream content that could carry instructions.
+
+Bound input size, too. `maxToolInputElements` on the `McpServer` constructor (sdk 1.32.0 / server 2.3.0, **off by default**) caps the combined array elements and object members in one call's `arguments`; an oversized call returns an `isError` result naming the limit before the schema runs. The transport's 4 MiB `maxRequestBodySize` is the coarse limit, this is the fine one.
+
+```typescript
+const server = new McpServer({ name: "my-server", version: "1.0.0" }, { maxToolInputElements: 10_000 });
+```
+
+**Never dereference a network `$ref`.** Schemas may now use any JSON Schema 2020-12 keyword with `$ref`, but *"Implementations **MUST NOT** automatically dereference `$ref` values that resolve to a network URI"*, and schemas that fail on an unresolved external `$ref` SHOULD be rejected. Publish self-contained schemas (`$defs` + local `$ref` only), and don't run a validator in auto-fetch mode on schemas you received.
+
 ## Other Server Primitives
 
 Beyond tools, the spec (2025-11-25) defines primitives a production server often needs. All are optional capabilities negotiated at initialization; a server that omits them still conforms.
 
 | Primitive | Methods | When you need it |
 |-----------|---------|------------------|
-| **Prompts** | `prompts/list`, `prompts/get` (`registerPrompt`) | Reusable, parameterized prompt templates users invoke by name (slash-commands, canned workflows). Args are completable. |
+| **Prompts** | `prompts/list`, `prompts/get` (`registerPrompt`) | Reusable, parameterized prompt templates users invoke by name (slash-commands, canned workflows). Args are completable. Since server 2.3.0 (and sdk 1.32.0 for `tools/call` too), a call without `arguments` is validated as `{}`, so a `.default()` on the whole args schema is no longer applied. |
 | **Resources** | `resources/list`, `resources/read` (`server.resource(name, uri, config, readCallback)`) | Documentation or structured data exposed by URI - a `docs://` scheme is the common convention for guides shipped alongside tools. |
 | **Resource Templates** | `resources/templates/list` (RFC 6570 URI templates) | Parameterized resources - `docs://{id}` instead of enumerating every static URI. Template variables are completable. |
 | **Pagination** | opaque `cursor` param + `nextCursor` in result, on every `*/list` | Large tool/resource/prompt catalogs. The cursor is opaque - never parse or synthesize it; loop until `nextCursor` is absent. Distinct from in-tool `offset`/`limit` args. |
-| **Completions** | `completion/complete` | Argument autocomplete for prompt args and resource-template variables. Return ranked candidates with `hasMore`/`total` hints. |
+| **Completions** | `completion/complete` | Argument autocomplete for prompt args and resource-template variables. Return ranked candidates with `hasMore`/`total` hints. SDK gotcha: `completable(z.string(), cb).describe(...)` silently drops the completion ([#2949](https://github.com/modelcontextprotocol/typescript-sdk/issues/2949)) - only `.optional()` survives after `completable()`, so describe the inner schema. |
 | **Cancellation** | `notifications/cancelled` | Client aborts an in-flight long request by id. Honor it via the handler's abort signal (`extra.signal` v1 / `ctx.mcpReq.signal` v2) - stop work, release resources. |
+
+**File-backed resources and templates are a path-traversal surface.** Never pass a template variable or client-supplied URI to a filesystem API unchecked: `..` arrives raw and percent-encoded, and a symlink inside your root can point outside it. Resolve the real path and confirm it is still under the root before reading.
 
 ```typescript
 server.resource("search-operators", "docs://search-operators", {

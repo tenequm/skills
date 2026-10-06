@@ -35,6 +35,7 @@ Format: `{vendor-prefix}/{extension-name}`
 | OAuth Client Credentials | `io.modelcontextprotocol/oauth-client-credentials` | Draft | [ext-auth](https://github.com/modelcontextprotocol/ext-auth) |
 | Enterprise-Managed Auth | `io.modelcontextprotocol/enterprise-managed-authorization` | Stable (2026-06-18) | [ext-auth](https://github.com/modelcontextprotocol/ext-auth) |
 | Tasks | `io.modelcontextprotocol/tasks` | Official (SEP-2663, final 2026-05-15); repo dropped its "experimental" framing 2026-08-19, schema frozen Stable at `2026-07-28` | [ext-tasks](https://github.com/modelcontextprotocol/ext-tasks) |
+| Skills | `io.modelcontextprotocol/skills` | Official ([SEP-2640](https://modelcontextprotocol.io/seps/2640-skills-extension) Final; merged 2026-09-13) | [docs](https://modelcontextprotocol.io/extensions/skills/overview) |
 
 ### Negotiation
 
@@ -72,7 +73,7 @@ Each extension defines its settings schema. Empty object = no settings.
 
 Official extensions follow the SEP (Specification Enhancement Proposal) process ([SEP-2133](https://modelcontextprotocol.io/seps/2133-extensions)):
 
-1. **Propose** - Create SEP with type "Extensions Track" per [SEP guidelines](https://modelcontextprotocol.io/community/sep-guidelines)
+1. **Propose** - Create SEP with type "Extensions Track" per [SEP guidelines](https://modelcontextprotocol.io/community/sep-guidelines). *"Prior discussion is required"* - a SEP without a linked prior discussion is not accepted
 2. **Implement** - Build at least one reference implementation in an official SDK (required before review)
 3. **Review** - Core Maintainers review and approve
 4. **Publish** - Add to extension repository
@@ -102,6 +103,7 @@ Breaking changes: removing/renaming fields, changing types, altering semantics, 
 
 | Client | MCP Apps | OAuth Client Creds | Enterprise Auth |
 |--------|----------|-------------------|-----------------|
+| [mcpc](https://github.com/apify/mcpc) (CLI) | - | Yes | Yes |
 | Claude (web + Desktop) | Yes | - | - |
 | ChatGPT | Yes | - | - |
 | VS Code Copilot | Yes | - | - |
@@ -113,7 +115,7 @@ Breaking changes: removing/renaming fields, changing types, altering semantics, 
 | Archestra.AI | Yes | - | Yes |
 | PostHog Code | Yes | - | - |
 
-Enterprise-Managed Authorization reached **Stable** (2026-06-18); Archestra.AI is the first client shipping it. OAuth Client Credentials remains Draft with no client adoption yet - check the official [client matrix](https://modelcontextprotocol.io/extensions/client-matrix) and [ext-auth](https://github.com/modelcontextprotocol/ext-auth) for latest status.
+Enterprise-Managed Authorization reached **Stable** (2026-06-18). OAuth Client Credentials remains Draft, with its first client (the `mcpc` CLI) listed 2026-09-28. The official matrix now also tracks the Skills extension and has no Tasks column - check the official [client matrix](https://modelcontextprotocol.io/extensions/client-matrix) and [ext-auth](https://github.com/modelcontextprotocol/ext-auth) for latest status.
 
 ## Authorization Extensions
 
@@ -171,6 +173,8 @@ The official centralized metadata repository for publicly accessible MCP servers
 
 **Ownership is proven from inside the package**, via an `mcp-name:` token in the published README. One gotcha bites Rust publishers specifically: *"Unlike PyPI and NuGet (which preserve HTML comments in their README rendering), **crates.io strips HTML comments during markdown -> HTML conversion**"* - so on crates.io the token has to be visible text, not a hidden comment.
 
+**Remote servers**: a hosted server publishes a `remotes` entry in `server.json` (URL, with template variables and headers) instead of, or alongside, `packages`. A remote-only server needs no package at all; its `description` is limited to 100 characters.
+
 **Public servers only**: Private servers (internal networks, private registries) are not supported. Self-host for those.
 
 **Aggregator-first design**: Intended for consumption by downstream aggregators (marketplaces, catalogs) via REST API, not direct use by host applications. Aggregators poll periodically (e.g., hourly).
@@ -199,22 +203,37 @@ Servers are versioned within the registry. See [versioning guide](https://modelc
 
 The spec includes server-to-client request capabilities. Elicitation and Progress are core protocol features; Sampling is Deprecated (SEP-2577) and Tasks has moved to an official extension (SEP-2663).
 
-> **Shape change on 2026-07-28.** Servers can no longer send requests to clients at all. Elicitation and sampling are reached through **Multi Round-Trip Requests**: the tool returns an `InputRequiredResult` carrying `inputRequests`, and the client answers with `inputResponses` on a retry of the original request. The `ctx.mcpReq.*` call style below is the 2025-era API - still what the SDK does by default. See `references/spec-2026-07-28.md`.
+> **Shape change on 2026-07-28.** Servers can no longer send requests to clients at all. Elicitation and sampling are reached through **Multi Round-Trip Requests**: the tool returns an `InputRequiredResult` carrying `inputRequests`, and the client answers with `inputResponses` on a retry of the original request. The `ctx.mcpReq.*` call style below is the 2025-era API, and `elicitInput` **throws on a 2026-07-28 connection** - which Claude Code now negotiates with HTTP servers. See `references/spec-2026-07-28.md`.
 
 ### Elicitation
 
 Request structured user input mid-tool-execution. Server sends a schema, client prompts the user, returns the response.
 
 ```typescript
-// v2 API
-const input = await ctx.mcpReq.elicitInput({
-  message: "Please confirm the operation",
-  requestedSchema: {
-    type: "object",
-    properties: { confirm: { type: "boolean" } },
-  },
-});
+// v2, both eras: return the request; the default legacy shim serves 2025-era clients
+const confirmationSchema = z.object({ confirm: z.boolean() });
+
+server.registerTool("deploy", { inputSchema: z.object({ env: z.string() }) },
+  async ({ env }, ctx): Promise<CallToolResult | InputRequiredResult> => {
+    const answer = acceptedContent(ctx.mcpReq.inputResponses, "confirm", confirmationSchema);
+    if (answer?.confirm !== true) {
+      return inputRequired({
+        inputRequests: {
+          confirm: inputRequired.elicit({ message: `Deploy to ${env}?`, requestedSchema: confirmationSchema }),
+        },
+      });
+    }
+    return { content: [{ type: "text", text: `Deployed to ${env}` }] };
+  });
 ```
+
+The requested schema must convert to elicitation's flat primitive shape (strings and formats, inclusive number bounds, booleans, enums, `.optional()`, `.default()`); nested objects or `.regex()` throw a `TypeError` before anything is sent. `acceptedContent` re-validates the answer with the original schema, so refinements still hold on re-entry.
+
+**Server-side MUSTs** from the elicitation spec:
+
+- *"Servers **MUST NOT** request sensitive information (passwords, API keys, etc.) via form mode"* - use URL mode for anything credential-shaped.
+- In URL mode, servers **MUST NOT** provide a URL that is pre-authenticated to access a protected resource, and *"The MCP Server **MUST** verify the identity of the user who opens the URL before accepting information."*
+- URL-mode elicitation is the sanctioned way to obtain a user's third-party (upstream) token - the server runs the OAuth flow itself and keeps the token, instead of passing a client token through.
 
 Related SEPs: [#1034](https://github.com/modelcontextprotocol/modelcontextprotocol/issues/1034) (default values), [#1036](https://github.com/modelcontextprotocol/modelcontextprotocol/issues/1036) (URL mode for out-of-band interactions), [#1330](https://github.com/modelcontextprotocol/modelcontextprotocol/issues/1330) (enum improvements).
 
@@ -247,7 +266,7 @@ Check the specific sub-flag you need (`elicitation.url` for out-of-band flows, `
 
 Long-running operations with lifecycle management - progress tracking, cancellation, and status updates for operations spanning multiple requests. [SEP-2663](https://github.com/modelcontextprotocol/modelcontextprotocol/pull/2663) (final, 2026-05-15) supersedes the earlier SEP-1686 proposal: Tasks moved out of the core `2025-11-25` spec (the experimental `tasks` feature there is removed) into the official `io.modelcontextprotocol/tasks` extension. A server may answer a `tools/call` with an async task handle instead of a final result; the client **polls** via `tasks/get` and `tasks/update` (`tasks/cancel` to abort). The redesign drops the blocking `tasks/result` and `tasks/list` methods and allows servers to return task handles unsolicited.
 
-**Canonical source**: the [ext-tasks repo](https://github.com/modelcontextprotocol/ext-tasks) holds the full specification, with docs at [/docs/extensions/tasks/overview](https://modelcontextprotocol.io/docs/extensions/tasks/overview). The stale "experimental" README banner was removed on 2026-08-19; the repo now opens *"This repository contains the official Model Context Protocol Tasks extension"* and pins an immutable `2026-07-28` Stable schema snapshot.
+**Canonical source**: the [ext-tasks repo](https://github.com/modelcontextprotocol/ext-tasks) holds the full specification, with docs at [/extensions/tasks/overview](https://modelcontextprotocol.io/extensions/tasks/overview). The stale "experimental" README banner was removed on 2026-08-19; the repo now opens *"This repository contains the official Model Context Protocol Tasks extension"* and pins an immutable `2026-07-28` Stable schema snapshot.
 
 **Three rules that changed or are easy to miss:**
 
@@ -255,7 +274,13 @@ Long-running operations with lifecycle management - progress tracking, cancellat
 - **Authorize every task request, not just task creation.** *"Servers **MUST** perform authentication and authorization checks on each task-related request to ensure that the client has permission to access a task."* And because a task ID may function as a bearer token for stored state, servers **MUST** generate them *"with sufficient entropy that a third party cannot enumerate or guess them"* - the same discipline as the stateful-tool handles in `SKILL.md`.
 - **`CreateTaskResult` must not outrun durability.** A server **MUST NOT** return it *"until the task is durably created - that is, until a `tasks/get` for the returned `taskId` would resolve"*, waiting for consistency in eventually-consistent stores. That removes the need for clients to speculatively poll.
 
+Since `server@2.3.0`, `tasks/get` and `tasks/cancel` can be served on 2026-07-28 connections; if one factory serves both eras and a handler is meant for 2025-era clients only, register it only when `ctx.era === 'legacy'`. On v1, tasks were not bound to the session that created them before 1.32.0 ([GHSA-22jm-h49p-29qw](https://github.com/modelcontextprotocol/typescript-sdk/security/advisories/GHSA-22jm-h49p-29qw)) and still are not on servers without sessions - the per-request authorization rule above is the real control.
+
 In TypeScript SDK v2 the entire 2025-era task wire vocabulary is `@deprecated` - importable for backwards compatibility, but excluded from the typed method maps (`RequestMethod`, `RequestTypeMap`, `ResultTypeMap`, `NotificationTypeMap` carry no `tasks/*` entries), and removable at the major version that drops 2025-era support.
+
+### Skills (SEP-2640)
+
+Servers can ship agent skills - instruction bundles, not just tools - through MCP. *"Servers that declare this extension **MUST** implement `skills/list` and `skills/get`. Skill files are served through `resources/read`"* under `skill://` URIs. Worth knowing if your server's real value is a workflow the model should follow; client support is tracked in the [client matrix](https://modelcontextprotocol.io/extensions/client-matrix).
 
 ### Progress
 

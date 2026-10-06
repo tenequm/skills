@@ -7,6 +7,34 @@ and this skill adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.h
 
 ## [Unreleased]
 
+## [1.3.0] - 2026-10-06
+
+### Security
+- Four TypeScript SDK advisories published 2026-09-30..10-05: GHSA-rvq5-wwqv-78pq (bearer auth accepted tokens for another service; the `expectedResource` fix is off by default and needs `AuthInfo.resource` too), GHSA-22jm-h49p-29qw (v1 tasks not bound to their session), GHSA-6qxp-vccf-f47h (client sent credentials to a server-chosen authorization server), GHSA-6prh-2h8m-c8cw (client followed cross-origin redirects). Version floor raised to sdk >= 1.32.0 / server >= 2.3.0.
+- `maxToolInputElements` argument-size bound; the `requestState` integrity MUST (HMAC/AEAD) and `createRequestStateCodec`; server-side elicitation MUSTs; no network `$ref` dereferencing; the spec's tool-server MUSTs including output sanitization; path traversal through resource templates; Host/Origin gaps in `createMcpHandler` and in non-loopback framework-factory binds (#2843, #2844); state-handle hijacking on 2026-07-28.
+
+### Added
+- Claude Code client limits: the idle timeout that progress notifications reset (5 min HTTP / 30 min stdio), the 60 s HTTP first-byte timer, auto-backgrounding at 2 min, the 50,000-char persist-to-disk threshold, ~11k-char error-text truncation, the 2,048-char description/instructions cap, and tool search on by default.
+- `createMcpHandler(factory)` as the v2 HTTP entry point, serving both eras by default (`legacy: 'stateless'`), with correct Express/Hono mounting and a stdio section.
+- `scopeChallenge`/`requireScopes`, DPoP shipped in client 2.1.0, `<scheme>://*` allowed origins, and a "2.0.0 -> 2.3.1" migration section.
+- Skills extension (SEP-2640 Final); MCP Apps `visibility` and the UI-resource CSP/permissions fields; registry remote-only publishing.
+- Field-observed: a missing `ttlMs`/`cacheScope` makes strict clients reject whole list/read results; a dual-era stdio server must not latch the modern era after answering `server/discover`; DCR must return `201`; stale DCR client scopes; optional-auth endpoints split clients ("connected" is not "authenticated"); a bare `resource_link` to a bulk export is a dead end for agents.
+
+### Changed
+- **Breaking:** "build on the 2025-era wire unless you control both ends" is replaced by "serve both eras" - Claude Code now negotiates 2026-07-28 with HTTP servers, and `rmcp` >= 3.0 advertises it by default.
+- `ctx.mcpReq.elicitInput` throws on 2026-07-28 connections; examples use the `inputRequired` return pattern.
+- The canonical stateless example moves to `createMcpHandler` plus `hostHeaderValidationResponse`/`originValidationResponse`; the raw-transport DNS-rebinding options are `@deprecated`. `server@2.3.0` enforces one server per connection and one request per stateless transport.
+- Known-bugs table re-verified: #2607 and #2650 fixed in 2.2.0, #893 closed (v2 since 2.0.0; v1 fix unreleased), #2619 closed without a fallback, #2622 v1-only, the "fixed on main" items released in 2.1.0 / 1.30.1, GHSA-345p severity High; new open issues #2873, #2916, #2949.
+- Roadmap and process status: HTTP+SSE removal window opened (SEP-2596 Final 2026-06-03), SEP-2127 in review with `ai-catalog.json` discovery, SEP-2356 superseded by SEP-2631, Core Primitives and Agent Identity still forming, Ruby SDK Tier 1, Inspector `--protocol-era`, SEPs require prior discussion, OAuth Client Credentials has its first client.
+
+### Fixed
+- A thrown tool-handler error does reach the model as an `isError` result; only the code and `data` are lost.
+- The v2 Express/Hono examples used a `createMcpExpressApp(callback, info)` signature that never existed.
+- MCP Apps CSP and permissions live on the UI resource's `_meta.ui`, not the tool; `@modelcontextprotocol/core` is a required ext-apps peer.
+- The Tasks docs link (404); the Server Card repo and discovery path; the claim that SEP-2200 is in flight; the Origin rule in the CORS section now scopes 403 to a present-and-invalid header.
+
+Verified against: @modelcontextprotocol/sdk@1.32.1, @modelcontextprotocol/server@2.3.1, @modelcontextprotocol/ext-apps@2.0.3, modelcontextprotocol-spec@2026-07-28
+
 ## [1.2.1] - 2026-09-09
 
 ### Fixed

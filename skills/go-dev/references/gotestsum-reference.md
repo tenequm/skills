@@ -230,6 +230,9 @@ Post-run environment variables:
 | `GOTESTSUM_JUNITFILE` | JUnit output path |
 | `GOTESTSUM_JUNITFILE_PROJECT_NAME` | Project name in JUnit |
 | `GOTESTSUM_JSONFILE` | JSON output path |
+| `GOTESTSUM_JSONFILE_TIMING_EVENTS` | Path for the timing-events-only JSON file (`--jsonfile-timing-events`) |
+| `GOTESTSUM_JUNIT_HIDE_EMPTY_PKG` | Omit packages with no tests from JUnit (`--junitfile-hide-empty-pkg`) |
+| `GOTESTSUM_JUNIT_HIDE_SKIPPED_TESTS` | Omit skipped tests from JUnit (`--junitfile-hide-skipped-tests`) |
 | `TEST_DIRECTORY` | Default test directory (instead of `./...`) |
 | `GOVERSION` | Go version for JUnit XML when `go` is not on PATH |
 

@@ -122,6 +122,8 @@ import { McpError, ErrorCode } from "@modelcontextprotocol/sdk/types.js";
 throw new McpError(ErrorCode.InternalError, "Database connection lost");
 ```
 
+Inside a **tool handler** a throw does not produce a JSON-RPC error at all: the SDK converts every exception - including a thrown `McpError`/`ProtocolError` - into an `isError: true` result carrying the message, and drops the code and `data` (`UrlElicitationRequiredError` is the one exception). Protocol errors are what the SDK itself emits for unknown methods, malformed requests, and validation outside your handler.
+
 ## The error.data Loss Behavior
 
 **Critical**: The SDK strips `error.data` when converting an `McpError` thrown from a tool handler into a `CallToolResult`. If you embed structured data in McpError's `data` field (e.g., payment challenges, retry metadata), it does not reach the client. This is observed across the x402/MPP MCP ecosystem - see Client Compatibility table below. (Historically `-32042` was the one code observed to survive with `error.data` intact - do not rely on it: as of spec 2026-07-28 that code is spec-allocated and off-limits, see [Payment Error Patterns](#payment-error-patterns).)

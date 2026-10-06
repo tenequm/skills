@@ -2,18 +2,18 @@
 
 Interactive HTML interfaces rendered inside MCP hosts. The MCP Apps spec (SEP-1865) reached **Stable** status on 2026-01-26 as the first official MCP extension (`io.modelcontextprotocol/ui`).
 
-> **`@modelcontextprotocol/ext-apps` 2.0.0 (2026-09-08) is a breaking release - of the TypeScript API, not the protocol.** *"The MCP Apps wire protocol is unchanged: 2.x Views run in 1.x hosts and 2.x hosts render 1.x Views (covered by a test that runs the published 1.7.5 against this release in both directions). What breaks is dependencies and the TypeScript API."* You can upgrade either side independently. See [Migrating to 2.0](https://github.com/modelcontextprotocol/ext-apps/blob/main/docs/migrate-to-2.md).
+> **`@modelcontextprotocol/ext-apps` 2.0.0 (2026-09-08; current 2.0.3, whose published `dist/` is unchanged) is a breaking release - of the TypeScript API, not the protocol.** *"The MCP Apps wire protocol is unchanged: 2.x Views run in 1.x hosts and 2.x hosts render 1.x Views (covered by a test that runs the published 1.7.5 against this release in both directions). What breaks is dependencies and the TypeScript API."* You can upgrade either side independently. See [Migrating to 2.0](https://github.com/modelcontextprotocol/ext-apps/blob/main/docs/migrate-to-2.md).
 
 ## Upgrading to ext-apps 2.0
 
 | Change | Detail |
 |---|---|
-| **Peer packages** | `@modelcontextprotocol/sdk@^1` is replaced by `@modelcontextprotocol/client@^2.0.0` (required - `App` and `AppBridge` extend its `Protocol`) and `@modelcontextprotocol/server@^2.0.0` (optional, only for the `./server` helpers). Node.js 20+. |
+| **Peer packages** | `@modelcontextprotocol/sdk@^1` is replaced by `@modelcontextprotocol/client@^2.0.0` and `@modelcontextprotocol/core@^2.0.0` (both **required** - `App` and `AppBridge` extend the client's `Protocol`) and `@modelcontextprotocol/server@^2.0.0` (optional, only for the `./server` helpers). Node.js 20+. |
 | **Zod** | **zod 3 is dropped**; the peer range is `zod@^4.2.0`. Schemas must implement Standard JSON Schema (`~standard.jsonSchema`) - *"zod 4.0 and 4.1 do not expose `~standard.jsonSchema`"*, so 4.2.0 is a real floor, not a suggestion. ArkType and Valibot also qualify. |
 | **Handler context** | *"Custom handlers receive the SDK 2.x `BaseContext`: `extra.signal` is now `extra.mcpReq.signal`, `extra.requestId` is `extra.mcpReq.id`."* |
 | **Registration** | The 1.x `(Schema, handler)` form *"still works as a deprecated overload with a one-time warning ... and goes away in 3.0."* Move to the config-object form now. |
 
-The examples below use the v1-era imports (`@modelcontextprotocol/sdk/...`), which remain correct on the 1.x line. On 2.x, import `McpServer` and the transport from `@modelcontextprotocol/server` exactly as in `v2-migration.md`, and install `@modelcontextprotocol/ext-apps @modelcontextprotocol/server @modelcontextprotocol/client zod@^4.2.0` instead of the 1.x pair.
+The examples below use the v1-era imports (`@modelcontextprotocol/sdk/...`), which remain correct on the 1.x line. On 2.x, import `McpServer` and the transport from `@modelcontextprotocol/server` exactly as in `v2-migration.md`, and install `@modelcontextprotocol/ext-apps @modelcontextprotocol/server @modelcontextprotocol/client @modelcontextprotocol/core zod@^4.2.0` instead of the 1.x pair.
 
 ## Table of Contents
 - [Architecture](#architecture)
@@ -100,6 +100,7 @@ registerAppResource(server, "my-app-ui", resourceUri, {
 - `registerAppResource(server, name, uri, config, readCallback)` - the `name` is a human-readable label, distinct from the `ui://` URI
 - `RESOURCE_MIME_TYPE` = `text/html;profile=mcp-app`
 - The `ui://` path structure is arbitrary - organize however makes sense
+- **`_meta.ui.visibility`** on the tool (default `["model", "app"]`): set `["app"]` for tools only the view should call - refresh, paginate, mutate-from-a-button. *"Host MUST NOT include tools in the agent's tool list when their visibility does not include `"model"`"*, so app-only tools cost no model context. The tool's `_meta.ui` carries only `resourceUri` and `visibility`.
 
 ### Express Server Boilerplate
 
@@ -254,9 +255,18 @@ MCP Apps render in sandboxed iframes with **deny-by-default CSP**. The sandbox p
 
 All communication goes through postMessage. The host controls which capabilities the app can access.
 
-**External resources** (CDN scripts, fonts, APIs): Configure via `_meta.ui.csp` in tool registration, or bundle everything into a single HTML file.
+CSP and permissions are declared on the **UI resource**, not on the tool - the resource's `_meta.ui` (`UIResourceMeta`), returned from `resources/read` alongside the HTML:
 
-**Additional capabilities** (microphone, camera): Request via `_meta.ui.permissions` in tool registration.
+| Field | Purpose |
+|---|---|
+| `csp.connectDomains` | Origins the view may `fetch`/WebSocket to |
+| `csp.resourceDomains` | Origins for scripts, styles, images, fonts, media |
+| `csp.frameDomains` | Origins the view may embed in nested iframes |
+| `csp.baseUriDomains` | Allowed `<base href>` origins |
+| `permissions` | `camera`, `microphone`, `geolocation`, `clipboardWrite` (each `{}`), mapped to Permission Policy |
+| `domain` | A dedicated sandbox origin when the view needs a stable origin (e.g. for OAuth or CORS allowlists) - host-specific format |
+
+Or skip `csp` entirely by bundling everything into a single HTML file (see Project Setup).
 
 ## Testing
 
