@@ -42,7 +42,7 @@ tokio  = { workspace = true, features = ["fs"] }   # add features on top of the 
 
 Two things worth internalizing:
 
-- **Inherited dependencies unify.** Every member resolves to one version of `serde`, which is the point - it prevents the diamond where two crates in your own repo disagree and you compile both. A member can *add* features on top of the workspace entry. Subtracting is newer and narrower: from Rust 1.99 (2026-10-01) an edition 2024 member can write `default-features = false` to turn off the inherited default features. On earlier editions it "is ignored with a warning", and explicitly listed features can never be removed.
+- **Inherited dependencies unify.** Every member resolves to one version of `serde`, which is the point - it prevents the diamond where two crates in your own repo disagree and you compile both. A member can *add* features on top of the workspace entry. Subtracting is newer and narrower: from Rust 1.99 (2026-10-01) an edition 2024 member can write `default-features = false` to turn off the inherited default features. On editions before 2024 it "is ignored with a warning"; on edition 2024 with Rust 1.85 through 1.98 the combination was rejected outright, which is why older advice says it cannot be done. Explicitly listed features can never be removed.
 - **`target/` is shared.** A workspace build reuses artifacts across members, which is why splitting a big crate into several rarely costs build time and often saves it.
 
 `cargo test`, `cargo clippy`, and `cargo build` operate on the whole workspace from the root; `-p <crate>` scopes to one member.
@@ -96,6 +96,8 @@ Three pieces of syntax, all worth knowing because older guides predate them:
 
 A binary can be gated too, with `required-features = ["admin"]` on its `[[bin]]`: "If any of the required features are not enabled, the target will be skipped." Skipped silently - `cargo build`, `cargo test`, and `cargo install` without that feature all leave it out with no warning, so a CI job that never enables the feature never compiles the binary either. If you gate one, add a CI step that builds it with the feature on.
 
+**dev-dependencies take part in unification only while they are being built.** The Cargo reference: "Features enabled on dev-dependencies will not be unified when those same dependencies are used as a normal dependency, unless those dev-dependencies are currently being built." Two consequences. `cargo build` and `cargo test` resolve different feature sets for a shared dependency, so alternating them rebuilds it each time. And a feature you only get through a dev-dependency makes the tests pass while the shipped binary lacks it - if the library needs a feature, declare it in `[dependencies]`.
+
 In code, gate with `#[cfg(feature = "json")]`. Test the combinations you actually ship - and see `dev-environment.md` on why `--all-features` in CI is a trap, and `releasing.md` on how feature unification bites across cross-compilation targets.
 
 ## Build scripts (`build.rs`)
@@ -124,6 +126,19 @@ Two costs to weigh before adding one. A build script is a compile-time dependenc
 Edition 2024 defaults to `resolver = "3"`, which flips `resolver.incompatible-rust-versions` from `allow` to **`fallback`**: cargo will prefer an older version of a dependency when the newest one requires a newer Rust than you declare. That is usually what you want - it stops `cargo update` from silently breaking your MSRV promise - but it means a stale `rust-version` now quietly holds your whole dependency tree back.
 
 Set it to a version you actually test against, and raise it deliberately. If you support an MSRV, test it in CI with that toolchain, not just the latest. The Cargo guide's own recipe is one line - `cargo hack check --rust-version --workspace --all-targets --ignore-private` (from `cargo-hack`), which checks each member against its own declared `rust-version` - and `cargo-msrv` finds the real minimum when you do not know it.
+
+## Overriding a dependency: `[patch]`
+
+Sooner or later you need a fix that is merged upstream but not released, or you want to test your own fix to a dependency inside your app. Do not vendor the crate by hand. The `[patch]` section "can be used to override dependencies with other copies", with the same syntax as `[dependencies]`:
+
+```toml
+[patch.crates-io]
+uuid = { git = "https://github.com/uuid-rs/uuid.git", rev = "<commit with the fix>" }
+# or a local checkout while you work on the fix:
+# uuid = { path = "../uuid" }
+```
+
+Every crate in the graph that depends on `uuid` now gets the patched copy, provided its version still satisfies their requirements (bump the version in the fork if it does not). Pin `rev` rather than a branch so the build stays reproducible, and remove the patch as soon as the release lands. Two limits: "Cargo only looks at the patch settings in the `Cargo.toml` manifest at the root of the workspace", so a library cannot impose a patch on its users; and crates.io will not accept a git dependency in a published crate, so this is a tool for applications and for the interval before a release.
 
 ## `#[non_exhaustive]`
 

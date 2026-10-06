@@ -29,6 +29,28 @@ One assertion shape to never write: a **negative wall-clock property** - "less t
 
 A related trap hides in tests for shutdown and cancellation fixes. If the code has a backstop - drain for at most five seconds, then give up - a test that only checks "shutdown completed" passes whether or not the fix works, because the backstop finishes it either way. The test is guarding the fallback, not the fix. Make the backstop path observable (a flag, a counter on a fake) and assert it was *not* taken, or configure the backstop in the test to fail loudly when hit.
 
+## Running the tests you want
+
+The test harness has controls worth knowing on day 1, all from the Book's "Controlling How Tests Are Run":
+
+```rust
+#[test]
+#[should_panic(expected = "divide by zero")]   // passes only if it panics with that text
+fn rejects_zero() { divide(1, 0); }
+
+#[test]
+#[ignore = "needs a live database"]            // skipped unless asked for
+fn hits_real_db() { /* ... */ }
+```
+
+```sh
+cargo test parse            # only tests whose name contains "parse"
+cargo test -- --ignored     # only the #[ignore] tests
+cargo test -- --show-output # print stdout of passing tests too (captured by default)
+```
+
+Flags after the `--` go to the test binary, not to cargo. `#[ignore]` is the honest home for a slow or environment-dependent test you still want runnable on demand; give it a reason string so the next reader knows what it needs.
+
 ## The reproduce-then-fix habit
 
 The single highest-ROI testing habit: when you find a bug, write the failing test *first*, watch it fail, then fix the bug. Confirm the test actually catches the bug by reverting the fix and seeing it go red again. A regression test that still passes when you delete the fix is worthless - and that happens more often than you would think.
@@ -180,6 +202,8 @@ Tests run in parallel. Anything touching shared external state needs per-test is
 #![allow(clippy::print_stdout, clippy::unwrap_used, clippy::expect_used)]
 ```
 
+This is one place `#[allow]` beats the `#[expect]` the main skill recommends: a crate-level `expect` listing three lints warns as unfulfilled the day any one of them stops firing in that file.
+
 A `#[cfg(test)]` support module inside `src/` needs the same treatment, since it is part of the library crate.
 
 ## Two profile traps in the test suite
@@ -207,7 +231,7 @@ Reach for these when a specific need appears:
 
 | Tool | Use it when |
 |---|---|
-| `insta` | Output is large or structured (serializer output, API responses, CLI text). Review every diff with `cargo insta review`; never blind-run `cargo insta accept` - an unreviewed baseline certifies nothing. |
+| `insta` | Output is large or structured (serializer output, API responses, CLI text). Review every diff with `cargo insta review`; never blind-run `cargo insta accept` - an unreviewed baseline certifies nothing. On Rust 1.99+ use insta 1.49.0 or later: older serialized-snapshot macros used as a test's last line, with no trailing `;`, trip the new `semicolon_in_expressions_from_non_local_macros` warning, which fails the test build under `build.warnings = "deny"`. |
 | `wiremock` | Your code calls a third-party HTTP API - run a real local mock server instead of mocking the HTTP client. |
 | `#[sqlx::test]` | Database code - per-test isolated database, lighter than `testcontainers`. |
 | `assert_cmd` + `predicates` | You ship a CLI binary and want to assert on exit code / stdout / stderr. |

@@ -50,6 +50,8 @@ struct Payload {
 }
 ```
 
+**Unknown fields are silently dropped by default.** serde's docs: "When this attribute is not present, by default unknown fields are ignored for self-describing formats like JSON." So a misspelled request parameter or a config key renamed in the last release deserializes cleanly and simply does nothing. For config files and API inputs you own, add `#[serde(deny_unknown_fields)]` to the struct so the old key is a hard error. It "is not supported in combination with flatten, neither on the outer struct nor on the flattened field", so a `#[serde(flatten)]` struct needs another way to catch strays.
+
 ## `tokio`
 
 Async runtime. The default. See `async-basics.md` for the deep dive.
@@ -171,18 +173,28 @@ std::process::Command::new("mytool")
 
 On the receiving side, clap already stops parsing at `--`, so a positional declared with `#[arg(trailing_var_arg = true)]` or simply documented as "put `--` first" is what makes your own tool safe to call that way.
 
-And **Rust ignores SIGPIPE at startup**, which the standard library says plainly: "we set SIGPIPE to ignore when the program starts up in order to prevent this problem." The consequence is that `mytool | head -5` does not exit quietly when `head` closes the pipe - your writes start returning `EPIPE`, and the panic or error surfaces from wherever you happened to be printing. Every Unix CLI a user pipes into `head`, `less`, or `grep -q` hits this. On stable, restore the default at the top of `main`:
+And **Rust ignores SIGPIPE at startup**, which the standard library says plainly: "we set SIGPIPE to ignore when the program starts up in order to prevent this problem." The consequence is that `mytool | head -5` does not exit quietly when `head` closes the pipe - your writes start returning `EPIPE`, and the panic or error surfaces from wherever you happened to be printing (`println!` panics on it). Every Unix CLI a user pipes into `head`, `less`, or `grep -q` hits this.
+
+The robust fix keeps SIGPIPE ignored and treats a broken stdout as a clean exit at the places you write to it:
 
 ```rust
-// Cargo.toml: libc = "0.2"
-fn main() {
-    // SAFETY: restoring the OS default disposition before any threads exist.
-    unsafe { libc::signal(libc::SIGPIPE, libc::SIG_DFL) };
-    // ... clap parsing, the rest of main
+use std::io::{self, Write};
+
+fn emit(lines: &[String]) -> io::Result<()> {
+    let mut out = io::stdout().lock();
+    for line in lines {
+        if let Err(e) = writeln!(out, "{line}") {
+            if e.kind() == io::ErrorKind::BrokenPipe {
+                std::process::exit(0);   // reader went away: not an error
+            }
+            return Err(e);
+        }
+    }
+    Ok(())
 }
 ```
 
-(The nightly-only `-Zon-broken-pipe` flag does the same thing without `libc`; there is no stable flag equivalent yet.)
+The shortcut you will find everywhere - `unsafe { libc::signal(libc::SIGPIPE, libc::SIG_DFL) }` at the top of `main` - is only safe for a **pure filter** that never touches a socket. It restores SIGPIPE for the whole process, and on Linux std's `TcpStream::write` suppresses the signal with `MSG_NOSIGNAL` but `write_vectored` goes straight to `writev`, which has no such flag. hyper writes vectored, so in any binary that also makes HTTP or database calls, one peer hanging up mid-write kills the entire process with no error and no log line. (The nightly-only `-Zon-broken-pipe` flag sets the same process-wide disposition, with the same caveat.)
 
 ## `reqwest`
 
@@ -277,7 +289,18 @@ tracing_subscriber::fmt()
     .init();
 ```
 
-Two more you will want in production and not before: the `json` feature swaps in `format::Json`, "newline-delimited JSON logs... intended for production use", which is what a log aggregator wants instead of the human-readable default; and `tracing-appender` provides file appenders plus a non-blocking writer so a slow sink cannot stall the code that logged.
+Colors have the same blind spot. With the default `ansi` feature, escape codes are on "unless the `NO_COLOR` environment variable is set to a non-empty value" - the decision never looks at the writer, so logs redirected to a file or collected by a container runtime fill up with `\x1b[2m`. Decide from the actual stream:
+
+```rust
+use std::io::IsTerminal;
+
+tracing_subscriber::fmt()
+    .with_writer(std::io::stderr)
+    .with_ansi(std::io::stderr().is_terminal())
+    .init();
+```
+
+Two more you will want in production and not before: the `json` feature swaps in `format::Json`, which uses "the newline-delimited JSON log format" and is "intended for production use with systems where structured logs are consumed as JSON" - which is what a log aggregator wants instead of the human-readable default; and `tracing-appender` provides file appenders plus a non-blocking writer so a slow sink cannot stall the code that logged.
 
 ## `axum`
 
@@ -373,6 +396,7 @@ Async SQL with compile-time-checked queries. Postgres, MySQL, SQLite.
 
 ```toml
 sqlx = { version = "0.9", features = ["runtime-tokio", "postgres", "macros", "migrate"] }
+# add "sqlx-toml" if you use a sqlx.toml (see the 0.9 notes below)
 ```
 
 ```rust
@@ -403,7 +427,7 @@ Migrations: `sqlx migrate add init`, write SQL, `sqlx migrate run`.
 
 **0.9 notes** (0.9.0 released 2026-05-21): the repository moved to the `transact-rs` GitHub org, and MSRV is now 1.94. The runtime `query()`/`query_as()` functions now take `impl SqlSafeStr` - wrap a dynamically built query string in `AssertSqlSafe(...)`. The `query_as!` macro shown above is unaffected (it takes a string literal). Older 0.8 tutorials otherwise still apply.
 
-0.9 also added a per-crate `sqlx.toml`, which is where migration and macro settings now live instead of scattered environment variables. One packaging regression to know before you copy a CI recipe: upstream states "`cargo install --locked sqlx-cli` will no longer work", so install the CLI without `--locked`.
+0.9 also added a per-crate `sqlx.toml`, which is where migration and macro settings now live instead of scattered environment variables. It is read only with the `sqlx-toml` feature on, and upstream is blunt about the default: "`sqlx-cli` has it enabled by default, but `sqlx` does **not**." Without the feature on the library, the file is silently ignored at compile time while the CLI honors it, so the two disagree. One packaging regression to know before you copy a CI recipe: upstream states "`cargo install --locked sqlx-cli` will no longer work", so install the CLI without `--locked`.
 
 ## `chrono` (and `jiff`)
 
