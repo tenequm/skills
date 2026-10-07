@@ -7,6 +7,12 @@ and this skill adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.h
 
 ## [Unreleased]
 
+## [0.8.4] - 2026-10-07
+
+### Fixed
+- Async termination: documented that calling `terminate` from a main-queue block or main-actor `Task` hangs the app (the `.terminateLater` reply tasks are starved), with the `RunLoop.main.perform` hop and a SIGTERM example.
+- The termination example reset `hasReplied` on entry, so a second quit during the window could reply twice; it now returns early via `isTerminating`.
+
 ## [0.8.3] - 2026-09-09
 
 ### Changed

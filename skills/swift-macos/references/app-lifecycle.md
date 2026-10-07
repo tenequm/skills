@@ -389,9 +389,13 @@ For apps that need async cleanup before quitting (finalizing file writers, stopp
 class AppDelegate: NSObject, NSApplicationDelegate {
     var monitor: AudioMonitor?
     private var hasReplied = false
+    private var isTerminating = false
 
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
-        hasReplied = false
+        // A second quit during the window (menu pressed twice, Sparkle, logout)
+        // re-enters here; resetting `hasReplied` would let both paths reply.
+        guard !isTerminating else { return .terminateLater }
+        isTerminating = true
 
         // Cleanup task
         Task { @MainActor in
@@ -401,7 +405,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             NSApplication.shared.reply(toApplicationShouldTerminate: true)
         }
 
-        // Timeout task - prevents hanging forever
+        // Timeout task - bounds slow cleanup, but cannot run if the main queue is blocked (see below)
         Task { @MainActor in
             try? await Task.sleep(for: .seconds(8))
             guard !hasReplied else { return }
@@ -415,6 +419,23 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 ```
 
 The `hasReplied` flag prevents double-reply (undefined behavior). Both Tasks are MainActor (serial), so the flag check is race-free. Use `movieFragmentInterval` on AVAssetWriter to bound data loss to ~10s even if timeout fires.
+
+### Never call `terminate` from a main-queue block
+
+`.terminateLater` spins a nested run loop until the reply arrives. The main dispatch queue is serial and never starts a block while another is running - and a `Task { @MainActor in }` job *is* a main-queue block. So if `terminate` is called from inside one (a `DispatchQueue.main.async` closure, a dispatch source on `.main`, a main-actor `Task`), both reply tasks above are starved: no reply, no timeout, and the app hangs until Force Quit. The compiler cannot see it. Menu Quit, Apple Events and Sparkle call `terminate` from run-loop event handling and are safe; anything else hops to the run loop first:
+
+```swift
+// Routing SIGTERM (killall, launchd) into the same cleanup. Its default action
+// exits on the spot, before any writer is finalized.
+signal(SIGTERM, SIG_IGN)
+let source = DispatchSource.makeSignalSource(signal: SIGTERM, queue: .main)
+source.setEventHandler {
+    RunLoop.main.perform {
+        MainActor.assumeIsolated { NSApplication.shared.terminate(nil) }
+    }
+}
+source.resume()  // keep a strong reference, or the source is cancelled
+```
 
 ### Prevent idle sleep during recording
 

@@ -2,7 +2,7 @@
 name: swift-macos
 description: macOS apps with Swift 6.3, SwiftUI, SwiftData, Swift Concurrency, Foundation Models, Swift Testing, and ScreenCaptureKit. Use when building native Mac apps - windows, menus, SwiftData, on-device AI, capture, AppKit bridges, notarization.
 metadata:
-  version: "0.8.3"
+  version: "0.8.4"
   categories: "development"
   topics: "swift, swiftui, macos, swiftdata, screencapturekit"
   upstream: "swift@6.3.3, xcode@26.6, macos@26.6.2"
@@ -481,7 +481,7 @@ See `references/architecture.md` for all patterns with examples.
 |------|-------------|
 | `references/fall-2026-releases.md` | WWDC 2026 beta stack: macOS 27, Xcode 27, Swift 6.4, Foundation Models next-gen, Core AI, Spatial Preview, mandatory Liquid Glass |
 | **SwiftUI & macOS** | |
-| `references/app-lifecycle.md` | Window management, scenes, DocumentGroup, MenuBarExtra gotchas, async termination, LSUIElement issues |
+| `references/app-lifecycle.md` | Window management, scenes, DocumentGroup, MenuBarExtra gotchas, async termination (and the terminate-from-main-queue hang), LSUIElement issues |
 | `references/swiftui-macos.md` | Sidebar, Inspector, Table, forms, popovers, sheets, search |
 | `references/appkit-interop.md` | NSViewRepresentable, hosting controllers, NSHostingSceneRepresentation, sizing/scene-bridging options, AppKit Liquid Glass (NSGlassEffectView), pasteboard privacy, NSPanel/floating HUD |
 | `references/screen-capture-audio.md` | ScreenCaptureKit, SCStream gotchas, SCStream teardown hazards, AVAudioEngine dual pipeline, AVAssetWriter crash safety, non-interleaved stereo trap, TCC gotchas, CDHash degraded-state after reinstall, SpeechAnalyzer transcription |
