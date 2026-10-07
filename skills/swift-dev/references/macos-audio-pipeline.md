@@ -455,6 +455,7 @@ All of these present as "permission granted, recording silent" or "re-prompts ev
 **Ad-hoc signing resets TCC on every build.** `codesign --sign -` yields a new CDHash each build, and TCC identifies ad-hoc apps by CDHash. Sign development builds with a stable identity - your Apple Development certificate, or a self-signed code-signing certificate - so TCC uses the designated requirement (certificate + bundle ID) and grants survive rebuilds.
 
 **A stale row from a superseded identity.** After switching identity (ad-hoc or self-signed during development, Developer ID for release), System Settings can show the app with the toggle on while `CGPreflightScreenCaptureAccess()` returns `false` and the app re-prompts each launch. The user must select the row, remove it with **-**, deny the pending prompt, relaunch and grant again. Afterwards the grant keys on team ID + bundle ID and survives rebuilds.
+
 **Terminal attribution and bare binaries.** Run capture code from a `.app` bundle, not a binary in a terminal: the grant goes to the terminal app, and some terminals record silence for Core Audio taps without ever prompting.
 
 Unverified: the signing-related behaviors above are production observations across macOS 14-26; Apple does not document TCC's keying rules.
