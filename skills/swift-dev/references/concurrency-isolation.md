@@ -2,7 +2,7 @@
 
 Where code runs (default MainActor isolation, `nonisolated`, `@concurrent`, actors, custom executors), what may cross isolation boundaries (`Sendable`, `~Sendable`, `Mutex`), bridging Objective-C and third-party delegates into `@MainActor @Observable` classes, and typed throws.
 
-Verified on Xcode 27.0 (Swift 6.4, iOS 27.0 / macOS 27.0 SDKs), 2026-10-07: every Swift block compiled with `swiftc -emit-sil` in Swift 6 mode against the iOS SDK (`arm64-apple-ios26.0`, CallKit blocks with LiveKit 2.17 modules) and the macOS SDK (`arm64-apple-macos15.0`), with and without default MainActor isolation; Xcode flag mapping confirmed with an XcodeGen project; isolated-conformance trap confirmed by running a macOS binary.
+Verified on Xcode 27.0 (Swift 6.4, iOS 27.0 / macOS 27.0 SDKs), 2026-10-07: every Swift block compiled with `swiftc -emit-sil` in Swift 6 mode against the iOS SDK (`arm64-apple-ios26.0`, CallKit blocks with LiveKit 2.17 modules) and the macOS SDK (`arm64-apple-macos15.0`), with and without default MainActor isolation; Xcode flag mapping confirmed with an XcodeGen project; isolated-conformance trap confirmed by running a macOS binary; the `assumeIsolated` unused-result warning and the `sending 'action'` error reproduced with `-emit-sil` for iOS 26, with and without `-default-isolation MainActor`.
 
 ## Contents
 - Project settings
@@ -292,9 +292,10 @@ extension CallController: CXProviderDelegate {
 ```
 
 - `assumeIsolated` runs synchronously, so CallKit sees state updated before the callback returns, and it traps if the queue assumption is ever wrong.
+- `MainActor.assumeIsolated { Task { ... } }` warns `result of call to 'assumeIsolated(_:file:line:)' is unused`: the single-expression closure returns the `Task`, and `assumeIsolated` returns what its closure does. Write `MainActor.assumeIsolated { _ = Task { ... } }`.
 - Fulfill or fail the action inside the callback. Do not capture the action in a `Task { @MainActor in action.fulfill() }`: `error: sending 'action' risks causing data races`.
 - Without `nonisolated`, a plain conformance fails: `conformance of 'CallController' to protocol 'CXProviderDelegate' crosses into main actor-isolated code and can cause data races`.
-- Equivalent shorter form: an isolated conformance, `extension CallController: @MainActor CXProviderDelegate { ... }` with no `nonisolated` and no `assumeIsolated` (SE-0470; inferred automatically under `InferIsolatedConformances`). The Objective-C entry point traps if called off the main actor, just like `assumeIsolated`. It works only for protocols that do not require `Sendable`.
+- Equivalent shorter form: an isolated conformance, `extension CallController: @MainActor CXProviderDelegate { ... }` with no `nonisolated` and no `assumeIsolated` (SE-0470; inferred automatically under `InferIsolatedConformances`). The Objective-C entry point traps if called off the main actor, just like `assumeIsolated`. It works only for protocols that do not require `Sendable`. Prefer it when an action completes after an `await` (a mute applied asynchronously): in an isolated method `Task { try await apply(); action.fulfill() }` compiles, while the same capture from a `nonisolated` method is `error: sending 'action' risks causing data races`, even inside `assumeIsolated`. ios-audio-and-callkit.md uses this form.
 
 ### Callbacks on arbitrary threads: hop with Task { @MainActor in }
 
@@ -314,7 +315,7 @@ extension CallController: RoomDelegate {
 }
 ```
 
-Ordering: tasks created with an explicit `@MainActor` closure from one serial thread start on the main actor in creation order ([SE-0431](https://github.com/swiftlang/swift-evolution/blob/main/proposals/0431-isolated-any-functions.md); 20,000 mixed-priority tasks from one serial queue arrived in order). Nothing orders them against callbacks from other queues, an `await` inside a handler lets later ones interleave, a plain `Task {}` without the explicit `@MainActor` has no guarantee, and the callback's arguments are stale by the time the task runs. Make the handler idempotent: ignore the arguments, guard that the object is still current (`room === self.room`), and re-read the live state in one `refresh()`. Pass only `Sendable` values (IDs, `Bool`s, the `Sendable` object itself) into the task.
+Ordering: tasks created with an explicit `@MainActor` closure from one serial thread start on the main actor in creation order ([SE-0431](https://github.com/swiftlang/swift-evolution/blob/main/proposals/0431-isolated-any-functions.md); 20,000 mixed-priority tasks from one serial queue arrived in order). Nothing orders them against callbacks from other queues, an `await` inside a handler lets later ones interleave, a plain `Task {}` without the explicit `@MainActor` has no guarantee, and the callback's arguments are stale by the time the task runs. Make the handler idempotent: ignore the arguments, guard that the object is still current (`room === self.room`), and re-read the live state in one `refresh()`. Pass only `Sendable` values (IDs, `Bool`s, the `Sendable` object itself) into the task. Exception to "re-read the live state": state the SDK resets or moves past (LiveKit's `room.metadata` after a disconnect, `connectionState == .reconnecting` during a reconnect) must be read synchronously in the `nonisolated` callback and passed in as a value.
 
 ## Typed throws
 

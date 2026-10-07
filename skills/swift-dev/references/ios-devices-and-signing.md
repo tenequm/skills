@@ -2,17 +2,17 @@
 
 Simulator runtimes, `simctl` and `devicectl`, Developer Mode, and headless iOS code signing with `xcodebuild` and an App Store Connect API key.
 
-Verified on Xcode 27.0 (Swift 6.4, iOS 27.0 / macOS 27.0 SDKs), 2026-10-07: flags checked against `xcodebuild -help`, `xcrun devicectl --help` (642.16) and its subcommand help, `xcrun simctl help`; archived `hey-dan-ios` unsigned for `generic/platform=iOS`; ran a signed archive with `-allowProvisioningUpdates` against the signed-in Xcode account and recorded the errors; built, installed and launched it on an iOS 27.0 simulator with both `simctl` and `devicectl`; registered a network-paired iPhone through `-allowProvisioningDeviceRegistration` and installed and launched a development build on it with the signed-in Xcode account. No API key was used.
+Verified on Xcode 27.0 (Swift 6.4, iOS 27.0 / macOS 27.0 SDKs), 2026-10-07: flags checked against `xcodebuild -help`, `xcrun devicectl --help` (642.16) and its subcommand help, `xcrun simctl help`; archived a voice-call app unsigned for `generic/platform=iOS`; ran a signed archive with `-allowProvisioningUpdates` against the signed-in Xcode account and recorded the errors; built, installed and launched it on an iOS 27.0 simulator with both `simctl` and `devicectl`; registered a network-paired physical iPhone (iOS 27.2) through `-allowProvisioningDeviceRegistration` and installed and launched a development build on it with the signed-in Xcode account; on a scratch simulator reproduced the partial-install error, the `log show` level filtering and `simctl ui content_size`; reproduced the unreachable-device `xcodebuild` error with the paired iPhone off the network. No API key was used.
 
 ## Contents
 - SDK vs simulator runtime
 - Simulators from the command line
+- Simulator logs, Dynamic Type and install errors
 - devicectl: simulators and physical devices
 - Developer Mode and pairing
 - The iOS signing model
 - Headless signing with xcodebuild
 - App Store Connect API key roles
-- Owner setup
 
 ## SDK vs simulator runtime
 
@@ -26,7 +26,7 @@ xcodebuild -project MyApp.xcodeproj -scheme MyApp \
 Install a runtime (the iOS 27.0 runtime is 7.5 GB on disk):
 
 ```bash
-xcodebuild -downloadPlatform iOS                       # newest runtime; iOS 27.0 (24A434) took ~3 min here
+xcodebuild -downloadPlatform iOS                       # newest runtime; iOS 27.0 (24A434) took ~3 min
 xcodebuild -downloadPlatform iOS -buildVersion 27.0 -architectureVariant arm64
 xcodebuild -downloadPlatform iOS -exportPath ~/Downloads  # keep the .dmg, then:
 xcodebuild -importPlatform ~/Downloads/<runtime>.dmg
@@ -58,6 +58,34 @@ SIMCTL_CHILD_API_URL=https://staging.example.com \
 - The Simulator app is now **Device Hub** (`open "$(xcode-select -p)/../Applications/DeviceHub.app"`); it shows simulators and paired devices together.
 - Xcode 27 adds `simctl reboot` / `devicectl` reboot for simulators, and runtimes ship a prebuilt dyld cache, so first boot is faster.
 
+## Simulator logs, Dynamic Type and install errors
+
+```bash
+# Persisted log: Info is hidden unless asked for.
+xcrun simctl spawn "$UDID" log show --last 5m --info --debug \
+  --predicate 'subsystem == "com.example.MyApp"' --style compact
+# Live, including Debug messages:
+xcrun simctl spawn "$UDID" log stream --level debug --predicate 'subsystem == "com.example.MyApp"'
+
+xcrun simctl ui "$UDID" content_size accessibility-extra-extra-extra-large
+xcrun simctl io "$UDID" screenshot dynamic-type-xxxl.png
+```
+
+- Plain `log show` prints only Default (`notice`) and above, so `Logger.info` lines look missing. With `--info --debug` the `.info` lines came back but `.debug` lines did not - they appeared only in `log stream --level debug` (verified with all three levels from one app). Third-party SDKs log under their own subsystem (LiveKit: `io.livekit.sdk`).
+- `simctl ui <udid> content_size` with no argument prints the current size (`large` by default); setting it re-lays out the running app without a relaunch, so a screenshot right after shows the new size (verified). Check large Dynamic Type this way before shipping (see ios-swiftui.md).
+- `print()` output under `simctl launch --console` is block-buffered because stdout is a pipe - lines show up late, or never if the process is killed. `--console-pty` gives line-buffered output (observed).
+- **`simctl install` of a half-built app** fails with an error that hides the real cause:
+  ```
+  An error was encountered processing the command (domain=IXErrorDomain, code=13):
+  Simulator device failed to install the application.
+  Missing bundle ID.
+  Underlying error (domain=IXErrorDomain, code=13):
+  	Failed to get bundle ID from .../Debug-iphonesimulator/MyApp.app
+  	Missing bundle ID.
+  ```
+  A failed build (here a Swift compile error, `xcodebuild` exit 65) leaves a `.app` holding only `Frameworks/` and no `Info.plist`. Read the build output above it, and chain build, install and launch with `&&` or `set -e` so a failed build stops the script (reproduced).
+- **The Simulator does not use the Mac's VPN for WebRTC media.** With a media server reachable only over a VPN interface (`utun`, e.g. Tailscale `100.x`), HTTPS and WebSocket signalling over the VPN worked, but ICE offered only LAN host, IPv6 and server-reflexive candidates and LiveKit failed with `Primary transport connect timed out` after 10 s. Observed once. Test on a device, or use a media server reachable on the LAN or the internet. Unverified: a local TURN relay as a workaround.
+
 ## devicectl: simulators and physical devices
 
 On Xcode 27 `devicectl` lists booted simulators next to physical devices (the `Reality` column reads `simulated`), and `device install app` / `device process launch` work on both:
@@ -73,6 +101,15 @@ xcrun devicectl device info lockState --device <udid|name>
 
 - `install app` takes a `.app` bundle path. Launch environment comes from `DEVICECTL_CHILD_<NAME>` or `--environment-variables '{"KEY":"value"}'` (the flag overrides the prefixed variables).
 - Parse `--json-output` (versioned and stable), never the table text. In JSON v5 `hardwareProperties`, `deviceProperties` and `connectionProperties` are deprecated in favour of `properties`.
+- **Device states.** `list devices` shows a network-paired iPhone on the same LAN as `available (paired)` - `device install app`, `process launch` and `info lockState` then work without a cable - and `connected` while a tunnel is up (observed on one iPhone). Off the network it is `unavailable` (JSON v5: `properties.connection.state`), and building for it fails with exit 70 and a misleading second line (reproduced):
+  ```
+  xcodebuild: error: Unable to find a destination matching the provided destination specifier:
+  		{ id:<udid> }
+  ...
+  { platform:macOS, arch:arm64e, ..., name:My Mac, error:My Mac's macOS platform doesn't match MyApp.app's supported platforms. ... }
+  ```
+  The `My Mac` line only lists an incompatible destination; the cause is the unreachable phone. Wake it and join the same network, or plug it in.
+- `xcrun devicectl device` in Xcode 27 also has `capture`, `pasteboard`, `settings`, `orientation`, `simulate`, `notification`, `copy`, `sysdiagnose`, `appResize`, `motion` and `reboot` (from `--help` only; not exercised).
 - The physical device must be unlocked for most commands. `devicectl device info details --device <udid>` reports `pairingState`, `transportType` (`localNetwork` for network pairing) and `developerModeStatus`.
 
 ## Developer Mode and pairing
@@ -115,18 +152,18 @@ xcrun devicectl device process launch --device "$DEVICE_UDID" com.example.MyApp
 
 Drop the three key flags to use the Apple Account signed into Xcode instead. Pass the same signing flags to every `xcodebuild` step that signs (`build`, `archive`, `-exportArchive`).
 
-Errors observed on this Mac (signed-in Xcode account, team with no registered devices, no local profiles):
+Errors observed with a signed-in Xcode account, a team with no registered devices and no local profiles:
 
 - `xcodebuild archive -destination 'generic/platform=iOS' -allowProvisioningUpdates` - automatic signing archives with a **development** profile, which needs at least one device:
   ```
   error: Communication with Apple failed: Your team has no devices from which to generate a provisioning profile. Connect a device to use or manually add device IDs in Certificates, Identifiers & Profiles.
-  error: No profiles for 'com.tenequm.HeyDan' were found: Xcode couldn't find any iOS App Development provisioning profiles matching 'com.tenequm.HeyDan'.
+  error: No profiles for 'com.example.MyApp' were found: Xcode couldn't find any iOS App Development provisioning profiles matching 'com.example.MyApp'.
   ```
   Fix: connect a device and add `-allowProvisioningDeviceRegistration`, register a UDID in the portal, or archive unsigned and let export sign (see `ios-distribution.md`).
 - `xcodebuild -exportArchive` without `-allowProvisioningUpdates` never creates anything:
   ```
   error: exportArchive No signing certificate "iOS Distribution" found
-  error: exportArchive No profiles for 'com.tenequm.HeyDan' were found
+  error: exportArchive No profiles for 'com.example.MyApp' were found
     ... Automatic signing is disabled and unable to generate a profile. To enable automatic signing, pass -allowProvisioningUpdates to xcodebuild.
   ```
 
@@ -151,13 +188,6 @@ CI&P = Certificates, Identifiers & Profiles access, a per-user grant in Users an
 
 Unverified: whether a Developer or App Manager **team key** can upload builds or register devices - the per-user "CI&P access" grant has no visible equivalent for keys.
 
+To check a key's role: App Store Connect > Users and Access > Integrations > App Store Connect API > Team Keys shows each key's Access column. Functional check: run `-exportArchive` with `method` `app-store-connect`, `destination` `export`, `-allowProvisioningUpdates` and the three key flags - success means the key can create the App Store profile and cloud-sign; `Cloud signing permission error` means the role is too low. The first success creates a cloud-managed Apple Distribution certificate and an App Store profile in the team.
+
 Handle the `.p8` like a password: keep it out of the repo, write it to a `0600` temp file from your secret store right before the build, and delete it afterwards. `altool` instead looks for `AuthKey_<KEY_ID>.p8` in `~/.appstoreconnect/private_keys` (and a few other directories, see `altool --help`).
-
-## Owner setup
-
-- Team: `4L9YA7S99L` (paid Apple Developer Program).
-- Code-signing identity types in the login keychain (`security find-identity -v -p codesigning`): Apple Development, Developer ID Application, and one local self-signed identity (not Apple-issued). There is no Apple Distribution certificate locally; distribution signing would be cloud-managed or created on first export.
-- Physical device: an iPhone 15 Pro Max on iOS 27.2 beta (24B5099f), paired over the local network with Developer Mode enabled; registered on the team on 2026-10-07 by the first `-allowProvisioningDeviceRegistration` build (hey-dan installed and launched). Before that the team had no registered devices, which produced the archive errors above.
-- An Apple Account is signed into Xcode and handles development signing; the API key is only needed for headless distribution.
-- ASC API key: 1Password item `pond-apple-ci-signing`. Unverified: its role (Admin vs App Manager/Developer) - this decides whether device registration, profile creation and cloud signing work headless.
-- To verify the role: App Store Connect > Users and Access > Integrations > App Store Connect API > Team Keys shows each key's Access column. The functional check is an `-exportArchive` with `method` `app-store-connect`, `destination` `export` and `-allowProvisioningUpdates` plus the key flags: success means the key can create the App Store profile and cloud-sign; `Cloud signing permission error` means the role is too low.

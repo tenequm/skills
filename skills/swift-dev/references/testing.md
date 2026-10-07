@@ -2,7 +2,7 @@
 
 Swift Testing and XCTest for iOS and macOS code: the test API, its compiler traps, running logic tests without a simulator, UI tests, and the `swift test` / `xcodebuild test` surface.
 
-Verified on Xcode 27.0 (Swift 6.4, iOS 27.0 / macOS 27.0 SDKs), 2026-10-07: every Swift Testing snippet compiled and ran under `swift test` in a scratch package (17 tests incl. exit test, attachments, warnings, cancellation, confirmations, known issues); the `.init` trap reproduced verbatim; `HeyDanCore` copied and run with `swift test` (cold and warm timings below); a scratch XcodeGen iOS app with a Swift Testing unit target and an XCUITest target run on an iOS 27.0 simulator; the same package tests run on the simulator through `xcodebuild`; image attachments, the macOS UI test and the polling helper compiled through SIL (`swiftc -emit-sil`) against both SDKs; interop modes exercised with `SWIFT_TESTING_XCTEST_INTEROP_MODE`.
+Verified on Xcode 27.0 (Swift 6.4, iOS 27.0 / macOS 27.0 SDKs), 2026-10-07: every Swift Testing snippet compiled and ran under `swift test` in a scratch package (17 tests incl. exit test, attachments, warnings, cancellation, confirmations, known issues); the `.init` trap reproduced verbatim; a 10-test logic package from a voice-call app run with `swift test` (cold and warm timings below); a scratch XcodeGen iOS app with a Swift Testing unit target and an XCUITest target run on an iOS 27.0 simulator; the same package tests run on the simulator through `xcodebuild`; image attachments, the macOS UI test and the polling helper compiled through SIL (`swiftc -emit-sil`) against both SDKs; interop modes exercised with `SWIFT_TESTING_XCTEST_INTEROP_MODE`.
 
 ## Contents
 - Swift Testing essentials
@@ -166,7 +166,7 @@ let package = Package(
 )
 ```
 
-The `.macOS` entry is what makes `swift test` work: the package builds and runs natively on the Mac, no simulator, no runtime download, no app launch. Measured on a 10-test package (`hey-dan-ios/HeyDanCore`): cold `swift test` 9.6 s, warm 1.4 s. The same tests through `xcodebuild test` on a booted iOS simulator took 36 s warm.
+The `.macOS` entry is what makes `swift test` work: the package builds and runs natively on the Mac, no simulator, no runtime download, no app launch. Measured on a 10-test logic package from a voice-call app: cold `swift test` 9.6 s, warm 1.4 s. The same tests through `xcodebuild test` on a booted iOS simulator took 36 s warm.
 
 Rules that keep it working:
 - Nothing in the package may `import UIKit`, `CallKit` or another iOS-only framework unguarded. Wrap iOS-only code in `#if os(iOS)` or leave it in the app target.

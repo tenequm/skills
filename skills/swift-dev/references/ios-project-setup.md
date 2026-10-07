@@ -2,7 +2,7 @@
 
 How to stand up an iOS app from the command line: an XcodeGen `project.yml`, a local Swift package for logic and fast tests, the Info.plist keys and build settings that matter, and the build/test commands.
 
-Verified on Xcode 27.0 (Swift 6.4, iOS 27.0 / macOS 27.0 SDKs), 2026-10-07: generated the project below with XcodeGen 2.46.0, built it unsigned for `generic/platform=iOS` and `generic/platform=iOS Simulator`, ran its app-target tests on an iOS 27.0 simulator and `swift test` in the local package, and read the compiler flags Xcode passed from the build log.
+Verified on Xcode 27.0 (Swift 6.4, iOS 27.0 / macOS 27.0 SDKs), 2026-10-07: generated the project below with XcodeGen 2.46.0, built it unsigned for `generic/platform=iOS` and `generic/platform=iOS Simulator`, ran its app-target tests on an iOS 27.0 simulator and `swift test` in the local package, and read the compiler flags Xcode passed from the build log; added two OFL fonts (one static, one variable) to a copy, built it for the simulator, inspected the `.app` and checked `UIFont(name:)` at launch, and reproduced the build error without `excludes`.
 
 ## Contents
 - Why a generator
@@ -10,6 +10,7 @@ Verified on Xcode 27.0 (Swift 6.4, iOS 27.0 / macOS 27.0 SDKs), 2026-10-07: gene
 - project.yml
 - Build settings that are not obvious
 - Info.plist keys
+- Custom fonts
 - The local package
 - Commands and timings
 - justfile
@@ -47,7 +48,7 @@ options:
     iOS: "26.0"
 settings:
   base:
-    DEVELOPMENT_TEAM: 4L9YA7S99L
+    DEVELOPMENT_TEAM: ABCDE12345   # replace with your 10-character Team ID
     CODE_SIGN_STYLE: Automatic
     SWIFT_VERSION: "6.0"
     SWIFT_APPROACHABLE_CONCURRENCY: YES
@@ -127,6 +128,31 @@ XcodeGen writes `info.path` on every `xcodegen generate` from `info.properties`,
 - **`ITSAppUsesNonExemptEncryption: false`** declares the app (including linked libraries) uses no encryption, or only encryption exempt from export compliance. With the key present, App Store Connect skips the export-compliance questionnaire on every upload; set `true` (plus `ITSEncryptionExportComplianceCode`) if you ship non-exempt crypto ([Apple](https://developer.apple.com/documentation/bundleresources/information-property-list/itsappusesnonexemptencryption)).
 - **`UIDesignRequiresCompatibility`** (the Liquid Glass opt-out) is ignored when building against the iOS 27 SDK - do not add it.
 - `TARGETED_DEVICE_FAMILY` is a build setting, not a plist key: `"1"` iPhone, `"2"` iPad, `"1,2"` both. The built plist's `UIDeviceFamily` follows it; `"1,2"` commits you to iPad layouts and screenshots.
+
+## Custom fonts
+
+Keep fonts in their own folder, one subfolder per family with its license file, and add that folder as a folder reference:
+
+```yaml
+targets:
+  VoiceApp:
+    sources:
+      - path: VoiceApp
+        excludes: [Fonts]
+      - path: VoiceApp/Fonts       # folder reference: keeps subfolders and each OFL.txt
+        type: folder
+        buildPhase: resources
+    info:
+      properties:
+        UIAppFonts:
+          - Fonts/IBMPlexMono/IBMPlexMono-Regular.ttf
+          - Fonts/HankenGrotesk/HankenGrotesk[wght].ttf
+```
+
+- **The `excludes` is required.** Without it the main group also adds every file in `Fonts/` as a flat resource, and two families shipping an `OFL.txt` collide: `error: Multiple commands produce '.../VoiceApp.app/OFL.txt'`.
+- `UIAppFonts` paths are relative to the bundle root, so they include the `Fonts/` folder. The built `.app` contains `Fonts/<Family>/*.ttf` plus each `OFL.txt`.
+- Reference a font by its PostScript name, not the file name: `Font.custom("IBMPlexMono-Regular", size: 15, relativeTo: .body)` (`relativeTo:` keeps it scaling with Dynamic Type). `fc-scan --format "%{postscriptname} | %{style[0]}\n" <file>.ttf` (Homebrew `fontconfig`) prints the names, including a variable font's named instances.
+- A variable font registers only its default instance by name: `UIFont(name: "HankenGrotesk-Regular", size: 12)` resolved, `UIFont(name: "HankenGrotesk-Bold", size: 12)` returned `nil` although `fc-scan` lists that instance (observed on the iOS 27.0 simulator). Unverified: whether `.weight(.bold)` on the custom font selects the variable instance.
 
 ## The local package
 

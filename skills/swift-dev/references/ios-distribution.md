@@ -2,7 +2,7 @@
 
 Getting an iOS build onto phones: development install, ad hoc, TestFlight and App Store from the command line, and why a macOS Developer ID certificate cannot sign any of it.
 
-Verified on Xcode 27.0 (Swift 6.4, iOS 27.0 / macOS 27.0 SDKs), 2026-10-07: archived `hey-dan-ios` unsigned for `generic/platform=iOS` and ran `-exportArchive` on it with `app-store-connect`, `release-testing`, `debugging` and `developer-id` to record the real errors; ExportOptions keys and `method` values from `xcodebuild -help`; upload flags from `xcrun altool --help` (27.0.5). Development build, install and launch on a physical iPhone with the signed-in Xcode account (sequence below). Nothing was signed for distribution or uploaded (no API key used).
+Verified on Xcode 27.0 (Swift 6.4, iOS 27.0 / macOS 27.0 SDKs), 2026-10-07: archived a voice-call app unsigned for `generic/platform=iOS` and ran `-exportArchive` on it with `app-store-connect`, `release-testing`, `debugging` and `developer-id` to record the real errors; ExportOptions keys and `method` values from `xcodebuild -help`; upload flags from `xcrun altool --help` (27.0.5). Development build, install and launch on a physical iPhone with the signed-in Xcode account (sequence below); the device-selection `jq` filter run against real `devicectl list devices` JSON v5 output with the paired iPhone unreachable. Nothing was signed for distribution or uploaded (no API key used).
 
 ## Contents
 - Channels
@@ -73,17 +73,19 @@ Prerequisites: the phone is paired, unlocked and has Developer Mode on (see `ios
 
 ```bash
 xcrun devicectl list devices --json-output /tmp/devices.json >/dev/null
-DEVICE=$(jq -r '.result.devices[] | select(.hardwareProperties.platform == "iOS"
-  and .hardwareProperties.reality == "physical") | .hardwareProperties.udid' /tmp/devices.json | head -1)
+DEVICE=$(jq -r '[.result.devices[] | select(.properties.hardware.platform == "iOS"
+  and .properties.hardware.reality == "physical"
+  and .properties.connection.state != "unavailable")] | first | .properties.hardware.udid // empty' /tmp/devices.json)
+: "${DEVICE:?no reachable iPhone - wake it, join the same network or plug it in}"
 xcodebuild -project MyApp.xcodeproj -scheme MyApp -destination "id=$DEVICE" -derivedDataPath build \
   -allowProvisioningUpdates -allowProvisioningDeviceRegistration build
 xcrun devicectl device install app --device "$DEVICE" build/Build/Products/Debug-iphoneos/MyApp.app
 xcrun devicectl device process launch --device "$DEVICE" --console com.example.MyApp
 ```
 
-The first build registers the UDID and creates the development certificate and profile. `--console` streams the app's stdout until it exits; drop it to launch and return.
+A paired phone that is asleep or off the network stays in the list as `unavailable`; selecting it anyway makes `xcodebuild` fail with exit 70 `Unable to find a destination matching the provided destination specifier` (see ios-devices-and-signing.md), so the filter skips it and the `:?` line stops with a clear message. The filter uses the JSON v5 `properties` dictionary; `hardwareProperties` and friends are deprecated. Verified: an unreachable iPhone (`unavailable`) is skipped and the script stops; the same JSON with the state edited to `available` selects it. The first build registers the UDID and creates the development certificate and profile. `--console` streams the app's stdout until it exits; drop it to launch and return.
 
-Verified on an iPhone 15 Pro Max (iOS 27.2 beta) with the Apple Account signed into Xcode (no API key): the first build registered the device on the team and created the development profile; `install app` printed `App installed:` with the bundle ID and installation URL, and `process launch --terminate-existing` printed `Launched application with com.tenequm.HeyDan bundle identifier.` `xcodebuild [MT] IDERunDestination: Supported platforms for the buildables in the current scheme is empty.` appears on every run and is harmless.
+Verified on a physical iPhone (iOS 27.2) with the Apple Account signed into Xcode (no API key): the first build registered the device on the team and created the development profile; `install app` printed `App installed:` with the bundle ID and installation URL, and `process launch --terminate-existing` printed `Launched application with com.example.MyApp bundle identifier.` `xcodebuild [MT] IDERunDestination: Supported platforms for the buildables in the current scheme is empty.` appears on every run and is harmless.
 
 Unverified: whether the phone shows an "Untrusted Developer" prompt on first launch (none is expected for Apple Development signing on a paid team; it was not observed directly).
 
@@ -129,9 +131,17 @@ xcrun altool --build-status --delivery-id <id-from-upload> --api-key "$KEY_ID" -
 
 `altool` is the current command-line uploader in Xcode 27 (version 27.0.5 lists `--upload-package` with `--wait`, `--validate-app`, `--build-status`, and still accepts `--upload-app -f`); only its notarization role was retired. It looks for `AuthKey_<KEY_ID>.p8` in `~/.appstoreconnect/private_keys` or `$API_PRIVATE_KEYS_DIR`, or takes `--p8-file-path`. Apple's [upload builds](https://developer.apple.com/help/app-store-connect/manage-builds/upload-builds) page also lists Transporter and the App Store Connect API `buildUploads` endpoint as alternatives.
 
+Observed once (cause unconfirmed): `-exportArchive` with `method` `app-store-connect`, `destination` `export`, automatic signing, an Apple Account signed into Xcode and no API key failed with
+
+```
+error: exportArchive Failed to Use Accounts. App Store Connect access for "<TEAM>" is required.
+```
+
+The account's App Store Connect role, a missing app record, or an export that needs an API key are all candidates; none was confirmed. Retrying with the `-authenticationKey*` flags of an Admin team key is the next thing to try.
+
 After processing (an email arrives), the build is immediately available to internal testers in a TestFlight group; external groups trigger Beta App Review for the first build.
 
-Unverified: the `-authenticationKey*` flags authenticating the `destination` `upload` step itself, and the live upload of any build from this Mac.
+Unverified: the `-authenticationKey*` flags authenticating the `destination` `upload` step itself, and the live upload of any build.
 
 ## Archiving before any device is registered
 

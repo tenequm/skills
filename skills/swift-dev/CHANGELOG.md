@@ -17,7 +17,9 @@ and this skill adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.h
   references.
 - iOS coverage: XcodeGen projects with a local logic package, simulator runtimes and `devicectl`,
   command-line signing and device registration, TestFlight and App Store export, `AVAudioSession` and
-  CallKit outgoing calls with LiveKit, App Intents and the Action Button, iOS SwiftUI, Keychain.
+  CallKit outgoing calls with LiveKit (room lifecycle traps, DTX across republish, mute before publish),
+  App Intents and the Action Button, iOS SwiftUI (battery and accessibility in animated views), custom
+  fonts with XcodeGen, simulator logs and install diagnostics, Keychain.
 - macOS coverage restructured from the `swift-macos` skill and re-verified against the 27.0 SDKs, with
   the API corrections that surfaced (ScreenCaptureKit, AVAssetWriter, SwiftData predicates, document
   protocols, notarization and export methods).

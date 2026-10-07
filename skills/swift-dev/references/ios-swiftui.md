@@ -2,7 +2,7 @@
 
 iPhone-specific SwiftUI: the app/scene lifecycle, navigation and presentation, toolbars, text input, opening Settings, Liquid Glass, UIKit bridging, background refresh, and what changes when you rebuild with the iOS 27 SDK.
 
-Verified on Xcode 27.0 (Swift 6.4, iOS 27.0 / macOS 27.0 SDKs), 2026-10-07: every code block compiled with `swiftc -emit-sil` against the iOS 27.0 SDK (`-target arm64-apple-ios26.0 -swift-version 6`, with and without `-default-isolation MainActor`); APIs and availability read from the SDK's SwiftUI `.swiftinterface`; the `@State` source break reproduced in an `xcodebuild` build.
+Verified on Xcode 27.0 (Swift 6.4, iOS 27.0 / macOS 27.0 SDKs), 2026-10-07: every code block compiled with `swiftc -emit-sil` against the iOS 27.0 SDK (`-target arm64-apple-ios26.0 -swift-version 6`, with and without `-default-isolation MainActor`); APIs and availability read from the SDK's SwiftUI `.swiftinterface`; the `@State` source break reproduced in an `xcodebuild` build; `TimelineSchedule`, `lineHeight` and `LineHeight` factories read from the SwiftUI and CoreText interfaces.
 
 ## Contents
 - App, WindowGroup and scenePhase
@@ -13,6 +13,7 @@ Verified on Xcode 27.0 (Swift 6.4, iOS 27.0 / macOS 27.0 SDKs), 2026-10-07: ever
 - Liquid Glass
 - UIKit bridge
 - Background refresh
+- Battery and accessibility in animated views
 - Building with the iOS 27 SDK
 
 ## App, WindowGroup and scenePhase
@@ -411,6 +412,95 @@ struct RefreshingApp: App {
 - `earliestBeginDate` is a floor, not a schedule. Do not use refresh tasks for anything time-critical.
 - A user-initiated job that must finish after the user leaves (export, upload) is `BGContinuedProcessingTaskRequest` (iOS 26+), submitted from the foreground in response to a user action; the system shows it with the request's `title` and `subtitle`.
 - Keeping a call or audio alive is not a background task - that is background modes plus CallKit / `AVAudioSession` (see ios-audio-and-callkit.md).
+
+## Battery and accessibility in animated views
+
+A voice or media app keeps an indicator animating for minutes; these keep that cheap and readable (from the SwiftUI docs and builds; CPU was not measured):
+
+```swift
+import SwiftUI
+
+struct ListeningDot: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    var body: some View {
+        TimelineView(.animation(minimumInterval: 1.0 / 15, paused: reduceMotion)) { context in
+            let t = context.date.timeIntervalSinceReferenceDate
+            Circle()
+                .fill(.tint)
+                .frame(width: 12, height: 12)
+                .opacity(reduceMotion ? 1 : 0.4 + 0.6 * abs(sin(t * 2)))
+        }
+        .accessibilityLabel("Listening")
+    }
+}
+
+struct ConnectingHint: View {
+    let start: Date
+
+    var body: some View {
+        TimelineView(.explicit([start.addingTimeInterval(5), start.addingTimeInterval(15)])) { context in
+            let elapsed = context.date.timeIntervalSince(start)
+            Text(elapsed < 5 ? "Connecting..." : elapsed < 15 ? "Still connecting..." : "Check your network")
+        }
+        .id(start)
+    }
+}
+
+struct LevelMeter: View {
+    let levels: [Double]
+    let pulsing: Bool
+
+    var body: some View {
+        Canvas { context, size in
+            let width = size.width / CGFloat(max(levels.count, 1))
+            for (index, level) in levels.enumerated() {
+                let height = size.height * level
+                let bar = CGRect(x: CGFloat(index) * width, y: size.height - height, width: width * 0.6, height: height)
+                context.fill(Path(roundedRect: bar, cornerRadius: 2), with: .color(.accentColor))
+            }
+        }
+        .opacity(pulsing ? 0.4 : 1)
+        .animation(pulsing ? .easeInOut(duration: 0.8).repeatForever(autoreverses: true) : .default, value: pulsing)
+    }
+}
+
+struct Line: Identifiable {
+    let id: Int
+    let speaker: String
+    let text: String
+}
+
+struct TranscriptView: View {
+    let lines: [Line]
+    @State private var topLine: Line.ID?
+
+    var body: some View {
+        ScrollView {
+            LazyVStack(alignment: .leading, spacing: 12) {
+                ForEach(lines) { line in
+                    VStack(alignment: .leading) {
+                        Text(line.speaker).font(.caption).foregroundStyle(.secondary)
+                        Text(line.text).lineHeight(.multiple(factor: 1.25))
+                    }
+                    .accessibilityElement(children: .combine)
+                }
+            }
+            .scrollTargetLayout()
+        }
+        .scrollPosition(id: $topLine, anchor: .top)
+        .dynamicTypeSize(...DynamicTypeSize.accessibility2)
+    }
+}
+```
+
+- **`PhaseAnimator` with no `trigger` cycles forever at display rate.** A continuous indicator only needs `TimelineView(.animation(minimumInterval: 1.0 / 15, paused:))`; pause it when the indicator is hidden or Reduce Motion is on.
+- **`TimelineView(.periodic(from:by:))` never stops.** When the view only changes at known moments, use `.explicit([dates])` and `.id(start)` so a new start resets the schedule.
+- **Pulse a `Canvas` through an outer modifier.** Animating a value the `Canvas` closure reads re-runs the drawing every frame; keep its inputs constant and animate `.opacity` on the view instead.
+- **`.lineHeight(.exact(points:))` (iOS 26+) does not scale with Dynamic Type** - use `.multiple(factor:)`.
+- **Trimming old rows makes a list jump.** `.scrollTargetLayout()` on the stack plus `.scrollPosition(id:anchor: .top)` keeps the visible row in place when earlier rows are removed.
+- Cap a dense layout with `.dynamicTypeSize(...DynamicTypeSize.accessibility2)` rather than letting the largest sizes break it, honour `accessibilityReduceMotion`, and merge a row's texts into one VoiceOver element with `.accessibilityElement(children: .combine)`.
+- Check the largest sizes in the simulator: `xcrun simctl ui <udid> content_size accessibility-extra-extra-extra-large`, then `xcrun simctl io <udid> screenshot` (see ios-devices-and-signing.md).
 
 ## Building with the iOS 27 SDK
 

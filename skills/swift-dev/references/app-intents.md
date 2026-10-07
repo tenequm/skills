@@ -2,7 +2,7 @@
 
 App Intents on iOS and macOS: intents, App Shortcuts for Siri/Spotlight/Shortcuts and the iPhone Action Button, run modes, authentication, entities, and Control Center controls.
 
-Verified on Xcode 27.0 (Swift 6.4, iOS 27.0 / macOS 27.0 SDKs), 2026-10-07: every block built in a scratch XcodeGen iOS app plus WidgetKit extension (`xcodebuild -destination 'generic/platform=iOS' CODE_SIGNING_ALLOWED=NO`, deployment target iOS 26, Swift 6 strict concurrency) and typechecked for `arm64-apple-macos26.0`; the App Shortcut build errors quoted below were reproduced. Declarations and availability read from the 27.0 `AppIntents`/`WidgetKit` `.swiftinterface` files. Not run on a device.
+Verified on Xcode 27.0 (Swift 6.4, iOS 27.0 / macOS 27.0 SDKs), 2026-10-07: every block built in a scratch XcodeGen iOS app plus WidgetKit extension (`xcodebuild -destination 'generic/platform=iOS' CODE_SIGNING_ALLOWED=NO`, deployment target iOS 26, Swift 6 strict concurrency) and typechecked for `arm64-apple-macos26.0`; the app target rebuilt as is and with `SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor`; the App Shortcut build errors quoted below were reproduced. Declarations and availability read from the 27.0 `AppIntents`/`WidgetKit` `.swiftinterface` files. Not run on a device.
 
 ## Contents
 - [Intent + App Shortcut](#intent--app-shortcut)
@@ -17,7 +17,7 @@ Verified on Xcode 27.0 (Swift 6.4, iOS 27.0 / macOS 27.0 SDKs), 2026-10-07: ever
 
 ## Intent + App Shortcut
 
-The hey-dan pattern: an App Shortcut that starts a call, assignable to the Action Button.
+The voice-call pattern: an App Shortcut that starts a call, assignable to the Action Button.
 
 ```swift
 struct StartConversationIntent: AppIntent {
@@ -27,7 +27,7 @@ struct StartConversationIntent: AppIntent {
 
     @MainActor
     func perform() async throws -> some IntentResult {
-        await CallController.shared.start(calling: "Dan")
+        await CallController.shared.start(calling: "Assistant")
         return .result()
     }
 }
@@ -74,7 +74,7 @@ struct StartCallIntent: AppIntent {
 }
 
 // App target, in the controller's own file (Sendable conformances must live there):
-//   extension CallController: CallStarting { func startCall() async { await start(calling: "Dan") } }
+//   extension CallController: CallStarting { func startCall() async { await start(calling: "Assistant") } }
 // and as early as App.init():
 //   let calls = CallController.shared
 //   AppDependencyManager.shared.add(dependency: calls as any CallStarting)

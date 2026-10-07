@@ -2,7 +2,7 @@
 
 Package.swift on Swift 6.4, local packages for iOS and macOS apps, resources, plugins, macros, the Swift Build engine, `xcodebuild` basics, Xcode 27 build-breakers, and the macOS-only path of shipping an app straight from SwiftPM.
 
-Verified on Xcode 27.0 (Swift 6.4, iOS 27.0 / macOS 27.0 SDKs), 2026-10-07: built and tested scratch packages covering every manifest snippet (traits, resources, a remote dependency, ObjC target, strict settings, two executables), a build-tool plus command plugin, the `swift package init --type macro` template; assembled, ad-hoc signed and ran a `.app` from `swift build` output; checked flags with `swift build --help`, `swift build --help-hidden`, `swift test --help`, `swift package --help`, `xcodebuild -help`; compiled the conditional-compilation snippet through SIL (`swiftc -emit-sil`) for iOS and macOS; read `PackageDescription` and `PackagePlugin` interfaces; reproduced four of the five Xcode 27 build-breakers and checked all five against the [Xcode 27 release notes](https://developer.apple.com/documentation/xcode-release-notes/xcode-27-release-notes).
+Verified on Xcode 27.0 (Swift 6.4, iOS 27.0 / macOS 27.0 SDKs), 2026-10-07: built and tested scratch packages covering every manifest snippet (traits, resources, a remote dependency, ObjC target, strict settings, two executables), a build-tool plus command plugin, the `swift package init --type macro` template; assembled, ad-hoc signed and ran a `.app` from `swift build` output; checked flags with `swift build --help`, `swift build --help-hidden`, `swift test --help`, `swift package --help`, `xcodebuild -help`; compiled the conditional-compilation snippet through SIL (`swiftc -emit-sil`) for iOS and macOS; read `PackageDescription` and `PackagePlugin` interfaces; reproduced four of the five Xcode 27 build-breakers and checked all five against the [Xcode 27 release notes](https://developer.apple.com/documentation/xcode-release-notes/xcode-27-release-notes); the agent-sandbox errors are quoted from two earlier Codex sandbox sessions, not reproduced.
 
 ## Contents
 - Package.swift on Swift 6.4
@@ -347,6 +347,15 @@ swift build --cache-path "$SCRATCH/spm-cache" --scratch-path "$SCRATCH/build"
 ```
 
 Under Swift Build the module cache lives in the scratch path, so the old `-Xswiftc -module-cache-path` redirect is no longer needed.
+
+Agent sandboxes can block more than the cache. Inside the Codex `workspace-write` sandbox an unsigned `xcodebuild ... -destination 'generic/platform=iOS' CODE_SIGNING_ALLOWED=NO build` failed with (abbreviated):
+
+```
+Could not resolve package dependencies: error opening '~/.cache/clang/ModuleCache/...': Operation not permitted
+Unable to discover any Simulator runtimes ... simdiskimaged ... launchd job is not registered
+```
+
+The first is the same `$HOME` cache problem; the second is `xcodebuild` failing to reach CoreSimulator's launchd services, which no path redirect fixes. Run the build with sandbox escalation (outside the sandbox) instead of debugging the project (seen in two Codex sessions; not reproduced in other sandboxes).
 
 **Plugin and macro trust prompts.** A project whose dependencies carry package plugins or macros stops headless `xcodebuild` on `Validate plug-in '<name>' in package '<pkg>'`. Skip validation only for vetted dependencies - it is the trust boundary for code that runs at build time:
 
