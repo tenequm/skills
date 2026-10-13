@@ -3,7 +3,7 @@ name: update-skill
 description: Thorough on-demand refresh of one skill in a skills repo - researches usage, upstream, and docs in parallel, gates twice for approval, bumps version, updates CHANGELOG, validates, commits, watches CI. Use to check a skill's freshness.
 argument-hint: "[skill-name]"
 metadata:
-  version: "0.8.4"
+  version: "0.8.5"
   categories: "agents, automation"
   topics: "skill-maintenance, versioning, changelog, research, agent-skills"
   openclaw:
@@ -32,6 +32,8 @@ These rules apply across all phases:
 - **Duplicate triggers.** If a scheduled task or a repeated invocation fires while a run is holding at a gate, hold at the emitted gate and answer from the existing report - never redo research or re-apply edits.
 - **No `--no-verify`, no `--amend`, no force-push** unless the user explicitly authorizes it for this run. Per the repo's CLAUDE.md or AGENTS.md.
 - **Working directory.** Every path, every `just check`, and every working git command (`status`/`diff`/`add`/`commit`/`push`) in the phases below runs against `<workdir>` - the worktree created in Phase 0 if the user opted in, otherwise `${CLAUDE_PROJECT_DIR}`. Use absolute paths under `<workdir>`; do not mix in the main checkout once a worktree is chosen. The exception is Phase 0's own `git worktree add`/`remove`, which must run against `${CLAUDE_PROJECT_DIR}` (the main checkout).
+- **Scratch directory for toolchains.** Pick one scratch directory outside every checkout (the session scratchpad if the harness provides one, else `mktemp -d`) and name it in every subagent brief. Every build or toolchain command - `swift`, `xcodebuild`, `npm`, `cargo`, `uv`, `go` and the like, including `--help` probes and scratch packages - runs with that directory as its working directory. Subagents start in the main checkout, so a bare `swift build --help` leaves a `.build/` there.
+- **No backticks in shell arguments.** Single-quote search patterns (`rg -n 'pattern' path`). In zsh and bash a backtick inside a double-quoted argument is command substitution, and one such `rg` pattern has printed the whole environment, secrets included, into a transcript.
 
 ## Phase 0 - Worktree choice (ask first)
 
@@ -56,6 +58,7 @@ Capture state for the rest of the run:
 - `metadata.upstream` (current; parse to `{name: version}` map; empty if absent)
 - Topmost CHANGELOG entry date (if `CHANGELOG.md` exists; this is the "last verified" signal)
 - `git log -1 --format=%cs -- skills/<name>/` date (last touch)
+- `git status --porcelain` snapshot of `<workdir>` and of `${CLAUDE_PROJECT_DIR}` - the baseline for the Phase 6 hygiene check, so pre-existing user files are never flagged or removed
 - `LICENSE.txt` (or the repo's equivalent) present and non-empty - publish pipelines and repo linters commonly hard-fail without it; if missing, queue a fix row in the Phase 3 report
 - `bootstrap_needed` flag = true if `metadata.upstream` is missing OR `CHANGELOG.md` is missing - **unless the skill is upstreamless by nature** (it wraps no package, spec, or living doc - e.g. a workflow or writing skill like `polish`). For those, omitting `metadata.upstream` is correct, not a gap: derive `bootstrap_needed` from the missing `CHANGELOG.md` alone and skip the upstream-candidate proposal.
 
@@ -64,7 +67,7 @@ Capture state for the rest of the run:
 Dispatch three research subagents in a single message, one per angle. Subagents run in the background by default (Claude Code v2.1.198+): collect every agent's completion before starting Phase 3. If the user supplied a seed finding (a bug they hit, a release they know about), pass it verbatim to the relevant agent - specific leads converge fastest. **Adapt each angle to the skill**: a skill wrapping a package researches that package's releases and source; a skill tracking living docs or a spec researches those docs and their source repos; a skill with no upstream at all still gets the usage angle.
 
 - **Usage** (pond - optional): if the pond MCP (`mcp__pond__pond_search`) is available, mine it with NO `project` filter for footguns, scenario-specific breakage, inefficiencies, gaps, and recurring misunderstandings the skill could absorb. Keep the query semantic (concepts, not project names); scope with filters. These are **advisory leads, not facts** - never verified, ground-checked in Phase 3. **If pond is not installed, skip this angle entirely** - dispatch only the upstream and docs agents, and note "Usage angle skipped: pond MCP not available (https://pond.cascade.fyi/)" in the Phase 3 report.
-- **Upstream**: releases, commits, and merged PRs since the last-verified date. Read real source - clone to a local scratch dir (e.g. `~/pjv/<owner>/<repo>`, lowercase) or use the GitHub MCP pinned to a concrete tag/SHA. For skills wrapping a CLI, also ground-truth against the live installed binary (`<cmd> --help`, real invocations) - docs and clones lag shipped behavior.
+- **Upstream**: releases, commits, and merged PRs since the last-verified date. Read real source - clone to a local scratch dir (e.g. `~/pjv/<owner>/<repo>`, lowercase) or use the GitHub MCP pinned to a concrete tag/SHA. For skills wrapping a CLI, also ground-truth against the live installed binary (`<cmd> --help`, real invocations, run from the scratch directory) - docs and clones lag shipped behavior.
 - **Docs**: the current canonical docs, read from source (raw `.md` or cloned repo), not model-summarized. Two distinct jobs, **both required**:
   - **(a) Drift check** - compare the docs against the skill's current `SKILL.md` and `references/`, flagging API changes, deprecated or removed symbols, and patterns the skill should adopt. This is anchored to what the skill already says.
   - **(b) Coverage sweep** - enumerate upstream's *current* feature/concept surface from the docs nav / table of contents, the API index, and the "what's new" / changelog. List every major capability, primitive, or concept the skill has **zero mention of**. Do NOT anchor this to existing skill content - the whole point is to find net-new surface the skill is silent about (`ADD` findings). This is the step a "verify what's there" pass structurally misses.
@@ -164,6 +167,10 @@ Skills in a public repo can publish on merge, and any research source can leak i
 It flags anything unsafe for a public skill: secrets (keys, tokens, passwords, `.env` values, connection strings), personal data (real names, emails, handles), and the easy-to-miss ones - non-public project or repo names, internal hostnames or endpoints, ticket IDs, local machine paths, pond session IDs. Intentional public references are fine (the public repo owner, official upstream repos and docs, published package names, spec URLs). The agent returns `[LEAK] <file>:<line> - <what> - suggested redaction: <text>` per issue, or exactly `NO LEAKS FOUND`.
 
 An unresolved `[LEAK]` is a hard blocker: redact each finding, re-run the scan, and repeat until clean before GATE 2. Hold the commit message to the same public-safe standard.
+
+### Checkout hygiene (hard blocker)
+
+Run `git status --porcelain` in `<workdir>` and, when a worktree is in use, in `${CLAUDE_PROJECT_DIR}` too - subagents can write into the main checkout even when the run edits a worktree. Any path missing from the Phase 1 snapshot and outside `skills/<name>/` and the generated `README.md` is a leftover from this run (a `.build/`, `node_modules/`, a scratch package): show it to the user, remove it, and re-check before GATE 2. Never gitignore it away - that hides the next leak from this check.
 
 ### Diff review
 
