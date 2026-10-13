@@ -1,6 +1,6 @@
 # Lance performance - combined reference
 
-Everything performance-shaped for Lance (`lance-format/lance@v13.0.0-beta.4`) in one place.
+Everything performance-shaped for Lance (`lance-format/lance@v14.0.0-beta.14`) in one place.
 **Part A** routes to the official guidance - which lives verbatim in this skill's
 `references/docs/` mirror, so it is pointed at rather than re-copied - and then adds the
 performance behavior upstream has *not* documented, derived from source and commit history.
@@ -13,6 +13,8 @@ performance behavior upstream has *not* documented, derived from source and comm
   - [OpenTelemetry metrics](#opentelemetry-metrics-not-in-the-performance-guide)
   - [Performance changes not in the guide (v10, source-derived)](#performance-changes-not-in-the-guide-v10-source-derived)
   - [Performance changes not in the guide (v11, source-derived)](#performance-changes-not-in-the-guide-v11-source-derived)
+  - [Performance changes not in the guide (v12, source-derived)](#performance-changes-not-in-the-guide-v12-source-derived)
+  - [Performance changes not in the guide (v13-v14, source-derived)](#performance-changes-not-in-the-guide-v13-v14-source-derived)
 - [Part B: Field-verified remote-storage practices](#part-b-field-verified-remote-storage-practices)
   - [The governing rule: minimize remote calls first](#the-governing-rule-minimize-remote-calls-first)
   - [Write path](#write-path)
@@ -37,6 +39,9 @@ Read these directly - they are byte-verbatim copies of the upstream docs at the 
 | `format/index/scalar/fts.md`, `format/index/vector/index.md` | (whole files) | Per-index storage, memory, and training costs |
 | `quickstart/vector-search.md` | (whole file) | ANN build and query tuning walkthrough |
 | `guide/observability.md` | (whole file) | Logging, trace events, object-store metrics |
+| `guide/object_store.md` | "General Configuration" | `block_size` read-coalescing gap (v13.0.0), `timeout`, retry knobs - see also `ops.md` section 13 |
+| `guide/distributed_indexing.md` | "Worker Shuffle Memory" | `LANCE_SHUFFLE_MAX_PRELOADED_OFFSETS_BYTES`, the per-shuffle IVF offsets budget (v13.0.0) |
+| `guide/blob.md` | "Open file-like blob handles lazily" | Sequential blob reads buffer 512 KiB by default; `buffer_size=0` for unbuffered |
 
 Provenance: `docs/src/guide/performance.md` was byte-unchanged from `v9.1.0-beta.8` through
 `v11.0.0-beta.2`, then **changed at `v11.0.0-beta.4`** (#8387), which added the "Tuning remote
@@ -46,9 +51,15 @@ edit). It then held byte-unchanged through `v12.0.0-beta.6` and **changed again 
 `v12.0.0-beta.12`** (#8936), which rewrote the RQ block for the 5-bit default: new per-row sizing
 formulas, a new worked example (~10.8 GiB -> ~47.3 GiB), and new `Fast`-mode guidance. It held
 again through `v12.0.0` and **changed at `v13.0.0-beta.1`** (#9112, +8 lines), which documented
-`Dataset::frag_reuse_index()` - the first edit to the guide since `v12.0.0-beta.12`.
+`Dataset::frag_reuse_index()` - the first edit to the guide since `v12.0.0-beta.12`. It then held
+byte-unchanged through the `v13.0.0` final and `v14.0.0-beta.1`, and **changed at
+`v14.0.0-beta.2`** (#9709, +5/-4): only the Logging paragraph, which now covers both crates -
+"Lance emits log messages through the `log` crate and structured events through the `tracing`
+crate", and "the Rust library does not install either globally" (`guide/performance.md:7-11`).
+The paragraph grew one line, so every later line shifts +1 against a `v13.x` copy (the RQ sizing
+block now starts at `:484`).
 
-The mirror is refreshed to `v13.0.0-beta.4`, so every number, default, and recommendation in it
+The mirror is refreshed to `v14.0.0-beta.14`, so every number, default, and recommendation in it
 is current as written. **Any RQ sizing figure you remember from an earlier read of this guide is
 stale** - re-read the block rather than trusting a cached number. The other perf-bearing sections
 above remain byte-unchanged across the range.
@@ -106,10 +117,10 @@ is gone.
 ## Performance changes not in the guide (v11, source-derived)
 
 Same caveat as above: verified against the `v11.0.0-beta.16` source and commit history, absent
-from `docs/src/guide/performance.md`. The section is unchanged at `v13.0.0-beta.4`. The edits to
-`docs/src/guide/performance.md` between `v12.0.0-beta.6` and `v13.0.0-beta.4` are three hunks
-from line 483 onward in the RQ sizing block (#8936), plus the FRI-inspection paragraph added at
-`v13.0.0-beta.1` (#9112), so the official "Tuning remote scans" numbers and everything else
+from `docs/src/guide/performance.md`. The section is unchanged at `v14.0.0-beta.14`. The edits to
+`docs/src/guide/performance.md` between `v12.0.0-beta.6` and `v14.0.0-beta.14` are three hunks
+from line 484 onward in the RQ sizing block (#8936), the FRI-inspection paragraph added at
+`v13.0.0-beta.1` (#9112), and the Logging paragraph (#9709), so the official "Tuning remote scans" numbers and everything else
 Part A routes to still stand as written - but the RQ sizing figures do not, and are restated in
 `references/indexes.md`.
 
@@ -213,7 +224,8 @@ this is the fix; OpenDAL-backed stores were never affected and are unchanged.
 
 ## Performance changes not in the guide (v12, source-derived)
 
-Verified against `v13.0.0-beta.4`.
+Verified against `v13.0.0-beta.4`; the env vars, proto fields 13/14 and the guide citation were
+re-checked at `v14.0.0-beta.14`.
 
 **Latest-version resolution stopped listing the whole `_versions/` prefix** (PR #8679). The
 namespace path previously enumerated every historical manifest to find the newest: on a
@@ -230,7 +242,7 @@ file movement to four concurrent files, overridable via `LANCE_DEEP_CLONE_STREAM
 
 **`LANCE_DEFAULT_IO_BUFFER_SIZE`** - the input scan for vector shuffling "uses a 2 GiB I/O
 readahead buffer by default", configurable through this variable
-(`docs/src/guide/performance.md:439`). This is a distinct knob from the per-scan
+(`docs/src/guide/performance.md:448`). This is a distinct knob from the per-scan
 `io_buffer_size` in the "Tuning remote scans" block, and it is the one that dominates memory
 during a large index build.
 
@@ -252,14 +264,59 @@ pre-allocates fixed-size node storage for `max_memtable_rows`, so a vector memta
 258 MiB, 1M -> 517 MiB, 2M -> 1033 MiB, all charged on row #1. Size `max_memtable_rows` against
 that, not against the row count you expect to hold.
 
+## Performance changes not in the guide (v13-v14, source-derived)
+
+Verified against `v14.0.0-beta.14`; none of this is in `guide/performance.md`.
+
+**Default IVF probing moved twice, so default-parameter latency and recall do not compare across
+v12 -> v13 -> v14.** #9184 (`v13.0.0`) keeps probe settings unset until configured "so dataset
+and MemWAL queries inherit adaptive defaults", and preserves "`nprobes(N)` as an exact
+minimum/maximum setting". #9467 (`v13.0.0`) recalibrated dot-product Auto probing for Float32
+IVF_FLAT at k <= 100 (initial floor/cap "k=1 | 0.14 | 56 partitions | 112 partitions"); before
+it, "the full Wiki workload searches one partition at k=1 but every partition at k=10/100".
+#9798 (`v14.0.0-beta.12`) extends the calibrated profiles from k=100 to k=100000 and adds
+`search_effort` in 0..1, which "defaults to `None`, resolved internally to 0.5 (Auto). Explicit
+effort takes precedence over fixed `nprobes`; explicit minimum/maximum bounds remain effective"
+(`rust/lance/src/dataset/scanner.rs:2426`). "Effort controls routing work, not a recall
+guarantee", and the PR claims no performance measurements. For any benchmark that spans these
+versions, pin `nprobes` (equal minimum and maximum select fixed probing).
+
+**The DataFusion spill pool now scales with cores, and concurrent builds stop sharing one.**
+Through v12, `mem_pool_size()` was 150 MiB x `target_partition.unwrap_or(1)` - one partition's
+budget feeding a session that ran one partition per core, so concurrent sort-heavy work failed
+with `ResourcesExhausted ... ExternalSorterMerge`. #9183 (`v13.0.0-beta.5`) multiplies by
+`target_partition.unwrap_or_else(get_available_parallelism)`
+(`rust/lance-datafusion/src/exec.rs:309,322-338`), and #9408 (`v13.0.0`) gives every spilling
+execution a fresh session and pool instead of a cached shared one (`exec.rs:447-452`). The cost
+is stated upstream: "concurrent executions can consume multiples of `LANCE_MEM_POOL_SIZE` and
+`LANCE_MAX_TEMP_DIRECTORY_SIZE`. On resource-constrained hosts, limit concurrent index builds or
+size those per-execution budgets accordingly." The Part B `LANCE_MEM_POOL_SIZE` bullet has the
+version split.
+
+**Cold point reads stopped paying for every page's metadata** (#7465, `v13.0.0-beta.3`,
+breaking). `StructuralFieldScheduler::initialize` used to initialize "**every** page in a column
+before scheduling, even when the read only touches one page"; it now initializes only the pages
+the requested ranges overlap and submits the misses as one request "so adjacent ranges coalesce
+into shared GETs instead of one request per page", caching per page (`PageDataCacheKey`). "Net
+effect: a cold point/range read's metadata IO is invariant to the column's total page count."
+This is the read-side fix for the tiny-page layout in Part B ("Binary-copy compaction of small
+appends...").
+
+**Two new knobs documented outside the guide** - the `block_size` read-coalescing storage option
+(#9380) and `LANCE_SHUFFLE_MAX_PRELOADED_OFFSETS_BYTES` (#9434), both `v13.0.0`; routed in the
+table above, detailed in `ops.md` sections 13 and 15.1.
+
 ---
 
 # Part B: Field-verified remote-storage practices
 
 Everything below comes from production benchmarks of a Lance-based application (2.2M-row
 corpus) running against S3-compatible object storage - not from the official docs. Each
-practice was measured with a before/after comparison and shipped. Nothing here is
-speculative; if an approach was tried and did not clearly win, it is not listed.
+practice was measured with a before/after comparison and shipped; newer entries name the
+Lance version they were measured on. Explanations that are reasoning or source-reading rather than
+measurement say so inline. If an approach was tried and did not clearly win, it is not listed.
+Code citations here were taken at the pin each finding names and are not re-targeted on every
+refresh, so line numbers drift - resolve them by symbol name.
 
 ## The governing rule: minimize remote calls first
 
@@ -445,10 +502,16 @@ analogue on object storage. Mechanism, verified at `v11.0.0-beta.2`:
 
 ## Index maintenance
 
-- **Batch index folds behind a row-count threshold; never fold on every write tick.**
-  Folding FTS + vector indexes on each 5-minute sync cost 15-445 s of the sync; deferring
+- **Batch index folds behind a threshold on rows *and* fragments; never fold on every write
+  tick.** Folding FTS + vector indexes on each 5-minute sync cost 15-445 s of the sync; deferring
   folds until the unindexed tail reaches ~5,000 rows cut a 80-524 s sync to ~44 s. The
-  deferred tail costs only ~50-350 ms extra per query (see next point).
+  deferred tail costs only ~50-350 ms extra per query (see next point). But the tail is paid per
+  *fragment*, and that includes scalar BTree lookups: each fragment outside the index's
+  `fragment_bitmap` costs one small (~126 B) GET per lookup. Measured on 11.0.0 against
+  S3-compatible storage, a controlled fixture went 201 uncovered fragments -> 201 GETs, and 1 GET
+  after folding. A table that gains a few rows per commit never trips a row threshold: one
+  append-heavy table drifted to ~1,379 uncovered fragments and a lookup path issued 9,652 GETs
+  (~7 per uncovered fragment). Fold on whichever of row count or fragment count crosses first.
 - **A remote fold is close to fixed-cost per pass, not proportional to the delta.** Measured on
   S3-compatible storage, folding a delta of **~200 rows took ~346 s**; the same fold against a
   local store took **2-4 s for a delta of 424k rows**. The dominant cost is neither transfer nor
@@ -472,7 +535,7 @@ analogue on object storage. Mechanism, verified at `v11.0.0-beta.2`:
   tail-recall regression test. On v11, an unindexed tail additionally disqualifies the
   posting-backed compound FTS scorer (section 11.3), so it costs plan quality too.
 - **Know exactly what the flat arm does, because it bounds your commit cadence.** Read the
-  branch at `rust/lance/src/dataset/scanner.rs:3380-3403` (`v13.0.0-beta.4`). It scans **every**
+  branch at `rust/lance/src/dataset/scanner.rs:7132-7153` (`v14.0.0-beta.14`). It scans **every**
   unindexed fragment, and two properties make that cost scale badly. First, the filter is applied
   as a post-scan `LanceFilterExec` over the scanned rows rather than through scalar indexes - the
   code says so outright: "we could try and use the scalar indices here to reduce the scope of this
@@ -515,14 +578,14 @@ analogue on object storage. Mechanism, verified at `v11.0.0-beta.2`:
 - **"Pending cleanup" bytes are the retention window, not bloat.** Versions younger than the
   retention window are pinned by design, so an optimize pass over a young store legitimately
   reclaims zero. Know your actual window before calling it a leak: Python's
-  `cleanup_old_versions` defaults `older_than` to **14 days** when neither `older_than` nor
-  `retain_versions` is given (`python/python/lance/dataset.py:3113`), while automatic cleanup
-  uses whatever `lance.auto_cleanup.older_than` the dataset config carries - the docs example
-  sets `"3600s"` (`docs/src/guide/read_and_write.md:585`), which is where a "one hour" default
+  `cleanup_old_versions` defaults `older_than` to **14 days** when none of `older_than`,
+  `retain_versions` or `versions` is given (`python/python/lance/dataset.py:3447`), while
+  automatic cleanup uses whatever `lance.auto_cleanup.older_than` the dataset config carries - the
+  docs example sets `"3600s"` (`docs/src/guide/read_and_write.md:645`), which is where a "one hour" default
   is easily misremembered from. Never benchmark space reclamation on a store younger than the
   window actually in force.
 - **A second, independent floor: unverified files are held for 7 days.**
-  `UNVERIFIED_THRESHOLD_DAYS = 7` (`rust/lance/src/dataset/cleanup.rs:319`) is hardcoded. With
+  `UNVERIFIED_THRESHOLD_DAYS = 7` (`rust/lance/src/dataset/cleanup.rs:396`) is hardcoded. With
   the default `delete_unverified=false`, any file not reachable from a manifest but newer than
   7 days is treated as possibly-in-progress and refused for deletion **regardless of
   `older_than`**. Shortening the retention window does not touch this floor, so a store can sit
@@ -533,6 +596,27 @@ analogue on object storage. Mechanism, verified at `v11.0.0-beta.2`:
   disk as pending-cleanup - a measured rebuild roughly doubled both store size and object count
   until the next cleanup pass. Provision headroom for a full extra index set before rebuilding,
   and do not schedule a rebuild and a tight retention window against each other.
+- **Real erasure is four steps, not a `delete`.** A delete writes a deletion vector; the bytes
+  stay in the data file, in every older version, and in index files. Source-read at 12.0.0 and
+  re-checked at `v14.0.0-beta.14` (a design review, not field-measured):
+  1. **Rewrite the affected fragments.** Compaction only self-rewrites a fragment whose deleted
+     share exceeds `materialize_deletions_threshold`, default `0.1`
+     (`rust/lance/src/dataset/optimize.rs:353,931-934`), so a full-size fragment with a few
+     deleted rows is skipped - set the threshold to `0.0` for an erasure pass.
+  2. **Clean up the old versions.** Rust and Java `CleanupPolicy.before_version` removes every
+     version below the anchor regardless of age - the filters AND only when set
+     (`rust/lance/src/dataset/cleanup.rs:1946-1983`). Python's `cleanup_old_versions` has no
+     anchor argument: `retain_versions=N` resolves to one internally (`cleanup.rs:2041-2052`), and
+     `versions=[...]` names exact versions. The 7-day unverified floor below still applies.
+  3. **Rebuild the indexes.** Deletes do not conflict with `CreateIndex` - "it is ok for an index
+     to refer to deleted rows" (`references/docs/format/table/transaction.md:176`) - so an index
+     built from pre-delete data can commit after the delete and keep the deleted values in its
+     files. An index's `dataset_version` is the version its build *read*, not its commit version,
+     which makes it the field to check.
+  4. **Do not sweep system indexes.** `load_indices()` returns `__lance_frag_reuse` and
+     `__lance_mem_wal` alongside user indexes (`rust/lance/src/index.rs:2660`,
+     `rust/lance-table/src/system_index.rs:22-24`), so "drop every index not on my list" must
+     skip them.
 - **Measure maintenance on the real remote store.** A full FTS consolidation rebuild
   measured ~1 min locally but 4.5-5 min (rewriting ~190 MB) against the remote store -
   round trips dominate. If a periodic rebuild can exceed your scheduler interval, rely on
@@ -549,18 +633,20 @@ analogue on object storage. Mechanism, verified at `v11.0.0-beta.2`:
   `retrain: true` merges everything into one. Pick an explicit ladder - collapse at a modest
   segment count, full rebuild at a higher one - and treat those numbers as correctness floors
   rather than tuning preferences.
-- **`LANCE_MEM_POOL_SIZE` is the hidden ceiling on large from-scratch scalar index builds, and
-  the default is smaller than it looks.** BTree/JSON training scans run with `use_spilling: true`
-  (`rust/lance/src/index/scalar.rs:166`, `rust/lance-index/src/scalar/btree.rs:1942`), which
+- **`LANCE_MEM_POOL_SIZE` is the ceiling on large from-scratch scalar index builds, and its
+  default depends on the version.** BTree/JSON training scans run with `use_spilling: true`
+  (`rust/lance/src/index/scalar.rs:179`, `rust/lance-index/src/scalar/btree.rs:2277`), which
   wraps a DataFusion `FairSpillPool` sized from that variable
-  (`rust/lance-datafusion/src/exec.rs:364,378`). The default is
-  `DEFAULT_LANCE_MEM_POOL_SIZE_PER_PARTITION = 150 MiB` (`exec.rs:309`) multiplied by
-  `target_partition.unwrap_or(1)` (`exec.rs:314,324`) - **so with `target_partition` unset the
-  pool is 150 MiB total, not 150 MiB per core.** A large sort that fragments into more spill
-  files than its fair-share slice can merge fails with a DataFusion `Resources exhausted ...
-  ExternalSorterMerge` error rather than spilling further. Raise `LANCE_MEM_POOL_SIZE` (or set
-  `LANCE_BYPASS_SPILLING`, `exec.rs:349`, to disable the pool entirely) before concluding the
-  index cannot be built.
+  (`rust/lance-datafusion/src/exec.rs:379-395`), default
+  `DEFAULT_LANCE_MEM_POOL_SIZE_PER_PARTITION = 150 MiB` (`exec.rs:309`) times a partition count.
+  **Through v12 that count was `target_partition.unwrap_or(1)`, so with `target_partition` unset
+  the pool was 150 MiB total, not per core**; from `v13.0.0-beta.5` (#9183) it is
+  `get_available_parallelism()` (`exec.rs:322-338`), and from `v13.0.0` (#9408) each spilling
+  execution gets its own pool - so N concurrent builds can now hold N pools (Part A, v13-v14). A
+  large sort that fragments into more spill files than its fair-share slice can merge fails with
+  a DataFusion `Resources exhausted ... ExternalSorterMerge` error rather than spilling further.
+  On v12 raise `LANCE_MEM_POOL_SIZE`; on v13+ check concurrency first. `LANCE_BYPASS_SPILLING`
+  (presence-only, `exec.rs:363-364`) disables the pool entirely.
 - **Auto-cleanup is opt-in and interval-gated - but `skip_auto_cleanup` is Rust-only.** The
   per-commit hook returns immediately unless the dataset config carries
   `lance.auto_cleanup.interval` and the current version is a multiple of it
@@ -591,39 +677,47 @@ analogue on object storage. Mechanism, verified at `v11.0.0-beta.2`:
   so the failure surfaces at cleanup time, not at compaction time.)
 - **Turning off stable row IDs is not the whole story on remap cost.** The gate is now
   `!uses_stable_row_ids() && !options.defer_index_remap && has_address_style`
-  (`rust/lance/src/dataset/optimize.rs:2060-2061`), and row-address capture is skipped entirely
-  when nothing will consume it (`:1653-1657`). So a non-stable-row-id dataset with **no**
+  (`rust/lance/src/dataset/optimize.rs:3266-3268`), and row-address capture is skipped entirely
+  when nothing will consume it (`:2538-2542`). So a non-stable-row-id dataset with **no**
   address-style index pays no remap cost at all - the "every compaction rewrites every index
   entry" rule only bites when such an index actually exists.
 
   The correctness half of that gate is covered in `indexes.md` section 11.5: on a
-  **stable-row-id** dataset no remap happens either, so an address-domain index (ZoneMap) has
-  its rewritten fragments *dropped* from coverage rather than remapped. Before v11 the bitmap
-  was instead advanced onto the new fragment ids, leaving zones pointing at dead ones. If your
-  datasets predate v11 and carry a ZoneMap, probe payload-vs-live fragment ids with
+  **stable-row-id** dataset no remap happens either, so an address-domain index has its
+  rewritten fragments *dropped* from coverage rather than remapped. ZoneMap is not the only one:
+  BloomFilter and FM-Index also return `results_are_row_addresses() == true`
+  (`rust/lance-index/src/scalar/zonemap.rs:781`, `bloomfilter.rs:546`, `fmindex.rs:1655`). Before
+  v11 the bitmap was instead advanced onto the new fragment ids, leaving zones pointing at dead
+  ones. If your datasets predate v11 and carry any of the three, probe payload-vs-live fragment ids with
   `calculate_included_frags` once and recreate any index that mismatches - upgrading does not
   repair existing damage.
 - **Replace the compaction planner rather than post-filtering its output.** `CompactionPlanner`
   is a public trait and `compact_files_with_planner` accepts any implementation
-  (`rust/lance/src/dataset/optimize.rs:687,928`). The load-bearing detail is that an empty plan
+  (`rust/lance/src/dataset/optimize.rs:780,1039`). The load-bearing detail is that an empty plan
   short-circuits before any commit - `if compaction_plan.tasks().is_empty() { return
   Ok(CompactionMetrics::default()); }` - so a veto-style planner produces **zero churn and zero
   new versions**, which post-filtering cannot promise. Byte-aware policy needs no extra I/O
   either: `DataFile.file_size_bytes` is already carried in the manifest as `CachedFileSize`.
   Measured on a heavy-row table, deriving `target_rows_per_fragment` from bytes instead of the
-  1M-row default took daily rewrites from ~190 GB to under ~100 MB.
+  1M-row default took daily rewrites from ~190 GB to under ~100 MB. A planner that *predicts*
+  outputs must model the pinned version's split. v11 wrote exact-target outputs plus a tail
+  (`max_rows_per_file: target_rows_per_fragment`); v12+ writes `max(1, floor(live / target))`
+  outputs with rows spread evenly, because "Planner-sized tasks may exceed the target, but should
+  remain one output instead of producing a target-sized fragment plus a stranded tail"
+  (`optimize.rs:2642-2650` at `v14.0.0-beta.14`) - so one output can hold up to ~2x target.
+  Field-verified across 11.0.0 -> 12.0.0 by source diff plus an A/B on a real-data copy.
 - **Compaction bins split at index-coverage boundaries, and that will not be relaxed.** The
   planner "cannot mix 'indexed' and 'non-indexed' fragments"
-  (`rust/lance/src/dataset/optimize.rs:849`); the split is load-bearing for correctness, because
+  (`rust/lance/src/dataset/optimize.rs:959`); the split is load-bearing for correctness, because
   a rewrite group straddling an index bitmap creates Rewrite-vs-CreateIndex conflicts (PR
   #6610), and a commit that mixes them fails later at `load_indices` with "split of indexed and
   non-indexed". The consequence to design around: freshly compacted fragments land outside every
   per-index `fragment_bitmap`, so `unindexed_fragments()` keeps reporting them and a naive
   "compact until clean" loop never terminates. Compaction is an **operator-cadence** verb -
   running it at write cadence is the impedance mismatch.
-- **Compaction non-convergence is confined to the reencode path.** Candidacy is purely
-  `physical_rows < target_rows_per_fragment` (`rust/lance/src/dataset/optimize.rs:728`) - there
-  is no byte term anywhere, including bin splitting, and the in-tree `CompactionOptions` doc
+- **Compaction non-convergence is confined to the reencode path.** Size candidacy is purely
+  `physical_rows < target_rows_per_fragment` (`rust/lance/src/dataset/optimize.rs:935`; the other
+  triggers are the deletion threshold and lineage-pinned files) - there is no byte term anywhere, including bin splitting, and the in-tree `CompactionOptions` doc
   admits it ("This does not affect which frgamnets need compaction", typo upstream). The
   reencode writer flushes on whichever of the row target or byte cap fires first, so a
   byte-capped task can emit fragments that are *still* under the row target and stay candidates
@@ -634,6 +728,24 @@ analogue on object storage. Mechanism, verified at `v11.0.0-beta.2`:
   `TryBinaryCopy`/`ForceBinaryCopy`; and a **single blob column disqualifies binary copy for the
   whole dataset**. `max_bytes_per_file` is also effectively inert when unset - the writer
   default is 90 GB.
+- **Binary-copy compaction of small appends preserves tiny pages; use `Reencode` on append-heavy
+  tables.** Binary copy concatenates source pages instead of re-encoding them, so a table built
+  from many small appends keeps about one page per append per column, while a re-encode buffers
+  `cache_bytes_per_column` (8 MiB default, `rust/lance-encoding/src/encoder.rs:280`) per column
+  before cutting a page. The debt is invisible until a reader pays per page. Measured on Lance
+  12.0.0 against S3-compatible storage, on an append-heavy table compacted with `TryBinaryCopy`
+  across v7-v11: a take paid roughly one metadata GET per page, so a single-row lookup cost
+  ~47,000 GETs; after a re-encode (93,937 pages -> 1,905 on the largest table) it cost ~700, a
+  read path went from 30-38 s to 2.7 s, and live data shrank ~12%. The per-page cost matches the
+  pre-#7465 `StructuralFieldScheduler::initialize` (Part A, v13-v14), which initialized every
+  page with its own request. *Not explained by code:* that function is identical at `v11.0.0`
+  and `v12.0.0` (`rust/lance-encoding/src/encodings/logical/primitive.rs:4407-4441` at
+  `v12.0.0`), so what made 12.0.0 surface the cost is unidentified - the field attribution to a
+  v12 reader change is unverified. v13's #7465 fixes the read side (measured ~14 GETs on the
+  unrepaired layout), but the layout itself only heals by re-encoding. Detection costs one footer
+  read per data file: a re-encoded file's narrowest column holds 1 page, while binary-copied
+  append files showed 16-478 pages even in their narrowest column - flag files whose narrowest
+  column has >= 16 pages.
 - **`file_size_bytes` backfill is cheap on Lance-written stores.** `migrate_manifest` runs at
   every commit and issues one `ObjectStore::size` (HEAD) per data file whose size is unknown
   (`rust/lance/src/io/commit.rs:839`), in parallel. Lance's own writers set the field at write
@@ -644,9 +756,9 @@ analogue on object storage. Mechanism, verified at `v11.0.0-beta.2`:
 ## Read path and query shaping
 
 - **Freshness is poll-only, and polling is cheaper than it looks.** There is **no `subscribe`,
-  `watch`, or version-notification API anywhere in the workspace** at `v13.0.0-beta.4` - a reader
+  `watch`, or version-notification API anywhere in the workspace** at `v14.0.0-beta.14` - a reader
   that must see new commits polls, full stop. The good news is the cost model:
-  `Dataset::checkout_latest()` (`rust/lance/src/dataset.rs:559`) on an **unchanged** version costs
+  `Dataset::checkout_latest()` (`rust/lance/src/dataset.rs:563`) on an **unchanged** version costs
   a single list/head and does **not** re-read the manifest body, so a ~100 ms poll interval is
   affordable even remotely; you only pay manifest decode when the version actually moved. Budget
   for the changed case, not the steady state. The only alternatives are in-process
@@ -656,7 +768,7 @@ analogue on object storage. Mechanism, verified at `v11.0.0-beta.2`:
 - **A latent timezone smell in scalar-index coercion - worth knowing, not currently a bug.**
   `safe_coerce_scalar`'s same-unit arm is
   `DataType::Timestamp(TimeUnit::Microsecond, _) => Some(value.clone())`
-  (`rust/lance-datafusion/src/expr.rs:437`, unchanged at `v13.0.0-beta.4`): when the literal's
+  (`rust/lance-datafusion/src/expr.rs:437`, unchanged at `v14.0.0-beta.14`): when the literal's
   time unit already matches the column's, it returns the literal **unchanged, discarding the
   target timezone**. The other-unit branches clone the timezone correctly. At the pinned
   `datafusion-common` 54.x this is harmless - `ScalarValue::partial_cmp` for two same-unit
@@ -690,6 +802,15 @@ analogue on object storage. Mechanism, verified at `v11.0.0-beta.2`:
   call. "Does this dataset have embeddings?" is answered by index presence in the
   manifest, not by `IsNotNull("vector")` (measured 6.8-44 s per call on S3). Cache counts
   that only change on ingest.
+- **A small `LIMIT` does not bound I/O on an unfiltered scan.** Measured on 12.0.0 against
+  S3-compatible storage: an unfiltered `scan(id) LIMIT 3`, used as a cheap existence check, cost
+  470-650 requests and 60-110 MB (~3 s) for 3 rows, and removing it cut the enclosing operation's
+  median from 7.47 s to 5.47 s. Readahead schedules whole pages across many files before the limit
+  stops the stream, and after a re-encode each file's `id` column was one multi-megabyte page -
+  the flip side of the tiny-page fix above: bigger pages make tiny reads cost more per page.
+  Restricting the check to one fragment (an expected 1-3 requests) was proposed, **not
+  measured**. Same root as the "Lowering `batch_size`" caveat: the page, not the row, is the unit
+  of I/O.
 - **Scalar and JSON indexes accelerate `WHERE` pushdown only.** A `GROUP BY
   json_get_string(col, 'name')` or a join key extracted from JSON evaluates the
   expression per row with no predicate to push down - the whole fat column ships over the
@@ -723,7 +844,7 @@ analogue on object storage. Mechanism, verified at `v11.0.0-beta.2`:
   not "optimize itself away" on small data.
 - **`Dataset::versions()` is O(history) remote reads, not a metadata lookup.** It lists
   manifests and then **reads every one** to recover its timestamp
-  (`rust/lance/src/dataset.rs:2618-2635`, which carries an upstream
+  (`rust/lance/src/dataset.rs:2653-2670`, which carries an upstream
   `// TODO: this API should support pagination`). On a dataset with hundreds of versions over
   remote storage this is a fetch storm - it shows up in access logs as reads of historical
   manifest versions in descending order. Use `version()` / the current manifest for "what
@@ -735,6 +856,21 @@ analogue on object storage. Mechanism, verified at `v11.0.0-beta.2`:
   flat scan. Index choice can therefore *remove* a query shape that worked before the index
   existed - if you need both set membership and prefix matching on one column, a bitmap index
   alone is the wrong choice.
+- **FTS prewarm is all-or-nothing on RAM by default, and the decoded index dies with the
+  process.** `prewarm_index` on an inverted index makes the whole posting set resident; one
+  deployment warmed FTS with a single synthetic query instead, because full prewarm had blown its
+  RAM budget. Rust callers can pass `PrewarmOptions::Fts(FtsPrewarmOptions::new().best_effort())`
+  to `prewarm_index_with_options`, which drops the requirement that the full working set "remain
+  resident when the operation completes" (`rust/lance-index/src/traits.rs:78-121,315-317`); Python's
+  `prewarm_index` exposes only `with_position` and `index_segments`. The cost being avoided is
+  real: postings decode on a cold first FTS query measured 47-300 s against remote storage
+  (Lance 11-12). *Reasoning from source, not measured:* the built-in cache backend is in-memory,
+  so the decoded index is rebuilt in every new process; the backend trait carries a `CacheCodec`
+  for persistent third-party backends and FTS posting lists have one
+  (`rust/lance-index/src/scalar/inverted/cache_codec.rs`), but Lance ships no disk tier. What runs
+  in production instead: caching the raw `_indices/<uuid>/` files on local disk through a
+  `WrappingObjectStore`. Index files are immutable and UUID-addressed, so a hit is always
+  correct - it removes the fetch, not the decode.
 - **A blob column in SQL is a `{position, size}` struct descriptor.** Any cast or text
   operation on it surfaces as an opaque planner error (`Unsupported CAST from Struct(...) to
   Utf8View`) with nothing pointing at blobs as the cause. Read blob payloads through the blob
@@ -781,17 +917,36 @@ not in release notes:
   reports transient storage failures as `TableNotFound` (PR #7931) - a create-or-open path that
   treated that error as "absent" could previously overwrite a live table on a 503, and now sees
   `Throttling` / `ServiceUnavailable` / `Internal` instead.
-- **crates.io carries finals only.** The newest published crate is `lance 10.0.0` (2026-08-07);
-  every beta and rc exists as a git tag with no crate. Pinning a beta means a git dependency,
+- **crates.io carries finals only.** The newest published crate is `lance 13.0.0` (2026-10-07,
+  after `11.0.0` on 2026-08-30 and `12.0.0` on 2026-09-17); every beta and rc exists as a git tag with no crate. Pinning a beta means a git dependency,
   which also means no crates.io yank signal if one turns out bad.
-- **Do not assume a given major shipped a final.** The auto-bump has now fired on **four
-  consecutive dev lines**, and *none* of `v9.1.0`, `v10.1.0`, `v11.1.0` or `v12.1.0` was ever
-  released - the 12.1 line got a `chore: bump main to 12.1.0-beta.0` commit and was re-rooted to
-  13 four commits later, without ever being tagged. `v12.0.0` **did** ship a final (2026-09-17)
-  - note that finals are cut on stabilization branches, so "not an ancestor of `main`" is normal
+- **Do not assume a given major shipped a final.** The auto-bump has now fired on **five
+  consecutive dev lines**, and *none* of `v9.1.0`, `v10.1.0`, `v11.1.0`, `v12.1.0` or `v13.1.0`
+  was ever released - the 12.1 line got a `chore: bump main to 12.1.0-beta.0` commit and was
+  re-rooted to 13 four commits later, without ever being tagged, and 13.1 reached
+  `v13.1.0-beta.2` (2026-10-02) before re-rooting to 14. `v12.0.0` and `v13.0.0` **did** ship
+  finals (2026-09-17, 2026-10-07) - note that finals are cut on stabilization branches, so "not an ancestor of `main`" is normal
   and not a sign the release is unofficial. "Upgrade to the latest major" is still not a valid
-  plan without checking which majors actually have finals - as of `v13.0.0-beta.4` that is
-  `v12.0.0` and below.
+  plan without checking which majors actually have finals - as of `v14.0.0-beta.14` that is
+  `v13.0.0` and below.
+- **The `stable` -> 2.2 default broke default-param writers on v12 and silently moved
+  benchmarks.** On 12.0.0, a dataset writer resolving the default format rejects any legacy
+  blob-marked column: "Legacy blob columns (field metadata key ...) are not supported for file
+  version >= 2.2" (`rust/lance/src/dataset/write.rs:1825` at `v12.0.0`). `v13.0.0` (#9459) makes
+  dataset writers convert that input instead - "With `data_storage_version >= 2.2`, dataset
+  writers convert this input to Blob v2" (`references/docs/guide/blob.md:494`) - and only
+  lower-level file writers still reject it (`:554-556`). Separately, any bench or test built on
+  `WriteParams::default()` changed file format at the 2.2 switch with no diff of its own, so
+  numbers taken across that boundary compare two formats, not one change. Pin
+  `data_storage_version` in anything you benchmark.
+- **v12 row-id readahead raises transient heap on stable-row-id scans - a plateau, not a leak.**
+  #8747 added a per-stream readahead, `ROW_ID_READ_AHEAD_ROWS = 64 * 1024`
+  (`rust/lance-table/src/utils/stream.rs:378`, unchanged at `v14.0.0-beta.14`), gated on stable
+  row ids. Five idle-host reruns on 12.0.0 measured **+11% to +23%** peak heap per query against
+  11.0.0, small in absolute terms (~16.6 -> 20.4 MiB). The field analysis attributes it to each
+  row-id decode rounding up to a 512 KiB chunk that zero-copy Arrow slices keep alive, multiplied
+  by concurrent streams - reasoning, not separately measured. Re-baseline memory alerts across
+  the bump rather than chasing a leak.
 - **v11 changes fragment-id semantics** (PR #8206). Overwrite no longer restarts ids at 0, and
   any commit producing duplicate ids is now rejected. Two audit items on a bump: code that reads
   a fragment by a hardcoded id after an overwrite, and any dataset written by Lance 0.16 or
@@ -822,6 +977,15 @@ Each of these produced a wrong conclusion that shipped or nearly shipped:
 - **Copy-then-optimize measures `IndexCreate`, never the incremental fold.** To measure
   fold cost: build indexes first, append a small tail, then optimize. An
   always-compact profile also masks the fold signal with compaction noise.
+- **Layout debt stays invisible until a new reader version charges for it - and a store your
+  own experiments reshaped is not the production layout.** The binary-copy tiny-page layout
+  (Index maintenance) accumulated for months at no visible cost, then surfaced as GET storms on a
+  12.0.0 upgrade; the regression was in no reviewed diff. The first diagnosis blamed per-request
+  latency on the copied prefix, which the page-count analysis later disproved, and a fix first
+  validated on a test copy that earlier experiments had already rewritten looked better than it
+  would on production. Benchmark on a fresh server-side copy of the real store, re-measure
+  long-lived stores (not only fresh fixtures) on every major bump, and read pages-per-column
+  from file footers before trusting a before/after.
 - **A/B on the same warm cache state.** Index/rowmap caches are keyed by store URL; a
   freshly cloned store URL always cold-starts (tens of seconds) and looks exactly like a
   regression. Compare binaries against the same URL, and separate cold from warm runs.

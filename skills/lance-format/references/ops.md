@@ -1,8 +1,8 @@
-# Lance v12 reference - object store, capabilities, source map (sections 13, 15, 16)
+# Lance v14 reference - object store, capabilities, source map (sections 13, 15, 16)
 
-Part of the Lance v13 reference (`lance-format/lance@v13.0.0-beta.4`). Citations are `path:line`
+Part of the Lance v14 reference (`lance-format/lance@v14.0.0-beta.14`). Citations are `path:line`
 relative to the repo root; build a permalink as
-`https://github.com/lance-format/lance/blob/v13.0.0-beta.4/<path>`. Line numbers drift between
+`https://github.com/lance-format/lance/blob/v14.0.0-beta.14/<path>`. Line numbers drift between
 tags - treat them as approximate. Cross-references written as "section N" use the original
 16-section numbering; `lance-reference.md` maps every number to its file.
 
@@ -14,7 +14,7 @@ tags - treat them as approximate. Cross-references written as "section N" use th
 - [16. Source map](#16-source-map) - where each spec, proto, and crate lives in the repo
 
 Other files: `format-file.md` (1-4), `format-table.md` (5-10), `indexes.md` (11-12),
-`changelog-v7-v13.md` (14).
+`changelog-v7-v14.md` (14).
 
 ---
 
@@ -24,7 +24,11 @@ The object store is chosen by URI scheme (`docs/src/guide/object_store.md`): `s3
 `s3+ddb://` (S3 + DynamoDB commits), `gs://`, `az://` / `abfss://`, `oss://` (Alibaba),
 `cos://` (Tencent), `tos://` (Volcengine, new in v8), `goosefs://` (feature-gated `goosefs`,
 new in v8), `hf://` (Hugging Face, read-oriented, new in v13), `file://`, `file+uring://`,
-`memory://`, `shared-memory://` (in-memory, cross-component).
+`memory://`, `shared-memory://` (in-memory, cross-component). Apache Ozone (documented in v14,
+#9601) adds no scheme: its S3 Gateway "exposes the standard S3 REST API, so Lance uses it through
+the existing S3 code path" (`object_store.md:632-635`) - plain `s3://` with `endpoint`, the
+`ozone s3 getsecret` key pair, and `virtual_hosted_style_request: "false"` for the gateway's
+default path-style mode (`:661-711`).
 
 **`hf://` has an opt-in resolve cache with a staleness hazard** (#9236). Setting
 `storage_options={"hf_enable_resolve_cache": "true"}` "reuses resolved HTTP download URLs and
@@ -39,8 +43,9 @@ The underlying stack moved in the `v12.0.0` final: `object_store` 0.13 -> **0.14
 `object_store` types transitively needs the matching bump.
 
 `file+uring://` is a **local** store, not a remote one: `is_local()` returns true for both
-`file` and `file+uring` (`rust/lance-io/src/object_store.rs:630`), and
-`is_uring()` distinguishes it (`:653`). Any rule stated for "the local store" therefore covers
+`file` and `file+uring` (`rust/lance-io/src/object_store.rs:769-771`); only the scheme string,
+and the `prefers_lite_scheduler()` check built on it (`:792-794`), tells them apart. Any rule
+stated for "the local store" therefore covers
 it - a scheme check written as `scheme == "file"` silently excludes uring stores.
 Config comes from environment variables or the `storage_options` map passed to
 `lance.dataset` / `lance.write_dataset`.
@@ -51,10 +56,30 @@ registries, threads, and unrelated components in the same process - to one proce
 `InMemory` backend keyed by the URL authority. The pool is never evicted and grows for the
 process lifetime; it is meant for tests and harnesses that coordinate a writer and an
 independent reader. Pick distinct authorities for isolation
-(`rust/lance-io/src/object_store/providers/shared_memory.rs:16`).
+(`rust/lance-io/src/object_store/providers/shared_memory.rs:16-24`).
 
 General options: `allow_http` (default false), `connect_timeout` (5s), `timeout` (30s),
-`client_max_retries` (3), `download_retry_count` (3), `proxy_url`, `user_agent`.
+`client_max_retries` (3), `client_retry_timeout` (180s), `download_retry_count` (3), `proxy_url`,
+`user_agent`, and **`block_size`** (v13.0.0, #9380) - the read-coalescing gap: "Gap in bytes below
+which two reads of one file are merged into a single request. Default, `4096` for local files and
+`65536` for object stores" (`object_store.md:33`). It takes a raw byte count (a `64KiB` suffix is
+rejected, `rust/lance-io/src/object_store.rs:2265-2282`). Raising it trades bytes for requests on
+scattered reads such as a `take` of rows spread across a file - the remote-storage lever when
+request count, not bandwidth, is the bottleneck.
+
+**Explicit cloud options now beat environment variables** (#9719, `v14.0.0-beta.11`). Before it,
+"Explicit cloud storage options such as `region` could lose to `AWS_REGION` because environment
+merging compared key spellings", and conflicting aliases (`region` and `aws_region` both set)
+resolved by HashMap iteration order across the AWS, Azure and GCP conversions. Now any spelling a
+caller supplies blocks the environment default for that key, and alias conflicts resolve
+deterministically: exact canonical spelling first, then its case variants, then lexical order
+(`rust/lance-io/src/object_store.rs:1693-1750`, `aws.rs:614-645`). On an older pin, unset the
+conflicting `AWS_*` variable rather than trusting the option. Two exceptions survive at
+`v14.0.0-beta.14`: `StorageOptions::new` still overwrites `allow_http`, `client_max_retries` and
+`client_retry_timeout` from `AWS_ALLOW_HTTP` / `AZURE_STORAGE_ALLOW_HTTP` /
+`AZURE_STORAGE_USE_HTTP` / `OBJECT_STORE_CLIENT_MAX_RETRIES` / `OBJECT_STORE_CLIENT_RETRY_TIMEOUT`
+whenever those are set (`object_store.rs:1752-1770`), and GooseFS master addressing ranks the
+environment first (below).
 
 **`request_timeout` is not a key** - it appears in no Lance source at any recent tag, and #8706
 corrected the docs to `timeout`. Anything still passing `request_timeout` is silently setting
@@ -72,7 +97,7 @@ destination share the same object-store client into the provider-native server-s
 operation instead of streaming bytes through the client - the relevant case for index movement
 and for copying between two prefixes of one bucket. Deep clone separately bounds non-local file
 movement to four concurrent files; `LANCE_DEEP_CLONE_STREAM_CONCURRENCY` overrides that
-operation-specific limit (`rust/lance/src/dataset.rs:3352`).
+operation-specific limit (`rust/lance/src/dataset.rs:3490`).
 
 Per-backend highlights:
 
@@ -82,23 +107,25 @@ Per-backend highlights:
   `AWS_PROFILE` is environment-only. New in v11: **`aws_provider_scheme`** (PR #8103) pins a
   dataset to one credential provider instead of the default chain - "useful when two datasets in
   the same process need different AWS auth (for example, one bucket using IRSA and another using
-  ECS container credentials)" (`docs/src/guide/object_store.md:118-121`). Exactly three values,
+  ECS container credentials)" (`docs/src/guide/object_store.md:143-146`). Exactly three values,
   each failing hard rather than falling back: `token` (static credentials), `ecs` (container
   credentials), and `irsa`, which "Reads `AWS_WEB_IDENTITY_TOKEN_FILE` and `AWS_ROLE_ARN` from
-  the environment" (`:127`). Anything else errors with "Invalid aws_provider_scheme '{}'. Valid
-  values are: token, ecs, irsa" (`rust/lance-io/src/object_store/providers/aws.rs:550`).
+  the environment" (`:152`). Anything else errors with "Invalid aws_provider_scheme '{}'. Valid
+  values are: token, ecs, irsa" (`rust/lance-io/src/object_store/providers/aws.rs:656`).
 - **S3-compatible endpoints: set the region explicitly, and know why.** The docs state the
   requirement plainly - `aws_region` "must be specified for S3-compatible stores"
-  (`object_store.md:102`) - because SigV4 embeds the region in the signed credential scope even
-  when the endpoint is not AWS. But the code does **not** enforce it: `resolve_s3_region` returns
-  `Ok(None)` precisely in the endpoint-without-region case (`aws.rs:239,264`), and the builder
-  then applies `DEFAULT_REGION = "us-west-2"` (`aws.rs:316`, applied at `:103`). There is no
-  error path for a missing region, so an omitted `aws_region` **silently signs with `us-west-2`**
-  rather than failing fast - producing signature errors, or worse, quiet misrouting on providers
-  that accept any region string. Third-party endpoints also usually need
-  `virtual_hosted_style_request` (or `aws_virtual_hosted_style_request`) set explicitly - both
-  spellings work because the key is passed straight through to the `object_store` crate
-  (`aws.rs:99,535`); it defaults to `False` (`object_store.md:107`).
+  (`object_store.md:127`) - because SigV4 embeds the region in the signed credential scope even
+  when the endpoint is not AWS. But the code does **not** enforce it: with an endpoint and no
+  region option, `resolve_s3_region` returns only the AWS profile's region, possibly `None`
+  (`aws.rs:297-323`), and credential building then falls through the AWS SDK default region chain
+  to `DEFAULT_REGION = "us-west-2"` (`aws.rs:373-384`). There is no error path for a missing
+  region, so an omitted `aws_region` **silently signs with whatever region the environment
+  happens to carry, else `us-west-2`**, rather than failing fast - producing signature errors, or
+  worse, quiet misrouting on providers that accept any region string. Third-party endpoints also
+  usually need `virtual_hosted_style_request` (or `aws_virtual_hosted_style_request`) set
+  explicitly - both spellings parse to one `object_store` config key (`aws.rs:619-625`), and
+  since #9719 the canonical `aws_` spelling wins when both are given; it defaults to `False`
+  (`object_store.md:132`).
 - **S3 Express** - directory buckets; auto-recognized via the `--x-s3` suffix, or set
   `s3_express: "true"`; reachable only from a same-region EC2 instance. Its listing is not
   lexically ordered, so the `latest_version_hint.json` mechanism accelerates latest-version
@@ -108,37 +135,43 @@ Per-backend highlights:
 - **Azure** - `account_name` / `account_key`, service principal, SAS tokens, managed
   identity, workload-identity federation.
 - **Alibaba OSS** - `oss_endpoint` (required), `oss_access_key_id`, `oss_secret_access_key`.
-- **Tencent COS** (`object_store.md:333`) - `cos://bucket/path` with `cos_endpoint`,
+- **Tencent COS** (`object_store.md:338`) - `cos://bucket/path` with `cos_endpoint`,
   `cos_secret_id`, `cos_secret_key`, and optional `cos_enable_versioning`; env vars are read
   from the `COS_` or `TENCENTCLOUD_` prefixes.
-- **Volcengine TOS** (new in v8, `object_store.md:303`) - `tos://bucket/path` with
+- **Volcengine TOS** (new in v8, `object_store.md:308`) - `tos://bucket/path` with
   `tos_endpoint` required (e.g. `https://tos-cn-beijing.volces.com`), plus `tos_region` and
   access-key options.
-- **GooseFS** (new in v8, feature-gated `goosefs`, now documented at `object_store.md:396`) -
-  `goosefs://host:port/path`; master address comes from `goosefs_master_addr` (HA-aware:
-  `"addr1:port,addr2:port"`), the URL host, or default port `9200`. Optional keys:
+- **GooseFS** (new in v8, feature-gated `goosefs`, documented at `object_store.md:432`) -
+  `goosefs://host:port/path` (default port `9200`), or `goosefs:///path` with an empty authority
+  (v13.0.0, #9364). **The master address resolves environment-first**, "highest priority first:
+  1. The `GOOSEFS_MASTER_ADDR` environment variable. 2. `goosefs.master.rpc.addresses` or
+  `goosefs.master.hostname` in `goosefs-site.properties` ... 3. The `goosefs_master_addr` storage
+  option ... 4. The host and port from the URL authority" (`object_store.md:583-593`). That is the
+  reverse of the cloud-provider rule above: an exported `GOOSEFS_MASTER_ADDR` or a site file on
+  the host silently outranks the address you pass, so a per-dataset `goosefs_master_addr`
+  (HA-aware: `"addr1:port,addr2:port"`) only takes effect where neither exists. Optional keys:
   `goosefs_write_type` (`MUST_CACHE` / `CACHE_THROUGH` / `THROUGH` / `ASYNC_THROUGH`),
   `goosefs_auth_type` (`nosasl` / `simple`), `goosefs_auth_username`, `goosefs_block_size`,
-  `goosefs_chunk_size` (`rust/lance-io/src/object_store/providers/goosefs.rs:24-61`).
+  `goosefs_chunk_size` (`rust/lance-io/src/object_store/providers/goosefs.rs:29-37`).
 
   **`storage_options` keys must be lowercase** (#8940, `v12.0.0-beta.12`) - a wrong-case key is
   now a hard error rather than a silently ignored value: "Uppercase or mixed-case spellings such
   as `GOOSEFS_MASTER_ADDR` are rejected with an explicit error - they are not ignored, and they
-  are not treated as the matching environment variable" (`object_store.md:547-549`). A config
+  are not treated as the matching environment variable" (`object_store.md:603-605`). A config
   that appeared to work by accident will start failing loudly on upgrade.
 
   **`goosefs_block_size` / `goosefs_chunk_size` accept unit suffixes** (#8943): "Accepts a raw
   byte count or GooseFS suffixes such as `64MB` (binary units: `1KB = 1024`). Optional."
-  (`object_store.md:556`).
+  (`object_store.md:612-613`).
   **In v11 GooseFS commits became safe** (PR #8134): manifest commits now use
   `ConditionalPutCommitHandler` (`PutMode::Create` / if-not-exists), "backed by GooseFS master's
   atomic no-replace rename so concurrent writers cannot clobber each other's versioned
-  manifests" (`object_store.md:404-407`), replacing `UnsafeCommitHandler`. **Mixed-version
+  manifests" (`object_store.md:446-449`), replacing `UnsafeCommitHandler`. **Mixed-version
   writers are a data-loss hazard during the rollout**: "The `if-not-exists` guarantee only holds
   when **every** writer for a dataset routes through this new handler. A writer running an older
   Lance release still selects `UnsafeCommitHandler` for `goosefs://` and writes the version path
   unconditionally, which can overwrite a manifest that an upgraded writer has already won"
-  (`:382-386`). Upgrade all writers before relying on it.
+  (`:453-457`). Upgrade all writers before relying on it.
 
 **Multipart upload retries (v11, PR #8174).** A failed part upload used to be retried by calling
 `MultipartUpload::put_part` again, but "Native cloud stores allocate a new part number when that
@@ -154,7 +187,7 @@ additions, both from the AMX-FP16 work in `beta.16` (PR #8540):
 | Variable | Scope | Effect |
 |----------|-------|--------|
 | `LANCE_DISABLE_AMX` | runtime | Kill switch for the AMX-FP16 paths. Also reverts IVF partition assignment to the approximate path, so an index built with it set is **not** equivalent to one built without it |
-| `LANCE_AMX_FP16_CC` | build time | Overrides the compiler used to build the AMX kernel (`rust/lance-linalg/build.rs:27`); the kernel needs clang >= 16 or gcc >= 13 |
+| `LANCE_AMX_FP16_CC` | build time | Overrides the compiler used to build the AMX kernel (`rust/lance-linalg/build.rs:28`); the kernel needs clang >= 16 or gcc >= 13 |
 
 Grep trap: `LANCE_AMX_CFG_SEARCH`, `LANCE_AMX_CFG_GEMM`, and `LANCE_AMX_TILE_COUNT` look like
 env vars in a tree-wide `LANCE_[A-Z_]*` grep but are **C preprocessor macros** in
@@ -165,7 +198,7 @@ for the primary store, `Some(base_id)` for an additional base. Caching/instrumen
 wrappers are applied per `store_prefix` and propagate to all base stores.
 
 **Per-base `storage_options` (v9, PR #7608).** For multi-base datasets you can scope a storage
-option to one base with a `base_<id>.<key>` key (`docs/src/guide/object_store.md:44-70`): "A
+option to one base with a `base_<id>.<key>` key (`docs/src/guide/object_store.md:65-96`): "A
 storage option key of the form `base_<id>.<key>` applies `<key>` only to the base path with
 that manifest id. Every base inherits the unscoped options; base-scoped entries add to or
 override them." Base ids are assigned when bases are registered (`initial_bases` ids "assigned
@@ -183,7 +216,7 @@ keyed by base-path URI) beats a `base_<id>.<key>` scoped key.
   an I/O error, "I/O request was dropped before completion ({} of {} reads delivered)"
   (`rust/lance-io/src/scheduler.rs`, PR #7478).
 - **`LANCE_CPU_THREADS` and `LANCE_IO_CORE_RESERVATION` are now validated** instead of
-  `.parse().unwrap()`-panicking on garbage (`rust/lance-core/src/utils/tokio.rs:50-70`,
+  `.parse().unwrap()`-panicking on garbage (`rust/lance-core/src/utils/tokio.rs:23-60`,
   PR #7856). `LANCE_CPU_THREADS` must be at least 1; `LANCE_IO_CORE_RESERVATION` still allows 0
   (reserve no cores for IO); unset still defaults to 2.
 - **Namespace behavior change worth auditing call sites for**: the directory namespace no longer
@@ -207,6 +240,13 @@ keyed by base-path URI) beats a `base_<id>.<key>` scoped key.
   the same signature updates. Note the Python side is not type-checked against the ABC -
   `python/lance/namespace.py` is outside the pyright allowlist - so a missed unwrap surfaces at
   runtime, not at check time.
+- **`lance-namespace` pins split across the bindings in v13/v14.** Rust's
+  `lance-namespace-reqwest-client` moved 0.12.0 -> **0.13.0** at `v13.0.0` (#9184) while Python
+  stayed at `>=0.11.1,<0.12` and Java at 0.12.0. v14 (#9822, `v14.0.0-beta.10`) moves Python to
+  **`>=0.13.0,<0.14`** "so the released Python SDK can be consumed alongside clients using the new
+  probe-bound fields" (`maximum_nprobes = 0` now decodes as the unbounded sentinel); Java is still
+  0.12.0 at `v14.0.0-beta.14`. A `v13.0.0` pylance therefore cannot be resolved into one
+  environment with a lance-namespace 0.13 client.
 - **Latest-version resolution stopped listing the whole prefix** (v12, PR #8679). It previously
   walked all of `_versions/`: on a ~340k-version table that is ~344 sequential `ListObjectsV2`
   pages, "~25s of pure I/O wait", paid by every `open_table` / `describe` / `merge_insert` that
@@ -221,13 +261,13 @@ Disable globally with `LANCE_USE_VERSION_HINT=0`.
 
 ## 15. Capability matrix
 
-What Lance can and cannot do at `v13.0.0-beta.4`.
+What Lance can and cannot do at `v14.0.0-beta.14`.
 
 **Storage and format**
 
 | Capability | Status |
 |------------|--------|
-| Local FS, S3 (+ S3-compatible), S3 Express, GCS, Azure, Alibaba OSS, Tencent COS, Volcengine TOS | yes |
+| Local FS, S3 (+ S3-compatible, incl. Apache Ozone via its S3 Gateway), S3 Express, GCS, Azure, Alibaba OSS, Tencent COS, Volcengine TOS | yes |
 | GooseFS (`goosefs://`) | yes (feature-gated `goosefs`) |
 | In-memory store (`memory://`, `shared-memory://`) | yes |
 | Multi-base storage (hot/cold, multi-region, shallow clone) | yes (`FLAG_BASE_PATHS`) |
@@ -248,6 +288,8 @@ What Lance can and cannot do at `v13.0.0-beta.4`.
 | Blob v2 - large binary, lazy `BlobFile` streaming, external URIs | yes (2.2) |
 | Zero-copy add/drop/rename column (metadata-only) | yes |
 | Cell-level updates without base-file rewrite (data overlay files) | yes, but unstable (env-gated `LANCE_ENABLE_UNSTABLE_DATA_OVERLAY_FILES`; release builds refuse) |
+| Row lineage spilled to hidden data-file columns (`lance.row_lineage.spill`, bit `2^11`) | yes, but unstable (env-gated `LANCE_ENABLE_UNSTABLE_SPILLED_ROW_LINEAGE`; release builds refuse) |
+| Fragment metadata tree (fragment records outside the manifest, `_bt/`, bit `2^12`) | no - spec only; readers and writers reject the bit |
 | Type change / cast | yes (rewrites that column; drops its index) |
 | Time travel, tags, branches | yes |
 | Stable row IDs (opt-in at creation; existing datasets can migrate) | yes |
@@ -266,6 +308,7 @@ What Lance can and cannot do at `v13.0.0-beta.4`.
 | Geo / RTree spatial index + geo UDFs | yes (`geo` feature) |
 | Distributed / segmented index builds (vector, bitmap, btree, FTS, ngram, rtree, zone map, bloom filter, label-list) | yes (no scheduler) |
 | Hamming clustering / near-duplicate detection over binary hashes | yes (v9 utility) |
+| MinHash LSH near-duplicate text index | yes, **experimental** (v13.0.0; format may change, rebuild required) |
 | `COUNT(*)` pushdown | yes (fast path on stable-row-id datasets) |
 | SQL over datasets | via DataFusion (`LanceTableProvider`) - projection / filter / limit only, **no vector search**, see below |
 
@@ -286,17 +329,17 @@ identity; a built-in cross-dataset join planner (use DuckDB/DataFusion on top); 
 dashboard.
 
 **The SQL surface has no vector search.** `LanceTableProvider::scan` pushes down projection,
-then filter, then limit, then in-order-ness, and calls `create_plan()`
-(`rust/lance/src/datafusion/dataframe.rs:161-164`) - it never calls `Scanner::nearest`, and the
+then filter, then limit, then in-order-ness, and calls `create_plan_with_session()`
+(`rust/lance/src/datafusion/dataframe.rs:150-181`) - it never calls `Scanner::nearest`, and the
 symbol appears nowhere in the DataFusion glue. There is no `ORDER BY vec <-> query LIMIT k`
 operator and no vector-distance UDF: `register_functions` adds `contains_tokens`
-(`rust/lance-datafusion/src/udf.rs:17`) and the JSON functions, plus geo UDFs
+(`rust/lance-datafusion/src/udf.rs:16-17`) and the JSON functions, plus geo UDFs
 (`st_distance` / `st_area` / `st_intersects`) when the non-default `geo` feature is on
-(`udf.rs:30-33,44-53`) - those are geometric, not embedding, distances. **An IVF/HNSW index is
+(`udf.rs:28-33`) - those are geometric, not embedding, distances. **An IVF/HNSW index is
 therefore unreachable from `Dataset::sql()`**; use the scanner API (`Scanner::nearest`) for ANN
 and reserve SQL for relational work. FTS is the exception - it *is* SQL-reachable through the
 registered `fts` table function (`ctx.register_udtf("fts", ...)`,
-`rust/lance/src/dataset/udtf.rs:78`), but `Dataset::sql()` itself registers only the table plus
+`rust/lance/src/dataset/udtf.rs:309`), but `Dataset::sql()` itself registers only the table plus
 `register_functions`, so there is no vector analogue of that escape hatch.
 
 ---
@@ -341,27 +384,38 @@ the commit retry timeout, still 30s by default. That makes the full set `LANCE_D
 `LANCE_AMX_CFG_*` and `LANCE_AMX_TILE_COUNT` are C macros, and `LANCE_FACTOR` is a substring of
 `BALANCE_FACTOR`.
 
+**Two more arrived in `v13.0.0`; none were added between `v13.0.0` and `v14.0.0-beta.14`.**
+
+| Variable | Effect |
+|----------|--------|
+| `LANCE_ENABLE_UNSTABLE_SPILLED_ROW_LINEAGE` | Opts a release build into reading and writing row lineage spilled to hidden data-file columns (feature bit `2^11`, #9253). **Presence-only** - `std::env::var_os(..).is_some()`, so `=0` or `=false` still enables it; debug builds always understand the bit (`rust/lance-table/src/feature_flags.rs:143-144,297-298`). The overlay gate is the same pattern |
+| `LANCE_SHUFFLE_MAX_PRELOADED_OFFSETS_BYTES` | Per-shuffle budget for the IVF two-file shuffler's preloaded offsets table (#9434), default 256 MiB (`rust/lance-index/src/vector/v3/shuffler.rs:495-496`). `0` disables preloading; invalid values error. The limit "applies to each shuffle, so memory use adds up across concurrent builds" and excludes decoded data and index construction (`docs/src/guide/distributed_indexing.md:96-115`) |
+
+Grep trap for this range: `LANCE_BTREE_BENCH_MANY_FRAG_ROWS` and
+`LANCE_TEST_SHUFFLE_OFFSET_PRELOAD_CHILD` match a `LANCE_[A-Z_]*` sweep but are test and bench
+hooks, not user knobs.
+
 ## 16. Source map
 
-Where to look in `lance-format/lance` at `v13.0.0-beta.4`.
+Where to look in `lance-format/lance` at `v14.0.0-beta.14`.
 
 | Topic | Path |
 |-------|------|
 | Format spec overview | `docs/src/format/index.md` |
 | File format | `docs/src/format/file/{index,encoding,versioning}.md` |
-| Table format | `docs/src/format/table/{index,layout,schema,transaction,versioning,branch_tag,row_id_lineage,mem_wal}.md` |
-| Index spec | `docs/src/format/index/{index.md,vector/,scalar/,system/}` (scalar incl. `scalar/fmindex.md`) |
-| User guide | `docs/src/guide/{blob,data_evolution,data_types,json,object_store,read_and_write,performance,tags_and_branches,tokenizer,distributed_write,distributed_indexing,migration}.md` |
+| Table format | `docs/src/format/table/{index,layout,schema,transaction,versioning,branch_tag,row_id_lineage,mem_wal,data_overlay_file,fragment_metadata,jsonb}.md` (`fragment_metadata.md` is the experimental fragment tree, new in v13.0.0; `jsonb.md` the JSONB byte layout, new in v14) |
+| Index spec | `docs/src/format/index/{index.md,vector/,scalar/,system/}` (scalar incl. `scalar/fmindex.md`, `scalar/minhash_lsh.md`, `scalar/json.md`) |
+| User guide | `docs/src/guide/{arrays,blob,data_evolution,data_types,json,object_store,observability,read_and_write,performance,tags_and_branches,tokenizer,distributed_write,distributed_indexing,migration}.md` |
 | Integrations | `docs/src/integrations/{index,datafusion,pytorch,tensorflow}.md` |
-| Protobuf schemas | All 12: `protos/{file,file2,table,transaction,rowids,index,index_old,ann,filtered_read,table_identifier,encodings_v2_0,encodings_v2_1}.proto` (`index_old.proto` is a v9 forward-compat shim; `file.proto` is the legacy v1 container; the two `encodings_v2_*` files hold the per-version encoding messages) |
-| Rust workspace | `rust/` (entry point `rust/lance/`) |
+| Protobuf schemas | All 13: `protos/{file,file2,table,fragment_metadata,transaction,rowids,index,index_old,ann,filtered_read,table_identifier,encodings_v2_0,encodings_v2_1}.proto` (`fragment_metadata.proto`, new in v13.0.0 by #9060, now holds `DataFragment` / `DataFile` / `DeletionFile`, moved out of `table.proto`; `index_old.proto` is a v9 forward-compat shim; `file.proto` is the legacy v1 container; the two `encodings_v2_*` files hold the per-version encoding messages) |
+| Rust workspace | `rust/` (entry point `rust/lance/`; 27 crate dirs at v14, the newest `rust/lance-jsonb` - the JSONB codec vendored from the external `jsonb` crate by #9534, `v14.0.0-beta.9`) |
 | Commit / OCC | `rust/lance/src/io/commit.rs`, `rust/lance-table/src/io/commit.rs` |
 | Transactions | `rust/lance-table/src/transaction/` (moved out of `rust/lance/src/dataset/transaction.rs` in v11 by #8053/#8054/#8056; `lance::dataset::transaction` survives as a re-export shim) |
 | MemWAL | `rust/lance/src/dataset/mem_wal/` |
 | Indexes | `rust/lance-index/src/` |
 | Object store | `rust/lance-io/src/object_store/` |
 | File-version identity | `rust/lance-file/src/version.rs` (both `LanceFileVersion` and `ConcreteFileVersion`; `lance-encoding/src/version.rs` was deleted in v11) |
-| Cache keys / backends | `rust/lance-core/src/cache/` (`key.rs`, `quick.rs`) |
+| Cache keys / backends | `rust/lance-core/src/cache/` (`key.rs`, `quick.rs`, `moka.rs`, `backend.rs`, `codec.rs`, `registry.rs`) |
 | Data overlay resolution | `rust/lance/src/dataset/overlay.rs` |
 | Release train / breaking detection | `ci/publish_beta.sh`, `ci/check_breaking_changes.py` |
 

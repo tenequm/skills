@@ -7,6 +7,95 @@ and this skill adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.h
 
 ## [Unreleased]
 
+## [0.21.0] - 2026-10-13
+
+### Added
+
+- The `v13.0.0` final delta (`v13.0.0-beta.4 -> v13.0.0`, 161 commits) and a new **v14 line**
+  section (`release-root/14.0.0-beta.N -> v14.0.0-beta.14`, 137 commits) in
+  `references/changelog-v7-v14.md`, plus "The v13 final and v14 delta" in `SKILL.md`. Eight
+  `breaking-change`-labeled PRs: #7905, #9479, #9551, #9547, #9159 (v13 final) and #9518,
+  #9534, #8331 (v14).
+- A "Manifest feature flags" section in `SKILL.md`: the bit 7-15 table with each bit's real
+  support status, the sticky sets, and the two do-not-pin windows.
+- The managed-blob do-not-pin window `v14.0.0-beta.4`..`beta.13`: any Blob v2 write there sets
+  the sticky `FLAG_MANAGED_BLOBS`, so `v13.0.0` can never open the table again. #9891 made it an
+  explicit `lance.blob.managed=true` opt-in in beta.14, but the docs still describe automatic
+  activation.
+- #9482, an unlabeled format break: the inline transaction moved from manifest field 21 to 23,
+  `Operation::Unknown` was added, and `From` became `TryFrom`.
+- New format surface: tagged FRI supported (#9420), the fragment metadata tree (#9060), spilled
+  row lineage replacing `DataFragment.external_*` (#9253), non-reusable field ids (#8658), the
+  JSONB spec and `lance-jsonb` crate (#9534), the MinHash LSH index (#9076/#9114), BM25F
+  `CombinedFieldsQuery` (#7905), and the v2.3 generic block codecs plus compressed mini-block
+  offsets (#8325-#8333, #8331).
+- Rebuild/rewrite/repair-class fixes from `v13.0.0` and the v14 betas, with trigger conditions.
+- Field-verified remote-storage practice in `references/performance.md` Part B: binary-copy
+  compaction page debt and its per-page read cost on v12, per-fragment GETs on scalar lookups
+  over an unindexed tail, `LIMIT` not bounding unfiltered-scan I/O, the v12+ compaction output
+  split, FTS `prewarm_index` residency, the 2.2-default fallout, what real erasure requires, and
+  row-id readahead heap growth.
+- New env vars `LANCE_ENABLE_UNSTABLE_SPILLED_ROW_LINEAGE` and
+  `LANCE_SHUFFLE_MAX_PRELOADED_OFFSETS_BYTES`; the object-store `block_size` read-coalescing
+  option.
+
+### Changed
+
+- **Breaking:** tracked tag moves to `v14.0.0-beta.14`; the **stable pin moves `v12.0.0` ->
+  `v13.0.0`** (released 2026-10-07; crates.io `lance` and PyPI `pylance` at `13.0.0`, fury.io
+  carrying `pylance-14.0.0b1` through `b14`).
+- **Breaking:** manifest feature flags. `FLAG_UNKNOWN` moved `1 << 9` -> `1 << 14` (v13.0.0) ->
+  `1 << 16` (v14); bit 10 (tagged FRI) is supported rather than refused, and bits 9 and 11-15
+  were allocated.
+- **Breaking:** 27 crates (`lance-jsonb`, v14), 17 transaction ops (`Operation::Unknown`), and
+  MSRV 1.94.0 in the v14 line.
+- Default IVF probing changed without a label (#9184, #9467, and #9798's `search_effort`).
+- `lance-namespace` pins: Rust 0.13.0, Java 0.12.0, Python `>=0.13.0,<0.14` in v14.
+- The release train has re-rooted on **five** consecutive lines; 13.1 got two beta tags before
+  #9518 abandoned it. Four finals now (v10-v13).
+- `SKILL.md` condensed from 35.9k to ~27k chars: the v11 and v12 delta sections became short
+  summaries. All of their PR citations stay in `references/changelog-v7-v14.md`; #8979 was the
+  only one found nowhere else and was kept in `SKILL.md`.
+- Docs mirror refreshed to `v14.0.0-beta.14`: 19 files changed, 4 markdown files and
+  `format/table/fragment_metadata_tree.svg` added (49 md + 5 svg). `format/CLAUDE.md` no longer
+  exists upstream.
+- `references/maintenance.md`: the mirror rule copies every `.svg` under `format/`; the
+  upstream trailing-blank-line deviation is gone; the docs-ahead-of-code trap now cites bits 9,
+  13 and 14; refreshes also query the `format-change` label.
+- `references/changelog-v7-v13.md` renamed to `references/changelog-v7-v14.md`.
+
+### Fixed
+
+- **Covering fields were described backwards.** The skill said carried columns are "no longer
+  a trailing suffix of `fields`". Without manifest bit 13 the legacy contract still applies -
+  carried columns are the trailing suffix, and a keyed+carried column appears twice; the
+  independent contract (#9159, bit 13) is masked out by the build.
+- Blob v2 tiering thresholds are 64 KiB inline / 4 MiB dedicated (`blob.rs`, unchanged since
+  #5413), not the 16 KiB / 2 MiB the pre-v14 docs stated.
+- Address-domain indexes are ZoneMap, BloomFilter and FM-Index, not ZoneMap alone.
+- #8997 merged as preparation only; the arrow 59 / DataFusion 55 / pyo3 0.29 upgrade is #9647,
+  still open.
+- Generic block v5 compression is complete, not "1 of 10 PRs merged".
+- Legacy blob metadata on 2.2+ is converted to Blob v2 since `v13.0.0` (#9459), not rejected.
+- Citations re-targeted after the mirror refresh, including six into `format/file/encoding.md`
+  and `guide/object_store.md` and four into `format/index/vector/index.md` that were already
+  wrong at `v13.0.0-beta.4`; the sparse "Writer Selection" quotes deleted upstream (#9843) were
+  re-grounded in the writer code. Part B code citations stay at the pin each finding names, now
+  with an explicit drift caveat.
+- Pre-existing errors found while re-grounding: the Java `lance-namespace` pin was listed as
+  0.11.1 (0.12.0 since #8979); the S3 region fallback is profile region -> SDK default chain ->
+  `us-west-2`, not an `Ok(None)` path; `is_uring()` does not exist (`prefers_lite_scheduler()`
+  is the uring check); the `LANCE_MEM_POOL_SIZE` "150 MiB total" claim has been false since
+  `v13.0.0-beta.5` (#9183); and the newest crates.io release was still given as `lance 9.0.1`.
+- `FLAG_FRAGMENT_REUSE_INDEX` text across the references: supported from `v13.0.0`, no longer
+  "documented but not implemented".
+
+### Security
+
+- PyO3 RUSTSEC-2026-0176 and RUSTSEC-2026-0177 remain outstanding, now gated on #9647.
+
+Verified against: lance-format/lance@v14.0.0-beta.14
+
 ## [0.20.0] - 2026-09-17
 
 ### Added
