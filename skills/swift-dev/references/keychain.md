@@ -2,7 +2,7 @@
 
 Storing small secrets (tokens, passwords, call links) as generic-password items with one helper that behaves the same on iOS and macOS, plus the accessibility, sharing and macOS-keychain rules that decide whether a read succeeds.
 
-Verified on Xcode 27.0 (Swift 6.4, iOS 27.0 / macOS 27.0 SDKs), 2026-10-07: the helper compiled with `swiftc -emit-sil` for iOS and macOS (also under `-default-isolation MainActor`); ran it in an app-hosted test on an iOS 27.0 simulator (add, update-on-duplicate, load, delete, accessibility change all pass); ran it from an unsigned and an Apple Development-signed macOS command-line tool (data protection keychain refused with `-34018`).
+Verified on Xcode 27.0 (Swift 6.4, iOS 27.0 / macOS 27.0 SDKs), 2026-10-07: the helper compiled with `swiftc -emit-sil` for iOS and macOS (also under `-default-isolation MainActor`); ran it in an app-hosted test on an iOS 27.0 simulator (add, update-on-duplicate, load, delete, accessibility change all pass); ran it from an unsigned and an Apple Development-signed macOS command-line tool (data protection keychain refused with `-34018`). 2026-10-13: the `-128` row is from `SecBase.h`, not reproduced on a device; the before-first-unlock note is observed in a shipping voice-call app.
 
 ## Contents
 - The helper
@@ -104,6 +104,7 @@ Apple's own guidance is to update the existing item, since "the new item can't c
 | `kSecAttrAccessibleWhenPasscodeSetThisDeviceOnly` | only while unlocked; cannot be stored without a passcode, deleted if the passcode is removed | no |
 
 - **Anything read while the phone is locked needs an `AfterFirstUnlock` class.** A call started from the lock screen or the Action Button, a CallKit/VoIP flow, a background refresh - all run with the device locked, and a `WhenUnlocked` item is unreadable there. Apple recommends AfterFirstUnlock "for items that need to be accessed by background applications" ([kSecAttrAccessibleAfterFirstUnlock](https://developer.apple.com/documentation/security/ksecattraccessibleafterfirstunlock)). After a reboot nothing in that class is readable until the user unlocks once.
+- **A process launched before that first unlock** (an App Intent, a VoIP push or a background task right after a reboot) gets failed reads, and the process may live on after the unlock. Do not cache "no secret" from a failed read: re-read lazily on the next use (an `ensureLoaded()` at the top of each entry point), so the same process works once the phone has been unlocked. `load` throwing instead of returning `nil` is what makes the two cases distinguishable.
 - **`ThisDeviceOnly`** items are restored only to the same device that made the backup; on a new phone the user has to sign in again. Use it for device-bound secrets (a device key, a token tied to this install), not for credentials the user expects to survive a phone upgrade. `ThisDeviceOnly` classes cannot be combined with `kSecAttrSynchronizable` (iCloud Keychain).
 - Use the most restrictive class that still works. `kSecAttrAccessibleAlways` is deprecated (since iOS 12 / macOS 10.14); for a user-presence check (Face ID / passcode at read time) pass a `SecAccessControl` in `kSecAttrAccessControl` instead of `kSecAttrAccessible` ([Restricting keychain item accessibility](https://developer.apple.com/documentation/security/restricting-keychain-item-accessibility)).
 - Unverified: reading a `WhenUnlocked` item on a locked device surfaces as `errSecInteractionNotAllowed` (-25308); not reproduced on hardware.
@@ -137,4 +138,5 @@ Without `kSecAttrAccessGroup` an item goes to the first group in that list: the 
 | `-25300` | `errSecItemNotFound` | no matching item (a normal "not set") |
 | `-25308` | `errSecInteractionNotAllowed` | "User interaction is not allowed." - item not readable in the current state |
 | `-34018` | `errSecMissingEntitlement` | "A required entitlement is not present." - access group not entitled, or a macOS process without a provisioned signature using the data protection keychain |
-| `-25293` | `errSecAuthFailed` | authentication failed (wrong password, cancelled user-presence check) |
+| `-25293` | `errSecAuthFailed` | authentication failed (wrong password, failed user-presence check) |
+| `-128` | `errSecUserCanceled` | "User canceled the operation." - the user dismissed the Face ID / passcode prompt of a `SecAccessControl` item; treat as a cancel, not an error to report (from `SecBase.h`; not reproduced on a device) |

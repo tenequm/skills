@@ -2,7 +2,7 @@
 
 Voice-call audio on iPhone: `AVAudioSession` setup, microphone permission, interruptions and route changes, an outgoing-only CallKit call, LiveKit under CallKit, and staying alive with the screen locked.
 
-Verified on Xcode 27.0 (Swift 6.4, iOS 27.0 / macOS 27.0 SDKs), 2026-10-07: every block built together in a scratch XcodeGen app on LiveKit 2.17.0 (`xcodebuild -destination 'generic/platform=iOS' CODE_SIGNING_ALLOWED=NO`, Swift 6, iOS 26 target), once as is and once with `SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor`; the CallKit block also compiled with `swiftc -emit-sil` with and without `-default-isolation MainActor`; LiveKit behavior read from the `2.17.0` tag source; availability quoted from the iOS 27.0 SDK headers. Not run on a device.
+Verified on Xcode 27.0 (Swift 6.4, iOS 27.0 / macOS 27.0 SDKs), 2026-10-07: every block built together in a scratch XcodeGen app on LiveKit 2.17.0 (`xcodebuild -destination 'generic/platform=iOS' CODE_SIGNING_ALLOWED=NO`, Swift 6, iOS 26 target), once as is and once with `SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor`; the CallKit block also compiled with `swiftc -emit-sil` with and without `-default-isolation MainActor`; LiveKit behavior read from the `2.17.0` tag source; availability quoted from the iOS 27.0 SDK headers. Not run on a device. 2026-10-13: the Simulator CallKit stand-ins and the fed-audio helper compiled with `swiftc -emit-sil` (simulator and device targets, with and without `-default-isolation MainActor`); the muted-publish timeout and the mixer APIs read from the LiveKit `2.17.0` source; the Simulator CallKit behavior and the publish fix observed in a voice-call app on an iOS 27.0 Simulator and an iOS 27.2 iPhone.
 
 ## Contents
 - [Session for a voice call](#session-for-a-voice-call)
@@ -33,7 +33,7 @@ enum VoiceAudio {
 - HFP is what makes AirPods and car kits usable as a **microphone**. `.allowBluetoothA2DP` is output-only. `.bluetoothHighQualityRecording` (iOS 26+) is not for calls: the header says it "may increase input latency ... not recommended for real-time communication usage" and only works with mode `.default`.
 - `.defaultToSpeaker`: loudspeaker instead of earpiece when nothing else is connected. Drop it for phone-to-ear.
 - **No `.mixWithOthers`.** `.playAndRecord` is non-mixable by default, so activating it pauses Music - what a call should do. LiveKit's README and CallKit example pass `[.mixWithOthers]` in `didActivate`; do not copy that into a call app.
-- Under CallKit never call `setActive(true)` yourself - CallKit activates the session (see below). Outside CallKit, `activate(options:) async throws -> Bool` is new in iOS 27; `setActive(_:)` remains for iOS 26.
+- Under CallKit never call `setActive(true)` yourself on a device - CallKit activates the session (see below; the Simulator is the exception, see CallKit gotchas). Outside CallKit, `activate(options:) async throws -> Bool` and `deactivate(options:) async throws -> Bool` are new in iOS 27; `setActive(_:)` remains for iOS 26.
 
 ## Microphone permission
 
@@ -54,7 +54,7 @@ func microphoneAllowed() async -> Bool {
 
 ## Interruptions and route changes
 
-**iOS 27 deprecates the interruption notification.** The SDK marks `AVAudioSessionInterruptionNotification`, its keys and `InterruptionType`/`InterruptionOptions` with `API_DEPRECATED("Use AVAudioSessionDidBecomeInactiveNotification and AVAudioSessionResumptionRecommendationNotification instead", ios(6.0, 27.0), ...)`. The replacements - `didBecomeActive`, `didBecomeInactive`, `resumptionRecommendation` - post on the main queue and have typed `NotificationCenter.MainActorMessage` types. Per Apple's [Handling audio interruptions](https://developer.apple.com/documentation/avfaudio/handling-audio-interruptions) they "don't get out of sync when the system can't deliver an end event".
+**iOS 27 deprecates the interruption notification.** The SDK marks `AVAudioSessionInterruptionNotification`, its keys and `InterruptionType`/`InterruptionOptions` with `API_DEPRECATED("Use AVAudioSessionDidBecomeInactiveNotification and AVAudioSessionResumptionRecommendationNotification instead", ios(6.0, 27.0), ...)`. The deprecation names `didBecomeInactive` and `resumptionRecommendation` as the replacements; with `didBecomeActive` the three post on the main queue and have typed `NotificationCenter.MainActorMessage` types. Per Apple's [Handling audio interruptions](https://developer.apple.com/documentation/avfaudio/handling-audio-interruptions) they "don't get out of sync when the system can't deliver an end event".
 
 ```swift
 @available(iOS 27.0, *)
@@ -79,7 +79,7 @@ final class AudioLifecycleObserver {
 }
 ```
 
-- With an iOS 26 deployment target, gate this on `if #available(iOS 27, *)` and keep observing `AVAudioSession.interruptionNotification` (userInfo `AVAudioSessionInterruptionTypeKey`) on 26. Swift only warns about the old API once the deployment target reaches iOS 27.
+- With an iOS 26 deployment target, gate this on `if #available(iOS 27, *)` and keep observing `AVAudioSession.interruptionNotification` (userInfo `AVAudioSessionInterruptionTypeKey`) on 26. Even at an iOS 27 target Swift warns only on `InterruptionType` / `InterruptionOptions`; `interruptionNotification` and `AVAudioSessionInterruptionTypeKey` compile silently, so grep for leftover observers when you raise the target.
 - **There are no typed messages for route changes or media-services resets** in the iOS 27 SDK - only the three above. Use the `Notification.Name`s:
 
 ```swift
@@ -100,7 +100,7 @@ func observeRouteChanges(_ onChange: (AVAudioSession.RouteChangeReason, AVAudioS
 
 ## CallKit: outgoing-only call
 
-CallKit gives the call the system call UI, lock-screen and AirPods controls, and audio-session priority. `CXProvider` is iOS-only (`API_UNAVAILABLE(macos, tvos)` in `CXProvider.h`).
+CallKit gives the call the system call UI, lock-screen and AirPods controls, and audio-session priority. `CXProvider` is iOS-only (`API_UNAVAILABLE(macos, tvos)` in `CXProvider.h`). LiveCommunicationKit (`ConversationManager`, iOS 17.4+) is Apple's newer API with the same model - `StartConversationAction`, `MuteConversationAction`, `EndConversationAction`, `didActivate`/`didDeactivate` for the audio session; CallKit is not deprecated in the 27 SDK and this file uses it. Media playback (not calls) reaches the Lock Screen and Control Center through the NowPlaying framework (`MediaSessionRepresentable`, iOS/macOS 27).
 
 The flow, from Apple's [Making and receiving VoIP calls](https://developer.apple.com/documentation/callkit/making-and-receiving-voip-calls) and the Speakerbox sample:
 
@@ -213,6 +213,9 @@ extension CallController: @MainActor CXProviderDelegate {
         do { try VoiceAudio.configure() } catch { /* log it; CallKit still activates the session */ }
         connectTransport(action.callUUID)
         action.fulfill()
+        #if targetEnvironment(simulator)
+        activateAudioInSimulator() // see CallKit gotchas
+        #endif
     }
 
     func provider(_: CXProvider, perform action: CXEndCallAction) {
@@ -253,14 +256,43 @@ extension CallController: @MainActor CXProviderDelegate {
 
 ## CallKit gotchas
 
-- **CallKit does not work in the Simulator.** Transactions fail or the call is ended immediately, and `didActivate` is not delivered; Apple's docs do not state it, but [Stack Overflow](https://stackoverflow.com/questions/65501603/is-it-possible-to-receive-calls-using-callkit-in-ios-simulator) and Apple forum reports agree. Compile a fallback that skips CallKit and lets LiveKit manage the session:
-  ```swift
-  #if targetEnvironment(simulator)
-  private static let usesCallKit = false
-  #else
-  private static let usesCallKit = true
-  #endif
-  ```
+- **CallKit runs in the iOS 27 Simulator with two stand-ins.** Provider creation, `CXStartCallAction`, `reportOutgoingCall`, `CXSetMutedCallAction` and `CXEndCallAction` all work (observed on Xcode 27.0, iOS 27.0 runtime), but the Simulator's `callservicesd` ends every outgoing call:
+  - **No in-call UI host.** It opens `facetime://?showInCallUI=1`, fails (`LSApplicationWorkspaceErrorDomain` 115, "Disconnecting call because there wont be a UI to host the call") and sends `CXEndCallAction` about 140 ms after the start. Fix: Simulator builds claim the `facetime` scheme in the built Info.plist. The phase must declare that plist as input and output (plus a stamp output) - without it an incremental build can run it before `ProcessInfoPlistFile`, which rewrites the plist without the claim, and calls end again after about a second:
+    ```yaml
+    targets:
+      VoiceApp:
+        postBuildScripts:
+          - name: Host the Simulator's in-call UI
+            inputFiles: [$(TARGET_BUILD_DIR)/$(INFOPLIST_PATH)]
+            outputFiles: [$(TARGET_BUILD_DIR)/$(INFOPLIST_PATH), $(DERIVED_FILE_DIR)/simulator-in-call-ui.stamp]
+            script: |
+              touch "$DERIVED_FILE_DIR/simulator-in-call-ui.stamp"
+              [ "$PLATFORM_NAME" = iphonesimulator ] || exit 0
+              plutil -replace CFBundleURLTypes -json '[{"CFBundleURLName":"simulator-in-call-ui","CFBundleURLSchemes":["facetime"]}]' \
+                  "$TARGET_BUILD_DIR/$INFOPLIST_PATH"
+    ```
+    Device builds carry no URL types. Side effect: SpringBoard shows an "Open in '<App>'?" alert on every start; UI tests tap `XCUIApplication(bundleIdentifier: "com.apple.springboard").alerts.buttons["Open"]` (see testing.md).
+  - **No audio activation.** It logs "Error setting audio active to true" (OSStatus -50) and `didActivate` never arrives ([same since iOS 16](https://developer.apple.com/forums/thread/711956)). Fix: after fulfilling the start action, activate the session yourself and run the `didActivate` path - `CallController` above calls this; call the deactivating twin from `finish(_:)`:
+    ```swift
+    #if targetEnvironment(simulator)
+    extension CallController {
+        /// Stand-in for provider(_:didActivate:), which the Simulator's callservicesd never delivers.
+        func activateAudioInSimulator() {
+            let session = AVAudioSession.sharedInstance()
+            do { try session.setActive(true) } catch { return }
+            provider(provider, didActivate: session)
+        }
+
+        /// Stand-in for provider(_:didDeactivate:).
+        func deactivateAudioInSimulator() {
+            let session = AVAudioSession.sharedInstance()
+            try? session.setActive(false, options: .notifyOthersOnDeactivation)
+            provider(provider, didDeactivate: session)
+        }
+    }
+    #endif
+    ```
+  Other CallKit clients (and older advice) skip CallKit in the Simulator instead; with the stand-ins the real CallKit path, mute sync included, runs there.
 - **`didActivate` sometimes never fires**, and every later call then has no audio until relaunch. Apple DTS ([forum 837211](https://developer.apple.com/forums/thread/837211), iOS 27): `callservicesd` holds a stale audio-session ID for the app; one race happens when the provider is created right after first unlock. Fixes from DTS: create the `CXProvider` lazily (first call), and re-push the configuration before reporting a call - `provider.configuration = provider.configuration` is the "setConfiguration" workaround. Also add a timeout: if `didActivate` has not arrived a few seconds after `fulfill()`, end the call with `.failed` so CallKit's state machine resets.
 - **`providerDidReset` means `callservicesd` restarted.** Drop all call state; transactions for old UUIDs fail with `unknownCallUUID`. DTS advice ([forum 817614](https://developer.apple.com/forums/thread/817614)): keep the CallKit stack isolated so it can be destroyed and recreated.
 - **Double start.** A second tap (or Action Button press) while the microphone prompt is up passes an "is a call active" check placed before the `await`. With `maximumCallGroups = 1` CallKit rejects the second `CXStartCallAction`, and the first call stays stuck in the system UI. Claim the call before the first `await` and `action.fail()` a start whose UUID is not the claimed one (both in `CallController` above). A code-review finding, fixed but not reproduced.
@@ -283,7 +315,7 @@ final class LiveKitCall: NSObject {
     private var joined = false // callbacks before connect returns are a failed connect's cleanup
     private var micPublished = false
 
-    /// CallController.init, before any Room exists. In the Simulator skip this and let LiveKit manage the session.
+    /// CallController.init, before any Room exists. The Simulator too, with the CallKit stand-ins above.
     static func handAudioToCallKit() throws {
         AudioManager.shared.audioSession.isAutomaticConfigurationEnabled = false
         try AudioManager.shared.setEngineAvailability(.none)
@@ -301,12 +333,14 @@ final class LiveKitCall: NSObject {
         room.add(delegate: self)
         try await room.connect(url: url, token: token)
         joined = true
-        // setMicrophone(enabled: false) does nothing before a track exists, so publish one in the wanted state.
+        // Publish waits for the track's first captured frame and a muted track captures none, so publish it
+        // unmuted behind a silenced mixer (silence still flows as frames), then apply the wanted mute.
         let mic = await LocalAudioTrack.createTrack()
-        if wantsMuted { try await mic.mute() }
+        AudioManager.shared.mixer.micVolume = 0
+        defer { AudioManager.shared.mixer.micVolume = 1 } // runs after the mute below
         try await room.localParticipant.publish(audioTrack: mic)
         micPublished = true
-        if mic.isMuted != wantsMuted { try await room.localParticipant.setMicrophone(enabled: !wantsMuted) }
+        if wantsMuted { try await room.localParticipant.setMicrophone(enabled: false) }
     }
 
     /// applyMute(_:), from CXSetMutedCallAction. A throw fails the action.
@@ -355,7 +389,8 @@ From the LiveKit 2.17.0 source, not run, unless marked:
 
 - **Full reconnect looks like everyone leaving.** `Room.cleanUp(isFullReconnect: true)` runs `cleanUpParticipants`, and `Participant.cleanUp` fires `room(_:participantDidDisconnect:)` for every remote participant while `connectionState` is still `.reconnecting` (`Core/Room.swift`, `Participant/Participant.swift`). Guard on it, as `LiveKitCall` does.
 - **Muted tracks are not republished.** After a full reconnect `LocalParticipant.republishAllTracks()` skips muted tracks (`Core/Room+EngineDelegate.swift`, `Participant/LocalParticipant.swift`). A later `setMicrophone(enabled: true)` creates a new track with `publishOptions: nil`, which falls back to `roomOptions.defaultAudioPublishOptions` - DTX back on unless the room default turns it off.
-- **Muting before the first publish does nothing.** `set(source:enabled:)` mutes an existing publication; with none, `enabled: false` returns `nil` (`Participant/LocalParticipant.swift`). To start muted: `await LocalAudioTrack.createTrack()`, `mute()`, then `publish(audioTrack:options:)`.
+- **Muting before the first publish does nothing, and publishing a muted track times out.** `set(source:enabled:)` mutes an existing publication; with none, `enabled: false` returns `nil` (`Participant/LocalParticipant.swift`). `publish(audioTrack:)` then waits for the track's first captured frame whenever input is available (`LocalParticipant.swift`, `startWaitingForFrames`), and the watcher gives up after 5 s (`Track/Local/LocalAudioTrack.swift`, `AudioFrameWatcher`, `defaultTimeout: 5`). A track muted before publish captures nothing, so the publish fails with `LiveKitError` `.timedOut` (observed on a device). To start muted, publish unmuted with `AudioManager.shared.mixer.micVolume = 0`, mute right after, then restore the volume, as `LiveKitCall.join` does; the publish then took about 70 ms.
+- **A failed full reconnect is reported as success.** In 2.17.0 the room can end up `.connected` with its state reset by `cleanUp(isFullReconnect: true)` - no sid, no participants - with no further reconnect attempt and no `didDisconnect`, so nothing tells the app the call is dead. Fixed on `main` ([#1144](https://github.com/livekit/client-sdk-swift/pull/1144)), not yet released. Until then, add a watchdog: after `room(_:didUpdateConnectionState:from:)` returns to `.connected` from `.reconnecting`, end the call if the agent participant has not reappeared within a few seconds.
 - **Room state is reset before `didDisconnectWithError`.** `cleanUp` replaces the whole state (metadata `nil`, `.disconnected`) and the state observer then notifies the delegate (`Core/Room.swift`, `Core/Room+EngineDelegate.swift`), so `room.metadata` is already gone there. Cache it from `room(_:didUpdateMetadata:)`, or read it in `participantDidDisconnect`, which the SDK awaits before resetting.
 - **A failed connect reports participants leaving first.** Observed once in the Simulator: when `room.connect` timed out on ICE, `participantDidDisconnect` for the already-joined agent arrived before `connect` threw, and the app showed "agent left". The source matches: `connect`'s catch runs `cleanUp(withError:)` before rethrowing (`Core/Room.swift`), and the reset from `.connecting` fires `didFailToConnectWithError`, not `didDisconnectWithError`. Ignore room callbacks until `connect` returns (`joined` above); the fix is build-tested only.
 - **Agent captions are text streams.** livekit-agents 1.x sends transcriptions on the text-stream topic `lk.transcription` (`Agent/Chat/Receive/TranscriptionStreamReceiver.swift`); `room(_:participant:trackPublication:didReceiveTranscriptionSegments:)` fires only for the legacy transcription data packet (`Core/Room.swift`); do not wait on it for agent captions. `Room.registerTextStreamHandler(for:onNewStream:)` registers unordered: each stream's handler runs in its own detached task (`DataStream/Incoming/IncomingStreamManager.swift`), so sort by `info.timestamp`. A second handler for the same topic throws `StreamError.handlerAlreadyRegistered` - the SDK's agent `Session` registers `lk.transcription` itself.
@@ -379,6 +414,32 @@ func listenForCaptions(in room: Room, _ onCaption: @escaping @MainActor (Caption
 }
 ```
 
+### Caller audio without a microphone
+
+For end-to-end test runs (Simulator or device), play a recording into the call instead of the mic. Manual rendering mode bypasses the audio session and the mic permission; the SDK then does not play remote audio out, so the reply is silent - assert on captions or logs.
+
+```bash
+say -o question.aiff "What is two plus two?"
+afconvert -f WAVE -d LEF32@48000 -c 1 question.aiff question.wav
+```
+
+```swift
+/// Test runs only: call before publishing the mic, then feed the WAV in 10 ms frames.
+func feedCallerAudio(from url: URL) async throws {
+    try AudioManager.shared.setManualRenderingMode(true)
+    let file = try AVAudioFile(forReading: url)
+    let frames = AVAudioFrameCount(file.processingFormat.sampleRate / 100)
+    while file.framePosition < file.length {
+        guard let buffer = AVAudioPCMBuffer(pcmFormat: file.processingFormat, frameCapacity: frames) else { return }
+        try file.read(into: buffer, frameCount: frames)
+        AudioManager.shared.mixer.capture(appAudio: buffer) // converts to the engine's format itself
+        try await Task.sleep(for: .milliseconds(10))
+    }
+}
+```
+
+`setManualRenderingMode(_:)` and `mixer.capture(appAudio:)` are in `Audio/Manager/AudioManager.swift` and `Audio/MixerEngineObserver.swift` at `2.17.0`; a voice agent answered a question fed this way (observed).
+
 ## Background and the locked screen
 
 Info.plist keys for a call app (XcodeGen `info.properties` form; these keys built in the scratch app):
@@ -391,5 +452,5 @@ UIBackgroundModes: [audio, voip]
 - What keeps the app running with the screen locked is an **active audio session doing I/O** under the `audio` mode. CallKit itself grants nothing: "It provides no additional facilities for ring indication or background execution" (Apple DTS, [forum 87551](https://developer.apple.com/forums/thread/87551)). Once CallKit activates the session and the engine runs, the app (and its WebSocket/WebRTC connection) keeps running; once `didDeactivate` stops the engine, normal suspension applies again.
 - `voip` is what PushKit VoIP pushes require; see the Unverified note above for outgoing-only.
 - Secrets the call needs while locked (tokens) must be readable after first unlock - `kSecAttrAccessibleAfterFirstUnlock`, see keychain.md.
-- Starting the call from the Action Button or Siri is an App Intent - see app-intents.md.
+- Starting the call from the Action Button or Siri is an App Intent - see app-intents.md. A plain `AppIntent` works only when iOS launches a fresh process; with the app already running in the background (or the phone locked) CallKit refuses its `CXStartCallAction` and ActivityKit its Live Activity. The call intent must adopt the `.phone.startCall` App Schema (app-intents.md).
 - Unverified: a web page (Safari, WebRTC) cannot keep the microphone running with the screen locked the way a CallKit app can - observed while building a voice-call app, not documented by Apple.

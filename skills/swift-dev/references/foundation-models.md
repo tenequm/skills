@@ -2,7 +2,7 @@
 
 Apple's language-model framework on iOS, iPadOS, macOS and visionOS: the on-device model, the Private Cloud Compute model, guided generation, tools, image input, dynamic sessions and error handling, plus a pointer to Core AI for bringing your own model.
 
-Verified on Xcode 27.0 (Swift 6.4, iOS 27.0 / macOS 27.0 SDKs), 2026-10-07: every block compiled through SIL (`swiftc -emit-sil`, so region-isolation checks ran) for iOS 27 and macOS 27 with and without `-default-isolation MainActor` (the error-handling block also typechecked at an iOS 26 deployment target); a scratch SPM executable on macOS 27.2 with Apple Intelligence enabled ran text, guided, image, tool, dynamic-instruction and profile requests and triggered `contextSizeExceeded`, `concurrentRequests` and a PCC request without the entitlement.
+Verified on Xcode 27.0 (Swift 6.4, iOS 27.0 / macOS 27.0 SDKs), 2026-10-07: every block compiled through SIL (`swiftc -emit-sil`, so region-isolation checks ran) for iOS 27 and macOS 27 with and without `-default-isolation MainActor` (the error-handling block also typechecked at an iOS 26 deployment target); a scratch SPM executable on macOS 27.2 with Apple Intelligence enabled ran text, guided, image, tool, dynamic-instruction and profile requests and triggered `contextSizeExceeded`, `concurrentRequests` and a PCC request without the entitlement. 2026-10-13: the `SpotlightSearchTool` block compiled through SIL for iOS and macOS 26 targets; `Evaluations` read from the Xcode 27 framework interface (no example run); `fm` from its man page, not executed; PCC eligibility from Apple's [Private Cloud Compute](https://developer.apple.com/private-cloud-compute/) page.
 
 ## Contents
 - Availability and models
@@ -16,6 +16,7 @@ Verified on Xcode 27.0 (Swift 6.4, iOS 27.0 / macOS 27.0 SDKs), 2026-10-07: ever
 - Errors (27.0 error types)
 - Private Cloud Compute
 - Other models: LanguageModel protocol and Core AI
+- Evaluating prompts and the `fm` CLI
 
 ## Availability and models
 
@@ -160,6 +161,19 @@ func askAboutStock() async throws -> String {
 - `GenerationOptions(toolCallingMode: .required | .allowed | .disallowed)` (27.0) forces or forbids tool use for one request.
 - Errors thrown from `call` surface as `LanguageModelSession.ToolCallError` (with `tool` and `underlyingError`).
 - Vision ships ready-made tools for image prompts (27.0): `OCRTool()` and `BarcodeReaderTool()` from `import Vision`.
+- Core Spotlight ships `SpotlightSearchTool` (iOS / macOS / visionOS 27, `import CoreSpotlight` alongside `FoundationModels`): the model searches Core Spotlight (the default `Configuration(sources: [.coreSpotlight])`; items you indexed with `CSSearchableIndex`) to ground its answers. The configuration also takes custom search stages and a `maximumResponseSize` to bound what lands in the 4096-token context.
+
+```swift
+import CoreSpotlight
+import FoundationModels
+
+@available(iOS 27.0, macOS 27.0, *)
+func askAboutIndexedNotes(_ question: String) async throws -> String {
+    let session = LanguageModelSession(tools: [SpotlightSearchTool()],
+                                       instructions: "Answer from the user's indexed notes.")
+    return try await session.respond(to: question).content
+}
+```
 
 ## Image input
 
@@ -352,6 +366,7 @@ func analyzeLongDocument(_ text: String) async throws -> String {
 ```
 
 - Same session API: only the `model:` argument changes. Requires the managed entitlement `com.apple.developer.private-cloud-compute`, granted on request (see [Adding server-side intelligence with Private Cloud Compute](https://developer.apple.com/documentation/foundationmodels/adding-server-side-intelligence-with-private-cloud-compute)).
+- **Eligibility is limited** ([Apple](https://developer.apple.com/private-cloud-compute/)): the developer must be enrolled in the App Store Small Business Program and have fewer than 2 million first-time App Store downloads across all their apps. Crossing the threshold or leaving the program means migrating "to an alternative solution within 6 months". TestFlight and ad hoc installs do not count as downloads. Design PCC features with an on-device or own-server fallback if the app may outgrow it.
 - Without the entitlement, `availability` still reported `.available` on macOS 27.2, and `respond` failed with an untyped `NSError` in domain `FoundationModels.LanguageModelError`, code -1 - not one of the typed cases. Check the entitlement first when PCC "fails for no reason".
 - Availability reasons: `.deviceNotEligible`, `.systemNotReady`. It needs the network; fall back to the on-device model on `networkFailure` / `serviceUnavailable`.
 - Quota is per person per day. Show `quotaUsage.status` (`.belowLimit(info)` with `info.isApproachingLimit`, or `.limitReached`) in the UI and call `quotaUsage.limitIncreaseSuggestion?.show()` to present the system upgrade (iCloud+) sheet. The Xcode scheme can simulate approaching and exceeded limits.
@@ -364,3 +379,9 @@ func analyzeLongDocument(_ text: String) async throws -> String {
 Core AI (`import CoreAI`, all Apple platforms 27.0) is the separate framework for running your own models on CPU, GPU and Neural Engine from `.aimodel` files produced by Apple's `coreai-torch` / `coreai-optimization` Python tools. SDK surface: `AIModel(contentsOf:options:)`, `AIModel.specialize(contentsOf:options:cache:cachePolicy:)`, `AIModelCache` (`.default`, or `init?(appGroup:)`), `SpecializationOptions` / `ComputeUnitKind`, `AIModel.loadFunction(named:)` returning an `InferenceFunction`, and `NDArray`. For language models, the open-source [coreai-models](https://github.com/apple/coreai-models) package provides `CoreAILanguageModel(resourcesAt:)`, a `LanguageModel` you pass straight to `LanguageModelSession(model:)` - see [Running a Core AI model in a Foundation Models session](https://developer.apple.com/documentation/foundationmodels/running-a-core-ai-model-in-a-foundation-models-session). Background inference uses the `com.apple.developer.background-tasks.continued-processing.inference` entitlement ([Core AI](https://developer.apple.com/documentation/coreai)).
 
 Unverified: `CoreAILanguageModel` and the `coreai-models` package were not built here; the Core AI types above are from the 27.0 SDK interface only.
+
+## Evaluating prompts and the `fm` CLI
+
+**Evaluations framework** (Xcode 27, `import Evaluations`, 27 OSes): tests a prompt or agent against a dataset instead of one hand-checked reply. An `Evaluation` declares a `dataset` (a `Loader` of samples such as `ModelSample(prompt:expected:instructions:)`), `subject(from:)` that runs your session and returns a `ModelSubject(value:transcript:)`, and `evaluators`: closure-based `Evaluator`, `ToolCallEvaluator` (checks tool calls against a `TrajectoryExpectation`) and `ModelJudgeEvaluator` (a model grades the output on a `ScoringScale`), plus aggregate metrics (mean, median, standard deviation). Run it in Swift Testing with the trait `@Test(.evaluates(MyEvaluation(), recordTranscripts: true))`, or directly with `try await MyEvaluation().run()`. Results vary between runs and OS model updates, so assert on aggregates with tolerance, and keep these tests out of the default fast `swift test` loop (an env-gated trait, testing.md).
+
+**`fm` command-line tool** (`/usr/bin/fm`, macOS 27): runs the same models from a shell - `fm respond "prompt"` (`-i` instructions, `--schema <file>`, `--image <path>`, `-g` greedy, `--save-transcript` / `--resume`), `fm chat`, `fm count-tokens`, `fm schema object` (builds a JSON generation schema), `fm models`, `fm quota-usage`, and `fm serve --port <n>`, a Chat Completions-compatible server. `--model pcc` targets Private Cloud Compute instead of the on-device model. Accept the terms with `fm license` before first use. Useful for iterating on prompts and schemas before writing Swift; flags are from `man fm`, not exercised here.

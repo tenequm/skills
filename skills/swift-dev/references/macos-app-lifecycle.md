@@ -2,7 +2,7 @@
 
 Scenes, windows, Settings, MenuBarExtra, document apps (including the macOS 27 `Document` protocols), app delegate and termination, and menu-bar-only (`LSUIElement`) apps.
 
-Verified on Xcode 27.0 (Swift 6.4, iOS 27.0 / macOS 27.0 SDKs), 2026-10-07: every Swift block typechecked with `swiftc -typecheck -swift-version 6` against the macOS 27.0 SDK (target macOS 15, or macOS 27 for the `Document` blocks), both with and without `-default-isolation MainActor`; the C watchdog block passed `clang -fsyntax-only`; API names checked in `SwiftUI.swiftinterface` and AppKit headers; behavior changes checked against the macOS 27 and Xcode 27 release notes.
+Verified on Xcode 27.0 (Swift 6.4, iOS 27.0 / macOS 27.0 SDKs), 2026-10-07: every Swift block typechecked with `swiftc -typecheck -swift-version 6` against the macOS 27.0 SDK (target macOS 15, or macOS 27 for the `Document` blocks), both with and without `-default-isolation MainActor`; the C watchdog block passed `clang -fsyntax-only`; API names checked in `SwiftUI.swiftinterface` and AppKit headers; behavior changes checked against the macOS 27 and Xcode 27 release notes. 2026-10-13: the termination and SIGTERM blocks compiled through SIL (macOS 15 and 27 targets, with and without `-default-isolation MainActor`); document creation source and `fileExporter` signatures read from the macOS 27.0 `SwiftUI.swiftinterface`.
 
 ## Contents
 - Scenes and the App entry point
@@ -284,7 +284,8 @@ Other initializers and helpers (all macOS 27+):
 - `DocumentGroup(viewer:makeReadableDocument:)` for a `ReadableDocument` viewer; `DocumentGroup(allowCreating: false, editor:makeDocument:)` for edit-only apps with no New command.
 - `FileWrapperDocumentReader` / `FileWrapperDocumentWriter` adapt `FileWrapper` code. The writer closure gets `(snapshot, previous: FileWrapper?)`; reuse `previous` for packages so only changed children are rewritten.
 - `@Environment(\.newDocument)` accepts an in-memory `ReadableDocument` - the hook for "New from Template".
-- `fileExporter(isPresented:documents:contentTypes:onCompletion:onCancellation:)` exports a collection of `WritableDocument`s in one dialog.
+- `fileExporter(isPresented:documents:contentTypes:onCompletion:onCancellation:)` exports a collection of `WritableDocument`s in one dialog; `fileExporter(isPresented:document:contentType:defaultFilename:onCompletion:onCancellation:)` exports one.
+- Creation sources (`DocumentCreationSource`, `NewDocumentButton(_:contentType:source:)`, read back as `creationSource` on the creation context or configuration) are iOS/visionOS 27 only: on macOS the type exists but its `init(id:)` and the button are `unavailable`.
 
 ```swift
 extension UTType { nonisolated static let notesPackage = UTType(exportedAs: "com.example.notes") }
@@ -385,6 +386,7 @@ final class AudioMonitor {
 final class AppDelegate: NSObject, NSApplicationDelegate {
     var monitor: AudioMonitor?
     private var hasReplied = false
+    private var isTerminating = false
 
     func applicationDidFinishLaunching(_ notification: Notification) {}
 
@@ -396,13 +398,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
         guard let monitor else { return .terminateNow }
-        hasReplied = false
+        // A second quit during the window (menu twice, Sparkle, logout) re-enters here;
+        // resetting hasReplied would let both paths reply.
+        guard !isTerminating else { return .terminateLater }
+        isTerminating = true
 
         Task {
             await monitor.stopAndSave()
             reply()
         }
-        Task {
+        Task {  // bounds slow cleanup, but cannot run if the main queue is blocked (below)
             try? await Task.sleep(for: .seconds(8))
             reply()
         }
@@ -418,6 +423,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 ```
 
 Replying twice is undefined behavior; both tasks run on the main actor, so the flag check is race-free. Keep the monitor main-actor-isolated (or `Sendable`): a plain non-Sendable class with a `nonisolated async` method fails with `sending 'monitor' risks causing data races` - a region-isolation error that `swiftc -typecheck` never shows, only a full build. Pair this with `AVAssetWriter.movieFragmentInterval` so a fired timeout loses at most one fragment. `applicationShouldTerminateAfterLastWindowClosed` returning `false` keeps a menu bar app alive with no windows.
+
+**Never call `terminate` from a main-queue block.** `.terminateLater` spins a nested run loop until the reply arrives. The main dispatch queue is serial and never starts a block while another is running - and a `Task { @MainActor in }` job is a main-queue block. Calling `terminate` from inside one (a `DispatchQueue.main.async` closure, a dispatch source on `.main`, a main-actor `Task`) starves both reply tasks above: no reply, no timeout, the app hangs until Force Quit. The compiler cannot see it. Menu Quit, Apple Events and Sparkle call `terminate` from run-loop event handling and are safe; anything else hops to the run loop first:
+
+```swift
+// Routes SIGTERM (killall, launchd) into the same cleanup; its default action exits before writers finalize.
+@MainActor
+func routeSIGTERMToTerminate() -> any DispatchSourceSignal {
+    signal(SIGTERM, SIG_IGN)
+    let source = DispatchSource.makeSignalSource(signal: SIGTERM, queue: .main)
+    source.setEventHandler {
+        RunLoop.main.perform {
+            MainActor.assumeIsolated { NSApp.terminate(nil) }
+        }
+    }
+    source.resume()
+    return source  // keep a strong reference, or the source is cancelled
+}
+```
 
 ## Menu-bar-only apps (`LSUIElement`)
 

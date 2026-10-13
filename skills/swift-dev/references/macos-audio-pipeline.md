@@ -2,7 +2,7 @@
 
 Recording system audio plus microphone to disk on macOS: the dual pipeline (SCStream + AVAudioEngine), AVAssetWriter crash safety, PCM buffer conversion and layout traps, AVAudioFile, on-device transcription with SpeechAnalyzer, and the signing/TCC failures that make recordings silent.
 
-Verified on Xcode 27.0 (Swift 6.4, iOS 27.0 / macOS 27.0 SDKs), 2026-10-07: Swift blocks compiled through SIL (`swiftc -emit-sil -target arm64-apple-macos15.0 -swift-version 6`, with and without `-default-isolation MainActor`; SpeechAnalyzer also typechecked against `arm64-apple-ios26.0`); an output-only `AVAudioEngine` was run to confirm the MainActor tap-closure trap; the ObjC wrapper built with `swift build`; the macOS 27 throwing `installTap` run on an `AVAudioPlayerNode` (no mic); APIs read from the macOS 27.0 SDK.
+Verified on Xcode 27.0 (Swift 6.4, iOS 27.0 / macOS 27.0 SDKs), 2026-10-07: Swift blocks compiled through SIL (`swiftc -emit-sil -target arm64-apple-macos15.0 -swift-version 6`, with and without `-default-isolation MainActor`; SpeechAnalyzer also typechecked against `arm64-apple-ios26.0`); an output-only `AVAudioEngine` was run to confirm the MainActor tap-closure trap; the ObjC wrapper built with `swift build`; the macOS 27 throwing `installTap` run on an `AVAudioPlayerNode` (no mic); APIs read from the macOS 27.0 SDK. 2026-10-13: the `installAudioTap` overlay and `AVReadOnlyAudioPCMBuffer` consumers read from the AVFAudio `.swiftinterface`; the 27 tap block compiled through SIL (macOS 26 and 27 targets, with and without `-default-isolation MainActor`) and the main-actor capture error reproduced; the receiver-API deprecations re-read from `AVAssetWriterInput.h`; `AnalyzerInput(buffer:)` read from the Speech `.swiftinterface`.
 
 ## Contents
 - AVAudioEngine mic tap and its traps
@@ -38,11 +38,27 @@ func startMicCapture() throws {
 
 **Isolation trap: the tap block is `NS_SWIFT_NONSENDABLE`.** An inline closure written inside a MainActor-isolated type - which every type is under `-default-isolation MainActor` - inherits MainActor isolation, compiles with no diagnostic in Swift 6 mode, and then traps (`EXC_BREAKPOINT`, exit 133 in a test run) on the first buffer, because CoreAudio calls it on its render thread. Always pass a closure typed `@Sendable (AVAudioPCMBuffer, AVAudioTime) -> Void` as above, and declare capture classes `nonisolated final class ...: @unchecked Sendable` with state confined to one queue.
 
-Sendability in the macOS 27 SDK: `AVAudioFormat` and `AVAudioTime` are Sendable; `AVAudioPCMBuffer` is not (hence the `nonisolated(unsafe)` hop above - the tap hands you a fresh buffer you do not touch again); `CMSampleBuffer`, `AVAssetWriter` and `AVAssetWriterInput` mark Sendable unavailable, so keep the writer, its inputs and in-flight buffers on one serial queue. On a 27+ target, `AVReadOnlyAudioPCMBuffer` is a Sendable buffer you can pass across tasks.
+Sendability in the macOS 27 SDK: `AVAudioFormat` and `AVAudioTime` are Sendable; `AVAudioPCMBuffer` is not (hence the `nonisolated(unsafe)` hop above - the tap hands you a fresh buffer you do not touch again); `CMSampleBuffer`, `AVAssetWriter` and `AVAssetWriterInput` mark Sendable unavailable, so keep the writer, its inputs and in-flight buffers on one serial queue. On a 27+ target, `AVReadOnlyAudioPCMBuffer` is a Sendable buffer you can pass across tasks; `AVAudioFile.write(from:)` / `read(frameCount:)` and `AVAudioPlayerNode.scheduleBuffer(_:)` take it directly, and `AVAudioPCMBuffer(copying:)` turns it back into a mutable buffer.
+
+**macOS 27+ / iOS 27+: use `installAudioTap`.** The Swift overlay `installAudioTap(onBus:bufferSize:format:tapProvider:) throws` takes a `@Sendable (AVReadOnlyAudioPCMBuffer, AVAudioTime) -> Void` closure. That turns the isolation trap into a compile error (`main actor-isolated property 'count' can not be mutated from a Sendable closure`) and the buffer needs no `nonisolated(unsafe)` hop:
+
+```swift
+@available(macOS 27, *)
+func startMicCapture() throws {
+    let inputNode = engine.inputNode
+    let format = inputNode.inputFormat(forBus: 0)
+    try inputNode.installAudioTap(onBus: 0, bufferSize: 4800, format: format) { [weak self] buffer, time in
+        guard let self else { return }
+        audioQueue.async { self.handleMicBuffer(buffer, time: time) }   // handleMicBuffer(_: AVReadOnlyAudioPCMBuffer, ...)
+    }
+    engine.prepare()
+    try engine.start()
+}
+```
 
 **`installTap` raises an ObjC `NSException`, not a Swift error** (incompatible format, tap already on the bus). Swift `do/catch` cannot catch it, and a generic "ObjC try block" helper fails in release builds because the compiler removes the ObjC trampoline for `NS_NOESCAPE` blocks. `engine.start()` can raise too.
 
-- **macOS 27+ / iOS 27+:** the SDK adds a throwing variant and deprecates the old one. Swift imports it under a refined name with a vestigial `error: ()` argument (there is no Swift overlay wrapper):
+- **macOS 27+ / iOS 27+:** `installAudioTap` above throws instead, and the old `installTap(onBus:bufferSize:format:block:)` is deprecated. The throwing ObjC method is also imported raw, with a vestigial `error: ()` argument and the old mutable-buffer block - only needed if you must keep an `AVAudioPCMBuffer` block:
 
   ```swift
   try engine.inputNode.__installTap(onBus: 0, bufferSize: 4800, format: nil, error: (), block: handler)
@@ -201,7 +217,7 @@ func writeWithReceiver(url: URL, firstBuffer: sending CMSampleBuffer) async thro
 }
 ```
 
-`CMReadySampleBuffer(unsafeBuffer:)` takes the buffer as `sending`; do not touch it afterwards. The rules below apply to both APIs.
+`CMReadySampleBuffer(unsafeBuffer:)` takes the buffer as `sending`; do not touch it afterwards. Under the receiver API, `expectsMediaDataInRealTime` and `isReadyForMoreMediaData` are themselves deprecated ("Use the input receiver's appendImmediately(...) method instead", `AVAssetWriterInput.h`): `appendImmediately` is the real-time path and `try await receiver.append(_:)` the backpressured one. So the `expectsMediaDataInRealTime` and `isReadyForMoreMediaData` rules below are for the classic API; the fragment, session-start, format and gap rules apply to both.
 
 ## AVAssetWriter crash safety and track integrity
 
@@ -421,6 +437,7 @@ func transcribe(_ buffers: AsyncStream<AVAudioPCMBuffer>) async throws -> String
 - Check `SpeechTranscriber.isAvailable`; fall back to `DictationTranscriber` on unsupported hardware.
 - The system caps concurrent analyzers (`insufficientResources`); `SpeechAnalyzer.Options(priority:modelRetention:ignoresResourceLimits:)` (27+) lifts the cap at your own risk. Call `prepareToAnalyze(in:)` to preheat models.
 - `AnalyzerInput.buffer` is deprecated in 27 (use `bufferFormat`, `bufferDuration`, `bufferStartTime`).
+- `AnalyzerInput(buffer: CMReadySampleBuffer<CMReadOnlyDataBlockBuffer>)` (27+) takes sample buffers, so SCStream audio can feed the analyzer without the PCM conversion above.
 
 Summarizing the transcript is a separate step: see `foundation-models.md`.
 

@@ -2,7 +2,7 @@
 
 App Intents on iOS and macOS: intents, App Shortcuts for Siri/Spotlight/Shortcuts and the iPhone Action Button, run modes, authentication, entities, and Control Center controls.
 
-Verified on Xcode 27.0 (Swift 6.4, iOS 27.0 / macOS 27.0 SDKs), 2026-10-07: every block built in a scratch XcodeGen iOS app plus WidgetKit extension (`xcodebuild -destination 'generic/platform=iOS' CODE_SIGNING_ALLOWED=NO`, deployment target iOS 26, Swift 6 strict concurrency) and typechecked for `arm64-apple-macos26.0`; the app target rebuilt as is and with `SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor`; the App Shortcut build errors quoted below were reproduced. Declarations and availability read from the 27.0 `AppIntents`/`WidgetKit` `.swiftinterface` files. Not run on a device.
+Verified on Xcode 27.0 (Swift 6.4, iOS 27.0 / macOS 27.0 SDKs), 2026-10-07: every block built in a scratch XcodeGen iOS app plus WidgetKit extension (`xcodebuild -destination 'generic/platform=iOS' CODE_SIGNING_ALLOWED=NO`, deployment target iOS 26, Swift 6 strict concurrency) and typechecked for `arm64-apple-macos26.0`; the app target rebuilt as is and with `SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor`; the App Shortcut build errors quoted below were reproduced. Declarations and availability read from the 27.0 `AppIntents`/`WidgetKit` `.swiftinterface` files. Not run on a device. 2026-10-13: the phone-schema call intent, the Live Activity and the `LongRunningIntent` blocks built in a scratch XcodeGen app with a WidgetKit extension (iOS 26 target, MainActor default isolation), with the two `ExtractAppIntentsMetadata` errors below reproduced; the background-call behavior was observed on a locked iPhone (iOS 27.2) in a shipping voice-call app.
 
 ## Contents
 - [Intent + App Shortcut](#intent--app-shortcut)
@@ -11,8 +11,11 @@ Verified on Xcode 27.0 (Swift 6.4, iOS 27.0 / macOS 27.0 SDKs), 2026-10-07: ever
 - [supportedModes (replaces openAppWhenRun)](#supportedmodes-replaces-openappwhenrun)
 - [authenticationPolicy and execution targets](#authenticationpolicy-and-execution-targets)
 - [Action Button, Siri, Spotlight](#action-button-siri-spotlight)
+- [Starting a call from the background: the phone schema](#starting-a-call-from-the-background-the-phone-schema)
 - [Parameters and entities](#parameters-and-entities)
+- [App Schemas and newer intent protocols](#app-schemas-and-newer-intent-protocols)
 - [Controls and widgets](#controls-and-widgets)
+- [Live Activities](#live-activities)
 - [macOS vs iOS](#macos-vs-ios)
 
 ## Intent + App Shortcut
@@ -118,7 +121,7 @@ static var openAppWhenRun: Swift::Bool { get }
 public protocol ForegroundContinuableIntent : AppIntents::AppIntent
 ```
 
-(Same attributes for macOS 13.3/26.0, watchOS, tvOS, visionOS. Implementing the deprecated `openAppWhenRun` produces no warning - only uses of it do - so grep for it.)
+(Same attributes for macOS 13.3/26.0, watchOS and tvOS; `ForegroundContinuableIntent` has no visionOS line and is `unavailable` in every app-extension context (`iOSApplicationExtension`, `macOSApplicationExtension`, ...), so an intent that also compiles into a widget or control extension cannot adopt it. Implementing the deprecated `openAppWhenRun` produces no warning - only uses of it do - so grep for it.)
 
 `IntentModes` is an `OptionSet`; the 27.0 SDK declares exactly these members:
 
@@ -184,7 +187,91 @@ An `@available(iOS 27.0, macOS 27.0, *)` witness compiles fine on an iOS 26 depl
 - **Action Button** (iPhone 15 Pro/Pro Max and every iPhone since, including 16e, 17e and Air - not iPhone 15/15 Plus or earlier): the user assigns it in Settings > Action Button > Shortcut > your app's App Shortcut. Settings > Action Button > Controls accepts a `ControlWidget` (below). Your app cannot assign it programmatically; the button only offers what your App Shortcuts or controls expose. ([Apple Support](https://support.apple.com/guide/iphone/use-and-customize-the-action-button-iphe89d61d66/ios))
 - **Siri**: speaking a phrase runs the App Shortcut; any intent is also runnable by name in Shortcuts.
 - **Spotlight**: App Shortcuts appear in Spotlight results. To index app data, conform entities to `IndexedEntity` (iOS 18 / macOS 15) and mark attributes with `@Property(indexingKey:)` / `@ComputedProperty(indexingKey:)` ([Making app entities available in Spotlight](https://developer.apple.com/documentation/appintents/making-app-entities-available-in-spotlight)).
-- `AudioRecordingIntent` (iOS 18 / macOS 15) tells the system an intent records audio; on iOS "you must start a Live Activity when you begin the audio recording ... If you don't start a Live Activity, the audio recording stops." A CallKit call already has system call UI, so a call intent is a plain `AppIntent`.
+- `AudioRecordingIntent` (iOS 18 / macOS 15) tells the system an intent records audio; on iOS "you must start a Live Activity when you begin the audio recording ... If you don't start a Live Activity, the audio recording stops." A plain `AppIntent` can start a CallKit call only from the foreground or a freshly launched process - from the background use the phone schema below.
+
+## Starting a call from the background: the phone schema
+
+Observed on a locked iPhone (iOS 27.2, Xcode 27.0): an Action Button press or shortcut that runs a plain `AppIntent` while the app is already resident in the background cannot start a call. `callservicesd` logs `callSourceHasReasonableUserIntent: false`, the `CXStartCallAction` transaction fails with `CXErrorCodeRequestTransactionError` 6, and `Activity.request` fails with `ActivityAuthorizationError` 7. It works only when iOS happens to launch a fresh process. iOS 27's phone App Schema is what lets the system vouch for the user's intent, so CallKit takes the start from the background, locked phone included:
+
+```swift
+@available(iOS 27.0, *)
+@AppIntent(schema: .phone.startCall)
+struct CallLineIntent: AudioRecordingIntent, LiveActivityIntent {
+    static let supportedModes: IntentModes = [.background]
+    static let authenticationPolicy: IntentAuthenticationPolicy = .alwaysAllowed
+
+    var destination: CallDestination
+    var audioVisualMode: CallMode // the schema requires it; a video request is placed as a voice call
+
+    init() {}
+
+    @MainActor
+    func perform() async throws -> some IntentResult {
+        guard case let .line(line) = destination else { return .result() }
+        await CallController.shared.start(calling: line.name) // also starts the call's Live Activity
+        return .result()
+    }
+}
+
+@available(iOS 27.0, *)
+@UnionValue
+enum CallDestination {
+    case line(VoiceLineEntity)
+}
+
+@available(iOS 27.0, *)
+@AppEnum(schema: .phone.audioVisualMode)
+enum CallMode: String {
+    case audio
+    case video
+
+    static let caseDisplayRepresentations: [Self: DisplayRepresentation] = [.audio: "Audio", .video: "Video"]
+}
+
+@available(iOS 27.0, *)
+@AppEntity(schema: .phone.phonePerson)
+struct VoiceLineEntity {
+    static let defaultQuery = VoiceLineQuery()
+
+    let id: UUID
+    let name: String
+    var person: IntentPerson
+
+    var displayRepresentation: DisplayRepresentation { DisplayRepresentation(title: "\(name)") }
+
+    init(_ line: VoiceLine) { // the app's saved destination (id, name); the controller lists them in `lines`
+        id = line.id
+        name = line.name
+        person = IntentPerson(identifier: .applicationDefined(line.id.uuidString), name: .displayName(line.name), handle: nil)
+    }
+}
+
+@available(iOS 27.0, *)
+struct VoiceLineQuery: EntityStringQuery {
+    @MainActor
+    func entities(for identifiers: [UUID]) async throws -> [VoiceLineEntity] {
+        CallController.shared.lines.filter { identifiers.contains($0.id) }.map(VoiceLineEntity.init)
+    }
+
+    @MainActor
+    func suggestedEntities() async throws -> [VoiceLineEntity] { CallController.shared.lines.map(VoiceLineEntity.init) }
+
+    @MainActor
+    func entities(matching string: String) async throws -> [VoiceLineEntity] {
+        try await suggestedEntities().filter { $0.name.localizedStandardContains(string) }
+    }
+
+    /// Pre-fills the destination when the user adds the action in Shortcuts.
+    @MainActor
+    func defaultResult() async -> VoiceLineEntity? { CallController.shared.selectedLine.map(VoiceLineEntity.init) }
+}
+```
+
+- **All of it is needed together** (observed): the schema; `AudioRecordingIntent` and `LiveActivityIntent` (the call's Live Activity may then start from the background); `.background` with `.alwaysAllowed`, so a locked phone runs it - anything `perform()` reads must be stored `kSecAttrAccessibleAfterFirstUnlock` (keychain.md). Each alone failed: `LiveActivityIntent` fixed only the Live Activity, `AudioRecordingIntent` / `AudioPlaybackIntent` did not satisfy CallKit, and donating `INStartCallIntent` interactions with `NSUserActivityTypes` changed nothing.
+- **Build-time rules** (both reproduced, `ExtractAppIntentsMetadata`): the union's entity needs a string query - "AppSchemaIntent 'StartCallIntent' requires UnionValue case 'VoiceLineEntity' to conform to 'IndexedEntity', 'UniqueAppEntity', 'TransientAppEntity', provide a default 'EntityStringQuery', or provide an 'IntentValueQuery'"; and the mode enum must declare `video` even for a voice-only app - "'CallMode' conforming to 'phone.audioVisualMode' requires enum case 'video'". Schema properties take no default value (`= .audio` fails to compile).
+- **The user's shortcut** must save the destination and the Audio mode rather than "Ask Each Time" (observed); `defaultResult()` fills the destination in when the action is added. Settings > Action Button > Shortcut then points at that shortcut.
+- Keep a foreground path too: a plain intent with `supportedModes = .foreground(.immediate)` and `.requiresAuthentication` brings the app forward (after Face ID on a locked phone), and a start from the app in front passes CallKit's check.
+- The `.phone` domain is `anyAppleOS 27` (watchOS/tvOS unavailable); `@available(iOS 27.0, *)` keeps it building on an iOS 26 target.
 
 ## Parameters and entities
 
@@ -245,6 +332,37 @@ struct CreateProjectIntent: AppIntent {
 - Return values with `ReturnsValue<T>` so Shortcuts can chain the result into the next action.
 - `SnippetIntent` (iOS/macOS 26) renders interactive SwiftUI as the result; the system calls its `perform()` again after each button/toggle in the snippet, so re-fetch state every time.
 
+## App Schemas and newer intent protocols
+
+**App Schemas** conform an intent, entity or enum to a system-defined shape with `@AppIntent(schema:)`, `@AppEntity(schema:)` and `@AppEnum(schema:)`. Siri and Apple Intelligence then understand it without phrases you define, and entity schemas feed Spotlight's semantic index. Domains arrive per OS (`.journal`, `.reader` and others since iOS 18; `.phone` in 27, used above); the schema dictates required properties, enforced by the macro and by `ExtractAppIntentsMetadata`.
+
+| API | Availability | Use |
+|---|---|---|
+| `.appEntityIdentifier(_:)` / `.appEntityIdentifier(forSelectionType:identifier:)` | iOS 18.4 / macOS 15.4 | View annotation: maps a SwiftUI view or selection to an entity so Siri can act on what is on screen |
+| `CancellableIntent` + `withIntentCancellationHandler(operation:onCancel:)` | 26.4 | Cleanup when the system cancels; `IntentCancellationReason` (e.g. `.timeout`) |
+| `UndoableIntent` | 26 | Reverse the action through its `undoManager` |
+| `LongRunningIntent` + `performBackgroundTask(options:operation:)` | 27 | Extends the background runtime; `LongRunningTaskOptions.requiresGPU` |
+| `IndexedEntityQuery` | 27 | `reindexEntities(for:indexDescription:)` / `reindexAllEntities(indexDescription:)` when Spotlight asks |
+| `SyncableEntity`, `SyncableEntityIdentifier(local:stable:)` | 27 | Entities whose identity survives sync across devices |
+| `EntityCollection<Entity>` | 27 | A parameter holding a set of entity identifiers |
+| `AppIntentError(description:)`, `CustomAppIntentErrorConvertible` | 27 | User-facing error text from `perform()`, or map your own error type |
+
+```swift
+@available(iOS 27.0, *)
+struct ExportLibraryIntent: LongRunningIntent, CancellableIntent {
+    static let title: LocalizedStringResource = "Export Library"
+
+    func perform() async throws -> some IntentResult {
+        try await performBackgroundTask {
+            try await Task.sleep(for: .seconds(1)) // the export
+        } onCancel: { reason in
+            print("cancelled: \(reason)")
+        }
+        return .result()
+    }
+}
+```
+
 ## Controls and widgets
 
 A control (iOS 18+, macOS 26+, watchOS 26+; unavailable on tvOS/visionOS) is a button or toggle in Control Center, on the Lock Screen, or on the Action Button. It lives in a WidgetKit extension and runs an App Intent.
@@ -275,13 +393,87 @@ struct VoiceControls: WidgetBundle {
 - Unverified: on iOS 26, which process performs a `.foreground` intent fired from a control - check on a device before relying on the app's state there.
 - Widgets: WidgetKit (iOS 14 / macOS 11+) - home screen, Lock Screen, macOS desktop and Notification Center. `WidgetAccentedRenderingMode` (iOS 18 / macOS 15) controls image tinting in accented rendering; `WidgetPushHandler` (iOS/macOS 26) drives push-based reloads. Interactive widget buttons also run App Intents.
 
+## Live Activities
+
+A Live Activity (ActivityKit) is the Lock Screen and Dynamic Island card for something in progress - a call, a recording, a delivery. The UI lives in a WidgetKit extension; the app starts, updates and ends it. XcodeGen:
+
+```yaml
+targets:
+  VoiceApp:
+    dependencies:
+      - target: VoiceActivity       # embeds the extension
+    info:
+      properties:
+        NSSupportsLiveActivities: true
+  VoiceActivity:
+    type: app-extension
+    platform: iOS
+    sources:
+      - path: VoiceActivity          # the widget bundle and its views
+      - path: VoiceApp/CallActivityAttributes.swift   # shared with the app
+    info:
+      path: VoiceActivity/Info.plist
+      properties:
+        CFBundleDisplayName: Voice
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.widgetkit-extension
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.example.VoiceApp.Activity
+```
+
+```swift
+import ActivityKit
+import SwiftUI
+import WidgetKit
+
+// Both targets
+struct CallActivityAttributes: ActivityAttributes {
+    struct ContentState: Codable, Hashable {
+        var status: String
+        var startedAt: Date
+    }
+}
+
+// Extension: listed in its @main WidgetBundle
+struct CallActivityWidget: Widget {
+    var body: some WidgetConfiguration {
+        ActivityConfiguration(for: CallActivityAttributes.self) { context in
+            Label(context.state.status, systemImage: "phone.fill").padding()
+        } dynamicIsland: { context in
+            DynamicIsland {
+                DynamicIslandExpandedRegion(.bottom) { Text(context.state.status) }
+            } compactLeading: {
+                Image(systemName: "phone.fill")
+            } compactTrailing: {
+                Text(context.state.startedAt, style: .timer).monospacedDigit().frame(maxWidth: 44)
+            } minimal: {
+                Image(systemName: "phone.fill")
+            }
+        }
+    }
+}
+
+// App
+@MainActor
+func startCallActivity() throws -> Activity<CallActivityAttributes> {
+    let state = CallActivityAttributes.ContentState(status: "Connecting", startedAt: .now)
+    return try Activity.request(attributes: CallActivityAttributes(), content: ActivityContent(state: state, staleDate: nil))
+}
+```
+
+- Update with `await activity.update(ActivityContent(state:staleDate:))` and end with `await activity.end(_:dismissalPolicy:)`; at launch, end leftovers from `Activity<CallActivityAttributes>.activities`.
+- **Local updates need no entitlement**; `aps-environment` is only for push-driven updates. Automatic signing registers the extension's bundle ID on the first signed archive (observed).
+- **From the background `Activity.request` fails** with `ActivityAuthorizationError` 7 (`.visibility`, "Target is not foreground") - observed. Start it from the foreground, or from an intent conforming to `LiveActivityIntent`, the documented route for background starts (see the phone schema section).
+- iOS 27 shows Live Activities in the Dynamic Island in landscape too; `@Environment(\.isDynamicIslandLimitedInWidth)` (iOS 27) tells the views when the island is narrow.
+
 ## macOS vs iOS
 
 | | iOS | macOS |
 |---|---|---|
 | App Intents, App Shortcuts, Siri, Spotlight | iOS 16+ | macOS 13+ |
 | `supportedModes`, `continueInForeground` | 26+ | 26+ |
-| `allowedExecutionTargets` | 27+ | 27+ |
+| `allowedExecutionTargets`, `LongRunningIntent`, `.phone` schema | 27+ | 27+ |
 | Controls (`ControlWidget`) | 18+ | 26+ |
 | Action Button | iPhone 15 Pro and later | none |
 | Onscreen-content data sources | `UITableViewAppIntentsDataSource`, `UICollectionViewAppIntentsDataSource` (18.4) | `NSTableViewAppIntentsDataSource`, `NSCollectionViewAppIntentsDataSource` (15.4) |

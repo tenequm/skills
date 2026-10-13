@@ -2,7 +2,7 @@
 
 Package.swift on Swift 6.4, local packages for iOS and macOS apps, resources, plugins, macros, the Swift Build engine, `xcodebuild` basics, Xcode 27 build-breakers, and the macOS-only path of shipping an app straight from SwiftPM.
 
-Verified on Xcode 27.0 (Swift 6.4, iOS 27.0 / macOS 27.0 SDKs), 2026-10-07: built and tested scratch packages covering every manifest snippet (traits, resources, a remote dependency, ObjC target, strict settings, two executables), a build-tool plus command plugin, the `swift package init --type macro` template; assembled, ad-hoc signed and ran a `.app` from `swift build` output; checked flags with `swift build --help`, `swift build --help-hidden`, `swift test --help`, `swift package --help`, `xcodebuild -help`; compiled the conditional-compilation snippet through SIL (`swiftc -emit-sil`) for iOS and macOS; read `PackageDescription` and `PackagePlugin` interfaces; reproduced four of the five Xcode 27 build-breakers and checked all five against the [Xcode 27 release notes](https://developer.apple.com/documentation/xcode-release-notes/xcode-27-release-notes); the agent-sandbox errors are quoted from two earlier Codex sandbox sessions, not reproduced.
+Verified on Xcode 27.0 (Swift 6.4, iOS 27.0 / macOS 27.0 SDKs), 2026-10-07: built and tested scratch packages covering every manifest snippet (traits, resources, a remote dependency, ObjC target, strict settings, two executables), a build-tool plus command plugin, the `swift package init --type macro` template; assembled, ad-hoc signed and ran a `.app` from `swift build` output; checked flags with `swift build --help`, `swift build --help-hidden`, `swift test --help`, `swift package --help`, `xcodebuild -help`; compiled the conditional-compilation snippet through SIL (`swiftc -emit-sil`) for iOS and macOS; read `PackageDescription` and `PackagePlugin` interfaces; reproduced four of the five Xcode 27 build-breakers and checked all five against the [Xcode 27 release notes](https://developer.apple.com/documentation/xcode-release-notes/xcode-27-release-notes); the agent-sandbox errors are quoted from two earlier Codex sandbox sessions, not reproduced. 2026-10-13: `ApproachableConcurrency` compiled against each of its two features' errors; `xcrun mcp-server` and `xctrace record` flags read from their `--help`; the `MetricManager` snippet compiled through SIL for iOS; the multiple-Xcode notes are from a multi-lane iOS project, not reproduced here.
 
 ## Contents
 - Package.swift on Swift 6.4
@@ -43,7 +43,7 @@ let package = Package(
 - `swift package init` on this toolchain writes `// swift-tools-version: 6.4`. The tools version gates manifest API: `.iOS(.v26)` / `.macOS(.v26)` need 6.2, `.iOS(.v27)` / `.macOS(.v27)` need 6.4. Xcode 26 cannot open a 6.4 manifest - stay on 6.2 if collaborators are still on Xcode 26.
 - Tools version 6.0+ defaults every target to the Swift 6 language mode; `.swiftLanguageMode(.v6)` is only needed to be explicit or to override a `.v5` default elsewhere.
 - `platforms` sets minimums, not the platform list: a package builds for every platform, and the minimum for an unlisted one is the oldest SwiftPM supports.
-- New templates (`swift package init --type library|executable|tool|macro|build-tool-plugin|command-plugin|empty`) add `.enableUpcomingFeature("ApproachableConcurrency")` to each target. In Swift 6.4 that name turns on the approachable-concurrency feature set (verified: it enables isolated conformance inference, like `InferIsolatedConformances`); see concurrency-isolation.md.
+- New templates (`swift package init --type library|executable|tool|macro|build-tool-plugin|command-plugin|empty`) add `.enableUpcomingFeature("ApproachableConcurrency")` to each target. In Swift 6.4 that one name enables both `NonisolatedNonsendingByDefault` and `InferIsolatedConformances` (verified: the `sending` error from a nonisolated async call and the isolated-conformance error both disappear with it); see concurrency-isolation.md.
 
 ## Swift settings
 
@@ -62,7 +62,7 @@ let package = Package(
 ```
 
 Traps:
-- **Misspelled feature names are silently ignored.** `-enable-upcoming-feature BogusFeatureX` compiles with no warning. Check names against `swiftc -print-supported-features` (JSON listing every upcoming, experimental and optional feature this compiler knows).
+- **Misspelled feature names are silently ignored.** `-enable-upcoming-feature BogusFeatureX` compiles with no warning. Check names against `swiftc -print-supported-features` (JSON listing upcoming, experimental and optional features) - but it omits the `ApproachableConcurrency` bundle, which the compiler accepts, so a missing entry is not proof of a typo.
 - **`.defaultIsolation(MainActor.self)` changes the package's public API.** Every unannotated public function and type becomes `@MainActor`, so callers in other modules - including the package's own test target, which is nonisolated - fail with `call to main actor-isolated global function '...' in a synchronous nonisolated context`. Use it on UI-facing targets; leave model/network/parsing targets nonisolated, or mark the tests `@MainActor`.
 - `.unsafeFlags` makes a package unusable as a version-based dependency; keep it to local packages and the root.
 
@@ -370,6 +370,13 @@ xcodebuild -showComponent MetalToolchain   # Status: installed / not installed
 xcodebuild -downloadComponent MetalToolchain
 ```
 
+**Several Xcodes on one Mac** (a beta next to the release, observed on a multi-lane iOS project):
+
+- Select per command with `DEVELOPER_DIR=/Applications/Xcode-beta.app/Contents/Developer xcodebuild ...`; never `sudo xcode-select -s` in scripts - it switches every other shell and agent on the machine.
+- There is one CoreSimulatorService per Mac. Do not drive simulators from two `DEVELOPER_DIR`s at the same time; finish one lane before the other touches a simulator.
+- Delete the derived-data or `build/` directory after switching Xcode: stale module caches from the other compiler fail in confusing ways.
+- Seed a fresh checkout's resolved packages with an APFS clone (`cp -c -R <old>/build/SourcePackages build/`) to skip a full package fetch; the clone costs no disk until files diverge.
+
 ## xcodebuild basics
 
 ```bash
@@ -387,6 +394,25 @@ xcodebuild build -scheme MyMacApp -destination 'platform=macOS'
 - Repeating and flake hunting: `-test-iterations N`, `-retry-tests-on-failure`, `-run-tests-until-failure`. Enumerate without running: `-enumerate-tests`.
 - Interface Builder documents for UIKit now compile in a `toolchain` mode by default, without a simulator runtime; `IBC_COCOATOUCH_COMPILER_MODE = simulator` restores the old behavior.
 - Signing, archiving and export are in ios-distribution.md and macos-distribution.md.
+
+### Xcode 27 tooling for agents and profiling
+
+- **Xcode MCP server.** Xcode exposes build, test, preview, debugger and build-setting tools over MCP; `mcpbridge` is the stdio entry point an agent configures. Xcode 27 adds a headless preview that runs without an open workspace: `sudo xcrun mcp-server enable` turns it on, `xcrun mcp-server status` shows state and pending request ids, `sudo xcrun mcp-server approve <id>` / `deny <id>` answer requests, `sudo xcrun mcp-server allow-folder --always` (or `--for-24-hours`) pre-authorizes a directory tree, and `xcrun mcp-server open <project>` loads a workspace. `enable --unsafe-always-allow-all-agents` is for unattended machines only. Apple calls it an early preview whose settings may need an Xcode relaunch or reboot to apply.
+- **`xctrace` options from the CLI.** `xcrun xctrace record --template 'Time Profiler' --show-recording-options` prints an instrument's options as JSON; edit it and pass it back with `--recording-options <file>`, plus `--time-limit 30s --output run.trace --launch -- <cmd>` or `--attach <pid|name>`.
+- **MetricKit, Swift-first (iOS 27 / macOS 27).** `MetricManager()` exposes `metricReports` and `diagnosticReports` as async sequences - the Swift alternative to an `MXMetricManager` subscriber:
+
+```swift
+import MetricKit
+
+@available(iOS 27.0, macOS 27.0, *)
+func collectDiagnostics() async {
+    for await report in MetricManager().diagnosticReports {
+        print(report)
+    }
+}
+```
+
+- **App icons.** Icon Composer 2.0 (bundled with Xcode 27) previews the current and the 2027 design generation side by side and produces one icon file used for all OS versions; check both generations before adding it to the app target.
 
 ## Xcode 27 build-breakers
 

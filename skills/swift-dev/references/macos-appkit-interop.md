@@ -2,7 +2,7 @@
 
 Bridging SwiftUI and AppKit: representables, hosting SwiftUI views and scenes in AppKit, AppKit Liquid Glass, menus, pasteboard, workspace and panels, window access, and floating `NSPanel` HUDs.
 
-Verified on Xcode 27.0 (Swift 6.4, iOS 27.0 / macOS 27.0 SDKs), 2026-10-07: every block typechecked with `swiftc -typecheck -swift-version 6` against the macOS 27.0 SDK, with and without `-default-isolation MainActor`; symbols checked in `SwiftUI.swiftinterface`, `AppKit.swiftinterface` and the AppKit headers; behavior notes checked against the macOS 27 / 27.2 release notes and Apple's [AppKit updates](https://developer.apple.com/documentation/updates/appkit).
+Verified on Xcode 27.0 (Swift 6.4, iOS 27.0 / macOS 27.0 SDKs), 2026-10-07: every block typechecked with `swiftc -typecheck -swift-version 6` against the macOS 27.0 SDK, with and without `-default-isolation MainActor`; symbols checked in `SwiftUI.swiftinterface`, `AppKit.swiftinterface` and the AppKit headers; behavior notes checked against the macOS 27 / 27.2 release notes and Apple's [AppKit updates](https://developer.apple.com/documentation/updates/appkit). 2026-10-13: `NSHostingView` sizing and scene-bridging defaults re-read from Apple's docs; the hosting and menu-item blocks compiled through SIL at macOS 26 and 27 targets, with and without `-default-isolation MainActor`.
 
 ## Contents
 - NSViewRepresentable
@@ -145,9 +145,8 @@ macOS 27 gesture changes that affect custom `NSGestureRecognizer` subclasses: on
 ```swift
 final class MainViewController: NSViewController {
     override func loadView() {
-        let hosting = NSHostingView(rootView: ContentView())
-        hosting.sizingOptions = [.intrinsicContentSize]
-        hosting.sceneBridgingOptions = [.title, .toolbars]
+        let hosting = NSHostingView(rootView: ContentView())   // sizingOptions: .standardBounds by default
+        hosting.sceneBridgingOptions = [.title, .toolbars]      // [] unless it is a window's contentView
         view = hosting
     }
 }
@@ -162,7 +161,8 @@ final class MainViewController: NSViewController {
 }
 ```
 
-- **A bare `NSHostingView` reports no intrinsic size under Auto Layout** and does not surface its content's `navigationTitle` or `.toolbar` to the window. Both are opt-in: `sizingOptions` (macOS 13+) and `sceneBridgingOptions` (macOS 14+). If a hosted view "has no size", `sizingOptions` is almost always the missing piece.
+- **`sizingOptions` (macOS 13+) defaults to `.standardBounds`** - min, intrinsic and max size constraints, created only when the window uses Auto Layout; as a window's `contentView` it also drives `contentMinSize`/`contentMaxSize` ([docs](https://developer.apple.com/documentation/swiftui/nshostingview/sizingoptions)). Setting `[.intrinsicContentSize]` drops the min/max constraints; narrow it (`.minSize`, `[]`) only for performance when the frame is fixed.
+- **`sceneBridgingOptions` (macOS 14+) defaults to `.all` (`.title` + `.toolbars`) when the hosting view is a window's `contentView`, and `[]` otherwise** ([docs](https://developer.apple.com/documentation/swiftui/nshostingview/scenebridgingoptions)). A hosting view nested in a view controller or deeper in the hierarchy does not surface `navigationTitle` or `.toolbar` until you set it.
 - `NSHostingController` + `NSWindow(contentViewController:)` with `.preferredContentSize` lets the window track the SwiftUI content size.
 
 **Hosting whole scenes (macOS 26+).** An AppKit-lifecycle app can present a real SwiftUI `Settings` or `Window` scene - Cmd+, handling, restoration, single-instance behavior - instead of rebuilding them around a hand-made `NSWindow`:
@@ -232,6 +232,7 @@ With the Xcode 27 SDK Liquid Glass cannot be opted out of (`UIDesignRequiresComp
 Apps linked on the macOS 27 SDK get both symbol and non-symbol menu item images hidden automatically in menu bar and context menus (on the 26 SDK only symbol images are hidden). Settings, Share and Print keep default images. When an image must stay - for example an item that is only an icon - opt in per item:
 
 ```swift
+@available(macOS 27, *)
 @MainActor func makeShareItem() -> NSMenuItem {
     let item = NSMenuItem(title: "Share Project", action: nil, keyEquivalent: "")
     item.image = NSImage(systemSymbolName: "square.and.arrow.up", accessibilityDescription: nil)
@@ -264,7 +265,7 @@ Apple is moving macOS to iOS-style pasteboard privacy: reading the **general** p
 - Read contents only in response to an explicit paste (menu item, Cmd+V). Responder-chain paste into `NSTextView` and friends is unaffected; clipboard managers and pasteboard pollers are what break.
 - To enable a Paste item or offer "open copied link", inspect without reading: `detectedPatterns(for:)` / `detectedValues(for:)` / `detectedMetadata(for:)` (macOS 15.4+, async) do not trigger the alert.
 - `NSPasteboard.accessBehavior` (macOS 15.4+) reports the user's per-app setting: `.default`, `.ask`, `.alwaysAllow`, `.alwaysDeny`.
-- The `EnablePasteboardPrivacyDeveloperPreview` user default that simulated the alert was removed in macOS 27.2.
+- The `EnablePasteboardPrivacyDeveloperPreview` user default that simulated the alert is removed in macOS 27.2 (in the beta 3 release notes; 27.2 is not released yet).
 
 Unverified: whether macOS 27.x shows the alert to users by default - neither the macOS 27 nor 27.2 release notes say so.
 
@@ -291,7 +292,7 @@ Unverified: whether macOS 27.x shows the alert to users by default - neither the
 }
 ```
 
-With the macOS 27 SDK, setting `allowedContentTypes` on `NSOpenPanel` also updates `canChooseFiles` / `canChooseDirectories` to match whether the types are file or directory types. In SwiftUI prefer `fileImporter` / `fileExporter`. Panel URLs are security-scoped in sandboxed apps - persist them as bookmarks (see macos-system-integration.md).
+With the macOS 27 SDK, setting `allowedContentTypes` or `treatsFilePackagesAsDirectories` on `NSOpenPanel` also updates `canChooseFiles` / `canChooseDirectories` to match whether the types are file or directory types - set those two afterwards if you need other values. In SwiftUI prefer `fileImporter` / `fileExporter`. Panel URLs are security-scoped in sandboxed apps - persist them as bookmarks (see macos-system-integration.md).
 
 ## Reaching the NSWindow
 

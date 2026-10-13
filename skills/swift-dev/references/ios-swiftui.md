@@ -2,13 +2,14 @@
 
 iPhone-specific SwiftUI: the app/scene lifecycle, navigation and presentation, toolbars, text input, opening Settings, Liquid Glass, UIKit bridging, background refresh, and what changes when you rebuild with the iOS 27 SDK.
 
-Verified on Xcode 27.0 (Swift 6.4, iOS 27.0 / macOS 27.0 SDKs), 2026-10-07: every code block compiled with `swiftc -emit-sil` against the iOS 27.0 SDK (`-target arm64-apple-ios26.0 -swift-version 6`, with and without `-default-isolation MainActor`); APIs and availability read from the SDK's SwiftUI `.swiftinterface`; the `@State` source break reproduced in an `xcodebuild` build; `TimelineSchedule`, `lineHeight` and `LineHeight` factories read from the SwiftUI and CoreText interfaces.
+Verified on Xcode 27.0 (Swift 6.4, iOS 27.0 / macOS 27.0 SDKs), 2026-10-07: every code block compiled with `swiftc -emit-sil` against the iOS 27.0 SDK (`-target arm64-apple-ios26.0 -swift-version 6`, with and without `-default-isolation MainActor`); APIs and availability read from the SDK's SwiftUI `.swiftinterface`; the `@State` source break reproduced in an `xcodebuild` build; `TimelineSchedule`, `lineHeight` and `LineHeight` factories read from the SwiftUI and CoreText interfaces. 2026-10-13: the item-driven dialogs, the background-refresh scheduler and the SwiftUI 27 block compiled the same way (iOS 26 and 27 targets, with and without MainActor default isolation); availability read from the SwiftUI, SwiftUICore, BackgroundTasks and UIKit 27.0 SDK files.
 
 ## Contents
 - App, WindowGroup and scenePhase
 - State in observable controllers
 - Navigation and presentation
 - Toolbars
+- SwiftUI 27 additions
 - Forms, text input and opening Settings
 - Liquid Glass
 - UIKit bridge
@@ -119,12 +120,7 @@ struct RootView: View {
                 SettingsView()
                     .presentationDetents([.medium, .large])
             }
-            .confirmationDialog(
-                "Delete this note?",
-                isPresented: Binding(get: { pendingDelete != nil }, set: { if !$0 { pendingDelete = nil } }),
-                titleVisibility: .visible,
-                presenting: pendingDelete
-            ) { note in
+            .confirmationDialog("Delete this note?", item: $pendingDelete, titleVisibility: .visible) { note in
                 Button("Delete", role: .destructive) { store.delete(note) }
             }
         }
@@ -167,7 +163,7 @@ struct FullScreenView: View {
 - `NavigationStack(path:)` with value-based `NavigationLink` + `navigationDestination(for:)` keeps navigation as data: push by appending to `path`, pop to root with `path.removeAll()`. Attach `navigationDestination` to a view inside the stack but outside lazy containers (`List` rows, `LazyVStack` children).
 - Presented content (`sheet`, `fullScreenCover`) gets no navigation bar of its own - wrap it in a `NavigationStack` for a title and toolbar, and close it with `@Environment(\.dismiss)`.
 - `fullScreenCover` has no swipe-to-dismiss; always give it a close button. `.interactiveDismissDisabled()` stops swipe-dismissal of a sheet with unsaved input.
-- `confirmationDialog` is the iOS action sheet. With Liquid Glass it anchors to the control that triggered it rather than the bottom edge, so attach it near that control. Use `sheet(item:)` / `presenting:` forms to carry the value being acted on.
+- `confirmationDialog` is the iOS action sheet. With Liquid Glass it anchors to the control that triggered it rather than the bottom edge, so attach it near that control. Carry the value being acted on with the item forms: `sheet(item:)`, `confirmationDialog(_:item:titleVisibility:actions:)` and `alert(_:item:actions:)`, plus `alert(error: $saveError) { ... }` for a `LocalizedError?` binding - the dialog shows while the binding is non-nil and clears it on dismiss. The 27 SDK adds these as `@export(implementation)` overloads, so they compile down to iOS 15 (the `alert(error:)` overload for a plain `Error` needs iOS 27).
 
 ## Toolbars
 
@@ -199,6 +195,76 @@ struct EditableHeader: View {
 
 - **Hide a toolbar item with `if`, not by hiding its view.** `ToolbarContent.hidden(_:)` is macOS-only - on iOS it fails with `'hidden' is unavailable in iOS`. Hiding the button inside a `ToolbarItem` leaves an empty glass capsule.
 - With Liquid Glass, items sharing a placement are grouped on one glass background. Separate groups with `ToolbarSpacer(.fixed, placement: .topBarTrailing)` (iOS 26+); take one item off the shared background with `.sharedBackgroundVisibility(.hidden)` (iOS 26+). Apple's guidance: icons rather than text for common actions, and do not mix text and icons in one group.
+- **Overflow (iOS 27+)**: `ToolbarOverflowMenu { ... }` sends secondary actions (archive, delete) straight to the overflow menu, and `.visibilityPriority(.low)` on a `ToolbarItem` makes it the first to move there when space runs out (see `Inbox` below).
+
+## SwiftUI 27 additions
+
+```swift
+import SwiftUI
+
+@available(iOS 27, *)
+struct Inbox: View {
+    let rows = Array(0..<20)
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                LazyVStack {
+                    ForEach(rows, id: \.self) { row in
+                        Text("Row \(row)")
+                            .frame(maxWidth: .infinity, minHeight: 44)
+                            .swipeActions {
+                                Button("Archive", systemImage: "archivebox") {}
+                            }
+                    }
+                }
+                .swipeActionsContainer() // swipe actions outside List
+            }
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) { Button("Add", systemImage: "plus") {} }
+                ToolbarItem(placement: .topBarTrailing) { Button("Share", systemImage: "square.and.arrow.up") {} }
+                    .visibilityPriority(.low)
+                ToolbarOverflowMenu {
+                    Button("Archive All", systemImage: "archivebox") {}
+                    Button("Delete All", systemImage: "trash", role: .destructive) {}
+                }
+            }
+        }
+    }
+}
+
+@available(iOS 27, *)
+struct Avatar: View {
+    let url: URL
+
+    var body: some View {
+        AsyncImage(request: URLRequest(url: url, cachePolicy: .returnCacheDataElseLoad))
+            .frame(width: 40, height: 40)
+            .asyncImageURLSession(.shared)
+    }
+}
+
+@available(iOS 27, *)
+struct ProminentTabs: View {
+    let onCall: Bool
+
+    var body: some View {
+        TabView {
+            Tab("Calls", systemImage: "phone") { Text("Calls") }
+            Tab("New Call", systemImage: "plus", role: .prominent) { Text("New") }
+        }
+        .tabViewBottomAccessory(isEnabled: onCall) { // iOS 26.1+
+            Label("On a call", systemImage: "waveform")
+        }
+    }
+}
+```
+
+- `.swipeActions` on rows of a `ScrollView`, stack, grid or custom layout needs `.swipeActionsContainer()` on the container (iOS 27); in a `List` it works as before.
+- `AsyncImage` now caches downloads with standard HTTP caching. `AsyncImage(request:)` takes a `URLRequest` (cache policy, headers) and `.asyncImageURLSession(_:)` picks the session for every `AsyncImage` below it (both 27).
+- `Tab(role: .prominent)` (27) places a tab in a separate trailing position of the tab bar, like `.search`.
+- `tabViewBottomAccessory(isEnabled:content:)` (iOS 26.1) shows the accessory only while `isEnabled` - an in-call bar that appears with the call - instead of an empty glass bar.
+- `@ContentBuilder` is the unified result builder (a typealias of `ViewBuilder`, so it works at any deployment target) that replaces type-specific builders such as `ToolbarContentBuilder` and `CommandsBuilder` in 27-SDK signatures; Apple notes it type-checks faster. Existing `@ViewBuilder` code is unchanged.
 
 ## Forms, text input and opening Settings
 
@@ -400,15 +466,21 @@ struct RefreshingApp: App {
             }
     }
 
-    static func scheduleRefresh() {
+    @concurrent // the 27 header: do not submit from the main thread
+    static func scheduleRefresh() async {
         let request = BGAppRefreshTaskRequest(identifier: "com.example.app.refresh")
         request.earliestBeginDate = .now.addingTimeInterval(15 * 60)
-        try? BGTaskScheduler.shared.submit(request)
+        if #available(iOS 27, *) {
+            try? await BGTaskScheduler.shared.submitTaskRequest(request)
+        } else {
+            try? BGTaskScheduler.shared.submit(request)
+        }
     }
 }
 ```
 
 - Requires `UIBackgroundModes: [fetch]` and the identifier in `BGTaskSchedulerPermittedIdentifiers` in Info.plist. Submit the first request yourself (e.g. on `.background`), and resubmit from the handler - each request runs at most once, at a time the system picks.
+- iOS 27 deprecates `submit(_:)` for `try await submitTaskRequest(_:)` ("to capture all error conditions"); log its error instead of `try?` while debugging scheduling.
 - `earliestBeginDate` is a floor, not a schedule. Do not use refresh tasks for anything time-critical.
 - A user-initiated job that must finish after the user leaves (export, upload) is `BGContinuedProcessingTaskRequest` (iOS 26+), submitted from the foreground in response to a user action; the system shows it with the request's `title` and `subtitle`.
 - Keeping a call or audio alive is not a background task - that is background modes plus CallKit / `AVAudioSession` (see ios-audio-and-callkit.md).
@@ -526,3 +598,6 @@ struct CounterView: View {
 - **`TabView` selection must name a visible tab**; setting it to a hidden or unavailable tab can crash.
 - Status bar: `.toolbarVisibility(.hidden, for: .statusBar)` hides it and `.toolbarColorScheme(_:for: .statusBar)` sets its scheme.
 - Liquid Glass opt-out is gone (above).
+- **UIKit apps must adopt the scene-based life cycle** "or they fail to launch" when built with the 27 SDK - an app still driving its window from `UIApplicationDelegate` needs a `UIApplicationSceneManifest` and a scene delegate. SwiftUI `App` apps are already scene-based.
+- **`canOpenURL(_:)` is deprecated** ("Prefer attempting to open URLs and handling any failures"): call `open(_:)` / `openURL` and handle the `false` result.
+- A `Text` with `.textSelection(.enabled)` now uses the system text-selection UI on iOS.

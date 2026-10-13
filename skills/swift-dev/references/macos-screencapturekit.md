@@ -2,7 +2,7 @@
 
 Capturing displays, windows and app audio with `SCStream`: content discovery, filters, configuration, outputs, the audio-only pattern, error recovery, teardown, recording/picker/screenshot APIs and Screen Recording TCC.
 
-Verified on Xcode 27.0 (Swift 6.4, iOS 27.0 / macOS 27.0 SDKs), 2026-10-07: every Swift block compiled through SIL (`swiftc -emit-sil -target arm64-apple-macos15.0 -swift-version 6`, with and without `-default-isolation MainActor`) so region-isolation errors surface; availability, defaults and error codes read from the macOS 27.0 SDK headers (`SCStream.h`, `SCError.h`, `SCScreenshotManager.h`, `SCRecordingOutput.h`, `SCClipBufferingOutput.h`, `SCRecordingEditor.h`). No capture code was run.
+Verified on Xcode 27.0 (Swift 6.4, iOS 27.0 / macOS 27.0 SDKs), 2026-10-07: every Swift block compiled through SIL (`swiftc -emit-sil -target arm64-apple-macos15.0 -swift-version 6`, with and without `-default-isolation MainActor`) so region-isolation errors surface; availability, defaults and error codes read from the macOS 27.0 SDK headers (`SCStream.h`, `SCError.h`, `SCScreenshotManager.h`, `SCRecordingOutput.h`, `SCClipBufferingOutput.h`, `SCRecordingEditor.h`). No capture code was run. 2026-10-13: the clip-buffering limit and ordering re-read from `SCClipBufferingOutput.h` / `SCStream.h`; the corrected clip example and the macOS 27 filter/attachment additions compiled through SIL.
 
 ## Contents
 - Content discovery and filters
@@ -165,7 +165,7 @@ func stream(_ stream: SCStream, didStopWithError error: any Error) {
 }
 ```
 
-**`SCRecordingOutput` stops when you call `updateConfiguration()`** on a running stream. If you need mid-stream config changes (device following, resolution), use `SCStreamOutput` + `AVAssetWriter` instead.
+**`SCRecordingOutput` stops when you call `updateConfiguration()`** on a running stream - the header says so: "In case client update the stream configuration during recording, recording will be stopped as well." (`SCStream.h`). If you need mid-stream config changes (device following, resolution), use `SCStreamOutput` + `AVAssetWriter` instead.
 
 **VPIO and SCStream do not mix.** `setVoiceProcessingEnabled(true)` on an `AVAudioEngine` creates a hidden VPIO aggregate that hooks the system output path for its echo reference and silences SCStream's system audio. It also ducks all other audio by about 20 dB (see `macos-audio-pipeline.md`). Use an independent mic pipeline or post-processing AEC.
 
@@ -185,6 +185,8 @@ nonisolated func resolveParentBundleID(_ bundleID: String) -> String {
     return bundleID
 }
 ```
+
+**Continuity and FaceTime call audio is silently excluded.** During a call relayed through the Mac, SCK leaves the call daemon (`avconferenced`) out of display-wide capture; the only trace is a system log line like `excluding avcPid=<pid> csdPid=<pid>`. Buffers keep arriving on schedule, but the system track is digital zeros, so a recorder that only logs "buffers flowing" looks healthy while recording silence (observed in production, not documented by Apple). Count it per track: RMS/peak per buffer plus a counter of all-zero buffers, and surface a warning when a track stays at zero.
 
 **Never mutate SCStream's `CMSampleBuffer` in place.** The buffers are framework-managed and may be shared; writing through `CMBlockBufferGetDataPointer` is undefined behavior. Mix by writing separate tracks.
 
@@ -353,14 +355,14 @@ if #available(macOS 26, *) {
 
 For 14/15 back-deployment use `SCStreamConfiguration(preset: .captureHDRScreenshotLocalDisplay)` with `captureImage`.
 
-**macOS 27 additions.** `SCClipBufferingOutput` keeps a rolling buffer so you can save "the last N seconds" without a hand-rolled ring buffer over `SCStreamOutput`; `SCRecordingEditor` presents a system-owned preview UI for a finished recording (it does not expose editing APIs).
+**macOS 27 additions.** `SCClipBufferingOutput` keeps a rolling buffer so you can save "the last N seconds" (at most 15) without a hand-rolled ring buffer over `SCStreamOutput`; `SCRecordingEditor` presents a system-owned preview UI for a finished recording (it does not expose editing APIs). Also new: `SCContentFilter.isMicrophoneEnabled` (read-only: the user's mic choice in the picker when `showsMicrophoneControl` is on) and a `videoOrientation` key in the `SCStreamFrameInfo` attachments (a `CGImagePropertyOrientation` value).
 
 ```swift
 @available(macOS 27, *)
 func saveLastClip(stream: SCStream, to url: URL) async throws {
     let clip = SCClipBufferingOutput(delegate: nil)
-    try stream.addClipBufferingOutput(clip)      // normally once, at stream setup
-    try await clip.exportClip(to: url, duration: 30)
+    try stream.addClipBufferingOutput(clip)      // once, after startCapture(): the stream must already be capturing
+    try await clip.exportClip(to: url, duration: 15)  // "Maximum duration is 15 seconds" (SCClipBufferingOutput.h)
 }
 
 @available(macOS 27, *)

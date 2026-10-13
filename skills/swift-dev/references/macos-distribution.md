@@ -2,7 +2,7 @@
 
 Shipping a Mac app: Developer ID + notarization, Mac App Store, sandbox and hardened runtime entitlements, nested signing, Sparkle, and the `xcodebuild` signing traps.
 
-Verified on Xcode 27.0 (Swift 6.4, iOS 27.0 / macOS 27.0 SDKs), 2026-10-07: flags checked against `xcodebuild -help`, `notarytool --help` (1.1.3), `altool --help` (27.0.5), `stapler`, `codesign`, `spctl`; ad-hoc signed and inspected a test bundle with the `codesign` commands below; built unsigned `pkgbuild`/`productbuild` packages; reproduced the bracketed-setting parse bug; built the Sparkle snippet against Sparkle 2.10.0. Developer ID signing, notarization and uploads were not run (no credentials used).
+Verified on Xcode 27.0 (Swift 6.4, iOS 27.0 / macOS 27.0 SDKs), 2026-10-07: flags checked against `xcodebuild -help`, `notarytool --help` (1.1.3), `altool --help` (27.0.5), `stapler`, `codesign`, `spctl`; ad-hoc signed and inspected a test bundle with the `codesign` commands below; built unsigned `pkgbuild`/`productbuild` packages; reproduced the bracketed-setting parse bug; built the Sparkle snippet against Sparkle 2.10.0. Developer ID signing, notarization and uploads were not run (no credentials used). 2026-10-13: DMG signing and `find-identity` guidance re-read from Apple's packaging guide; `notarytool store-credentials --help`, `man spctl` and the Sparkle 2.10.0 release notes re-checked.
 
 ## Contents
 - Choosing a channel
@@ -32,8 +32,11 @@ Default to Developer ID for tools that need screen capture, accessibility, Core 
 Per Apple's [certificate types](https://developer.apple.com/help/account/certificates/certificates-overview): **Developer ID Application** signs Mac apps distributed outside the Mac App Store, **Developer ID Installer** signs `.pkg` installers outside the store, **Apple Distribution** covers App Store/TestFlight on every platform, **Apple Development** runs your own builds on devices. Only the Account Holder can create Developer ID certificates; Account Holder or Admin create the other distribution certificates.
 
 ```bash
-security find-identity -v -p codesigning
+security find-identity -v -p codesigning   # Developer ID Application, Apple Development/Distribution
+security find-identity -v                  # also lists Developer ID Installer identities
 ```
+
+`-p codesigning` filters out installer identities (Apple: "Don't use the `-p codesigning` option ... Installer-signing identities are different from code-signing identities"), so use plain `-v` when looking for the `productsign` identity.
 
 If a freshly imported Developer ID certificate does not show up as a valid identity, the Apple Developer ID G2 intermediate is missing from the keychain - install it from the [Apple PKI page](https://www.apple.com/certificateauthority/).
 
@@ -45,7 +48,10 @@ xcodebuild archive -scheme MyApp -destination 'generic/platform=macOS' \
 xcodebuild -exportArchive -archivePath build/MyApp.xcarchive \
   -exportPath build/export -exportOptionsPlist DevID.plist
 hdiutil create -volname MyApp -srcfolder build/export/MyApp.app -ov -format UDZO build/MyApp.dmg
+codesign -s "Developer ID Application: Your Name (TEAMID)" --timestamp -i com.example.MyApp.dmg build/MyApp.dmg
 ```
+
+Sign the disk image itself, with the Developer ID Application identity and its own identifier (the bundle ID plus a unique suffix): Apple's [packaging guide](https://developer.apple.com/documentation/xcode/packaging-mac-software-for-distribution) says "Sign your code, and sign each nested container that supports signing". Without it, the `spctl --context context:primary-signature` check below has no signature to assess. With nested containers (app in a `.pkg` on a DMG), sign every layer and notarize only the outermost.
 
 `DevID.plist`:
 
@@ -80,7 +86,7 @@ codesign -dv --verbose=4 MyApp.app 2>&1 | grep -E 'Authority|Signature|flags|Tea
 
 ## Notarization
 
-Store credentials once, then submit by profile name. Prefer a team App Store Connect API key over an Apple ID: [individual API keys cannot use notarytool](https://developer.apple.com/documentation/appstoreconnectapi/creating-api-keys-for-app-store-connect-api), and every program role except Finance/Marketing/Sales/Customer Support may notarize ([roles](https://developer.apple.com/help/account/access/roles)).
+Store credentials once, then submit by profile name. Prefer a team App Store Connect API key over an Apple ID. The sources disagree on individual keys: Apple's [API key page](https://developer.apple.com/documentation/appstoreconnectapi/creating-api-keys-for-app-store-connect-api) says they cannot use `notarytool`, while `notarytool store-credentials --help` (1.1.3) documents them ("Required for Team API Keys. Do not provide for Individual API Keys." for `--issuer`) - a team key avoids the question. Every program role except Finance/Marketing/Sales/Customer Support may notarize ([roles](https://developer.apple.com/help/account/access/roles)).
 
 ```bash
 xcrun notarytool store-credentials notary \
@@ -213,6 +219,8 @@ struct MyApp: App {
 }
 ```
 
+[Sparkle 2.10.0](https://github.com/sparkle-project/Sparkle/releases/tag/2.10.0) requires macOS 12 or later ("due to Xcode 27 dropping support for deploying to older OS versions") and drops CocoaPods. If you write the appcast by hand, add `<sparkle:minimumSystemVersion>12.0</sparkle:minimumSystemVersion>` to each `<item>`.
+
 Sparkle verifies updates with its own EdDSA key, separate from Apple signing. With SPM the tools live in `.build/artifacts/sparkle/Sparkle/bin/` (`generate_keys`, `sign_update`, `generate_appcast`): run `sign_update MyApp-1.0.0.dmg` per release and put the signature into `appcast.xml`, or let `generate_appcast` do both.
 
 ## `xcodebuild` signing traps
@@ -240,6 +248,7 @@ codesign -dv --verbose=4 build/MyApp.app 2>&1 | grep -E 'Authority|Signature|fla
 - TCC keys off bundle ID + signature, not path - moving a signed `.app` keeps its grants.
 - Replacing an installed app with `rm -rf` + `cp -R` can leave TCC reporting "authorized" while delivering degraded data (capture starts, buffers are silent/empty). The user-side fix is toggling the permission off and on in System Settings > Privacy & Security. Prevent it: `killall MyApp` first, then `ditto` the new bundle over the old one, then `xattr -cr`. In dev scripts, `tccutil reset ScreenCapture com.example.myapp` gives a clean prompt instead of a stale grant.
 - `spctl -a -vv` reporting `rejected` / `Unnotarized Developer ID` for a local build is expected; Gatekeeper acts on the quarantine attribute, which `xattr -cr` clears.
+- `sudo spctl --purge` (new in macOS 27) drops Gatekeeper's policy scan cache entries for apps on volumes that are no longer mounted ("Requires root access", `man spctl`).
 - For users opening a non-notarized build: the Control-click > Open bypass is gone (since Sequoia). The only path is to try opening once, then System Settings > Privacy & Security > **Open Anyway** ([Apple Support](https://support.apple.com/en-us/102445)).
 
 ## Architectures, Enhanced Security, installers, Homebrew

@@ -2,7 +2,7 @@
 
 How to stand up an iOS app from the command line: an XcodeGen `project.yml`, a local Swift package for logic and fast tests, the Info.plist keys and build settings that matter, and the build/test commands.
 
-Verified on Xcode 27.0 (Swift 6.4, iOS 27.0 / macOS 27.0 SDKs), 2026-10-07: generated the project below with XcodeGen 2.46.0, built it unsigned for `generic/platform=iOS` and `generic/platform=iOS Simulator`, ran its app-target tests on an iOS 27.0 simulator and `swift test` in the local package, and read the compiler flags Xcode passed from the build log; added two OFL fonts (one static, one variable) to a copy, built it for the simulator, inspected the `.app` and checked `UIFont(name:)` at launch, and reproduced the build error without `excludes`.
+Verified on Xcode 27.0 (Swift 6.4, iOS 27.0 / macOS 27.0 SDKs), 2026-10-07: generated the project below with XcodeGen 2.46.0, built it unsigned for `generic/platform=iOS` and `generic/platform=iOS Simulator`, ran its app-target tests on an iOS 27.0 simulator and `swift test` in the local package, and read the compiler flags Xcode passed from the build log; added two OFL fonts (one static, one variable) to a copy, built it for the simulator, inspected the `.app` and checked `UIFont(name:)` at launch, and reproduced the build error without `excludes`. 2026-10-13: the `.v27` tools-version gate reproduced with `swift package dump-package`; XcodeGen's unreleased fixes and the Xcode 27.2 project format read from the XcodeGen changelog/PRs and Apple's docs.
 
 ## Contents
 - Why a generator
@@ -23,6 +23,8 @@ Verified on Xcode 27.0 (Swift 6.4, iOS 27.0 / macOS 27.0 SDKs), 2026-10-07: gene
 SwiftPM cannot produce an iOS `.app` (no app bundle, Info.plist, entitlements, asset catalog or signing), and a hand-maintained `.xcodeproj` is unreviewable XML that merges badly. Generate it instead: **[XcodeGen](https://github.com/yonaskolb/XcodeGen)** reads one `project.yml` and writes the `.xcodeproj`, which stays out of git. Install with `mise use -g xcodegen@2.46.0` (or `brew install xcodegen`).
 
 [Tuist](https://tuist.dev) is the alternative (Swift `Project.swift` manifests, `tuist generate`). XcodeGen is the default here because it is a single YAML file with no manifest-compilation step or extra toolchain, and the generated project is disposable.
+
+Xcode 27.2 (beta) makes a smaller, hierarchical JSON `project.xcproj` the default project file ([Apple](https://developer.apple.com/documentation/xcode/updating-your-xcode-project-configuration-file-format)); Xcode 27 reads both formats. XcodeGen 2.46.0 still writes `project.pbxproj` (JSON output is an open PR, [#1653](https://github.com/yonaskolb/XcodeGen/pull/1653)), and the `.gitignore` below covers either, since both live inside `.xcodeproj/`.
 
 ## Layout
 
@@ -173,7 +175,7 @@ let package = Package(
 )
 ```
 
-`.iOS(.v26)` needs tools version 6.2+. The `.macOS` entry is what lets `swift test` run on the host. Types the app uses must be `public`, and a synthesized memberwise init is internal - give public structs an explicit `public init` (see testing.md for the misleading diagnostic this causes in `#expect`).
+`.iOS(.v26)` needs tools version 6.2+; `.iOS(.v27)` / `.macOS(.v27)` need `// swift-tools-version: 6.4` (6.3 fails with `'v27' is unavailable`). The `.macOS` entry is what lets `swift test` run on the host. Types the app uses must be `public`, and a synthesized memberwise init is internal - give public structs an explicit `public init` (see testing.md for the misleading diagnostic this causes in `#expect`).
 
 ## Commands and timings
 
@@ -248,7 +250,7 @@ Xcode writes the SwiftPM pins to `VoiceApp.xcodeproj/project.xcworkspace/xcshare
 
 ## Failure modes
 
-- **New files silently missing from the build.** XcodeGen lists source files at generate time. A file created on disk afterwards (by an agent, a script, `git pull`) is not compiled - a file containing a syntax error still gave `BUILD SUCCEEDED` until the next `xcodegen generate`. Regenerate before every build (the justfile does). Escape hatch: `sources: [{path: VoiceApp, type: syncedFolder}]` makes an Xcode 16+ synchronized folder that picks up new files without regenerating (verified; XcodeGen adds the Info.plist membership exception itself).
+- **New files silently missing from the build.** XcodeGen lists source files at generate time. A file created on disk afterwards (by an agent, a script, `git pull`) is not compiled - a file containing a syntax error still gave `BUILD SUCCEEDED` until the next `xcodegen generate`. Regenerate before every build (the justfile does). Escape hatch: `sources: [{path: VoiceApp, type: syncedFolder}]` makes an Xcode 16+ synchronized folder that picks up new files without regenerating (verified; XcodeGen adds the Info.plist membership exception itself). In 2.46.0 it breaks when the spec's directory differs from `options.projectDirectory`: the folder path is written relative to the spec, and Xcode treats the synced folder as empty (fixed on master, unreleased, [#1636](https://github.com/yonaskolb/XcodeGen/pull/1636)) - keep `project.yml` next to the generated project.
 - **Test bundle won't sign:** `Cannot code sign because the target does not have an Info.plist file and one is not being generated automatically` - add `GENERATE_INFOPLIST_FILE: YES` to the test target.
 - **`... is not available due to missing import of defining module`** - `MemberImportVisibility`; add the `import` to that file.
 - **Build-setting overrides on the `xcodebuild` command line hit every target, packages included.** `xcodebuild ... SWIFT_STRICT_CONCURRENCY=complete` recompiled LiveKit's Swift 5 modules with `-enable-upcoming-feature StrictConcurrency`. Put settings in `project.yml`, which only reaches project targets.

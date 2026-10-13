@@ -2,7 +2,7 @@
 
 Mac-specific SwiftUI: sidebar and inspector layouts, `Table`, menus and commands, forms, popovers and sheets, search, Liquid Glass, Mac modifiers, and the SwiftUI behavior changes that come with building against the macOS 27 SDK.
 
-Verified on Xcode 27.0 (Swift 6.4, iOS 27.0 / macOS 27.0 SDKs), 2026-10-07: every block typechecked with `swiftc -typecheck -swift-version 6` against the macOS 27.0 SDK (target macOS 15, 26 or 27 matching each API's minimum), with and without `-default-isolation MainActor`; behavior changes checked against the [macOS 27 release notes](https://developer.apple.com/documentation/macos-release-notes/macos-27-release-notes) and [Xcode 27 release notes](https://developer.apple.com/documentation/xcode-release-notes/xcode-27-release-notes).
+Verified on Xcode 27.0 (Swift 6.4, iOS 27.0 / macOS 27.0 SDKs), 2026-10-07: every block typechecked with `swiftc -typecheck -swift-version 6` against the macOS 27.0 SDK (target macOS 15, 26 or 27 matching each API's minimum), with and without `-default-isolation MainActor`; behavior changes checked against the [macOS 27 release notes](https://developer.apple.com/documentation/macos-release-notes/macos-27-release-notes) and [Xcode 27 release notes](https://developer.apple.com/documentation/xcode-release-notes/xcode-27-release-notes). 2026-10-13: the `@State` macro break re-checked against the macOS 27 release notes and reproduced through SIL.
 
 ## Contents
 - Sidebar and NavigationSplitView
@@ -476,7 +476,7 @@ struct TodoList: View {
 
 These hit when you rebuild with Xcode 27, before adopting any new API. They apply to iOS too.
 
-- **`@State` is now a macro.** The initial-value expression is evaluated once instead of on every view re-instantiation (back-deploys to iOS 17-aligned OSes). Source breaks: assigning an `@State` property in `init` when it also has an initial value no longer compiles (the assignment never had an effect) - drop the declaration's initial value:
+- **`@State` is now a macro.** The initial-value expression is evaluated once instead of on every view re-instantiation (back-deploys to iOS 17-aligned OSes). Source breaks: assigning an `@State` property in `init` when it also has an initial value never had an effect, and per the release notes "some such cases no longer compile". They pass `swiftc -typecheck` and fail later (SIL / a real build) with a misleading `variable 'self.title' used before being initialized`. Drop the declaration's initial value:
 
 ```swift
 struct StickerPageView: View {

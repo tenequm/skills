@@ -2,7 +2,7 @@
 
 Where code runs (default MainActor isolation, `nonisolated`, `@concurrent`, actors, custom executors), what may cross isolation boundaries (`Sendable`, `~Sendable`, `Mutex`), bridging Objective-C and third-party delegates into `@MainActor @Observable` classes, and typed throws.
 
-Verified on Xcode 27.0 (Swift 6.4, iOS 27.0 / macOS 27.0 SDKs), 2026-10-07: every Swift block compiled with `swiftc -emit-sil` in Swift 6 mode against the iOS SDK (`arm64-apple-ios26.0`, CallKit blocks with LiveKit 2.17 modules) and the macOS SDK (`arm64-apple-macos15.0`), with and without default MainActor isolation; Xcode flag mapping confirmed with an XcodeGen project; isolated-conformance trap confirmed by running a macOS binary; the `assumeIsolated` unused-result warning and the `sending 'action'` error reproduced with `-emit-sil` for iOS 26, with and without `-default-isolation MainActor`.
+Verified on Xcode 27.0 (Swift 6.4, iOS 27.0 / macOS 27.0 SDKs), 2026-10-07: every Swift block compiled with `swiftc -emit-sil` in Swift 6 mode against the iOS SDK (`arm64-apple-ios26.0`, CallKit blocks with LiveKit 2.17 modules) and the macOS SDK (`arm64-apple-macos15.0`), with and without default MainActor isolation; Xcode flag mapping confirmed with an XcodeGen project; isolated-conformance trap confirmed by running a macOS binary; the `assumeIsolated` unused-result warning and the `sending 'action'` error reproduced with `-emit-sil` for iOS 26, with and without `-default-isolation MainActor`. 2026-10-13: the isolated-conformance mute pattern recompiled warning-free under SE-0520, and `ApproachableConcurrency` shown to enable both features (each one's error disappears with it).
 
 ## Contents
 - Project settings
@@ -27,18 +27,19 @@ SWIFT_DEFAULT_ACTOR_ISOLATION: MainActor
 SWIFT_APPROACHABLE_CONCURRENCY: YES
 ```
 
-In Swift 6 mode, Approachable Concurrency adds exactly two flags (the other three features it names are already part of Swift 6): `-enable-upcoming-feature InferIsolatedConformances` and `-enable-upcoming-feature NonisolatedNonsendingByDefault`. Default isolation becomes `-default-isolation=MainActor`. The SwiftPM equivalent (tools version 6.2+):
+In Swift 6 mode, Approachable Concurrency adds exactly two flags (the other three features it names are already part of Swift 6): `-enable-upcoming-feature InferIsolatedConformances` and `-enable-upcoming-feature NonisolatedNonsendingByDefault`. Default isolation becomes `-default-isolation=MainActor`. The SwiftPM equivalent (tools version 6.2+) uses the single bundle feature that `swift package init` emits on 6.4; it turns on both:
 
 ```swift
 .target(
     name: "AppFeature",
     swiftSettings: [
         .defaultIsolation(MainActor.self),
-        .enableUpcomingFeature("NonisolatedNonsendingByDefault"),
-        .enableUpcomingFeature("InferIsolatedConformances"),
+        .enableUpcomingFeature("ApproachableConcurrency"),   // = NonisolatedNonsendingByDefault + InferIsolatedConformances
     ]
 )
 ```
+
+Listing the two features separately is equivalent. `ApproachableConcurrency` is missing from `swiftc -print-supported-features`, so do not use that list to validate it.
 
 Default isolation is per target; there is no per-file switch. Keep logic packages that run off-main (parsers, protocol clients) on the `nonisolated` default and put MainActor default on UI targets.
 
@@ -295,7 +296,7 @@ extension CallController: CXProviderDelegate {
 - `MainActor.assumeIsolated { Task { ... } }` warns `result of call to 'assumeIsolated(_:file:line:)' is unused`: the single-expression closure returns the `Task`, and `assumeIsolated` returns what its closure does. Write `MainActor.assumeIsolated { _ = Task { ... } }`.
 - Fulfill or fail the action inside the callback. Do not capture the action in a `Task { @MainActor in action.fulfill() }`: `error: sending 'action' risks causing data races`.
 - Without `nonisolated`, a plain conformance fails: `conformance of 'CallController' to protocol 'CXProviderDelegate' crosses into main actor-isolated code and can cause data races`.
-- Equivalent shorter form: an isolated conformance, `extension CallController: @MainActor CXProviderDelegate { ... }` with no `nonisolated` and no `assumeIsolated` (SE-0470; inferred automatically under `InferIsolatedConformances`). The Objective-C entry point traps if called off the main actor, just like `assumeIsolated`. It works only for protocols that do not require `Sendable`. Prefer it when an action completes after an `await` (a mute applied asynchronously): in an isolated method `Task { try await apply(); action.fulfill() }` compiles, while the same capture from a `nonisolated` method is `error: sending 'action' risks causing data races`, even inside `assumeIsolated`. ios-audio-and-callkit.md uses this form.
+- Equivalent shorter form: an isolated conformance, `extension CallController: @MainActor CXProviderDelegate { ... }` with no `nonisolated` and no `assumeIsolated` (SE-0470; inferred automatically under `InferIsolatedConformances`). The Objective-C entry point traps if called off the main actor, just like `assumeIsolated`. It works only for protocols that do not require `Sendable`. Prefer it when an action completes after an `await` (a mute applied asynchronously): in an isolated method `Task { do { try await apply(); action.fulfill() } catch { action.fail() } }` compiles, while the same capture from a `nonisolated` method is `error: sending 'action' risks causing data races`, even inside `assumeIsolated`. Catch inside the task: since Swift 6.4 an unused `Task { try await ... }` warns `[#NoUseUnstructuredThrowingTask]` (SE-0520), and the action must be failed anyway. ios-audio-and-callkit.md uses this form.
 
 ### Callbacks on arbitrary threads: hop with Task { @MainActor in }
 

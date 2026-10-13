@@ -2,7 +2,7 @@
 
 Moving code to Swift 6 strict concurrency and default MainActor isolation (GCD, Combine and `ObservableObject` to async and `@Observable`), the compile errors and runtime traps that migration surfaces, per-declaration warning control, and the Swift 6.4 language changes.
 
-Verified on Xcode 27.0 (Swift 6.4, iOS 27.0 / macOS 27.0 SDKs), 2026-10-07: Swift blocks compiled with `swiftc -emit-sil` in Swift 6 mode with default MainActor isolation for iOS 26 and macOS 15 targets (6.4 runtime APIs at iOS 27 / macOS 27); `swift package migrate` run on a scratch package; every quoted diagnostic reproduced; upcoming-feature names checked against the compiler.
+Verified on Xcode 27.0 (Swift 6.4, iOS 27.0 / macOS 27.0 SDKs), 2026-10-07: Swift blocks compiled with `swiftc -emit-sil` in Swift 6 mode with default MainActor isolation for iOS 26 and macOS 15 targets (6.4 runtime APIs at iOS 27 / macOS 27); `swift package migrate` run on a scratch package; every quoted diagnostic reproduced; upcoming-feature names checked against the compiler. 2026-10-13: the `installAudioTap` block, the 6.4 language rows (SE-0491, SE-0520, SE-0521, SE-0530) and the `ApproachableConcurrency` behavior compiled the same way; proposal statuses read from swift-evolution `main`.
 
 ## Contents
 - Order of operations
@@ -52,8 +52,10 @@ Each is `.enableUpcomingFeature("<name>")` / `-enable-upcoming-feature <name>`:
 | `ExistentialAny` | `any` required on existential types | opt in |
 | `InternalImportsByDefault` | imports are `internal` unless marked `public` | opt in |
 | `MemberImportVisibility` | members need their module imported in this file (Xcode 27 templates enable it) | opt in |
+| `ApproachableConcurrency` | enables both `NonisolatedNonsendingByDefault` and `InferIsolatedConformances` (what `swift package init` emits on 6.4) | opt in |
+| `ImmutableWeakCaptures` | explicit `[weak x]` captures are immutable, so they work in `@Sendable` closures (SE-0481) | on in Swift 7 |
 
-A misspelled feature name is silently ignored - no warning on Swift 6.4. Enabling one already implied by Swift 6 mode prints `upcoming feature 'X' already enabled as of the Swift 6 language mode`.
+A misspelled feature name is silently ignored - no warning on Swift 6.4. `swiftc -print-supported-features` is not a complete name list either: it omits `ApproachableConcurrency`, which the compiler accepts. Enabling a feature already implied by Swift 6 mode usually prints `upcoming feature 'X' already enabled as of the Swift 6 language mode` (`InferSendableFromCaptures` does); `StrictConcurrency` prints nothing.
 
 ## GCD, Combine and ObservableObject to async
 
@@ -192,7 +194,37 @@ final class Recorder {                             // MainActor via default isol
 }
 ```
 
-`installTap(onBus:bufferSize:format:block:)` is deprecated in iOS 27 / macOS 27; the replacement is imported only as `__installTap(onBus:bufferSize:format:error:block:)`, with the same non-`Sendable` block type.
+`installTap(onBus:bufferSize:format:block:)` is deprecated in iOS 27 / macOS 27. Its replacement has a Swift overlay, `installAudioTap(onBus:bufferSize:format:tapProvider:) throws`, whose closure is `@Sendable` and receives a Sendable `AVReadOnlyAudioPCMBuffer` - so the trap above becomes a compile error (`main actor-isolated property 'taps' can not be mutated from a Sendable closure`):
+
+```swift
+@available(macOS 27.0, iOS 27.0, *)
+nonisolated final class PeakMeter27: Sendable {
+    private let peak = Mutex<Float>(0)
+    func record(_ buffer: AVReadOnlyAudioPCMBuffer) {
+        guard case .float(let samples) = buffer.channelData(0) else { return }
+        peak.withLock { value in
+            for i in samples.indices { value = max(value, abs(samples[i])) }
+        }
+    }
+}
+
+@available(macOS 27.0, iOS 27.0, *)
+final class Recorder27 {
+    private let engine = AVAudioEngine()
+    private let meter = PeakMeter27()
+
+    func start() throws {
+        let input = engine.inputNode
+        let meter = meter
+        try input.installAudioTap(onBus: 0, bufferSize: 4096, format: input.outputFormat(forBus: 0)) { buffer, _ in
+            meter.record(buffer)
+        }
+        try engine.start()
+    }
+}
+```
+
+The raw ObjC import, `__installTap(onBus:bufferSize:format:error:block:)`, keeps the non-`Sendable` block type; use it only when you need an `AVAudioPCMBuffer` in the block.
 
 **Isolated members called from a framework thread.** `MainActor.assumeIsolated`, an isolated conformance (`X: @MainActor P`) and an actor's `assumeIsolated` all trap when entered off their executor. Each one is an assertion about the callback queue - check the framework's documented queue before relying on it.
 
@@ -230,6 +262,15 @@ All compile without experimental flags on Swift 6.4. Language features work at a
 | [SE-0506](https://github.com/swiftlang/swift-evolution/blob/main/proposals/0506-advanced-observation-tracking.md) | `withObservationTracking(options:)`, `withContinuousObservation` | iOS 27 / macOS 27 | concurrency-tasks.md |
 | [SE-0502](https://github.com/swiftlang/swift-evolution/blob/main/proposals/0502-exclude-private-from-memberwise-init.md) | memberwise init skips less-visible properties that have initial values | - | below |
 | [SE-0507](https://github.com/swiftlang/swift-evolution/blob/main/proposals/0507-borrow-accessors.md) | `borrow` / `mutate` accessors | - | below |
+| [SE-0520](https://github.com/swiftlang/swift-evolution/blob/main/proposals/0520-discardableresult-task-initializers.md) | warning on an unused throwing unstructured `Task` | - | below |
+| [SE-0521](https://github.com/swiftlang/swift-evolution/blob/main/proposals/0521-improved-optional-opaque-and-any.md) | `some P?` / `any P?` without parentheses | - | - |
+| [SE-0530](https://github.com/swiftlang/swift-evolution/blob/main/proposals/0530-async-result-support.md) | `await Result { try await ... }` (async `init(catching:)`) | - (back-deploys) | - |
+| [SE-0491](https://github.com/swiftlang/swift-evolution/blob/main/proposals/0491-module-selectors.md) (6.3) | module selectors: `Foundation::Date`, `MyKit::Task` | - | disambiguates clashing names |
+| SE-0519, 0517, 0527, 0516 | `Ref`/`MutableRef`, `UniqueBox`, `UniqueArray`, `Iterable` for noncopyable and copy-free code | iOS 27 / macOS 27 | performance work only |
+
+Unused throwing tasks (SE-0520): `Task { try await save() }` now warns `unstructured throwing task created by 'init(name:priority:operation:)' is not used, which may accidentally ignore errors thrown inside the task [#NoUseUnstructuredThrowingTask]` - the error was always silently dropped. Handle it inside (`Task { do { try await save() } catch { report(error) } }`), keep the task and `try await task.value`, or discard on purpose with `_ = Task { ... }`. Non-throwing tasks do not warn.
+
+**Swift 6.4 optimizer bug ([swift#92915](https://github.com/swiftlang/swift/issues/92915), open):** in `-O` / `-Osize` builds, a method of a *generic* actor that awaits `withTaskCancellationHandler { await withCheckedContinuation { ... } } onCancel: { ... }` resumes off the actor's executor - a `preconditionIsolated()` after the await aborts with `Incorrect actor executor assumption` (reproduced with `-O`; `-Onone` passes). Debug builds are fine, so it shows up only in Release and TestFlight. Workaround: keep that state behind a `Mutex` instead of relying on actor isolation across the call.
 
 Memberwise initializers (SE-0502): adding a `private var` with an initial value no longer makes the synthesized initializer `private`.
 

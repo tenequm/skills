@@ -2,7 +2,7 @@
 
 How a Mac app plugs into the system: keyboard handling, drag and drop, sandboxed file access, notifications, watching other processes, Accessibility (AXUIElement), per-process CoreAudio state, login items, XPC helpers, sleep prevention, unified logging, and privacy usage strings. App Intents, Shortcuts, Spotlight entities, widgets and Control Center controls live in app-intents.md.
 
-Verified on Xcode 27.0 (Swift 6.4, iOS 27.0 / macOS 27.0 SDKs), 2026-10-07: every Swift block typechecked with `swiftc -typecheck -swift-version 6` against the macOS 27.0 SDK (target macOS 26 for the `DropSession` and XPC peer-requirement APIs, which are macOS 26+), with and without `-default-isolation MainActor`; symbols checked in the SwiftUI, XPC and AppKit interfaces and headers.
+Verified on Xcode 27.0 (Swift 6.4, iOS 27.0 / macOS 27.0 SDKs), 2026-10-07: every Swift block typechecked with `swiftc -typecheck -swift-version 6` against the macOS 27.0 SDK (target macOS 26 for the `DropSession` and XPC peer-requirement APIs, which are macOS 26+), with and without `-default-isolation MainActor`; symbols checked in the SwiftUI, XPC and AppKit interfaces and headers. 2026-10-13: app group ID formats re-read from Apple's entitlement docs; `XPCPeerRequirement` members re-read from the XPC `.swiftinterface`.
 
 ## Contents
 - Keyboard handling
@@ -132,7 +132,7 @@ func appSupportDirectory() throws -> URL {
 }
 ```
 
-In a sandboxed app `URL.applicationSupportDirectory` already points inside the container. Share data between an app and its extensions or helpers with an app group (`com.apple.security.application-groups`); on macOS the group ID is prefixed with your team ID:
+In a sandboxed app `URL.applicationSupportDirectory` already points inside the container. Share data between an app and its extensions or helpers with an app group (`com.apple.security.application-groups`). The group ID is `group.<name>` (registered in the developer portal, works on every platform) or, macOS only, `<TEAMID>.<name>`, which needs no registration ([App Groups entitlement](https://developer.apple.com/documentation/bundleresources/entitlements/com.apple.security.application-groups)):
 
 ```swift
 struct SharedSettingsView: View {
@@ -370,7 +370,7 @@ func runHelper() throws -> XPCListener {
 - The name must match a `MachServices` key in the helper's launchd plist (or be the bundle ID of an embedded XPC service, using `XPCSession(xpcService:)`).
 - The helper must keep the listener alive and park the main thread (`dispatchMain()`), or it exits immediately.
 - `sendSync` blocks the calling thread - call it off the main actor, or use `send(_:replyHandler:)`.
-- `XPCPeerRequirement` also offers `.hasEntitlement(_:)`, `.isPlatformCode(...)` and `isFromSameTeam(andMatchesSigningIdentifier:)` for a stricter match.
+- `XPCPeerRequirement` also offers `.hasEntitlement(_:)`, `.entitlement(_:matches:)` (a `Bool`, `String` or `Int` value), `.isPlatformCode(...)`, `isFromSameTeam(andMatchesSigningIdentifier:)` and `init(lightweightCodeRequirements:)` (an `XPCDictionary` of lightweight code requirement keys) for a stricter match.
 
 ## Preventing sleep
 

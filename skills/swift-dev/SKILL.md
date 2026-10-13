@@ -2,10 +2,10 @@
 name: swift-dev
 description: Native iOS and macOS apps in Swift 6 - SwiftUI, SwiftData, concurrency, Swift Testing, XcodeGen projects, CallKit and audio sessions, App Intents and the Action Button, devices, TestFlight, notarization. Use for any iPhone or Mac app work.
 metadata:
-  version: "0.1.0"
+  version: "0.2.0"
   categories: "development"
   topics: "swift, swiftui, ios, macos, xcode"
-  upstream: "swift@6.4, xcode@27.0, ios@27.0, macos@27.0"
+  upstream: "swift@6.4, xcode@27.0, ios@27.0, macos@27.0, LiveKit@2.17.0, xcodegen@2.46.0"
   openclaw:
     homepage: https://github.com/tenequm/skills/tree/main/skills/swift-dev
     emoji: "🍎"
@@ -50,7 +50,7 @@ xcodebuild -downloadPlatform iOS                    # installs the iOS simulator
 xcrun devicectl list devices                        # simulators and paired iPhones
 ```
 
-Simulator.app is called DeviceHub.app in Xcode 27. CallKit does not work in the Simulator - gate it with `#if targetEnvironment(simulator)`.
+Simulator.app is called DeviceHub.app in Xcode 27. CallKit runs in the iOS 27 Simulator only with two Simulator-only stand-ins - claim the `facetime` URL scheme and activate the audio session yourself (`ios-audio-and-callkit.md`). UI tests in the Simulator can also press the Action Button, lock the screen and run App Intents out of process (`testing.md`). Starting a CallKit call or Live Activity from an App Intent while the app sits in the background needs the iOS 27 `.phone.startCall` App Schema; a plain `AppIntent` is refused (`app-intents.md`).
 
 ## Concurrency (Swift 6 language mode)
 
@@ -64,7 +64,7 @@ swiftSettings: [
 ]
 ```
 
-In Xcode the same is `SWIFT_VERSION = 6` and `SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor` (plus `SWIFT_APPROACHABLE_CONCURRENCY = YES`, which the Xcode 27 app template sets). `SWIFT_STRICT_CONCURRENCY` does nothing in Swift 6 mode - checking is already complete. Make app targets MainActor by default; leave library packages nonisolated. Misspelled `enableUpcomingFeature` names are silently ignored.
+In Xcode the same is `SWIFT_VERSION = 6` and `SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor` (plus `SWIFT_APPROACHABLE_CONCURRENCY = YES`, which the Xcode 27 app template sets - that template still says `SWIFT_VERSION = 5.0`, so switch it to 6). `SWIFT_STRICT_CONCURRENCY` does nothing in Swift 6 mode - checking is already complete. Make app targets MainActor by default; leave library packages nonisolated. Misspelled `enableUpcomingFeature` names are silently ignored.
 
 ```swift
 nonisolated struct Report: Decodable {               // see the conformance trap below
@@ -185,7 +185,7 @@ private var projects: [Project]
 
 Traps that compile but break, or do not compile at all (all reproduced on the 27 SDKs):
 
-- `#Predicate { $0.priority == .high }` fails ("key path cannot refer to enum case") - capture `let high = Priority.high` first. Optional chains through composite attributes (`$0.address?.city`) crash at runtime.
+- `#Predicate { $0.priority == .high }` fails ("member access without an explicit base is not supported in this predicate"), and `$0.priority == Priority.high` fails with "key path cannot refer to enum case" - capture `let high = Priority.high` first. Optional chains through composite attributes (`$0.address?.city`) crash at runtime.
 - The SwiftUI `.modelContainer(...)` modifiers take no `migrationPlan:`; build `ModelContainer(for:migrationPlan:configurations:)` yourself and pass it in. `VersionedSchema.versionIdentifier` must be `static let` in Swift 6.
 - `ModelConfiguration` defaults to `cloudKitDatabase: .automatic`, which turns on sync as soon as the target has any CloudKit entitlement. Pass `.none` unless you want sync; with sync, every property must be optional or defaulted, no `.unique`, relationships optional.
 - `ModelContext` is not Sendable. A `@ModelActor` awaited from main-actor code ran on the main thread in testing; call it from `@concurrent` code for real background work.
@@ -213,9 +213,10 @@ struct ParserTests {
 
 Traps:
 
-- `x == .init(a: 1, b: 2)` against a `public` struct from another module fails with a misleading overload error - `cannot convert ... to '(any (~Copyable & ~Escapable).Type)?'` when `x` is optional, an `AttributedStringProtocol` or `'Grant' and '()'` error otherwise (inside or outside `#expect`). The cause: synthesized memberwise initializers are `internal`. Spelling out the type (`Grant(a:b:)`) shows the real error. Fix with `@testable import` (on by default under `swift test`), an explicit `public init`, or by comparing fields.
+- `x == .init(a: 1, b: 2)` against a `public` struct from another module that has some other public init (e.g. Decodable's `init(from:)`) fails with a misleading overload error - `cannot convert ... to '(any (~Copyable & ~Escapable).Type)?'` when `x` is optional, an `AttributedStringProtocol` or `'Grant' and '()'` error otherwise (inside or outside `#expect`). The cause: synthesized memberwise initializers are `internal`. Spelling out the type (`Grant(a:b:)`) shows the real error. Fix with `@testable import` (on by default under `swift test`), an explicit `public init`, or by comparing fields.
 - A package target built with `.defaultIsolation(MainActor.self)` makes its API `@MainActor`, so its tests must be `@MainActor` too. Keep logic packages nonisolated by default.
 - An iOS app target's tests need a simulator runtime (36 s warm through `xcodebuild` versus 1.4 s for the same tests under `swift test`). Exit tests are unavailable on iOS.
+- `xcodebuild` UI-test runs can stall for ~10 minutes after a failure (it spawns `simctl diagnose`) or never exit after a pass - wrap them in `timeout` and enable test timeouts (`testing.md`).
 
 Exit tests, attachments, XCTest interop, UI and simulator tests: `testing.md`.
 
@@ -236,7 +237,7 @@ let package = Package(
 )
 ```
 
-Plugins, macros, Swift Build, `xcodebuild` basics and Xcode 27 build-breakers: `spm-and-builds.md`.
+`.iOS(.v27)` / `.macOS(.v27)` need `swift-tools-version: 6.4`; older tools versions fail with `'v27' is unavailable`. Plugins, macros, Swift Build, `xcodebuild` basics, the Xcode MCP server and Xcode 27 build-breakers: `spm-and-builds.md`.
 
 ## Keychain
 
@@ -268,10 +269,11 @@ The on-device model has a 4096-token context; `PrivateCloudComputeLanguageModel(
 - **ld64 is removed**: `-ld_classic` is now ignored with a warning (fatal only under warnings-as-errors); delete it from `OTHER_LDFLAGS`.
 - **SwiftPM 6.4 builds with Swift Build**: products land in `.build/out/Products/<Config>` (`.build/release` is a symlink); hardcoded `.build/arm64-apple-macosx/release` paths break.
 - **macOS universal binaries**: `ARCHS_STANDARD` drops x86_64 when the deployment target is macOS 27+.
-- **Export methods renamed**: `app-store` / `ad-hoc` / `development` are deprecated; use `app-store-connect` / `release-testing` / `debugging`.
+- **Export methods** (renamed back in Xcode 15.3, still common in old scripts): `app-store` / `ad-hoc` / `development` are deprecated; use `app-store-connect` / `release-testing` / `debugging`.
 - **Device registration** from the command line needs `-allowProvisioningDeviceRegistration` in addition to `-allowProvisioningUpdates`.
-- **Audio interruptions**: `AVAudioSession.interruptionNotification` is deprecated on iOS 27 in favor of typed `didBecomeActive` / `didBecomeInactive` messages.
-- **Documents**: new `Document` (`ReadableDocument` + `WritableDocument`) protocols with `@concurrent` read/write; `FileDocument` is soft-deprecated.
+- **Audio interruptions**: `AVAudioSession.interruptionNotification` is deprecated on iOS 27 in favor of the typed `didBecomeInactive` and `resumptionRecommendation` messages. Swift does not warn on leftover `interruptionNotification` observers - grep for them.
+- **Documents**: new class-bound `Document` (`ReadableDocument` + `WritableDocument`) protocols whose `DocumentReader` / `DocumentWriter` do the `@concurrent` read/write; `FileDocument` is soft-deprecated.
+- **UIKit life cycle**: apps built with the iOS 27 SDK must adopt the scene-based life cycle or they fail to launch.
 
 ## Platform
 
@@ -284,7 +286,7 @@ The on-device model has a 4096-token context; `PrivateCloudComputeLanguageModel(
 | Simulator runtimes, `simctl`/`devicectl`, Developer Mode, CLI signing, ASC API keys | `ios-devices-and-signing.md` |
 | Dev install, ad hoc, TestFlight, App Store, certificates | `ios-distribution.md` |
 | `AVAudioSession`, mic permission, interruptions, CallKit outgoing calls, LiveKit, screen-locked audio | `ios-audio-and-callkit.md` |
-| App Intents, App Shortcuts, Action Button, Siri, Control Center controls (also macOS) | `app-intents.md` |
+| App Intents, App Shortcuts, Action Button, Siri, App Schemas (background call start), Live Activities, Control Center controls (also macOS) | `app-intents.md` |
 
 ### macOS
 
@@ -309,7 +311,7 @@ The on-device model has a 4096-token context; `PrivateCloudComputeLanguageModel(
 | `@Model`, relationships, predicates, `@Query` | `swiftdata-models.md` |
 | Container, contexts, observers, migrations, CloudKit | `swiftdata-store.md` |
 | App structure, controllers, DI | `architecture.md` |
-| Swift Testing, traps, UI and simulator tests | `testing.md` |
-| Package.swift, plugins, macros, Swift Build, build-breakers | `spm-and-builds.md` |
+| Swift Testing, traps, UI and simulator tests (Action Button, lock, App Intents), `xcodebuild` stalls | `testing.md` |
+| Package.swift, plugins, macros, Swift Build, build-breakers, Xcode MCP server | `spm-and-builds.md` |
 | Generic-password helper, accessibility classes | `keychain.md` |
 | Foundation Models (on-device and Private Cloud Compute), Core AI | `foundation-models.md` |

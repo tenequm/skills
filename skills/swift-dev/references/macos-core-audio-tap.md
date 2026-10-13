@@ -2,7 +2,7 @@
 
 Capturing one process's (or every process's) audio output with `CATapDescription` + a tap-only aggregate device, without ScreenCaptureKit - and why it is the wrong default for long recordings.
 
-Verified on Xcode 27.0 (Swift 6.4, iOS 27.0 / macOS 27.0 SDKs), 2026-10-07: every Swift block compiled through SIL (`swiftc -emit-sil -target arm64-apple-macos15.0 -swift-version 6`, with and without `-default-isolation MainActor`); keys, functions and availability read from `CoreAudio.framework/Headers/{AudioHardware,AudioHardwareTapping,CATapDescription}.h` and the CoreAudio Swift overlay in the macOS 27.0 SDK. No tap was created (that would trigger the TCC prompt).
+Verified on Xcode 27.0 (Swift 6.4, iOS 27.0 / macOS 27.0 SDKs), 2026-10-07: every Swift block compiled through SIL (`swiftc -emit-sil -target arm64-apple-macos15.0 -swift-version 6`, with and without `-default-isolation MainActor`); keys, functions and availability read from `CoreAudio.framework/Headers/{AudioHardware,AudioHardwareTapping,CATapDescription}.h` and the CoreAudio Swift overlay in the macOS 27.0 SDK. No tap was created (that would trigger the TCC prompt). 2026-10-13: the header declaring `kAudioObjectPropertyName` corrected after re-reading `AudioHardwareBase.h`.
 
 ## Contents
 - Reality check: when not to use a tap
@@ -142,7 +142,7 @@ Check the result against `frameLength` in a test with a known-duration signal. S
 
 ## CFString properties follow the Create Rule
 
-Reading a `CFString` property (`kAudioTapPropertyUID`, `kAudioDevicePropertyDeviceUID`, `kAudioObjectPropertyName`) with `AudioObjectGetPropertyData` returns a +1 object despite "Get" in the name; `AudioHardware.h` says the caller is responsible for releasing it. Take it with `takeRetainedValue()`; `takeUnretainedValue()` leaks it. The Swift object API (`tap.uid`, `device.name`) handles this for you.
+Reading a `CFString` property (`kAudioTapPropertyUID`, `kAudioDevicePropertyDeviceUID`, `kAudioObjectPropertyName`) with `AudioObjectGetPropertyData` returns a +1 object despite "Get" in the name; the headers that declare them (`AudioHardwareBase.h` for `kAudioObjectPropertyName`, `AudioHardware.h` for the device and tap UIDs) say the caller is responsible for releasing it. Take it with `takeRetainedValue()`; `takeUnretainedValue()` leaks it. The Swift object API (`tap.uid`, `device.name`) handles this for you.
 
 ```swift
 nonisolated func stringProperty(_ objectID: AudioObjectID, _ selector: AudioObjectPropertySelector) throws -> String {

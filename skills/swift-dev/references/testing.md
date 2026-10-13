@@ -2,7 +2,7 @@
 
 Swift Testing and XCTest for iOS and macOS code: the test API, its compiler traps, running logic tests without a simulator, UI tests, and the `swift test` / `xcodebuild test` surface.
 
-Verified on Xcode 27.0 (Swift 6.4, iOS 27.0 / macOS 27.0 SDKs), 2026-10-07: every Swift Testing snippet compiled and ran under `swift test` in a scratch package (17 tests incl. exit test, attachments, warnings, cancellation, confirmations, known issues); the `.init` trap reproduced verbatim; a 10-test logic package from a voice-call app run with `swift test` (cold and warm timings below); a scratch XcodeGen iOS app with a Swift Testing unit target and an XCUITest target run on an iOS 27.0 simulator; the same package tests run on the simulator through `xcodebuild`; image attachments, the macOS UI test and the polling helper compiled through SIL (`swiftc -emit-sil`) against both SDKs; interop modes exercised with `SWIFT_TESTING_XCTEST_INTEROP_MODE`.
+Verified on Xcode 27.0 (Swift 6.4, iOS 27.0 / macOS 27.0 SDKs), 2026-10-07: every Swift Testing snippet compiled and ran under `swift test` in a scratch package (17 tests incl. exit test, attachments, warnings, cancellation, confirmations, known issues); the `.init` trap reproduced verbatim; a 10-test logic package from a voice-call app run with `swift test` (cold and warm timings below); a scratch XcodeGen iOS app with a Swift Testing unit target and an XCUITest target run on an iOS 27.0 simulator; the same package tests run on the simulator through `xcodebuild`; image attachments, the macOS UI test and the polling helper compiled through SIL (`swiftc -emit-sil`) against both SDKs; interop modes exercised with `SWIFT_TESTING_XCTEST_INTEROP_MODE`. 2026-10-13: re-ran the `.init` trap with and without a second public initializer and the `strict`/empty interop modes under `swift test`; `xcodebuild` timeout flags from `xcodebuild -help`; the AppIntentsTesting API read from its 27.0 `.swiftinterface`; the Simulator toolkit and the UI-test stalls observed in a voice-call app's UI-test suite on the iOS 27.0 Simulator.
 
 ## Contents
 - Swift Testing essentials
@@ -16,6 +16,8 @@ Verified on Xcode 27.0 (Swift 6.4, iOS 27.0 / macOS 27.0 SDKs), 2026-10-07: ever
 - `swift test` command line
 - XCTest interop and migration
 - UI testing
+- Simulator toolkit: Action Button, lock, intents, microphone
+- UI tests under xcodebuild: stalls, environment, flakes
 - macOS only: bundles, TCC and menu-bar apps
 
 ## Swift Testing essentials
@@ -108,7 +110,7 @@ public struct Grant: Decodable, Equatable {
 }
 ```
 
-the synthesized memberwise `init(url:token:)` is `internal`, so the only initializer the test module can see is Decodable's `public init(from:)`. Writing `.init(...)` hides that fact behind an operator-overload failure, and the message you get depends on the left-hand side:
+the synthesized memberwise `init(url:token:)` is `internal`, so the only initializer the test module can see is Decodable's `public init(from:)`. Writing `.init(...)` hides that fact behind an operator-overload failure. It takes that other public initializer to mislead: drop `Decodable` and Swift 6.4 says it plainly, `'Grant' initializer is inaccessible due to 'internal' protection level`. With it, the message depends on the left-hand side:
 
 Left side `Grant?` (an optional property, `try? decode(...)`, a function returning an optional):
 
@@ -308,6 +310,8 @@ Xcode shows attachments in the test report. **`swift test` discards them unless 
 
 The count is checked when the closure returns, so the events must arrive before it returns - await the work inside the closure. Ranges (`1...`, `...5`) are accepted for "at least" or "at most".
 
+`CustomTestReflectable` (Swift 6.4, ST-0022) controls what a failed expectation prints for your type - `var customTestMirror: Mirror { Mirror(self, children: ["amount": Double(cents) / 100]) }` makes the failure list `amount` as `1.5` instead of the raw `cents` field.
+
 ## Traits and parallelism
 
 ```swift
@@ -376,8 +380,9 @@ An XCTest assertion inside a Swift Testing test (or the reverse) is governed by 
 | unset (default) | test fails, plus an "An API was misused" warning |
 | `limited` | test passes with two warnings |
 | `complete` | same as default |
-| `strict` | test fails |
+| `strict` | `Fatal error: Replace XCTest API such as 'XCTAssert' with a Swift Testing equivalent` - the whole run dies, not just the test |
 | `none` | **test passes silently** - the assertion is lost |
+| empty (`=`) | same as `limited` |
 
 Never set `none`. Migrate assertions as you touch tests:
 
@@ -413,6 +418,69 @@ Use `waitForExistence(timeout:)` rather than sleeps for anything that appears as
 
 A UI test target in XcodeGen is `type: bundle.ui-testing` with a dependency on the app target; it must be in the scheme's `test.targets`.
 
+## Simulator toolkit: Action Button, lock, intents, microphone
+
+The iOS 27 Simulator covers more phone-only checks than it looks (observed with Xcode 27.0; the code compiles against the 27.0 SDK):
+
+```swift
+import AppIntentsTesting
+import XCTest
+
+final class SimulatorChecks: XCTestCase {
+    static let appID = "com.example.VoiceApp"
+
+    @MainActor
+    func testIntentFromBackground() async throws {
+        let app = XCUIApplication(bundleIdentifier: Self.appID)
+        app.launch()
+        XCUIDevice.shared.press(.home)
+        lockScreen()
+        let intent = IntentDefinitions(bundleIdentifier: Self.appID).intents["StartConversationIntent"].makeIntent()
+        try await intent.run() // out of process, as Shortcuts or Siri would run it
+        let shot = XCTAttachment(screenshot: XCUIScreen.main.screenshot()) // Lock Screen: screenshot, do not query
+        shot.lifetime = .keepAlways
+        add(shot)
+    }
+
+    @MainActor
+    func testActionButton() {
+        lockScreen()
+        XCUIDevice.shared.press(.action) // locked: the first press only wakes the screen
+        XCUIDevice.shared.press(.action)
+        let open = XCUIApplication(bundleIdentifier: "com.apple.springboard").alerts.buttons["Open"].firstMatch
+        if open.waitForExistence(timeout: 5) { open.tap() }
+    }
+
+    /// Private API: no public XCUIDevice button locks the Simulator. Test bundles only, never app code.
+    @MainActor
+    private func lockScreen() {
+        XCUIDevice.shared.perform(NSSelectorFromString("pressLockButton"))
+    }
+}
+```
+
+- **AppIntentsTesting** (Xcode 27, iOS/macOS 27; WWDC26 session 295) runs intents, entity queries and enums out of process from a UI-test bundle: `IntentDefinitions(bundleIdentifier:)` exposes `intents`, `entities` and `enums` by type name, and `makeIntent()` / `run()` perform it as the system would.
+- **The Simulator's lock is cosmetic**: the Lock Screen shows, but protected data never goes away - `UIApplication.isProtectedDataAvailable` stays `true` - so file protection, Keychain accessibility classes and `.requiresLocalDeviceAuthentication` still need a phone.
+- **Element queries into the Lock Screen hang** on its ticking clock; check a Live Activity there with `XCUIScreen.main.screenshot()`. Settings > Action Button's shortcut tile is a remote view: queries see its label, but only a coordinate tap (`element.coordinate(withNormalizedOffset:).tap()`) selects it.
+- **CallKit's "Open in ..." alert** appears in the Simulator when the app claims the `facetime` scheme to keep CallKit calls alive (ios-audio-and-callkit.md); dismiss it through SpringBoard as above.
+- **A real microphone and speaker**: `xcrun devicectl device settings audio --device <sim-udid> --input-device BuiltInMicrophoneDevice --output-device BuiltInSpeakerDevice` routes the Simulator through the Mac's own; `say` on the Mac then talks into the app (`devicectl device info audio` shows the current setting).
+
+## UI tests under xcodebuild: stalls, environment, flakes
+
+- **Stalls** (observed): after a failing UI test, `xcodebuild` spawns `simctl diagnose`, which has a ten-minute timeout, and some runs never exit after the test body finished. Bound every run and give tests an allowance:
+  ```bash
+  xcodebuild build-for-testing -project VoiceApp.xcodeproj -scheme VoiceApp \
+    -destination "id=$SIM" -derivedDataPath build
+  timeout 600 xcodebuild test-without-building -project VoiceApp.xcodeproj -scheme VoiceApp \
+    -destination "id=$SIM" -derivedDataPath build -only-testing:VoiceAppUITests/SimulatorChecks/testActionButton \
+    -test-timeouts-enabled YES -default-test-execution-time-allowance 180 \
+    -resultBundlePath "$(mktemp -d)/run.xcresult"
+  ```
+  Building once and running one test per invocation keeps a hang to one test; run one test at a time per simulator.
+- **Environment**: `TEST_RUNNER_<NAME>` variables in `xcodebuild`'s environment reach the UI-test runner as `<NAME>` (pass them on to the app through `XCUIApplication.launchEnvironment`).
+- **`.xcresult` bundles and build attachments capture the test runner's environment** (observed: credentials passed by env turned up in ignored build artifacts). Write result bundles to a temp dir and delete them, and keep real secrets out of the env of test runs you archive.
+- **Flakes**: a polling helper misses short transient states (one about 2 s long was missed) - read the label right after the tap that causes it. Anchor drags to an element's coordinate, not a fraction of the screen. Before blaming the app, rerun the test N times with per-run logs.
+
 ## macOS only: bundles, TCC and menu-bar apps
 
 **Kill stale instances by bundle identifier, not path.** A harness that terminates only `app.bundleURL == testBundleURL` leaves an older copy (for example `/Applications/MyApp.app` from a previous install) running and holding the audio tap, microphone or Screen Recording session. For `LSUIElement` apps that copy is invisible - no Dock icon, no Cmd-Tab, not in Force Quit:
@@ -438,6 +506,6 @@ if CommandLine.arguments.contains("--ui-test-mode") {
 
 **TCC-gated tests** (microphone, screen recording, accessibility): gate them behind an env var as above and serialize them.
 
-Unverified: TCC attributes the request to the responsible process - for `swift test` started from a terminal, the terminal app - so a grant made to the shipped app does not cover the test run.
+TCC attributes a test process's permission check to the responsible process - the app hosting the shell (the terminal or multiplexer) for `swift test` started there - so a grant made to the shipped app does not cover the test run (observed). A host app that moves to a new bundle identity (a rename, a different build) is a new app to TCC and loses its old grants.
 
 Command Line Tools-only machines: see spm-and-builds.md.

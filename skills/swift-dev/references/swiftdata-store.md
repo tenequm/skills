@@ -2,7 +2,7 @@
 
 Setting up `ModelContainer`, working with `ModelContext` on and off the main actor, observing changes outside SwiftUI, history, schema migration, CloudKit sync, previews and tests - iOS and macOS.
 
-Verified on Xcode 27.0 (Swift 6.4, iOS 27.0 / macOS 27.0 SDKs), 2026-10-07: every block compiled through SIL (`swiftc -emit-sil`, so region-isolation checks ran) for iOS 27 and macOS 27, with and without `-default-isolation MainActor`; container, `@ModelActor`, `ResultsObserver`, `HistoryObserver`, history/tombstone, batch delete and a three-version migration chain were run against an on-disk store in a scratch SPM package on macOS 27.2. CloudKit behavior is from Apple's documentation, not run.
+Verified on Xcode 27.0 (Swift 6.4, iOS 27.0 / macOS 27.0 SDKs), 2026-10-07: every block compiled through SIL (`swiftc -emit-sil`, so region-isolation checks ran) for iOS 27 and macOS 27, with and without `-default-isolation MainActor`; container, `@ModelActor`, `ResultsObserver`, `HistoryObserver`, history/tombstone, batch delete and a three-version migration chain were run against an on-disk store in a scratch SPM package on macOS 27.2. CloudKit behavior is from Apple's documentation, not run. 2026-10-13: `PersistentIdentifier.isTemporary` and `HistoryObserver(authors:)` run against an on-disk store on macOS 27.2; the `modelContainer:` initializers read from the 27.0 interface.
 
 Model examples use `Project` / `Todo` from swiftdata-models.md.
 
@@ -87,7 +87,7 @@ func editProjects(_ context: ModelContext) throws {
 - `enumerate(_:batchSize:allowEscapingMutations:)` walks large result sets in batches (default 5000). Leave `allowEscapingMutations` false: it traps when the block mutates objects outside the batch, which is the safety net you want. `FetchDescriptor` has no `fetchBatchSize`.
 - `rollback()` discards unsaved changes; `context.author = "importer"` tags the next transaction in history.
 - Undo: set `container.mainContext.undoManager = UndoManager()` (or `isUndoEnabled: true` on the modifier); SwiftUI's `@Environment(\.undoManager)` then drives it.
-- Identity: `persistentModelID` is temporary until the first save; do not store or send it before saving.
+- Identity: `persistentModelID` is temporary until the first save; do not store or send it before saving. On iOS 27 / macOS 27, `persistentModelID.isTemporary` says which (verified: `true` after `insert`, `false` after `save()`), so a hand-off can check it or save first.
 
 ## Background work with @ModelActor
 
@@ -174,6 +174,8 @@ final class TodoFeed {
 - `filterBy` and `sortBy` are settable, so one observer can follow a changing search field.
 - `element(at:)` / `indexPath(for:)` map to `IndexPath` for UIKit/AppKit table data sources.
 - `HistoryObserver` listens for remote-change notifications and bumps `eventCounter` when a transaction touches `observedModels` (empty array = any model). It counted one event per background-context save in testing. Pair it with the history API below to read what changed.
+- `HistoryObserver(historyTokens:observedModels:authors:modelContainer:)`: `authors` is an allow-list of `context.author` values - with `authors: ["sync"]`, three saves authored `ui`, `sync`, `ui` counted 1 event where an unfiltered observer counted 3 (verified). Tag your own writes (`context.author = "ui"`) and list only the other authors to react just to imports and sync. `historyTokens` starts it after tokens you already processed.
+- Both observers also take a `modelContainer:` instead of a context (`ResultsObserver(filterBy:sortBy:modelContainer:)`, with or without `sectionBy:`), for code that holds only the container.
 - `sectionBy` must name a stored `String` / `String?` attribute (`Ticket` is in swiftdata-models.md); a computed property typechecks but traps when the observer fetches.
 
 ## History and tombstones

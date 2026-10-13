@@ -2,7 +2,7 @@
 
 Simulator runtimes, `simctl` and `devicectl`, Developer Mode, and headless iOS code signing with `xcodebuild` and an App Store Connect API key.
 
-Verified on Xcode 27.0 (Swift 6.4, iOS 27.0 / macOS 27.0 SDKs), 2026-10-07: flags checked against `xcodebuild -help`, `xcrun devicectl --help` (642.16) and its subcommand help, `xcrun simctl help`; archived a voice-call app unsigned for `generic/platform=iOS`; ran a signed archive with `-allowProvisioningUpdates` against the signed-in Xcode account and recorded the errors; built, installed and launched it on an iOS 27.0 simulator with both `simctl` and `devicectl`; registered a network-paired physical iPhone (iOS 27.2) through `-allowProvisioningDeviceRegistration` and installed and launched a development build on it with the signed-in Xcode account; on a scratch simulator reproduced the partial-install error, the `log show` level filtering and `simctl ui content_size`; reproduced the unreachable-device `xcodebuild` error with the paired iPhone off the network. No API key was used.
+Verified on Xcode 27.0 (Swift 6.4, iOS 27.0 / macOS 27.0 SDKs), 2026-10-07: flags checked against `xcodebuild -help`, `xcrun devicectl --help` (642.16) and its subcommand help, `xcrun simctl help`; archived a voice-call app unsigned for `generic/platform=iOS`; ran a signed archive with `-allowProvisioningUpdates` against the signed-in Xcode account and recorded the errors; built, installed and launched it on an iOS 27.0 simulator with both `simctl` and `devicectl`; registered a network-paired physical iPhone (iOS 27.2) through `-allowProvisioningDeviceRegistration` and installed and launched a development build on it with the signed-in Xcode account; on a scratch simulator reproduced the partial-install error, the `log show` level filtering and `simctl ui content_size`; reproduced the unreachable-device `xcodebuild` error with the paired iPhone off the network. No API key was used. 2026-10-13: `devicectl device copy from` and `device settings audio`, `simctl ui increase_contrast` checked against their `--help`; the any-address ICE fix, the key-role results (App Manager vs Admin team key) and the device log pull observed while shipping a voice-call app through TestFlight.
 
 ## Contents
 - SDK vs simulator runtime
@@ -54,7 +54,9 @@ SIMCTL_CHILD_API_URL=https://staging.example.com \
 - Simulator builds are ad hoc signed ("Sign to Run Locally"): no team, certificate or profile is involved, even when the project sets `DEVELOPMENT_TEAM`.
 - `SIMCTL_CHILD_<NAME>` variables reach the launched process as `<NAME>`; `--console` blocks and streams stdout/stderr.
 - `xcrun simctl pbcopy` exits 0 on iOS 27 but nothing reaches the simulator's pasteboard; pass test values through `SIMCTL_CHILD_<NAME>` launch environment instead.
-- `simctl privacy ... grant` skips the permission alert; `reset` brings it back. Simulators have no CallKit UI, Action Button or real audio routes - test those on hardware.
+- `simctl privacy ... grant` skips the permission alert; `reset` brings it back.
+- More hardware paths run in the iOS 27 Simulator than it seems: CallKit with two app-side stand-ins (ios-audio-and-callkit.md), the Action Button and a lock from UI tests (testing.md), and the Mac's own mic and speaker via `xcrun devicectl device settings audio --device <sim-udid> --input-device BuiltInMicrophoneDevice --output-device BuiltInSpeakerDevice` (`devicectl device info audio` shows the current setting). The Simulator lock never removes protected data, so data-protection and Face ID paths still need a device.
+- Shut simulators down when done (`xcrun simctl shutdown <udid|all>`): one left booted for 8 hours held about 26 GB of memory on a 64 GB Mac (observed).
 - The Simulator app is now **Device Hub** (`open "$(xcode-select -p)/../Applications/DeviceHub.app"`); it shows simulators and paired devices together.
 - Xcode 27 adds `simctl reboot` / `devicectl` reboot for simulators, and runtimes ship a prebuilt dyld cache, so first boot is faster.
 
@@ -69,9 +71,12 @@ xcrun simctl spawn "$UDID" log stream --level debug --predicate 'subsystem == "c
 
 xcrun simctl ui "$UDID" content_size accessibility-extra-extra-extra-large
 xcrun simctl io "$UDID" screenshot dynamic-type-xxxl.png
+xcrun simctl ui "$UDID" increase_contrast enabled     # no argument prints the current state
+xcrun simctl spawn "$UDID" defaults write com.apple.Accessibility ReduceMotionEnabled -bool true
 ```
 
-- Plain `log show` prints only Default (`notice`) and above, so `Logger.info` lines look missing. With `--info --debug` the `.info` lines came back but `.debug` lines did not - they appeared only in `log stream --level debug` (verified with all three levels from one app). Third-party SDKs log under their own subsystem (LiveKit: `io.livekit.sdk`).
+- Plain `log show` prints only Default (`notice`) and above, so `Logger.info` lines look missing. With `--info --debug` the `.info` lines came back but `.debug` lines did not - they appeared only in `log stream --level debug` (verified with all three levels from one app). Debug-level lines also drop out of the Simulator's log store within minutes (observed), so capture logs right after a run. Third-party SDKs log under their own subsystem (LiveKit: `io.livekit.sdk`).
+- Accessibility passes change simulator-wide state: read the current value first (`content_size` defaults to `large`) and restore it afterwards.
 - `simctl ui <udid> content_size` with no argument prints the current size (`large` by default); setting it re-lays out the running app without a relaunch, so a screenshot right after shows the new size (verified). Check large Dynamic Type this way before shipping (see ios-swiftui.md).
 - `print()` output under `simctl launch --console` is block-buffered because stdout is a pipe - lines show up late, or never if the process is killed. `--console-pty` gives line-buffered output (observed).
 - **`simctl install` of a half-built app** fails with an error that hides the real cause:
@@ -84,7 +89,7 @@ xcrun simctl io "$UDID" screenshot dynamic-type-xxxl.png
   	Missing bundle ID.
   ```
   A failed build (here a Swift compile error, `xcodebuild` exit 65) leaves a `.app` holding only `Frameworks/` and no `Info.plist`. Read the build output above it, and chain build, install and launch with `&&` or `set -e` so a failed build stops the script (reproduced).
-- **The Simulator does not use the Mac's VPN for WebRTC media.** With a media server reachable only over a VPN interface (`utun`, e.g. Tailscale `100.x`), HTTPS and WebSocket signalling over the VPN worked, but ICE offered only LAN host, IPv6 and server-reflexive candidates and LiveKit failed with `Primary transport connect timed out` after 10 s. Observed once. Test on a device, or use a media server reachable on the LAN or the internet. Unverified: a local TURN relay as a workaround.
+- **The Simulator's WebRTC ignores the Mac's VPN unless ICE gathers on any address.** With a media server reachable only over a VPN interface (`utun`, e.g. Tailscale `100.x`), HTTPS and WebSocket signalling worked, but ICE offered only LAN host, IPv6 and server-reflexive candidates and LiveKit failed with `Primary transport connect timed out` after 10 s - every time. Cause: LiveKit 2.17's factory always installs WebRTC's iOS network monitor, which marks available only the interfaces of the default `NWPath`, and a VPN without an exit node is not on it; TURN binds to the same filtered interfaces, so relay fails too. Fix: `LKRTCConfiguration.enableIceGatheringOnAnyAddressPorts = true` ([webrtc-sdk#110](https://github.com/webrtc-sdk/webrtc/pull/110)) adds candidates on `0.0.0.0` sockets, which the Mac kernel routes through the VPN. LiveKit 2.17 does not expose it, so Simulator builds swizzle `-[LKRTCConfiguration createNativeConfiguration]` to set it; leave device builds alone. The field trial `WebRTC-Network-UseNWPathMonitor/Disabled/` does not help (it gates the other factory init). Even with the fix about 1 in 5 Simulator `room.connect` calls timed out after 10 s while the server showed ICE connected (observed); retry once before suspecting anything else.
 
 ## devicectl: simulators and physical devices
 
@@ -109,7 +114,13 @@ xcrun devicectl device info lockState --device <udid|name>
   { platform:macOS, arch:arm64e, ..., name:My Mac, error:My Mac's macOS platform doesn't match MyApp.app's supported platforms. ... }
   ```
   The `My Mac` line only lists an incompatible destination; the cause is the unreachable phone. Wake it and join the same network, or plug it in.
-- `xcrun devicectl device` in Xcode 27 also has `capture`, `pasteboard`, `settings`, `orientation`, `simulate`, `notification`, `copy`, `sysdiagnose`, `appResize`, `motion` and `reboot` (from `--help` only; not exercised).
+- `xcrun devicectl device` in Xcode 27 also has `capture`, `pasteboard`, `settings`, `orientation`, `simulate`, `notification`, `copy`, `sysdiagnose`, `appResize`, `motion` and `reboot` (from `--help`; `copy` and `settings audio` exercised).
+- **Pull a log off a phone without launching anything.** A Debug build that writes its own log file into its container can be read with `copy from` (and seeded with `copy to`):
+  ```bash
+  xcrun devicectl device copy from --device <udid|name> --domain-type appDataContainer \
+    --domain-identifier com.example.MyApp --source Library/Caches/app.log --destination build/app.log
+  ```
+  TestFlight builds are Release builds - write the file only where you want it.
 - The physical device must be unlocked for most commands. `devicectl device info details --device <udid>` reports `pairingState`, `transportType` (`localNetwork` for network pairing) and `developerModeStatus`.
 
 ## Developer Mode and pairing
@@ -184,9 +195,9 @@ What each operation needs, from Apple's [program roles](https://developer.apple.
 | Upload builds | yes | yes | with CI&P access | with CI&P access |
 | Notarize | yes | yes | yes | yes |
 
-CI&P = Certificates, Identifiers & Profiles access, a per-user grant in Users and Access. For a headless pipeline that registers devices, creates profiles and cloud-signs distribution builds, use an **Admin** team key. Community reports ([rxliuli](https://rxliuli.com/blog/two-pitfalls-of-safari-cloud-signing-in-github-actions), [SlyLED CI](https://github.com/SlyWombat/SlyLED/commit/2b790e62f167ad31225b25bf39fd341382fe4a1c)) show App Manager and Developer keys authenticating fine and then failing export with `Cloud signing permission error`; the escape hatch for a lower-role key is manual signing with a pre-created App Store profile and a local Apple Distribution certificate.
+CI&P = Certificates, Identifiers & Profiles access, a per-user grant in Users and Access. For a headless pipeline that registers devices, creates profiles and cloud-signs distribution builds, use an **Admin** team key. Observed while shipping through TestFlight: an **App Manager** team key authenticated and then got a 403 on cloud-managed distribution signing; an **Admin** team key ran archive, `-exportArchive` with `destination` `upload` and `altool --validate-app --p8-file-path` fully headless, repeatedly, and the builds reached `VALID`. Community reports ([rxliuli](https://rxliuli.com/blog/two-pitfalls-of-safari-cloud-signing-in-github-actions), [SlyLED CI](https://github.com/SlyWombat/SlyLED/commit/2b790e62f167ad31225b25bf39fd341382fe4a1c)) show the same for App Manager and Developer keys (`Cloud signing permission error`); the escape hatch for a lower-role key is manual signing with a pre-created App Store profile and a local Apple Distribution certificate.
 
-Unverified: whether a Developer or App Manager **team key** can upload builds or register devices - the per-user "CI&P access" grant has no visible equivalent for keys.
+Unverified: whether a Developer or App Manager **team key** can upload builds signed elsewhere or register devices - the per-user "CI&P access" grant has no visible equivalent for keys.
 
 To check a key's role: App Store Connect > Users and Access > Integrations > App Store Connect API > Team Keys shows each key's Access column. Functional check: run `-exportArchive` with `method` `app-store-connect`, `destination` `export`, `-allowProvisioningUpdates` and the three key flags - success means the key can create the App Store profile and cloud-sign; `Cloud signing permission error` means the role is too low. The first success creates a cloud-managed Apple Distribution certificate and an App Store profile in the team.
 

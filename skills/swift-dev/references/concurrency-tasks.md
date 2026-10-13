@@ -2,7 +2,7 @@
 
 Creating and structuring tasks (`Task`, `async let`, task groups), cancellation including Swift 6.4 cancellation shields and `async` `defer`, timeouts, `AsyncStream`, observing `@Observable` state (`Observations`, advanced observation tracking), typed notifications, continuations including the noncopyable `Continuation`, and clocks.
 
-Verified on Xcode 27.0 (Swift 6.4, iOS 27.0 / macOS 27.0 SDKs), 2026-10-07: every Swift block compiled with `swiftc -emit-sil` in Swift 6 mode for iOS and macOS (with and without default MainActor isolation, at the minimum OS stated next to each API); the timeout helper, `AsyncStream` bridge, cancellation shield, `Continuation` and observation-tracking examples were also run on macOS 27.2.
+Verified on Xcode 27.0 (Swift 6.4, iOS 27.0 / macOS 27.0 SDKs), 2026-10-07: every Swift block compiled with `swiftc -emit-sil` in Swift 6 mode for iOS and macOS (with and without default MainActor isolation, at the minimum OS stated next to each API); the timeout helper, `AsyncStream` bridge, cancellation shield, `Continuation` and observation-tracking examples were also run on macOS 27.2. 2026-10-13: `Task.immediateDetached` and the synchronous shield read from the 27.0 `_Concurrency` interface; Instruments additions from the [Xcode 27 release notes](https://developer.apple.com/documentation/xcode-release-notes/xcode-27-release-notes).
 
 ## Contents
 - Task kinds
@@ -24,8 +24,9 @@ Verified on Xcode 27.0 (Swift 6.4, iOS 27.0 / macOS 27.0 SDKs), 2026-10-07: ever
 | `Task { }` | yes | yes | enqueued |
 | `Task.immediate { }` (iOS 26+ / macOS 26+) | yes | yes | synchronously on the caller until its first suspension, when already on the right executor |
 | `Task.detached { }` | no | no | enqueued |
+| `Task.immediateDetached { }` (iOS 26+ / macOS 26+) | no | no | synchronously on the caller, like `Task.immediate`; state its isolation explicitly (`{ @MainActor in ... }`) |
 
-`Task` inside a `@MainActor` method runs on the main actor; only the `await`ed calls leave it. `Task.detached` is rarely right: for off-main work call a `@concurrent` function from a normal `Task`. Name tasks for debugging: `Task(name: "export \(id)") { ... }` shows in LLDB (`language swift task list`, `language swift task tree`) and the Instruments Swift Tasks track. Priorities: `.userInitiated`, `.medium`, `.utility`, `.background` (`.high`/`.low` are aliases).
+`Task` inside a `@MainActor` method runs on the main actor; only the `await`ed calls leave it. `Task.detached` is rarely right: for off-main work call a `@concurrent` function from a normal `Task`. Name tasks for debugging: `Task(name: "export \(id)") { ... }` shows in LLDB (`language swift task list`, and `language swift task tree`, new in Xcode 27) and in Instruments. Xcode 27's Swift Concurrency instrument groups tasks into "Swift Task Collection" tracks by name or creation site, and a new Swift Executors instrument shows tracks for the cooperative pool, the main actor and every custom `SerialExecutor`/`TaskExecutor` (names show on 27 OSes; older ones read "Unknown executor"). Priorities: `.userInitiated`, `.medium`, `.utility`, `.background` (`.high`/`.low` are aliases).
 
 Prefer structured concurrency (`async let`, task groups): child tasks are cancelled and awaited when the scope exits. Use an unstructured `Task` only for work that outlives the scope (UI event handlers, stored tasks).
 
@@ -144,7 +145,7 @@ func run(_ job: Job) async throws -> Data {
 Cancellation is final and propagates to every child task. That breaks cleanup: a teardown that awaits a cancellation-aware API (`Task.sleep`, a network call, a library that checks `Task.isCancelled`) is silently skipped in a cancelled task. Swift 6.4 adds two tools that compose:
 
 - `async` calls in `defer` (SE-0493, any OS): `defer { await close() }` is allowed in async contexts and is awaited on every exit path.
-- `withTaskCancellationShield { }` (SE-0504, iOS 27+ / macOS 27+): inside it `Task.isCancelled` is `false`, `Task.checkCancellation()` does not throw, new child tasks and task groups are not cancelled, and cancellation handlers registered inside do not fire. It hides cancellation; it does not undo it. `Task.hasActiveCancellationShield` reports whether one is active; the instance `task.isCancelled` on a handle still reports the real state.
+- `withTaskCancellationShield { }` (SE-0504, iOS 27+ / macOS 27+): inside it `Task.isCancelled` is `false`, `Task.checkCancellation()` does not throw, new child tasks and task groups are not cancelled, and cancellation handlers registered inside do not fire. It hides cancellation; it does not undo it. `Task.hasActiveCancellationShield` reports whether one is active; the instance `task.isCancelled` on a handle still reports the real state. A synchronous overload (`withTaskCancellationShield { try Task.checkCancellation() }`, same OS floor) shields non-async code that checks the flag.
 
 ```swift
 actor Recorder {

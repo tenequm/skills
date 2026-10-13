@@ -2,7 +2,7 @@
 
 Getting an iOS build onto phones: development install, ad hoc, TestFlight and App Store from the command line, and why a macOS Developer ID certificate cannot sign any of it.
 
-Verified on Xcode 27.0 (Swift 6.4, iOS 27.0 / macOS 27.0 SDKs), 2026-10-07: archived a voice-call app unsigned for `generic/platform=iOS` and ran `-exportArchive` on it with `app-store-connect`, `release-testing`, `debugging` and `developer-id` to record the real errors; ExportOptions keys and `method` values from `xcodebuild -help`; upload flags from `xcrun altool --help` (27.0.5). Development build, install and launch on a physical iPhone with the signed-in Xcode account (sequence below); the device-selection `jq` filter run against real `devicectl list devices` JSON v5 output with the paired iPhone unreachable. Nothing was signed for distribution or uploaded (no API key used).
+Verified on Xcode 27.0 (Swift 6.4, iOS 27.0 / macOS 27.0 SDKs), 2026-10-07: archived a voice-call app unsigned for `generic/platform=iOS` and ran `-exportArchive` on it with `app-store-connect`, `release-testing`, `debugging` and `developer-id` to record the real errors; ExportOptions keys and `method` values from `xcodebuild -help`; upload flags from `xcrun altool --help` (27.0.5). Development build, install and launch on a physical iPhone with the signed-in Xcode account (sequence below); the device-selection `jq` filter run against real `devicectl list devices` JSON v5 output with the paired iPhone unreachable. Nothing was signed for distribution or uploaded (no API key used). 2026-10-13: the device-selection filter re-run on `devicectl --json-output -` (JSON on stdout, the table on stderr); the TestFlight path below - Admin team key, cloud signing, upload, processing to `VALID`, the ITMS-90683 rejection, the dSYM warning and the stray build records - observed while shipping a LiveKit voice-call app.
 
 ## Contents
 - Channels
@@ -72,10 +72,10 @@ Keys worth knowing (full list in `xcodebuild -help`):
 Prerequisites: the phone is paired, unlocked and has Developer Mode on (see `ios-devices-and-signing.md`).
 
 ```bash
-xcrun devicectl list devices --json-output /tmp/devices.json >/dev/null
-DEVICE=$(jq -r '[.result.devices[] | select(.properties.hardware.platform == "iOS"
+DEVICE=$(xcrun devicectl list devices --json-output - 2>/dev/null | jq -r '[.result.devices[]
+  | select(.properties.hardware.platform == "iOS"
   and .properties.hardware.reality == "physical"
-  and .properties.connection.state != "unavailable")] | first | .properties.hardware.udid // empty' /tmp/devices.json)
+  and .properties.connection.state != "unavailable")] | first | .properties.hardware.udid // empty')
 : "${DEVICE:?no reachable iPhone - wake it, join the same network or plug it in}"
 xcodebuild -project MyApp.xcodeproj -scheme MyApp -destination "id=$DEVICE" -derivedDataPath build \
   -allowProvisioningUpdates -allowProvisioningDeviceRegistration build
@@ -83,7 +83,7 @@ xcrun devicectl device install app --device "$DEVICE" build/Build/Products/Debug
 xcrun devicectl device process launch --device "$DEVICE" --console com.example.MyApp
 ```
 
-A paired phone that is asleep or off the network stays in the list as `unavailable`; selecting it anyway makes `xcodebuild` fail with exit 70 `Unable to find a destination matching the provided destination specifier` (see ios-devices-and-signing.md), so the filter skips it and the `:?` line stops with a clear message. The filter uses the JSON v5 `properties` dictionary; `hardwareProperties` and friends are deprecated. Verified: an unreachable iPhone (`unavailable`) is skipped and the script stops; the same JSON with the state edited to `available` selects it. The first build registers the UDID and creates the development certificate and profile. `--console` streams the app's stdout until it exits; drop it to launch and return.
+A paired phone that is asleep or off the network stays in the list as `unavailable`; selecting it anyway makes `xcodebuild` fail with exit 70 `Unable to find a destination matching the provided destination specifier` (see ios-devices-and-signing.md), so the filter skips it and the `:?` line stops with a clear message. Since Xcode 27 `--json-output -` writes the JSON to stdout and the human table to stderr, so no temp file is needed. The filter uses the JSON v5 `properties` dictionary; `hardwareProperties` and friends are deprecated. Verified: an unreachable iPhone (`unavailable`) is skipped and the script stops; the same JSON with the state edited to `available` selects it. The first build registers the UDID and creates the development certificate and profile. `--console` streams the app's stdout until it exits; drop it to launch and return.
 
 Verified on a physical iPhone (iOS 27.2) with the Apple Account signed into Xcode (no API key): the first build registered the device on the team and created the development profile; `install app` printed `App installed:` with the bundle ID and installation URL, and `process launch --terminate-existing` printed `Launched application with com.example.MyApp bundle identifier.` `xcodebuild [MT] IDERunDestination: Supported platforms for the buildables in the current scheme is empty.` appears on every run and is harmless.
 
@@ -108,6 +108,7 @@ Prerequisites (once per app):
 2. Export compliance: set `ITSAppUsesNonExemptEncryption` to `NO` in Info.plist when the app only uses exempt encryption (HTTPS/TLS), or every build waits for the compliance question.
 3. The app is built with Xcode 26 or later and targets iOS 13 or later ([upcoming requirements](https://developer.apple.com/news/upcoming-requirements/)).
 4. An App Store Connect API key with a role that can cloud-sign and create the App Store profile - Admin for a fully headless run (see `ios-devices-and-signing.md`).
+5. A usage string for every protected API the binary links, not only the ones the app calls. An audio-only app on LiveKit was rejected during processing with ITMS-90683 (missing `NSCameraUsageDescription`) because WebRTC links the camera capture APIs; add the key with text saying the camera is never used.
 
 Unverified: App Store Connect rejecting an iOS build that has no app icon asset (the scratch project has none; this was not uploaded).
 
@@ -137,11 +138,26 @@ Observed once (cause unconfirmed): `-exportArchive` with `method` `app-store-con
 error: exportArchive Failed to Use Accounts. App Store Connect access for "<TEAM>" is required.
 ```
 
-The account's App Store Connect role, a missing app record, or an export that needs an API key are all candidates; none was confirmed. Retrying with the `-authenticationKey*` flags of an Admin team key is the next thing to try.
+The account's App Store Connect role, a missing app record, or an export that needs an API key are all candidates; none was confirmed. The `-authenticationKey*` flags of an Admin team key avoid it: with them archive, cloud signing and the `destination` `upload` step all ran headless (observed, builds reached `VALID`).
 
-After processing (an email arrives), the build is immediately available to internal testers in a TestFlight group; external groups trigger Beta App Review for the first build.
+### After the upload
 
-Unverified: the `-authenticationKey*` flags authenticating the `destination` `upload` step itself, and the live upload of any build.
+"Upload succeeded" only means App Store Connect received the file; processing can still reject it (ITMS-90683 above arrived this way, and the build never showed up in TestFlight). Poll the App Store Connect API until the build is usable:
+
+1. `GET /v1/apps/{app-id}/buildUploads?filter[cfBundleVersion]=<build>&sort=-uploadedDate` - read `state.state` and `state.errors`; prefer the record that has an `uploadedDate`.
+2. `GET /v1/builds?filter[app]=<app-id>&filter[version]=<build>` until `processingState` is `VALID` (or `INVALID` / `FAILED`).
+
+- Xcode 27's `-exportArchive` reserves a build record (`POST /v1/buildUploads`) even with `destination` `export`, so dry runs leave `AWAITING_UPLOAD` records behind; they are harmless (observed).
+- **dSYM warnings for binary frameworks.** Stripped xcframeworks shipped without dSYMs (LiveKit's `LiveKitWebRTC`, for one) make export warn `Upload Symbols Failed. The archive did not include a dSYM for the LiveKitWebRTC.framework with the UUIDs [...]`. Generate placeholders before `-exportArchive` - they carry the UUID only, no DWARF - instead of setting `uploadSymbols` to `NO`, which also drops the app's own symbols:
+  ```bash
+  ARCHIVE=build/MyApp.xcarchive
+  for fw in "$ARCHIVE"/Products/Applications/MyApp.app/Frameworks/*.framework; do
+    name=$(basename "$fw" .framework)
+    [ -d "$ARCHIVE/dSYMs/$name.framework.dSYM" ] || xcrun dsymutil "$fw/$name" -o "$ARCHIVE/dSYMs/$name.framework.dSYM"
+  done
+  ```
+
+After processing (an email arrives), the build is immediately available to internal testers in a TestFlight group; external groups trigger Beta App Review for the first build. Internal testers must first accept an App Store Connect team invitation (Developer is the most limited role that qualifies) and are invited by email only; public links exist only for external groups.
 
 ## Archiving before any device is registered
 
