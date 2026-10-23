@@ -2,10 +2,10 @@
 name: acpx-faq
 description: Run coding agents (codex, claude, agy) through the acpx ACP CLI - one-shot dispatch into named sessions you can watch live. Use before launching or prompting a subagent, or when a command fails, a session is missing, or a prompt is lost.
 metadata:
-  version: "0.9.0"
+  version: "0.10.0"
   categories: "agents, operations"
   topics: "acpx, acp, agent-orchestration, troubleshooting, headless-agents"
-  upstream: "acpx@0.19.4, @agentclientprotocol/claude-agent-acp@0.85.1, @agentclientprotocol/codex-acp@2.1.1, agy@1.2.14, agy_acp_server@1.2.1"
+  upstream: "acpx@0.20.0, @agentclientprotocol/claude-agent-acp@0.94.0, @agentclientprotocol/codex-acp@2.2.2, agy@1.2.14, agy_acp_server@1.4.1"
   openclaw:
     homepage: https://github.com/tenequm/skills/tree/main/skills/acpx-faq
     emoji: "🔌"
@@ -18,7 +18,7 @@ Drive coding agents headlessly through [acpx](https://github.com/openclaw/acpx) 
 ## Syntax authority
 
 Syntax comes from the binary, not this file. `acpx --skill show acpx` is the vendor
-reference (~39k chars) and the tiebreaker on command shape - do NOT dump it into the
+reference (~41k chars) and the tiebreaker on command shape - do NOT dump it into the
 transcript. Retrieve in this order:
 
 1. `acpx --help` / `acpx <cmd> --help` - the flags you are about to compose.
@@ -30,7 +30,7 @@ transcript. Retrieve in this order:
 This file repeats nothing the reference covers. It carries only what the reference
 lacks: exit codes, failure semantics, traps, and per-agent recipes. If a syntax
 question is not answered here, it is answered there - go get it, never guess a flag.
-The repo's `docs/` (exit-codes, session-control, config) cover some of what the
+The repo's `docs/` (exit-codes, session-control, session-watch, permissions, config) cover some of what the
 shipped reference omits.
 
 ## When this lane
@@ -42,8 +42,9 @@ In-session fan-out stays on the harness's own subagent tool.
 ## Invariants
 
 1. **Global flags precede the agent subcommand** (`--cwd`, `--model`, `--approve-all`,
-   `--agent`, `--format`, `--timeout`, `--ttl`, `--mcp-config`). The subcommand accepts
-   only `-s`, `--no-wait`, `-f` (and `exec` also `--config-option`). A global flag
+   `--agent`, `--format`, `--timeout`, `--ttl`, `--mcp-config`). The prompt form accepts
+   only `-s`, `--no-wait`, `-f` (and `exec` also `--config-option`); other subcommands
+   carry their own (`sessions watch --cursor`, `sessions export|import --cwd`). A global flag
    after the agent exits **1** with `error: unknown option`; a bad flag *before* the
    agent exits **2**.
 2. **`-s <name>` never creates a session.** It resolves one, walking from `--cwd` up
@@ -64,7 +65,8 @@ In-session fan-out stays on the harness's own subagent tool.
      `network_access`. `--approve-all` does not change the adapter's mode
      (`INITIAL_AGENT_MODE=read-only|agent|agent-full-access` does).
    - `--allowed-tools` / `--max-turns` reach only claude (and qoder); codex and agy
-     ignore them.
+     ignore them. `--allowed-tools` pre-approves and never restricts: `--help`'s
+     `"" for no tools` means no approvals, not no tools.
 
    The real filesystem control is which `--cwd` you hand it.
 5. **`[done] end_turn` and exit 0 are not proof of success.** A content-filter kill,
@@ -125,12 +127,13 @@ release (a missing helper only logs `Localharness not found.` and carries on), o
 point `ANTIGRAVITY_HARNESS_PATH` at it. Neither acpx nor `agy update` refreshes the
 `.par`: compare its `--version` `Build label:` with the
 [ACP registry](https://github.com/agentclientprotocol/registry/blob/main/antigravity-acp/agent.json)
-and swap both files together.
+and swap both files together (the installed helper is read-only - `rm -f` it before
+copying the new one in).
 
 ```bash
 D=/abs/real/dir                              # must exist: roots resolve through realpath
 acpx --agent ~/.local/lib/antigravity-acp/agy_acp_server.par \
-     --cwd "$D" --model gemini-3.7-flash-medium --approve-all --timeout 1800 \
+     --cwd "$D" --model gemini-3.8-flash --approve-all --timeout 1800 \
      exec "Carry out $D/brief.md. Write your report to $D/report.md."
 ```
 
@@ -139,11 +142,12 @@ acpx --agent ~/.local/lib/antigravity-acp/agy_acp_server.par \
 - **Fixed-choice questions fail the prompt with exit 5 even under `--approve-all`**
   (final line `Antigravity requested a user answer...`) - for `--agent` launches too.
   Write briefs that never need a user choice.
-- **Default `gemini-3.7-flash-medium`** - on par with Opus for rubric-driven bulk work
-  and far faster, but it misses real findings in review / bug-hunting work; use a
-  stronger model there. Effort lives in the model id (`gemini-3.7-flash-{low,medium,high}`).
-  Use only ids the ACP session advertises: a deliberately bad `--model` prints
-  `Available models:` without starting a turn. `agy models` is a different list.
+- **Use only ids the ACP session advertises** - a deliberately bad `--model` prints
+  `Available models:` without starting a turn (server 1.4.1: `gemini-4-argon`,
+  `gemini-3.8-flash`; the effort-in-id `gemini-3.7-flash-{low,medium,high}` ids are
+  gone). `agy models` is a different list. Flash suits rubric-driven bulk work and is
+  far faster, but misses real findings in review / bug-hunting work; use a stronger
+  model there.
 - **agy reads sibling files unprompted** - agents sharing a directory reproduce each
   other's output. One directory per agent, and checksum any rerun before believing an
   agreement number.
@@ -211,7 +215,11 @@ One-shot: `exec --config-option reasoning_effort=low` sets model and effort inli
   adapter rejects newer model ids: `[error] RUNTIME: Invalid params` at
   `session/set_config_option` (exit 1), or a 400 `model is not supported` that still
   ends `[done] end_turn`, exit 0. Pin a current one:
-  `{"agents":{"codex":{"argv":["npx","-y","@agentclientprotocol/codex-acp@2.0.1"]}}}`.
+  `{"agents":{"codex":{"argv":["npx","-y","@agentclientprotocol/codex-acp@2.2.2"]}}}`.
+  An exact pin still floats the codex binary inside it (2.2.2 depends on
+  `@openai/codex ^0.160.1`). The same symptoms hit a current adapter when the account
+  lacks the model: the advertised list differs per account - preflight under the
+  lane's own login.
 - **OpenAI's content filter kills benign turns** that end clean (`[done] end_turn`,
   exit 0). Vocabulary like race / sweep / exploit / attack in a filename, comment or
   prompt triggers it. Read the transcript tail before believing completion; recover by
@@ -220,8 +228,9 @@ One-shot: `exec --config-option reasoning_effort=low` sets model and effort inli
   neutrally and the remaining steps listed explicitly.
 - **Re-prompting the same name queues behind the current turn** - the recovery path
   after a content-filter kill (above), not a dispatch pattern; close once recovered.
-- **Handing off to a human TUI**: `sessions close` first, then `codex resume
-  <sessionId>` (id from `sessions show` - it is the ordinary codex rollout id).
+- **Handing off to a human TUI**: `sessions close` first, then `codex resume <id>` -
+  `agentSessionId` from `sessions show` when it prints one, else `sessionId` (the
+  ordinary codex rollout id).
 - **MCP servers still starting when codex builds its tool list are dropped** (1s shared
   grace). `mcp_optional_startup_grace_ms = 0` in `config.toml` waits for each server's
   own `startup_timeout_sec` instead.
@@ -246,15 +255,17 @@ acpx --cwd "$D" claude set effort high -s work                 # optional; after
   different entry (e.g. `opus[1m]`); only an id with no match fails
   (`Invalid value for config option model`). An unknown `--model` fails with
   `RUNTIME: Model '<id>' not found`. Quote ids with brackets (`'...[1m]'`) - globs.
-- **Fable runs**: `--model 'claude-fable-5[1m]'`. It is absent from the advertised
-  list, but `--model` forwards it as given (adapters 0.76.0, 0.81.0, 0.84.0).
+- **Fable runs**: `--model claude-fable-5-1`. Ids absent from the advertised list,
+  like `'claude-fable-5[1m]'`, still run - `--model` forwards them as given (adapter
+  0.94.0).
 - **The bundled Claude Code is whatever the adapter pins.** Built-in adapter
-  `^0.76.0` = Claude Code 2.1.257, and a caret on 0.x locks the minor, so upgrading
-  acpx does not reach newer builds. `claude-opus-5-5` needs 2.1.280+ (`Claude Code
-  2.1.257 does not support this model`) - pin a newer adapter:
-  `{"agents":{"claude":{"argv":["npx","-y","@agentclientprotocol/claude-agent-acp@0.84.0"]}}}`
-  in `~/.acpx/config.json`. Any command containing `claude-agent-acp` keeps acpx's
-  claude handling.
+  `^0.81.2` (acpx 0.19.4+) = Claude Code 2.1.280, enough for `claude-opus-5-5`; a
+  caret on 0.x locks the minor, so upgrading acpx does not reach newer builds. An
+  older pin fails newer models with `Claude Code 2.1.2xx does not support this model` -
+  pin a newer adapter:
+  `{"agents":{"claude":{"argv":["npx","-y","@agentclientprotocol/claude-agent-acp@0.94.0"]}}}`
+  (Claude Code 2.1.303) in `~/.acpx/config.json`. Any command containing
+  `claude-agent-acp` keeps acpx's claude handling.
 - **User settings are excluded on purpose** - user skills are missing (`/polish`
   "isn't available"). Fix with `ACPX_CLAUDE_INCLUDE_USER_SETTINGS=1`. acpx reads it
   from its own environment and re-applies settings whenever the session's process
@@ -288,20 +299,23 @@ acpx --cwd "$D" claude set effort high -s work                 # optional; after
   settings from racing.
 - **Changing `agents.<name>.argv` (a pin bump) or a `<cwd>/.acpxrc.json` override
   changes the agent command, so existing `-s` sessions stop resolving (exit 4).**
-  Close them before re-pinning. A target repo's `.acpxrc.json` can also replace the
+  Close them before re-pinning. (A built-in range bump from an acpx upgrade is
+  migrated since 0.19.4; custom argv never is.) A target repo's `.acpxrc.json` can also replace the
   adapter, the MCP set, or permission defaults - `acpx --cwd <dir> config show`
   before pointing acpx at a repo you do not control.
 - `sessions close` is the teardown verb: marks the record closed, sends ACP
   `session/close`, takes down the owner and adapter processes (see Teardown). Also
   required before `codex resume` and `sessions export`.
-- `sessions list` asks the *agent* by default; `sessions list --local` lists acpx's
-  own records (with their cwds).
+- **A warm owner keeps what it started with**: `--mcp-config`, `--no-fs` /
+  `--no-terminal`, `ACPX_MAX_ACP_MESSAGE_BYTES`, `ACPX_TERMINAL_MAX_OUTPUT_BYTES`,
+  `ACPX_CLAUDE_INCLUDE_USER_SETTINGS`, credentials and environment take effect only
+  when the next owner spawns - close the session (or let it idle out) first.
 - A session whose cwd you deleted still closes with `--cwd <old path>`.
-- `sessions new|ensure --resume-session <id>` binds a record to an existing ACP
-  session - take `sessionId:` from `sessions show`, not `id:` (they diverge). An open
-  record's `id:` first retires that record's owner, then fails `Failed to resume ACP
-  session <id>: Internal error` and leaves the record closed. Resume loads a saved
-  session into a new adapter; it never attaches to a live process.
+- `sessions new|ensure --resume-session <id>` binds a record to a saved ACP session.
+  A record `id:` of the same agent command (0.19.4+) retires that record's owner and
+  rebinds the same record, context intact; otherwise pass the ACP `sessionId:` from
+  `sessions show`. Resume loads a saved session into a new adapter; it never attaches
+  to a live process.
 
 ## Completion
 
@@ -336,7 +350,15 @@ acpx --format json --cwd "$D" claude sessions watch -s work --cursor "$LAST" \
       | {type, requestId, status: .result.status}'
 ```
 
-Keep the last `cursor` when re-arming, or the stream replays earlier turns.
+Keep the last `cursor` when re-arming, or the stream replays earlier turns. A cursor
+whose history has rotated away fails `WATCH_CURSOR_EXPIRED` (also `_INVALID`,
+`_FOREIGN`, `_FUTURE`) - re-arm without it and dedupe by `requestId`.
+
+Serialize dependent lanes by chaining their one-shot lines with `&&`, or by waiting
+on the backgrounded line's exit - never a `pgrep -f` loop, which matches other runs
+on the same agent or model. `acpx compare` runs its agents serially in one shared
+`--cwd` (each sees the others' writes); a per-agent error does not stop the batch,
+and SIGINT/SIGTERM/SIGHUP skips the remaining agents with exit 130.
 
 Supervise a backgrounded text-format run by counting tool lines and mtime
 (`rg -c '^\[tool\]' run.log`, `stat -f '%Sm' run.log`). `--format quiet` prints only
@@ -380,9 +402,14 @@ P=$(pgrep -d, -f "$PAT") && ps -o pid,ppid,etime,rss,comm -p "$P"   # no args co
 - **Close owners started by an older acpx before upgrading** - 0.19 refuses forced
   retirement of legacy owners it cannot verify (`QUEUE_SHARED_RUNTIME_UNSUPPORTED`:
   wait for idle expiry or close).
+- `QUEUE_OWNER_IDENTITY_UNVERIFIED` / `QUEUE_OWNER_RETIREMENT_INCOMPLETE`: acpx kept
+  a live owner's lease rather than guess - close or wait. A leftover
+  `.acpx/queues/<key>.lock.guard` (or its `.reclaim` dir) blocks recovery until you
+  stop every acpx process using that home and remove it by hand. Never share one
+  queue home across hosts or namespaces.
 - Closed records persist indefinitely; `sessions prune --older-than 7
-  --include-history` on a cadence - without the flag only the JSON record goes and
-  the event streams (the bulk of `~/.acpx/sessions`) stay.
+  --include-history` on a cadence (the event streams are the bulk of
+  `~/.acpx/sessions`).
 
 ## MCP
 
@@ -425,7 +452,7 @@ The turn still exits **0** and ends `[done] end_turn` - grep for
 - Terminal output retention defaults to 64 KiB per call when the agent sets no limit;
   `ACPX_TERMINAL_MAX_OUTPUT_BYTES` is a host ceiling that can only lower it.
 - Long unattended work: `--timeout 5400`, plus a wrapping shell `timeout` with a
-  margin (acpx drains and cleans up past its own deadline). Exit 3 leaves partial,
+  margin for acpx's cleanup. Exit 3 leaves partial,
   uncommitted work in the cwd - a relaunch prompt should say so. Do NOT add
   `--ttl 0` - the 300s default covers any gap within one run, and `--ttl 0` removes
   the only automatic reaper (invariant 6). Reserve it for a human-driven warm session
@@ -435,6 +462,9 @@ The turn still exits **0** and ends `[done] end_turn` - grep for
 - Headless permission requests nobody can answer are denied; a turn where none was
   approved and at least one was denied exits **5**. `--non-interactive-permissions fail` stops at the first
   one instead (`Permission prompt unavailable in non-interactive mode`).
+- `--prompt-retries` retries only before the turn produced any session update - one
+  thought chunk disqualifies it - so a mid-turn provider failure still needs a
+  re-prompt (openclaw/acpx#850).
 - Pass long briefs as `-f <path>` or a path in the prompt, never inlined - inlined
   content in a shell command is what a driving harness's classifier blocks on.
 
@@ -456,9 +486,10 @@ Verified end to end with acpx 0.19.4 and claude-agent-acp 0.85.1:
   append `PROGRESS:` / `QUESTION:` lines to a progress file and to poll an answer file
   with short foreground sleeps. Tail the progress file from the driving side (under
   the Monitor tool from Claude Code) and write the answer file. A blocker answered
-  this way resolves inside the turn - no session outlives it. (The claude adapter
-  ships a `_session/steering` extension since 0.84.0, but acpx exposes no verb for it
-  yet - openclaw/acpx#836 - so the file poll stays the only mid-turn inbound.)
+  this way resolves inside the turn - no session outlives it. (Both adapters ship a
+  `_session/steering` extension - claude-agent-acp 0.84.0, codex-acp 2.0.0 - but acpx
+  exposes no verb for it yet - openclaw/acpx#836 - so the file poll stays the only
+  mid-turn inbound.)
 - **Recovery:** a failed or timed-out turn (exit 3, `turn_result: failed`) leaves the
   session intact - prompt the same name again. After the idle owner exits, the next
   prompt respawns and resumes the same conversation. After any respawn check that
@@ -488,7 +519,7 @@ Exit codes (absent from the shipped reference; repo `docs/exit-codes.md` has the
 |---|---|
 | 0 | success (also `cancel` with nothing to cancel) |
 | 1 | agent / protocol / runtime error - the catch-all; also a global flag after the agent |
-| 2 | usage error before the agent: bad or conflicting flags, malformed `--agent` |
+| 2 | usage error before the agent: bad or conflicting flags, empty `--agent`, `--timeout 0` (an unterminated `--agent` quote is still exit 1 on 0.20.0) |
 | 3 | `--timeout` exceeded |
 | 4 | no session found by the directory walk |
 | 5 | permission denied in this turn (none approved, one denied/cancelled); `--non-interactive-permissions fail`; agy user-answer questions |
@@ -512,6 +543,8 @@ Error catalog - string -> fix:
   against `--cwd`.
 - `Cannot apply --model "<id>": the ACP agent did not advertise that model. Available
   models: ...` (exit 1, any agent) - pick from that list; codex: or pin a newer adapter.
+  A claude id rejected against a list of gpt ids means the agent name was omitted and
+  acpx fell back to its default agent, codex.
 - `Invalid value for config option model: <id> (ACP -32603, adapter reported
   "Internal error")` - `set model` with no match in the advertised list; use `--model`
   at session creation (see claude).
@@ -520,8 +553,18 @@ Error catalog - string -> fix:
 - `Claude Code 2.1.2xx does not support this model` - adapter too old; pin a newer one
   (see claude).
 - `Internal error` from `claude set reasoning_effort` - claude's knob is `set effort`.
-- `[error] RUNTIME: Authentication required` (agy, exit 1) - no `auth.type` in the
-  server's `settings.json`; see agy.
+- `Authentication required` (exit 1) - the agent's own login is missing or expired.
+  agy: no `auth.type` in the server's `settings.json` (see agy). claude: `OAuth session
+  expired` (`QUEUE_RUNTIME_PROMPT_FAILED`) - log in again under the same config dir.
+  Parallel codex lanes on one login race on refresh-token rotation - preflight once,
+  then stagger launches. Other agents (`grok-build`): log in with the agent's own CLI.
+  A failed `ensure && prompt` leaves the record open - close it.
+- `Session queue owner failed to start for session <id>` (exit 1) - often several
+  sessions launched at the same instant; relaunch serially or stagger the launches.
+- `[acpx] error: ...` followed by `hint: the provider appears rate-limited; retry
+  later, switch model, or check provider quota/billing.` (exit 1, 0.19.6+) - quota,
+  usage-limit and auth failures now carry the provider's own text instead of
+  `Internal error`; an overload can still end clean (openclaw/acpx#850).
 - agy stalls at `[client] session/new (running)` until timeout (exit 3) - `auth.type`
   set but never signed in; sign in once interactively.
 - `502 Bad Gateway: Failed to connect to backend API` (agy, exit 0) - missing CA
@@ -534,8 +577,9 @@ Error catalog - string -> fix:
   agent; use agy.
 - `already has an active writer (code -32600)` - `codex resume` while acpx still owns
   the thread; `sessions close <n>` first.
-- `Failed to resume ACP session <id>: Internal error` - `--resume-session` got the
-  record `id:`; use `sessionId:`.
+- `Failed to resume ACP session <id>: Internal error` - `--resume-session` got a
+  record `id:` from a different agent command, passed through as an ACP id; use that
+  record's `sessionId:`.
 - `Queue owner disconnected before prompt completion; outcome unknown` (exit 1) - the
   owner died mid-turn, or dropped a slow reader (full output spool) while the prompt
   kept running; check `sessions history` and the cwd before resubmitting.
