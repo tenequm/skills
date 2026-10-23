@@ -4,6 +4,48 @@ All notable changes to this skill are documented in this file, following [Keep a
 
 ## [Unreleased]
 
+## [0.10.0] - 2026-10-23
+
+### Fixed
+
+- agy: the `gemini-3.7-flash-*` ids are gone; server 1.4.1 advertises `gemini-4-argon`
+  and `gemini-3.8-flash`. The recipe uses `gemini-3.8-flash`; effort is no longer in
+  the id.
+- claude: the built-in adapter range is `^0.81.2` (Claude Code 2.1.280, enough for
+  `claude-opus-5-5`); the pin example moves to 0.94.0 (Claude Code 2.1.303).
+- `--resume-session` with a record `id:` of the same agent command works since 0.19.4
+  (same record, context kept); the catalog entry now covers a foreign record id.
+- Exit 2 covers an empty `--agent` and `--timeout 0`; an unterminated `--agent` quote
+  is still exit 1 on 0.20.0.
+- The shipped reference is ~41k chars.
+
+### Changed
+
+- Built-in adapter range bumps migrate saved sessions (0.19.4); only custom argv pins
+  and `.acpxrc.json` overrides re-key them.
+- codex: pin example 2.2.2; `@openai/codex` floats inside an exact adapter pin; the
+  advertised model list differs per account.
+- Fable: `claude-fable-5-1` runs; unadvertised ids still pass through `--model`.
+- Invariant 1 scoped to the prompt form; steering ships in both adapters
+  (openclaw/acpx#836 still open); codex handoff prefers `agentSessionId`.
+- Trimmed what the shipped reference now covers (prune flag detail, `sessions list
+  --local`, cleanup past the deadline).
+
+### Added
+
+- `--allowed-tools` grants approvals and never restricts; `--help`'s `""` wording
+  misleads.
+- `--prompt-retries` never retries a turn that produced any session update.
+- A warm owner keeps flags, byte limits, credentials and environment it started with.
+- `WATCH_CURSOR_EXPIRED` handling for the Monitor recipe; queue guard and identity
+  errors; `compare` semantics; serialize dependent lanes with `&&`, not `pgrep` loops.
+- Catalog: `Session queue owner failed to start`, `Authentication required` beyond
+  agy, the 0.19.6 provider-detail error line with its rate-limit hint, an omitted
+  agent name falling back to codex. agy: the installed helper is read-only.
+
+Verified against: acpx 0.20.0, claude-agent-acp 0.94.0, codex-acp 2.2.2, agy 1.2.14,
+agy_acp_server 1.4.1.
+
 ## [0.9.0] - 2026-10-06
 
 ### Changed
