@@ -2,7 +2,7 @@
 
 Simulator runtimes, `simctl` and `devicectl`, Developer Mode, and headless iOS code signing with `xcodebuild` and an App Store Connect API key.
 
-Verified on Xcode 27.0 (Swift 6.4, iOS 27.0 / macOS 27.0 SDKs), 2026-10-07: flags checked against `xcodebuild -help`, `xcrun devicectl --help` (642.16) and its subcommand help, `xcrun simctl help`; archived a voice-call app unsigned for `generic/platform=iOS`; ran a signed archive with `-allowProvisioningUpdates` against the signed-in Xcode account and recorded the errors; built, installed and launched it on an iOS 27.0 simulator with both `simctl` and `devicectl`; registered a network-paired physical iPhone (iOS 27.2) through `-allowProvisioningDeviceRegistration` and installed and launched a development build on it with the signed-in Xcode account; on a scratch simulator reproduced the partial-install error, the `log show` level filtering and `simctl ui content_size`; reproduced the unreachable-device `xcodebuild` error with the paired iPhone off the network. No API key was used. 2026-10-13: `devicectl device copy from` and `device settings audio`, `simctl ui increase_contrast` checked against their `--help`; the any-address ICE fix, the key-role results (App Manager vs Admin team key) and the device log pull observed while shipping a voice-call app through TestFlight.
+Verified on Xcode 27.0 (Swift 6.4, iOS 27.0 / macOS 27.0 SDKs), 2026-10-07: flags checked against `xcodebuild -help`, `xcrun devicectl --help` (642.16) and its subcommand help, `xcrun simctl help`; archived a voice-call app unsigned for `generic/platform=iOS`; ran a signed archive with `-allowProvisioningUpdates` against the signed-in Xcode account and recorded the errors; built, installed and launched it on an iOS 27.0 simulator with both `simctl` and `devicectl`; registered a network-paired physical iPhone (iOS 27.2) through `-allowProvisioningDeviceRegistration` and installed and launched a development build on it with the signed-in Xcode account; on a scratch simulator reproduced the partial-install error, the `log show` level filtering and `simctl ui content_size`; reproduced the unreachable-device `xcodebuild` error with the paired iPhone off the network. No API key was used. 2026-10-13: `devicectl device copy from` and `device settings audio`, `simctl ui increase_contrast` checked against their `--help`; the any-address ICE fix, the key-role results (App Manager vs Admin team key) and the device log pull observed while shipping a voice-call app through TestFlight. 2026-10-24 (Xcode 27.1, devicectl 651.13.5): every `devicectl` subcommand used here re-checked against `--help`; `pasteboard`, `capture screenshot` and `simulate location` run on an iOS 27.0 simulator.
 
 ## Contents
 - SDK vs simulator runtime
@@ -32,7 +32,7 @@ xcodebuild -downloadPlatform iOS -exportPath ~/Downloads  # keep the .dmg, then:
 xcodebuild -importPlatform ~/Downloads/<runtime>.dmg
 ```
 
-Manage installed runtimes with `xcrun simctl runtime list`, `xcrun simctl runtime delete --outdated` (or `--unusable`, `--notUsedSinceDays N`, `--dry-run`). Known Xcode 27 issue: some deleted runtimes reappear after a reboot.
+Manage installed runtimes with `xcrun simctl runtime list`, `xcrun simctl runtime delete --outdated` (or `--unusable`, `--notUsedSinceDays N`, `--dry-run`). Known Xcode 27 issue: some deleted runtimes reappear after a reboot, and a reinstalled runtime can still show as unavailable (both fixed in Xcode 27.2 RC). Also in 27.2 RC: cloning a simulator that runs runtime 27.2 can fail on file permissions (188407822).
 
 Unverified: `-destination 'generic/platform=iOS Simulator'` compiling with zero runtimes installed (a runtime was present during verification).
 
@@ -53,11 +53,12 @@ SIMCTL_CHILD_API_URL=https://staging.example.com \
 - `xcrun simctl list devicetypes` / `list runtimes` give the identifiers; omit the runtime to get the newest compatible one.
 - Simulator builds are ad hoc signed ("Sign to Run Locally"): no team, certificate or profile is involved, even when the project sets `DEVELOPMENT_TEAM`.
 - `SIMCTL_CHILD_<NAME>` variables reach the launched process as `<NAME>`; `--console` blocks and streams stdout/stderr.
-- `xcrun simctl pbcopy` exits 0 on iOS 27 but nothing reaches the simulator's pasteboard; pass test values through `SIMCTL_CHILD_<NAME>` launch environment instead.
+- `xcrun simctl pbcopy` exits 0 on iOS 27 but nothing reaches the simulator's pasteboard; use `devicectl device pasteboard copy` (below), or pass test values through `SIMCTL_CHILD_<NAME>` launch environment.
 - `simctl privacy ... grant` skips the permission alert; `reset` brings it back.
 - More hardware paths run in the iOS 27 Simulator than it seems: CallKit with two app-side stand-ins (ios-audio-and-callkit.md), the Action Button and a lock from UI tests (testing.md), and the Mac's own mic and speaker via `xcrun devicectl device settings audio --device <sim-udid> --input-device BuiltInMicrophoneDevice --output-device BuiltInSpeakerDevice` (`devicectl device info audio` shows the current setting). The Simulator lock never removes protected data, so data-protection and Face ID paths still need a device.
 - Shut simulators down when done (`xcrun simctl shutdown <udid|all>`): one left booted for 8 hours held about 26 GB of memory on a 64 GB Mac (observed).
-- The Simulator app is now **Device Hub** (`open "$(xcode-select -p)/../Applications/DeviceHub.app"`); it shows simulators and paired devices together.
+- The Simulator app is now **Device Hub** (`open "$(xcode-select -p)/../Applications/DeviceHub.app"`); it shows simulators and paired devices together. Xcode 27.2 RC adds Simulator-only Slow Motion Animation, Simulate Shake, Simulate Fall and Simulate Memory Pressure (and fixes Simulate Memory Warning), plus hidden device bezels.
+- **iPhone Duo** (Xcode 27.1): the `iPhone Duo` device type is in `simctl list devicetypes`. Its first launch can take several minutes, and running or debugging most app extensions is unavailable in its runtime (Xcode 27.1 known issues) - test extensions on another device type.
 - Xcode 27 adds `simctl reboot` / `devicectl` reboot for simulators, and runtimes ship a prebuilt dyld cache, so first boot is faster.
 
 ## Simulator logs, Dynamic Type and install errors
@@ -114,7 +115,15 @@ xcrun devicectl device info lockState --device <udid|name>
   { platform:macOS, arch:arm64e, ..., name:My Mac, error:My Mac's macOS platform doesn't match MyApp.app's supported platforms. ... }
   ```
   The `My Mac` line only lists an incompatible destination; the cause is the unreachable phone. Wake it and join the same network, or plug it in.
-- `xcrun devicectl device` in Xcode 27 also has `capture`, `pasteboard`, `settings`, `orientation`, `simulate`, `notification`, `copy`, `sysdiagnose`, `appResize`, `motion` and `reboot` (from `--help`; `copy` and `settings audio` exercised).
+- `xcrun devicectl device` in Xcode 27 also has `capture` (`screenshot`, `screen-record`), `pasteboard` (`copy`, `paste`), `settings`, `orientation` (`get`, `rotate`), `simulate` (`location`, `biometrics`, `statusBar`), `notification`, `copy`, `profile`, `sysdiagnose`, `appResize` and `reboot` (from `--help`, devicectl 651.13.5). Exercised on an iOS 27.0 simulator:
+  ```bash
+  printf 'test-token' | xcrun devicectl device pasteboard copy -d <udid>   # works where simctl pbcopy does not
+  xcrun devicectl device pasteboard paste -d <udid>
+  xcrun devicectl device capture screenshot -d <udid> --destination shot.png
+  xcrun devicectl device simulate location coordinate -d <udid> --latitude 51.5007 --longitude=-0.1246
+  xcrun devicectl device simulate location clear -d <udid>
+  ```
+  A negative coordinate needs the `--longitude=-0.1246` form; `--longitude -0.1246` is rejected with a usage error. `simulate biometrics -d <udid> --success` (or `--failure`) answers a Face ID / Touch ID prompt.
 - **Pull a log off a phone without launching anything.** A Debug build that writes its own log file into its container can be read with `copy from` (and seeded with `copy to`):
   ```bash
   xcrun devicectl device copy from --device <udid|name> --domain-type appDataContainer \

@@ -2,7 +2,7 @@
 
 Moving code to Swift 6 strict concurrency and default MainActor isolation (GCD, Combine and `ObservableObject` to async and `@Observable`), the compile errors and runtime traps that migration surfaces, per-declaration warning control, and the Swift 6.4 language changes.
 
-Verified on Xcode 27.0 (Swift 6.4, iOS 27.0 / macOS 27.0 SDKs), 2026-10-07: Swift blocks compiled with `swiftc -emit-sil` in Swift 6 mode with default MainActor isolation for iOS 26 and macOS 15 targets (6.4 runtime APIs at iOS 27 / macOS 27); `swift package migrate` run on a scratch package; every quoted diagnostic reproduced; upcoming-feature names checked against the compiler. 2026-10-13: the `installAudioTap` block, the 6.4 language rows (SE-0491, SE-0520, SE-0521, SE-0530) and the `ApproachableConcurrency` behavior compiled the same way; proposal statuses read from swift-evolution `main`.
+Verified on Xcode 27.0 (Swift 6.4, iOS 27.0 / macOS 27.0 SDKs), 2026-10-07: Swift blocks compiled with `swiftc -emit-sil` in Swift 6 mode with default MainActor isolation for iOS 26 and macOS 15 targets (6.4 runtime APIs at iOS 27 / macOS 27); `swift package migrate` run on a scratch package; every quoted diagnostic reproduced; upcoming-feature names checked against the compiler. 2026-10-13: the `installAudioTap` block, the 6.4 language rows (SE-0491, SE-0520, SE-0521, SE-0530) and the `ApproachableConcurrency` behavior compiled the same way; proposal statuses read from swift-evolution `main`. 2026-10-24 (Xcode 27.1): the swift#92915 repro and its `isolation: self` workaround run at `-O`; the unknown `@diagnose` group compiled.
 
 ## Contents
 - Order of operations
@@ -246,7 +246,7 @@ func bridgeToLegacy() {
 }
 ```
 
-It applies to types, extensions, functions, initializers, accessors, `import` statements and more. It changes warnings only: Swift 6 concurrency errors cannot be lowered. During a Swift 5 mode migration, `@diagnose(SendingRisksDataRace, as: ignored, reason: "...")` silences that warning for one declaration and leaves the rest of the module strict. An unknown group name is an error (`the diagnostic group identifier 'X' is unknown`).
+It applies to types, extensions, functions, initializers, accessors, `import` statements and more. It changes warnings only: Swift 6 concurrency errors cannot be lowered. During a Swift 5 mode migration, `@diagnose(SendingRisksDataRace, as: ignored, reason: "...")` silences that warning for one declaration and leaves the rest of the module strict. An unknown group name is only a warning (`the diagnostic group identifier 'X' is unknown`, Swift 5 and 6 modes), so a typo silently leaves the diagnostic untouched - check the build log for it.
 
 ## Swift 6.4 language changes
 
@@ -270,7 +270,15 @@ All compile without experimental flags on Swift 6.4. Language features work at a
 
 Unused throwing tasks (SE-0520): `Task { try await save() }` now warns `unstructured throwing task created by 'init(name:priority:operation:)' is not used, which may accidentally ignore errors thrown inside the task [#NoUseUnstructuredThrowingTask]` - the error was always silently dropped. Handle it inside (`Task { do { try await save() } catch { report(error) } }`), keep the task and `try await task.value`, or discard on purpose with `_ = Task { ... }`. Non-throwing tasks do not warn.
 
-**Swift 6.4 optimizer bug ([swift#92915](https://github.com/swiftlang/swift/issues/92915), open):** in `-O` / `-Osize` builds, a method of a *generic* actor that awaits `withTaskCancellationHandler { await withCheckedContinuation { ... } } onCancel: { ... }` resumes off the actor's executor - a `preconditionIsolated()` after the await aborts with `Incorrect actor executor assumption` (reproduced with `-O`; `-Onone` passes). Debug builds are fine, so it shows up only in Release and TestFlight. Workaround: keep that state behind a `Mutex` instead of relying on actor isolation across the call.
+**Swift 6.4 optimizer bug ([swift#92915](https://github.com/swiftlang/swift/issues/92915), open):** in `-O` / `-Osize` builds, a method of a *generic* actor that awaits `withTaskCancellationHandler { await withCheckedContinuation { ... } } onCancel: { ... }` resumes off the actor's executor - a `preconditionIsolated()` after the await aborts with `Incorrect actor executor assumption` (reproduced with `-O` on Xcode 27.1; `-Onone` passes). Debug builds are fine, so it shows up only in Release and TestFlight. It needs a real suspension inside the operation closure (a continuation that resumes immediately did not trigger it); per the issue, any suspension there is enough, continuation or not. Swift 6.4.1 does not fix it. Workaround: pass the isolation explicitly, which selects the `isolated (any Actor)?` overload that keeps the hop back (verified: the same repro passes at `-O`):
+
+```swift
+await withTaskCancellationHandler(operation: {
+    await withCheckedContinuation { waiters.append($0) }
+}, onCancel: {}, isolation: self)
+```
+
+Or keep that state behind a `Mutex` instead of relying on actor isolation across the call.
 
 Memberwise initializers (SE-0502): adding a `private var` with an initial value no longer makes the synthesized initializer `private`.
 

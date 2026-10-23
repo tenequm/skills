@@ -1,11 +1,11 @@
 ---
 name: swift-dev
-description: Native iOS and macOS apps in Swift 6 - SwiftUI, SwiftData, concurrency, Swift Testing, XcodeGen projects, CallKit and audio sessions, App Intents and the Action Button, devices, TestFlight, notarization. Use for any iPhone or Mac app work.
+description: Native iOS and macOS apps in Swift 6 - SwiftUI, AppKit, SwiftData, concurrency, Swift Testing, XcodeGen, CallKit and audio, App Intents, devices, TestFlight, code signing, notarization. Use for any iPhone or Mac app, helper or CLI work.
 metadata:
-  version: "0.2.0"
+  version: "0.3.0"
   categories: "development"
   topics: "swift, swiftui, ios, macos, xcode"
-  upstream: "swift@6.4, xcode@27.0, ios@27.0, macos@27.0, LiveKit@2.17.0, xcodegen@2.46.0"
+  upstream: "swift@6.4, xcode@27.1, ios@27.1, macos@27.0, LiveKit@2.18.0, xcodegen@2.46.0"
   openclaw:
     homepage: https://github.com/tenequm/skills/tree/main/skills/swift-dev
     emoji: "🍎"
@@ -15,7 +15,7 @@ metadata:
 
 # Swift Apple Development (iOS + macOS)
 
-Native apps for iPhone and Mac with Swift 6.4 and Xcode 27.0 (iOS 27.0 and macOS 27.0 SDKs). Xcode 27 runs only on Apple silicon and needs macOS 26.6 or later. Deployment targets: iOS 17 / macOS 14 for `@Observable` and SwiftData; iOS 26 / macOS 26 for Liquid Glass, Foundation Models, `IntentModes` and `Observations`.
+Native apps for iPhone and Mac with Swift 6.4 and Xcode 27.1 (iOS 27.1 and macOS 27.0 SDKs; Xcode 27.2 is at RC). Xcode 27 runs only on Apple silicon and needs macOS 26.6 or later. Deployment targets: iOS 17 / macOS 14 for `@Observable` and SwiftData; iOS 26 / macOS 26 for Liquid Glass, Foundation Models, `IntentModes` and `Observations`.
 
 This file is the platform-neutral core plus a router. Load a reference only when the task needs it - the [Platform](#platform) tables say which.
 
@@ -118,7 +118,8 @@ final class CallController: NSObject, CXProviderDelegate {
 
 - Delegate delivered on the main queue (you chose it): `MainActor.assumeIsolated` - synchronous, traps if the premise is wrong. Shorter equivalent: an isolated conformance, `extension CallController: @MainActor CXProviderDelegate`, with no `nonisolated` (rejected for protocols that require `Sendable`). Use that form when an action must be fulfilled after an `await` (e.g. `CXSetMutedCallAction` once the mic change succeeds): carrying a `CXAction` into a `Task` from a `nonisolated` method fails with `sending 'action' risks causing data races`. Inside `assumeIsolated`, write `_ = Task { ... }` - a bare `Task` is the closure's unused result and warns.
 - Delegate on another thread (LiveKit `RoomDelegate`, which is `Sendable` and calls from an internal queue): `Task { @MainActor in ... }`. Tasks created that way from one serial queue start in order, but they are not ordered against callbacks from other queues, an `await` inside one lets later ones interleave, and the callback's arguments are stale by the time it runs. Make the handler idempotent (re-read the source of truth in one `refresh()`), and copy Sendable values (IDs, Bools) out of non-Sendable arguments such as `CXAction` before the hop.
-- Verify concurrency code with a real build or `swiftc -emit-sil -o /dev/null`, not `-typecheck`: region-isolation errors (`sending 'x' risks causing data races`) come from the SIL pass and never appear in a typecheck.
+- Verify concurrency code with a real build or `swiftc -emit-sil -o /dev/null`, not `-typecheck`: region-isolation errors (`sending 'x' risks causing data races`) come from the SIL pass and never appear in a typecheck. A single-file probe that uses `@main` needs `swiftc -parse-as-library` (otherwise: `'main' attribute cannot be used in a module that contains top-level code`).
+- To check where async code runs, use `MainActor.assertIsolated()` / `preconditionIsolated()`: `Thread.isMainThread` is an error in async contexts in Swift 6 (`class property 'isMainThread' is unavailable from asynchronous contexts`).
 
 Deep dives: `concurrency-isolation.md` (isolation, Sendable, delegates, typed throws), `concurrency-tasks.md` (tasks, cancellation, streams, `Observations`), `concurrency-migration.md` (GCD/Combine to async, Swift 6 migration, Swift 6.4 changes).
 
@@ -261,7 +262,7 @@ func summarize(_ text: String) async throws -> Summary? {
 }
 ```
 
-The on-device model has a 4096-token context; `PrivateCloudComputeLanguageModel()` (27+, managed entitlement) has 32K. Errors: `LanguageModelError` (iOS/macOS 27+) replaces the deprecated `LanguageModelSession.GenerationError`; apps that still deploy to 26 catch both behind `#available`. Custom adapters are unavailable at a 27.0 deployment target. Tools, streaming, image input, PCC and Core AI: `foundation-models.md`.
+The on-device model has a 4096-token context (read `SystemLanguageModel.default.contextSize` rather than hard-coding it - on 27 it comes from the runtime model); `PrivateCloudComputeLanguageModel()` (27+, managed entitlement) has 32K. Errors: `LanguageModelError` (iOS/macOS 27+) replaces the deprecated `LanguageModelSession.GenerationError`; apps that still deploy to 26 catch both behind `#available`. Custom adapters are unavailable at a 27.0 deployment target. Tools, streaming, image input, PCC and Core AI: `foundation-models.md`.
 
 ## Xcode 27 / iOS 27 / macOS 27 changes that bite
 
@@ -274,6 +275,10 @@ The on-device model has a 4096-token context; `PrivateCloudComputeLanguageModel(
 - **Audio interruptions**: `AVAudioSession.interruptionNotification` is deprecated on iOS 27 in favor of the typed `didBecomeInactive` and `resumptionRecommendation` messages. Swift does not warn on leftover `interruptionNotification` observers - grep for them.
 - **Documents**: new class-bound `Document` (`ReadableDocument` + `WritableDocument`) protocols whose `DocumentReader` / `DocumentWriter` do the `@concurrent` read/write; `FileDocument` is soft-deprecated.
 - **UIKit life cycle**: apps built with the iOS 27 SDK must adopt the scene-based life cycle or they fail to launch.
+- **Launch screen required**: iOS apps built with the 27 SDK need `UILaunchScreen` (or `UILaunchStoryboardName`, `UILaunchStoryboards`, `UILaunchScreens`) in Info.plist; App Store submission rejects them otherwise.
+- **On-Demand Resources** and `NSBundleResourceRequest` are deprecated; use Background Assets.
+- **Previews**: `PreviewProvider` is deprecated in favor of `#Preview`, whose body now runs on the main actor.
+- **Mac Catalyst (Xcode 27.1/27.2 known issue)**: iOS 27.1-only APIs fail to compile for Catalyst ("cannot find", "has no member") - guard them with `#if !targetEnvironment(macCatalyst)`.
 
 ## Platform
 
@@ -295,11 +300,11 @@ The on-device model has a 4096-token context; `PrivateCloudComputeLanguageModel(
 | Scenes, windows, Settings, MenuBarExtra, documents, termination, `LSUIElement` | `macos-app-lifecycle.md` |
 | Table, sidebar, inspector, menus and commands, forms, popovers, 27-SDK SwiftUI changes | `macos-swiftui.md` |
 | `NSViewRepresentable`, hosting, AppKit Liquid Glass, pasteboard, `NSPanel` HUDs | `macos-appkit-interop.md` |
-| Shortcuts, drag and drop, bookmarks, AXUIElement, login items, XPC, logging, privacy strings | `macos-system-integration.md` |
+| Shortcuts, drag and drop, bookmarks, AXUIElement (read it before using `kAXTrustedCheckOptionPrompt`, which Swift 6 rejects as shared mutable state), login items, XPC, logging, privacy strings | `macos-system-integration.md` |
 | ScreenCaptureKit (`SCStream`, filters, audio-only capture, TCC) | `macos-screencapturekit.md` |
 | Recording pipeline: AVAudioEngine, AVAssetWriter, SpeechAnalyzer, silent-recording traps | `macos-audio-pipeline.md` |
 | Per-process audio with Core Audio taps | `macos-core-audio-tap.md` |
-| Developer ID, notarization, sandbox, Mac App Store, Sparkle | `macos-distribution.md` |
+| Developer ID, notarization, signing bare CLI binaries, sandbox, Mac App Store, Sparkle | `macos-distribution.md` |
 
 ### Shared
 

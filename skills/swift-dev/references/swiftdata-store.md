@@ -2,7 +2,7 @@
 
 Setting up `ModelContainer`, working with `ModelContext` on and off the main actor, observing changes outside SwiftUI, history, schema migration, CloudKit sync, previews and tests - iOS and macOS.
 
-Verified on Xcode 27.0 (Swift 6.4, iOS 27.0 / macOS 27.0 SDKs), 2026-10-07: every block compiled through SIL (`swiftc -emit-sil`, so region-isolation checks ran) for iOS 27 and macOS 27, with and without `-default-isolation MainActor`; container, `@ModelActor`, `ResultsObserver`, `HistoryObserver`, history/tombstone, batch delete and a three-version migration chain were run against an on-disk store in a scratch SPM package on macOS 27.2. CloudKit behavior is from Apple's documentation, not run. 2026-10-13: `PersistentIdentifier.isTemporary` and `HistoryObserver(authors:)` run against an on-disk store on macOS 27.2; the `modelContainer:` initializers read from the 27.0 interface.
+Verified on Xcode 27.0 (Swift 6.4, iOS 27.0 / macOS 27.0 SDKs), 2026-10-07: every block compiled through SIL (`swiftc -emit-sil`, so region-isolation checks ran) for iOS 27 and macOS 27, with and without `-default-isolation MainActor`; container, `@ModelActor`, `ResultsObserver`, `HistoryObserver`, history/tombstone, batch delete and a three-version migration chain were run against an on-disk store in a scratch SPM package on macOS 27.2. CloudKit behavior is from Apple's documentation, not run. 2026-10-13: `PersistentIdentifier.isTemporary` and `HistoryObserver(authors:)` run against an on-disk store on macOS 27.2; the `modelContainer:` initializers read from the 27.0 interface. 2026-10-24: observer initializers, `storeIdentifier` and `DocumentGroup(editing:migrationPlan:)` read from the iOS 27.1 SDK interfaces.
 
 Model examples use `Project` / `Todo` from swiftdata-models.md.
 
@@ -18,7 +18,7 @@ Model examples use `Project` / `Todo` from swiftdata-models.md.
 
 ## Container setup
 
-Create the container once, in the `App`, and inject it. Own it explicitly (rather than `.modelContainer(for:)`) whenever anything outside the view tree - an App Intent, a widget, a controller - needs the same store, or when you have a migration plan: the SwiftUI `.modelContainer(for:...)` modifiers take no `migrationPlan:` parameter.
+Create the container once, in the `App`, and inject it. Own it explicitly (rather than `.modelContainer(for:)`) whenever anything outside the view tree - an App Intent, a widget, a controller - needs the same store, or when you have a migration plan: the SwiftUI `.modelContainer(for:...)` modifiers take no `migrationPlan:` parameter. The one scene API that does is the document-based `DocumentGroup(editing: contentType, migrationPlan: Plan.self) { Editor() }` (and `viewing:`), iOS 17 / macOS 14.
 
 ```swift
 import SwiftData
@@ -174,8 +174,9 @@ final class TodoFeed {
 - `filterBy` and `sortBy` are settable, so one observer can follow a changing search field.
 - `element(at:)` / `indexPath(for:)` map to `IndexPath` for UIKit/AppKit table data sources.
 - `HistoryObserver` listens for remote-change notifications and bumps `eventCounter` when a transaction touches `observedModels` (empty array = any model). It counted one event per background-context save in testing. Pair it with the history API below to read what changed.
-- `HistoryObserver(historyTokens:observedModels:authors:modelContainer:)`: `authors` is an allow-list of `context.author` values - with `authors: ["sync"]`, three saves authored `ui`, `sync`, `ui` counted 1 event where an unfiltered observer counted 3 (verified). Tag your own writes (`context.author = "ui"`) and list only the other authors to react just to imports and sync. `historyTokens` starts it after tokens you already processed.
-- Both observers also take a `modelContainer:` instead of a context (`ResultsObserver(filterBy:sortBy:modelContainer:)`, with or without `sectionBy:`), for code that holds only the container.
+- `HistoryObserver(historyTokens:observedModels:authors:modelContainer:)` is its only initializer - it takes a container, never a context. `authors` is an allow-list of `context.author` values - with `authors: ["sync"]`, three saves authored `ui`, `sync`, `ui` counted 1 event where an unfiltered observer counted 3 (verified). Tag your own writes (`context.author = "ui"`) and list only the other authors to react just to imports and sync. `historyTokens` starts it after tokens you already processed; it is a `[String: any HistoryToken]` keyed by store, not a list - key each token by its `storeIdentifier` (`container.storeIdentifier(forConfigurationNamed:)` maps a configuration to it) so a multi-store container resumes each store separately.
+- `ResultsObserver` takes a `modelContainer:` instead of a context too (`ResultsObserver(filterBy:sortBy:modelContainer:)`, with or without `sectionBy:`), for code that holds only the container. Every initializer also has a `fetchDescriptor:` form - `ResultsObserver(fetchDescriptor: descriptor, modelContext: context)` - for `fetchLimit`, `fetchOffset` and the other descriptor options.
+- Every observer initializer ends with `isolation: isolated (any Actor)? = #isolation`, so the observer is bound to the actor that creates it (the main actor above).
 - `sectionBy` must name a stored `String` / `String?` attribute (`Ticket` is in swiftdata-models.md); a computed property typechecks but traps when the observer fetches.
 
 ## History and tombstones

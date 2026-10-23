@@ -493,6 +493,6 @@ struct StickerPageView: View {
 ```
 
   The macro also suppresses the private memberwise initializer used from an extension (assign members explicitly), can infer generic arguments less flexibly (spell out the type), and cannot be combined with other property wrappers or macros.
-- **`#Preview` bodies run on the main actor**, so they can call main-actor APIs without concurrency warnings or runtime isolation traps. `#Preview(arguments:)` renders a grid of previews, one per argument.
+- **`#Preview` bodies run on the main actor**, so they can call main-actor APIs without concurrency warnings or runtime isolation traps. `#Preview(arguments:)` renders a grid of previews, one per argument (macOS 27 / iOS 26). `PreviewProvider` and its preview modifiers are deprecated in Xcode 27 - move to `#Preview`.
 - **Liquid Glass is mandatory**, menu item symbols are hidden (already on macOS 27 for 26-SDK apps), sheets reset control environment values, and `List` accepts more drops - see the sections above.
 - `TextField` honors font/color styling on its `prompt` Text; disabled `.checkbox` toggles are no longer tinted; `defaultAction` buttons no longer stay tinted when disabled.

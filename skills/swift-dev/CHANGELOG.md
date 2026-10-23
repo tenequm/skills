@@ -7,6 +7,53 @@ and this skill adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.h
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-10-24
+
+### Added
+
+- Bare CLI binaries: set the code-signing identifier explicitly, strip before signing, and assert the
+  identity in CI (ported from `swift-macos` 0.8.5).
+- iOS 27 SDK requirements and changes: mandatory launch screen, scene accessories, navigation-bar
+  minimization, deprecated orientation and display-link APIs; iOS 27.1 zero default layout margins;
+  On-Demand Resources deprecated for Background Assets; `PreviewProvider` deprecated.
+- iPhone Duo (iOS 27.1): `ArrangementView`, `onHingeChange`, reserved regions, `CameraCaptureAccessory`,
+  Simulator limits, the App Store screenshot deadline.
+- Xcode 27.1/27.2 tooling: Mac Catalyst known issue, Device Hub simulation features, `devicectl device
+  pasteboard`/`capture`/`simulate` (a working replacement for `simctl pbcopy`), new Xcode MCP tools and
+  `mcp-server` subcommands, agent plug-ins and `lldb-mcp`.
+- More 27 surface: SwiftUI modifiers (`dismissalConfirmationDialog`, `presentationPlacement`, `.crossFade`,
+  `defaultTabBarPlacement`, `systemPrefersReducedResourceUsage`), AppKit (`NSRefreshController`, roles,
+  `NSTextSelectionManager`), App Intents (8 schema domains, `RunSystemShortcutIntent`, `RelevantEntities`),
+  SwiftData multi-store tokens and `DocumentGroup(editing:migrationPlan:)`, Swift Testing `TestScoping`
+  traits, issue filters and `#_sourceLocation` helpers.
+- LiveKit 2.18.0: transceivers stopped on unpublish, early data no longer dropped, in-process
+  ScreenCaptureKit screen share on iOS 27.
+- Developer ID Sub-CA expiry (2027-02-01); `xcrun dwarfdump --uuid` for dSYM checks; `-parse-as-library`
+  for single-file probes; `MainActor.assertIsolated()` instead of `Thread.isMainThread`.
+
+### Changed
+
+- Verified against Xcode 27.1 (iOS 27.1 SDK); the `.xcproj` default is documented as contested between
+  Apple's article and the 27.2 RC release notes, and XcodeGen 2.46.0 projects fail 27.2 conversion.
+- swift#92915: needs a real suspension, still present on Xcode 27.1, and `isolation: self` is a verified
+  workaround.
+- On-device context size: read `contextSize` instead of hard-coding 4096.
+- macOS 27 XProtect app-data restriction covers other apps' files outside containers.
+- The rebuild-in-place `Code Signature Invalid` kill is observed, no longer unverified.
+
+### Fixed
+
+- LiveKit failed-full-reconnect watchdog is needed only before 2.18.0.
+- `SpotlightSearchTool()` with the default configuration fails on the on-device model; use a focused guide.
+- `HistoryObserver` takes only a container; `historyTokens` is keyed by store.
+- `confirmation(expectedCount: ...5)` does not compile; the XCTest interop default depends on the tools
+  version (below 6.4 a failing XCTest assertion passes); unknown `@diagnose` groups only warn.
+- `LongRunningIntent` example now reports progress; `xcrun mcp-server` examples gained their required
+  arguments; `devicectl device` has no `motion` subcommand.
+- TCC keys off the code-signing identifier; `log` is a zsh builtin, so use `/usr/bin/log`.
+
+Verified against: xcode@27.1, ios@27.1, LiveKit@2.18.0
+
 ## [0.2.0] - 2026-10-13
 
 ### Added

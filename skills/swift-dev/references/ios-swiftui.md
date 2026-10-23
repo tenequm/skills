@@ -2,7 +2,7 @@
 
 iPhone-specific SwiftUI: the app/scene lifecycle, navigation and presentation, toolbars, text input, opening Settings, Liquid Glass, UIKit bridging, background refresh, and what changes when you rebuild with the iOS 27 SDK.
 
-Verified on Xcode 27.0 (Swift 6.4, iOS 27.0 / macOS 27.0 SDKs), 2026-10-07: every code block compiled with `swiftc -emit-sil` against the iOS 27.0 SDK (`-target arm64-apple-ios26.0 -swift-version 6`, with and without `-default-isolation MainActor`); APIs and availability read from the SDK's SwiftUI `.swiftinterface`; the `@State` source break reproduced in an `xcodebuild` build; `TimelineSchedule`, `lineHeight` and `LineHeight` factories read from the SwiftUI and CoreText interfaces. 2026-10-13: the item-driven dialogs, the background-refresh scheduler and the SwiftUI 27 block compiled the same way (iOS 26 and 27 targets, with and without MainActor default isolation); availability read from the SwiftUI, SwiftUICore, BackgroundTasks and UIKit 27.0 SDK files.
+Verified on Xcode 27.0 (Swift 6.4, iOS 27.0 / macOS 27.0 SDKs), 2026-10-07: every code block compiled with `swiftc -emit-sil` against the iOS 27.0 SDK (`-target arm64-apple-ios26.0 -swift-version 6`, with and without `-default-isolation MainActor`); APIs and availability read from the SDK's SwiftUI `.swiftinterface`; the `@State` source break reproduced in an `xcodebuild` build; `TimelineSchedule`, `lineHeight` and `LineHeight` factories read from the SwiftUI and CoreText interfaces. 2026-10-13: the item-driven dialogs, the background-refresh scheduler and the SwiftUI 27 block compiled the same way (iOS 26 and 27 targets, with and without MainActor default isolation); availability read from the SwiftUI, SwiftUICore, BackgroundTasks and UIKit 27.0 SDK files. 2026-10-24: the iPhone Duo block and the extra 27 modifiers compiled with `swiftc -emit-sil` against the iOS 27.1 SDK (Xcode 27.1, `-target arm64-apple-ios27.1`, with and without MainActor default isolation).
 
 ## Contents
 - App, WindowGroup and scenePhase
@@ -10,6 +10,7 @@ Verified on Xcode 27.0 (Swift 6.4, iOS 27.0 / macOS 27.0 SDKs), 2026-10-07: ever
 - Navigation and presentation
 - Toolbars
 - SwiftUI 27 additions
+- iPhone Duo (iOS 27.1)
 - Forms, text input and opening Settings
 - Liquid Glass
 - UIKit bridge
@@ -265,6 +266,34 @@ struct ProminentTabs: View {
 - `Tab(role: .prominent)` (27) places a tab in a separate trailing position of the tab bar, like `.search`.
 - `tabViewBottomAccessory(isEnabled:content:)` (iOS 26.1) shows the accessory only while `isEnabled` - an in-call bar that appears with the call - instead of an empty glass bar.
 - `@ContentBuilder` is the unified result builder (a typealias of `ViewBuilder`, so it works at any deployment target) that replaces type-specific builders such as `ToolbarContentBuilder` and `CommandsBuilder` in 27-SDK signatures; Apple notes it type-checks faster. Existing `@ViewBuilder` code is unchanged.
+- More 27 modifiers (typechecked against the iOS 27.1 SDK): `.dismissalConfirmationDialog("Discard draft?", shouldPresent: !draft.isEmpty) { Button("Discard", role: .destructive) {} }` asks before a sheet is swiped away; `.presentationPlacement(.center)` (`.automatic`, `.leading`, `.center`) places a presentation in the presenting view; `.navigationTransition(.crossFade)` (iOS 27, not macOS); `.defaultTabBarPlacement(.sidebar)` (`.tabBar`, `.sidebar`) for adaptable tab views; `@Environment(\.systemPrefersReducedResourceUsage)` tells you to scale back expensive work; `GeometryProxy.concentricCornerRadii` gives radii concentric with the container.
+
+## iPhone Duo (iOS 27.1)
+
+iPhone Duo has two displays and a hinge. The 27.1 SDK adds layout for it (Apple: `ArrangementView` "dynamically lays out a primary and secondary view based on size class, orientation, and reserved regions"):
+
+```swift
+import SwiftUI
+
+@available(iOS 27.1, *)
+struct NotesSplit: View {
+    @State private var hinge: DeviceHingeContext?
+
+    var body: some View {
+        ArrangementView {
+            List(0..<10, id: \.self) { Text("Note \($0)") }
+        } secondary: {
+            Text("Preview")
+        }
+        .onHingeChange { _, new in hinge = new }
+        .toolbarVerticalCompressionBehavior(.prefersToolbarItems)   // or .prefersTabBar
+    }
+}
+```
+
+- `GeometryProxy.reservedRegions(kind:)` returns the regions another entity reserves (`ReservedRegion.Kind.occlusion`, and the hinge's division) and `.division`) so content can avoid them; UIKit has `UIView.ReservedRegion`, `UIArrangementViewController` and `UIHingeInteraction`.
+- `CameraCaptureAccessory` (with `.sceneAccessory { ... }`, iOS 27.1) presents content during camera capture.
+- Preview it with the canvas's Display group or the `iPhone Duo` simulator (ios-devices-and-signing.md). App Store Connect: "Starting April 2027, any apps or games submitted will need to include screenshots for iPhone Duo."
 
 ## Forms, text input and opening Settings
 
@@ -593,7 +622,8 @@ struct CounterView: View {
 ```
 
   With `@State private var counter: Int = 0` the same `init` fails with `variable 'self.name' used before being initialized` - fix it by dropping the declaration's initial value, not by reordering. The macro also removes the private memberwise init used from an extension (assign members explicitly), can infer generic arguments less flexibly (spell out the type), and cannot be combined with other property wrappers or macros. **`swiftc -typecheck` does not report this** (it is a definite-initialization error, emitted later) - check with `swiftc -emit-sil` or a real build.
-- **`#Preview` bodies are `@MainActor`**, so they can call main-actor APIs directly. `#Preview("Name", arguments: [...]) { value in ... }` (iOS 26+) renders one preview per argument.
+- **`#Preview` bodies are `@MainActor`**, so they can call main-actor APIs directly. `#Preview("Name", arguments: [...]) { value in ... }` (iOS 26+) renders one preview per argument. `PreviewProvider` is deprecated in Xcode 27.
+- **Launch screen required**: apps built with the 27 SDK need `UILaunchScreen`, `UILaunchScreens`, `UILaunchStoryboardName` or `UILaunchStoryboards` in Info.plist or App Store submission rejects them (the ios-project-setup.md template sets `UILaunchScreen: {}`).
 - **Sheets and popovers reset control environment values:** `controlSize`, `buttonSizing`, `buttonRepeatBehavior`, `menuIndicatorVisibility` and `ButtonBorderShape` revert to defaults inside presented content - re-apply them inside the sheet.
 - **`TabView` selection must name a visible tab**; setting it to a hidden or unavailable tab can crash.
 - Status bar: `.toolbarVisibility(.hidden, for: .statusBar)` hides it and `.toolbarColorScheme(_:for: .statusBar)` sets its scheme.
@@ -601,3 +631,6 @@ struct CounterView: View {
 - **UIKit apps must adopt the scene-based life cycle** "or they fail to launch" when built with the 27 SDK - an app still driving its window from `UIApplicationDelegate` needs a `UIApplicationSceneManifest` and a scene delegate. SwiftUI `App` apps are already scene-based.
 - **`canOpenURL(_:)` is deprecated** ("Prefer attempting to open URLs and handling any failures"): call `open(_:)` / `openURL` and handle the `false` result.
 - A `Text` with `.textSelection(.enabled)` now uses the system text-selection UI on iOS.
+- UIKit changes in the same notes: `windowExternalDisplayNonInteractive` scenes are no longer offered automatically - use `UIViewController.registerSceneAccessory(_:)` with `UISceneAccessory.externalNonInteractive`; a presented view controller inherits traits through its superview chain, not straight from the presentation controller (custom `UIPresentationController`s may need updates); Siri can start drag sessions without a gesture, so present no UI in `dragInteraction(_:sessionWillBegin:)`; `UINavigationItem.navigationBarMinimization` replaces `barMinimizeBehavior` and `barMinimizationSafeAreaAdjustment`.
+- Deprecated in 27 (UIKit headers): `supportedInterfaceOrientationsForWindow:` ("Use UIWindowSceneDelegate.supportedInterfaceOrientations(for:) instead") and `UIScreen.displayLink(withTarget:selector:)` ("Use the equivalent display link API on UIWindowScene").
+- **iOS 27.1: a `UIView`'s default layout margins are zero.** View controllers still give their root view `systemMinimumLayoutMargins`; set `preservesSuperviewLayoutMargins = true` on subviews that should inherit them (iOS 27.2 RC release notes).

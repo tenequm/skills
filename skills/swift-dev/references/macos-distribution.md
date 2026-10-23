@@ -2,7 +2,7 @@
 
 Shipping a Mac app: Developer ID + notarization, Mac App Store, sandbox and hardened runtime entitlements, nested signing, Sparkle, and the `xcodebuild` signing traps.
 
-Verified on Xcode 27.0 (Swift 6.4, iOS 27.0 / macOS 27.0 SDKs), 2026-10-07: flags checked against `xcodebuild -help`, `notarytool --help` (1.1.3), `altool --help` (27.0.5), `stapler`, `codesign`, `spctl`; ad-hoc signed and inspected a test bundle with the `codesign` commands below; built unsigned `pkgbuild`/`productbuild` packages; reproduced the bracketed-setting parse bug; built the Sparkle snippet against Sparkle 2.10.0. Developer ID signing, notarization and uploads were not run (no credentials used). 2026-10-13: DMG signing and `find-identity` guidance re-read from Apple's packaging guide; `notarytool store-credentials --help`, `man spctl` and the Sparkle 2.10.0 release notes re-checked.
+Verified on Xcode 27.0 (Swift 6.4, iOS 27.0 / macOS 27.0 SDKs), 2026-10-07: flags checked against `xcodebuild -help`, `notarytool --help` (1.1.3), `altool --help` (27.0.5), `stapler`, `codesign`, `spctl`; ad-hoc signed and inspected a test bundle with the `codesign` commands below; built unsigned `pkgbuild`/`productbuild` packages; reproduced the bracketed-setting parse bug; built the Sparkle snippet against Sparkle 2.10.0. Developer ID signing, notarization and uploads were not run (no credentials used). 2026-10-13: DMG signing and `find-identity` guidance re-read from Apple's packaging guide; `notarytool store-credentials --help`, `man spctl` and the Sparkle 2.10.0 release notes re-checked. 2026-10-24 (Xcode 27.1): the bare-CLI identifier commands, the `-R` requirement check and `strip` invalidating a signature run ad hoc on a scratch binary.
 
 ## Contents
 - Choosing a channel
@@ -39,6 +39,8 @@ security find-identity -v                  # also lists Developer ID Installer i
 `-p codesigning` filters out installer identities (Apple: "Don't use the `-p codesigning` option ... Installer-signing identities are different from code-signing identities"), so use plain `-v` when looking for the `productsign` identity.
 
 If a freshly imported Developer ID certificate does not show up as a valid identity, the Apple Developer ID G2 intermediate is missing from the keychain - install it from the [Apple PKI page](https://www.apple.com/certificateauthority/).
+
+**The original Developer ID Sub-CA expires on February 1, 2027** ([Apple](https://developer.apple.com/news/?id=w4atic4c)). After that date, `.pkg` files signed with an affected certificate no longer install. Re-issue Developer ID certificates against the G2 Sub-CA ("When prompted for a Developer ID Certificate Intermediary, select G2 Sub-CA") and re-sign installers before then.
 
 ## Developer ID: archive, export, DMG
 
@@ -83,6 +85,27 @@ codesign -dv --verbose=4 MyApp.app 2>&1 | grep -E 'Authority|Signature|flags|Tea
 ```
 
 `--timestamp` (secure timestamp) and `--options runtime` (hardened runtime) are both required for notarization.
+
+### Bare CLI binaries: set the code-signing identifier
+
+A bundle's signing identifier defaults to its `CFBundleIdentifier`. A non-bundled Mach-O (a Swift, Rust or Go CLI shipped as one file) has none, so it gets whatever the signer falls back to, and nothing fails when that fallback moves. `codesign` without `-i` uses the file name; `rcodesign sign` without `--binary-identifier` [keeps the identifier already in the Mach-O](https://github.com/indygreg/apple-platform-rs/blob/main/apple-codesign/src/signing_settings.rs), which for cargo is the linker's ad-hoc signature over `deps/<name>-<hash>`. The designated requirement embeds the identifier (`designated => identifier "tool-34f4..." and anchor apple generic and ...`), so a new identifier per release makes every release a new program: firewall rules re-prompt and TCC grants and keychain ACLs reset, while the Developer ID, hardened-runtime and notarization checks all pass. macOS 27 also refuses to grant a process without a bundle ID access to other teams' app data containers in the Files & Folders pane (release notes, 184660124).
+
+Apple: "If you're signing nonbundled code, add the `-i <BundleID>` option to set the code-signing identifier" ([Creating distribution-signed code for macOS](https://developer.apple.com/documentation/xcode/creating-distribution-signed-code-for-the-mac/)). Pass it on every signing path, ad hoc included, and assert it in CI - a gate that checks only Authority and flags misses a drifting identifier:
+
+```bash
+codesign --force --options runtime --timestamp -i com.example.tool \
+  --sign "Developer ID Application: Your Name (TEAMID)" ./tool
+
+rcodesign sign --binary-identifier com.example.tool \
+  --code-signature-flags runtime --p12-file cert.p12 ./tool
+
+# CI gate: fail the release if the identity drifts
+codesign -dvvv ./tool 2>&1 | grep -Fqx 'Identifier=com.example.tool'
+codesign --verify -R='identifier "com.example.tool" and anchor apple generic and certificate leaf[subject.OU] = "TEAMID"' ./tool
+```
+
+- **Strip before signing, never after.** Xcode's `strip` on a signed binary warns and leaves `invalid signature (code or signature have been modified)` (verified); some build systems' default strip phase (Nix's is one) re-signs the result ad hoc with the file name as identifier, silently dropping the Developer ID signature. Disable the post-build strip on Darwin or sign after it.
+- Pick the identifier once: changing it costs every user one re-approval of firewall and privacy rules.
 
 ## Notarization
 
@@ -245,7 +268,7 @@ codesign -dv --verbose=4 build/MyApp.app 2>&1 | grep -E 'Authority|Signature|fla
 ## TCC, reinstalls and Gatekeeper
 
 - Switching a bundle between ad hoc and Developer ID changes its code identity: expect one more round of screen-recording/microphone prompts.
-- TCC keys off bundle ID + signature, not path - moving a signed `.app` keeps its grants.
+- TCC keys off the code-signing identifier (the bundle ID, for a bundle; see the bare-CLI section above for non-bundled tools) + signature, not path - moving a signed `.app` keeps its grants.
 - Replacing an installed app with `rm -rf` + `cp -R` can leave TCC reporting "authorized" while delivering degraded data (capture starts, buffers are silent/empty). The user-side fix is toggling the permission off and on in System Settings > Privacy & Security. Prevent it: `killall MyApp` first, then `ditto` the new bundle over the old one, then `xattr -cr`. In dev scripts, `tccutil reset ScreenCapture com.example.myapp` gives a clean prompt instead of a stale grant.
 - `spctl -a -vv` reporting `rejected` / `Unnotarized Developer ID` for a local build is expected; Gatekeeper acts on the quarantine attribute, which `xattr -cr` clears.
 - `sudo spctl --purge` (new in macOS 27) drops Gatekeeper's policy scan cache entries for apps on volumes that are no longer mounted ("Requires root access", `man spctl`).
