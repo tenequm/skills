@@ -2,7 +2,7 @@
 
 App Intents on iOS and macOS: intents, App Shortcuts for Siri/Spotlight/Shortcuts and the iPhone Action Button, run modes, authentication, entities, and Control Center controls.
 
-Verified on Xcode 27.0 (Swift 6.4, iOS 27.0 / macOS 27.0 SDKs), 2026-10-07: every block built in a scratch XcodeGen iOS app plus WidgetKit extension (`xcodebuild -destination 'generic/platform=iOS' CODE_SIGNING_ALLOWED=NO`, deployment target iOS 26, Swift 6 strict concurrency) and typechecked for `arm64-apple-macos26.0`; the app target rebuilt as is and with `SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor`; the App Shortcut build errors quoted below were reproduced. Declarations and availability read from the 27.0 `AppIntents`/`WidgetKit` `.swiftinterface` files. Not run on a device. 2026-10-13: the phone-schema call intent, the Live Activity and the `LongRunningIntent` blocks built in a scratch XcodeGen app with a WidgetKit extension (iOS 26 target, MainActor default isolation), with the two `ExtractAppIntentsMetadata` errors below reproduced; the background-call behavior was observed on a locked iPhone (iOS 27.2) in a shipping voice-call app.
+Verified on Xcode 27.0 (Swift 6.4, iOS 27.0 / macOS 27.0 SDKs), 2026-10-07: every block built in a scratch XcodeGen iOS app plus WidgetKit extension (`xcodebuild -destination 'generic/platform=iOS' CODE_SIGNING_ALLOWED=NO`, deployment target iOS 26, Swift 6 strict concurrency) and typechecked for `arm64-apple-macos26.0`; the app target rebuilt as is and with `SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor`; the App Shortcut build errors quoted below were reproduced. Declarations and availability read from the 27.0 `AppIntents`/`WidgetKit` `.swiftinterface` files. Not run on a device. 2026-10-13: the phone-schema call intent, the Live Activity and the `LongRunningIntent` blocks built in a scratch XcodeGen app with a WidgetKit extension (iOS 26 target, MainActor default isolation), with the two `ExtractAppIntentsMetadata` errors below reproduced; the background-call behavior was observed on a locked iPhone (iOS 27.2) in a shipping voice-call app. 2026-10-24: schema domains and the 27 protocols read from the iOS 27.1 SDK `AppIntents.swiftinterface`; the `LongRunningIntent` block compiled through SIL against it.
 
 ## Contents
 - [Intent + App Shortcut](#intent--app-shortcut)
@@ -334,18 +334,22 @@ struct CreateProjectIntent: AppIntent {
 
 ## App Schemas and newer intent protocols
 
-**App Schemas** conform an intent, entity or enum to a system-defined shape with `@AppIntent(schema:)`, `@AppEntity(schema:)` and `@AppEnum(schema:)`. Siri and Apple Intelligence then understand it without phrases you define, and entity schemas feed Spotlight's semantic index. Domains arrive per OS (`.journal`, `.reader` and others since iOS 18; `.phone` in 27, used above); the schema dictates required properties, enforced by the macro and by `ExtractAppIntentsMetadata`.
+**App Schemas** conform an intent, entity or enum to a system-defined shape with `@AppIntent(schema:)`, `@AppEntity(schema:)` and `@AppEnum(schema:)`. Siri and Apple Intelligence then understand it without phrases you define, and entity schemas feed Spotlight's semantic index. Domains arrive per OS (`.journal`, `.reader` and others since iOS 18). The 27 SDK adds `.audio`, `.calendar`, `.clock`, `.maps`, `.messages`, `.notes`, `.phone` (used above) and `.reminders`; the schema dictates required properties, enforced by the macro and by `ExtractAppIntentsMetadata`. Schemas change between releases: iOS 27 renamed `calendar.deleteEvents` to `calendar.deleteEvent`, and `@AppEntity(schema: .photos.asset)` conformers may need changes to compile (iOS 27 release notes).
 
 | API | Availability | Use |
 |---|---|---|
 | `.appEntityIdentifier(_:)` / `.appEntityIdentifier(forSelectionType:identifier:)` | iOS 18.4 / macOS 15.4 | View annotation: maps a SwiftUI view or selection to an entity so Siri can act on what is on screen |
 | `CancellableIntent` + `withIntentCancellationHandler(operation:onCancel:)` | 26.4 | Cleanup when the system cancels; `IntentCancellationReason` (e.g. `.timeout`) |
 | `UndoableIntent` | 26 | Reverse the action through its `undoManager` |
-| `LongRunningIntent` + `performBackgroundTask(options:operation:)` | 27 | Extends the background runtime; `LongRunningTaskOptions.requiresGPU` |
+| `LongRunningIntent` + `performBackgroundTask(options:operation:)` | 27 | Extends the background runtime; `LongRunningTaskOptions.requiresGPU`. It refines `ProgressReportingIntent`, so report through `progress` |
 | `IndexedEntityQuery` | 27 | `reindexEntities(for:indexDescription:)` / `reindexAllEntities(indexDescription:)` when Spotlight asks |
 | `SyncableEntity`, `SyncableEntityIdentifier(local:stable:)` | 27 | Entities whose identity survives sync across devices |
 | `EntityCollection<Entity>` | 27 | A parameter holding a set of entity identifiers |
 | `AppIntentError(description:)`, `CustomAppIntentErrorConvertible` | 27 | User-facing error text from `perform()`, or map your own error type |
+| `RunSystemShortcutIntent(shortcut:)` | iOS 27 | Run an App Shortcut, custom shortcut or system action (or open another app) from an interactive widget |
+| `RelevantEntities.shared.updateEntities(_:for:)` / `removeEntities(_:)` | 27 | Register entities as suggestions for a context, e.g. `.audio(...)` feeds the Fitness workout media picker |
+| `OwnershipProvidingEntity` (`ownership: EntityOwnership`) | 27 | Gives the system ownership and sharing context for an entity |
+| `AppUnionValue` + `AppUnionValueCasesProviding` | 27 | Type identity and metadata for union values, with an `AppEnum` listing the cases |
 
 ```swift
 @available(iOS 27.0, *)
@@ -353,8 +357,12 @@ struct ExportLibraryIntent: LongRunningIntent, CancellableIntent {
     static let title: LocalizedStringResource = "Export Library"
 
     func perform() async throws -> some IntentResult {
+        progress.totalUnitCount = 100
         try await performBackgroundTask {
-            try await Task.sleep(for: .seconds(1)) // the export
+            for step in 1...100 {
+                try await Task.sleep(for: .milliseconds(10)) // one slice of the export
+                progress.completedUnitCount = Int64(step)
+            }
         } onCancel: { reason in
             print("cancelled: \(reason)")
         }

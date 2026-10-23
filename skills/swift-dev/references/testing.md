@@ -2,7 +2,7 @@
 
 Swift Testing and XCTest for iOS and macOS code: the test API, its compiler traps, running logic tests without a simulator, UI tests, and the `swift test` / `xcodebuild test` surface.
 
-Verified on Xcode 27.0 (Swift 6.4, iOS 27.0 / macOS 27.0 SDKs), 2026-10-07: every Swift Testing snippet compiled and ran under `swift test` in a scratch package (17 tests incl. exit test, attachments, warnings, cancellation, confirmations, known issues); the `.init` trap reproduced verbatim; a 10-test logic package from a voice-call app run with `swift test` (cold and warm timings below); a scratch XcodeGen iOS app with a Swift Testing unit target and an XCUITest target run on an iOS 27.0 simulator; the same package tests run on the simulator through `xcodebuild`; image attachments, the macOS UI test and the polling helper compiled through SIL (`swiftc -emit-sil`) against both SDKs; interop modes exercised with `SWIFT_TESTING_XCTEST_INTEROP_MODE`. 2026-10-13: re-ran the `.init` trap with and without a second public initializer and the `strict`/empty interop modes under `swift test`; `xcodebuild` timeout flags from `xcodebuild -help`; the AppIntentsTesting API read from its 27.0 `.swiftinterface`; the Simulator toolkit and the UI-test stalls observed in a voice-call app's UI-test suite on the iOS 27.0 Simulator.
+Verified on Xcode 27.0 (Swift 6.4, iOS 27.0 / macOS 27.0 SDKs), 2026-10-07: every Swift Testing snippet compiled and ran under `swift test` in a scratch package (17 tests incl. exit test, attachments, warnings, cancellation, confirmations, known issues); the `.init` trap reproduced verbatim; a 10-test logic package from a voice-call app run with `swift test` (cold and warm timings below); a scratch XcodeGen iOS app with a Swift Testing unit target and an XCUITest target run on an iOS 27.0 simulator; the same package tests run on the simulator through `xcodebuild`; image attachments, the macOS UI test and the polling helper compiled through SIL (`swiftc -emit-sil`) against both SDKs; interop modes exercised with `SWIFT_TESTING_XCTEST_INTEROP_MODE`. 2026-10-13: re-ran the `.init` trap with and without a second public initializer and the `strict`/empty interop modes under `swift test`; `xcodebuild` timeout flags from `xcodebuild -help`; the AppIntentsTesting API read from its 27.0 `.swiftinterface`; the Simulator toolkit and the UI-test stalls observed in a voice-call app's UI-test suite on the iOS 27.0 Simulator. 2026-10-24 (Xcode 27.1): the custom-trait block run under `swift test`; the interop default re-run at tools versions 6.2 and 6.4; `confirmation(expectedCount: ...5)` compiled to confirm the error.
 
 ## Contents
 - Swift Testing essentials
@@ -308,7 +308,7 @@ Xcode shows attachments in the test report. **`swift test` discards them unless 
 }
 ```
 
-The count is checked when the closure returns, so the events must arrive before it returns - await the work inside the closure. Ranges (`1...`, `...5`) are accepted for "at least" or "at most".
+The count is checked when the closure returns, so the events must arrive before it returns - await the work inside the closure. Ranges (`1...`, `0...5`) are accepted for "at least" or "at most"; `...5` does not compile (`Range expression '...n' is ambiguous without an explicit lower bound`).
 
 `CustomTestReflectable` (Swift 6.4, ST-0022) controls what a failed expectation prints for your type - `var customTestMirror: Mirror { Mirror(self, children: ["amount": Double(cents) / 100]) }` makes the failure list `amount` as `1.5` instead of the raw `cents` field.
 
@@ -335,6 +335,46 @@ struct SharedResourceTests {
 - `.timeLimit` takes minutes only; `.seconds` and `.milliseconds` are `unavailable` with "Time limit must be specified in minutes".
 - Tests run in parallel by default. Apply `.serialized` to every suite whose tests share a resource - the microphone, an audio tap, a TCC prompt, a keychain item, a fixed file path, a launched app. Two such tests in parallel produce silent buffers, a spurious `false` from a permission request, or inconsistent process state, and look flaky rather than wrong. Tests outside the suite still run in parallel with it.
 - Gate tests that need live permissions or hardware behind an env var so `swift test` skips them by default: `.enabled(if: ProcessInfo.processInfo.environment["RUN_HARDWARE_SMOKE"] == "1")`, and add a `just`/`make` recipe that sets it.
+
+### Custom traits, issue filters and assertion helpers
+
+A trait conforming to `TestScoping` wraps each test it is applied to (set-up and tear-down around `function()`; ST-0007); `.filterIssues` / `.compactMapIssues` drop or rewrite issues before they are recorded; a helper that takes `sourceLocation: SourceLocation = #_sourceLocation` and forwards it reports failures at the caller's line (all three verified under `swift test`, Xcode 27.1):
+
+```swift
+import Testing
+
+struct MockServer: TestTrait, SuiteTrait, TestScoping {
+    @TaskLocal static var baseURL: String?
+
+    func provideScope(for test: Test, testCase: Test.Case?,
+                      performing function: @Sendable () async throws -> Void) async throws {
+        try await MockServer.$baseURL.withValue("http://127.0.0.1:9999") {   // start the server here
+            try await function()
+        }                                                                     // stop it here
+    }
+}
+
+extension Trait where Self == MockServer {
+    static var mockServer: Self { Self() }
+}
+
+@Test(.mockServer) func usesServer() {
+    #expect(MockServer.baseURL == "http://127.0.0.1:9999")
+}
+
+func expectSorted(_ values: [Int], sourceLocation: SourceLocation = #_sourceLocation) {
+    #expect(values == values.sorted(), sourceLocation: sourceLocation)
+}
+
+@Test func sortedHelper() { expectSorted([1, 2, 3]) }
+
+@Test(.filterIssues { issue in !String(describing: issue).contains("flaky-backend") })
+func ignoresKnownNoise() {
+    Issue.record("flaky-backend timeout")
+}
+```
+
+Pass values to the test through a `@TaskLocal`, as above - the trait cannot hand arguments to the test function.
 
 Polling helpers must let the outer deadline govern. A helper that rethrows a transient read error from the condition aborts on the first hiccup under parallel load:
 
@@ -377,9 +417,10 @@ An XCTest assertion inside a Swift Testing test (or the reverse) is governed by 
 
 | Mode | Result |
 |---|---|
-| unset (default) | test fails, plus an "An API was misused" warning |
+| unset, `swift-tools-version: 6.4` | test fails, plus an "An API was misused" warning |
+| unset, tools version below 6.4 (e.g. the `6.2` templates in this skill) | same as `limited`: **the test passes** with two warnings ([ST-0021](https://github.com/swiftlang/swift-evolution/blob/main/proposals/testing/0021-targeted-interoperability-swift-testing-and-xctest.md); re-verified on Xcode 27.1) |
 | `limited` | test passes with two warnings |
-| `complete` | same as default |
+| `complete` | same as the 6.4 default |
 | `strict` | `Fatal error: Replace XCTest API such as 'XCTAssert' with a Swift Testing equivalent` - the whole run dies, not just the test |
 | `none` | **test passes silently** - the assertion is lost |
 | empty (`=`) | same as `limited` |

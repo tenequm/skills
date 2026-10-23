@@ -2,7 +2,7 @@
 
 Apple's language-model framework on iOS, iPadOS, macOS and visionOS: the on-device model, the Private Cloud Compute model, guided generation, tools, image input, dynamic sessions and error handling, plus a pointer to Core AI for bringing your own model.
 
-Verified on Xcode 27.0 (Swift 6.4, iOS 27.0 / macOS 27.0 SDKs), 2026-10-07: every block compiled through SIL (`swiftc -emit-sil`, so region-isolation checks ran) for iOS 27 and macOS 27 with and without `-default-isolation MainActor` (the error-handling block also typechecked at an iOS 26 deployment target); a scratch SPM executable on macOS 27.2 with Apple Intelligence enabled ran text, guided, image, tool, dynamic-instruction and profile requests and triggered `contextSizeExceeded`, `concurrentRequests` and a PCC request without the entitlement. 2026-10-13: the `SpotlightSearchTool` block compiled through SIL for iOS and macOS 26 targets; `Evaluations` read from the Xcode 27 framework interface (no example run); `fm` from its man page, not executed; PCC eligibility from Apple's [Private Cloud Compute](https://developer.apple.com/private-cloud-compute/) page.
+Verified on Xcode 27.0 (Swift 6.4, iOS 27.0 / macOS 27.0 SDKs), 2026-10-07: every block compiled through SIL (`swiftc -emit-sil`, so region-isolation checks ran) for iOS 27 and macOS 27 with and without `-default-isolation MainActor` (the error-handling block also typechecked at an iOS 26 deployment target); a scratch SPM executable on macOS 27.2 with Apple Intelligence enabled ran text, guided, image, tool, dynamic-instruction and profile requests and triggered `contextSizeExceeded`, `concurrentRequests` and a PCC request without the entitlement. 2026-10-13: the `SpotlightSearchTool` block compiled through SIL for iOS and macOS 26 targets; `Evaluations` read from the Xcode 27 framework interface (no example run); `fm` from its man page, not executed; PCC eligibility from Apple's [Private Cloud Compute](https://developer.apple.com/private-cloud-compute/) page. 2026-10-24: the focused `SpotlightSearchTool` block typechecked against the iOS 27.1 and macOS 27.0 SDKs; `contextSize` read from the FoundationModels interface.
 
 ## Contents
 - Availability and models
@@ -26,7 +26,7 @@ Verified on Xcode 27.0 (Swift 6.4, iOS 27.0 / macOS 27.0 SDKs), 2026-10-07: ever
 | `PrivateCloudComputeLanguageModel()` | iOS / macOS / visionOS / watchOS 27+ | 32K | Server model on PCC, reasoning levels, per-person daily quota, managed entitlement. |
 | Your own `LanguageModel` | 27+ | model-defined | Core AI, MLX or a server model behind the same session API. |
 
-On macOS 27.2 the on-device model reported `variant.displayName == "AFM 3 Core"`, `contextSize == 4096`, and capabilities vision, tool calling and guided generation, not reasoning. The on-device model changes with OS updates (26.4, 27.0); re-test prompts on each release.
+Read `contextSize` instead of hard-coding 4096: on 27 the property returns the runtime model's value, and 4096 is only the pre-27 back-deployed constant (FoundationModels swiftinterface). On macOS 27.2 the on-device model reported `variant.displayName == "AFM 3 Core"`, `contextSize == 4096`, and capabilities vision, tool calling and guided generation, not reasoning. The on-device model changes with OS updates (26.4, 27.0); re-test prompts on each release.
 
 ```swift
 import FoundationModels
@@ -161,7 +161,7 @@ func askAboutStock() async throws -> String {
 - `GenerationOptions(toolCallingMode: .required | .allowed | .disallowed)` (27.0) forces or forbids tool use for one request.
 - Errors thrown from `call` surface as `LanguageModelSession.ToolCallError` (with `tool` and `underlyingError`).
 - Vision ships ready-made tools for image prompts (27.0): `OCRTool()` and `BarcodeReaderTool()` from `import Vision`.
-- Core Spotlight ships `SpotlightSearchTool` (iOS / macOS / visionOS 27, `import CoreSpotlight` alongside `FoundationModels`): the model searches Core Spotlight (the default `Configuration(sources: [.coreSpotlight])`; items you indexed with `CSSearchableIndex`) to ground its answers. The configuration also takes custom search stages and a `maximumResponseSize` to bound what lands in the 4096-token context.
+- Core Spotlight ships `SpotlightSearchTool` (iOS / macOS / visionOS 27, `import CoreSpotlight` alongside `FoundationModels`): the model searches Core Spotlight (the default `Configuration(sources: [.coreSpotlight])`; items you indexed with `CSSearchableIndex`) to ground its answers. The configuration also takes custom search stages and a `maximumResponseSize` to bound what lands in the 4096-token context. Known issue (iOS 27 release notes, 183770678): `SpotlightSearchTool()` with no configuration, used with the on-device model, fails with a "number of tokens ... exceeds the maximum" error - its default is sized for larger models. Pass `guide: .focused()`:
 
 ```swift
 import CoreSpotlight
@@ -169,7 +169,8 @@ import FoundationModels
 
 @available(iOS 27.0, macOS 27.0, *)
 func askAboutIndexedNotes(_ question: String) async throws -> String {
-    let session = LanguageModelSession(tools: [SpotlightSearchTool()],
+    let spotlight = SpotlightSearchTool(configuration: .init(sources: [.coreSpotlight], guide: .focused()))
+    let session = LanguageModelSession(tools: [spotlight],
                                        instructions: "Answer from the user's indexed notes.")
     return try await session.respond(to: question).content
 }

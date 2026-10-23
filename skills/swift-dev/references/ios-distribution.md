@@ -156,6 +156,7 @@ The account's App Store Connect role, a missing app record, or an export that ne
     [ -d "$ARCHIVE/dSYMs/$name.framework.dSYM" ] || xcrun dsymutil "$fw/$name" -o "$ARCHIVE/dSYMs/$name.framework.dSYM"
   done
   ```
+  Compare UUIDs with `xcrun dwarfdump --uuid <binary-or-dSYM>` (`UUID: 6739... (arm64) ...`). Keep the `xcrun`: a Homebrew `dwarfdump` (libdwarf) earlier in `PATH` shadows Apple's and rejects `--uuid` with `invalid long option '--uuid'`.
 
 After processing (an email arrives), the build is immediately available to internal testers in a TestFlight group; external groups trigger Beta App Review for the first build. Internal testers must first accept an App Store Connect team invitation (Developer is the most limited role that qualifies) and are invited by email only; public links exist only for external groups.
 

@@ -142,7 +142,7 @@ struct SharedSettingsView: View {
 }
 ```
 
-macOS 27 tightens cross-app data access: reading another team's app data container or app group container is now denied by default (no prompt) and only the user can grant it in Privacy & Security; XProtect may also block access to other teams' app data. Apps can no longer read the TCC database directly.
+macOS 27 tightens cross-app data access: reading another team's app data container or app group container is now denied by default (no prompt) and only the user can grant it in Privacy & Security; XProtect may also block access to other teams' app data. Apps can no longer read the TCC database directly. The XProtect rule reaches past containers: "Accessing files created by other developer teams' apps may be denied by default" (178668601) - a helper reading a browser's profile files (Chrome's `Local State` under `~/Library/Application Support`) failed with no prompt on macOS 27, and granting it Full Disk Access fixed it (observed). Handle the read error and point the user at Privacy & Security instead of assuming the file is missing.
 
 ## Notifications
 
@@ -409,7 +409,7 @@ func renderFrame() {
 
 - **Interpolated dynamic values are private by default** and show as `<private>` outside a debugger. Mark diagnostic values `.public`, keep user data private (`.private(mask: .hash)` still lets you correlate).
 - **Levels persist differently.** `.debug` is memory-only, `.info` is kept only when collected; `.notice` (default), `.error` and `.fault` go to the on-disk store. Use `.notice`+ for anything you need from a user's sysdiagnose.
-- Stream your app's logs: `log stream --predicate 'subsystem == "com.example.MyApp"' --level debug`.
+- Stream your app's logs: `/usr/bin/log stream --predicate 'subsystem == "com.example.MyApp"' --level debug`. In zsh, `log` is a shell builtin, so a bare `log show` / `log stream` fails with `log:1: too many arguments`; spell out `/usr/bin/log`.
 - Log archives written on macOS 27 cannot be read on macOS 26.1 or earlier (need 26.2+).
 - `OSSignposter` intervals show up as regions in Instruments' Points of Interest / os_signpost tracks.
 

@@ -14,6 +14,7 @@ Verified on Xcode 27.0 (Swift 6.4, iOS 27.0 / macOS 27.0 SDKs), 2026-10-07: ever
 - NSWorkspace and open/save panels
 - Reaching the NSWindow
 - NSPanel floating HUD
+- AppKit 27 additions
 
 ## NSViewRepresentable
 
@@ -265,7 +266,7 @@ Apple is moving macOS to iOS-style pasteboard privacy: reading the **general** p
 - Read contents only in response to an explicit paste (menu item, Cmd+V). Responder-chain paste into `NSTextView` and friends is unaffected; clipboard managers and pasteboard pollers are what break.
 - To enable a Paste item or offer "open copied link", inspect without reading: `detectedPatterns(for:)` / `detectedValues(for:)` / `detectedMetadata(for:)` (macOS 15.4+, async) do not trigger the alert.
 - `NSPasteboard.accessBehavior` (macOS 15.4+) reports the user's per-app setting: `.default`, `.ask`, `.alwaysAllow`, `.alwaysDeny`.
-- The `EnablePasteboardPrivacyDeveloperPreview` user default that simulated the alert is removed in macOS 27.2 (in the beta 3 release notes; 27.2 is not released yet).
+- The `EnablePasteboardPrivacyDeveloperPreview` user default that simulated the alert is removed in macOS 27.2 (still listed in the [27.2 RC release notes](https://developer.apple.com/documentation/macos-release-notes/macos-27_2-release-notes)).
 
 Unverified: whether macOS 27.x shows the alert to users by default - neither the macOS 27 nor 27.2 release notes say so.
 
@@ -408,3 +409,11 @@ struct MenuBarRoot: View {
 ```
 
 Pick the observer carefully: `MenuBarExtra` content is not built until the user first opens the extra (see macos-app-lifecycle.md), so an observer there can miss early clicks - a long-lived window's root view is safer. For scenes hosted through `NSHostingSceneRepresentation` (macOS 26+), call `representation.environment.openWindow(id:)` directly and skip the notification.
+
+## AppKit 27 additions
+
+From the [macOS 27 release notes](https://developer.apple.com/documentation/macos-release-notes/macos-27-release-notes):
+
+- **Pull to refresh:** `NSRefreshController`, set as `NSScrollView.refreshController`; give it a target/action for user-initiated refreshes, call `endRefreshing()` when done and `beginRefreshing()` to start one from code.
+- **Semantic roles:** `NSToolbarItemGroup.role` (`NSToolbarItemGroupRole`) and `NSSegmentedControl.role` (`NSSegmentedControlRole`); the `.tabs` role makes VoiceOver read a segmented control as tabs and gives it a distinct look.
+- **Text selection:** `NSTextSelectionManager` adds click, drag, shift-click and word/line/paragraph selection to any `NSView` through gesture recognizers. `NSTextView` now uses it; subclasses that override `mouseDown:` keep working through a compatibility path.
