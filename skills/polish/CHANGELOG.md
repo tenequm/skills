@@ -7,6 +7,21 @@ and this skill adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.h
 
 ## [Unreleased]
 
+## [3.2.0] - 2026-10-28
+
+### Added
+
+- Design lens: **fix in the wrong layer**. A bugfix that stops one caller from sending an input the shared function
+  cannot handle - while other callers or user-supplied input can still send it - is flagged, with the shared function
+  named as the place to fix it. The finding is anchored on the diff's workaround lines and stays a pre-merge ask,
+  since the remedy replaces the diff's change. The lens also checks that a test added for the fix exercises the
+  shared function rather than a copy of its logic.
+- Phase 4 validation for wrong-layer claims: the finding must name a second way the bad input can still arrive - another
+  caller by `file:line`, or a user-facing surface (CLI argument, config value, request field) - or it is dropped. Being
+  the only in-repo caller is not enough to drop it.
+- Eval 6 (`wrong-layer` fixture): an entrypoint-side workaround for input that any CLI user can still send to the
+  unfixed shared parser. The entrypoint is the only in-repo caller, as in glim-sh/cuttle#140.
+
 ## [3.1.0] - 2026-09-09
 
 ### Added

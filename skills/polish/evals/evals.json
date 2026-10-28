@@ -67,6 +67,19 @@
         "Report does NOT manufacture findings in the baseline code, which is also clean",
         "Automated checks (lint/typecheck) pass before review"
       ]
+    },
+    {
+      "id": 6,
+      "prompt": "Set up the fixture repo by running `bash evals/fixtures/wrong-layer/setup.sh`, then cd into the created directory and run /polish",
+      "expected_output": "The entrypoint is the only in-repo caller that adds a second `--`, but any user typing `browserd serve -- --flag -- url` reaches the same failure through src/cli.ts. Report should flag the entrypoint change as a fix in the wrong layer, name splitPassthrough or browserArgv as the place to fix it, and keep it as a pre-merge finding on the entrypoint lines. Should stop and wait for approval.",
+      "files": ["evals/fixtures/wrong-layer/setup.sh"],
+      "expectations": [
+        "Report flags the bin/viewer-entrypoint.sh change as a fix in the wrong layer and names splitPassthrough (src/args.ts) or browserArgv (src/launch.ts) as the place to fix it",
+        "Report names user-typed CLI arguments reaching src/cli.ts as a path that still delivers a literal `--` after the change",
+        "Report does NOT drop the finding because the entrypoint is the only in-repo caller",
+        "Report keeps the finding as a pre-merge ask anchored on the entrypoint, not as an out-of-diff follow-up",
+        "Report explicitly stops and waits for user approval before making fixes"
+      ]
     }
   ]
 }
