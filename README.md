@@ -27,7 +27,7 @@ npx skills add tenequm/skills@<skill-name>
 <!-- GENERATED_SKILLS_TABLE_START -->
 | Skill | Version | ClawHub | Description |
 |-------|---------|---------|-------------|
-| `acpx-faq` | 0.10.1 | [page](https://clawhub.ai/tenequm/skills/acpx-faq) | Run coding agents (codex, claude, agy) through the acpx ACP CLI - one-shot dispatch into named sessions you can watch live. Use before launching or prompting a subagent, or when a command fails, a session is missing, or a prompt is lost. |
+| `acpx-faq` | 0.11.0 | [page](https://clawhub.ai/tenequm/skills/acpx-faq) | Run coding agents (codex, claude, agy) through the acpx ACP CLI - one-shot dispatch into named sessions you can watch live. Use before launching or prompting a subagent, or when a command fails, a session is missing, or a prompt is lost. |
 | `founder-playbook` | 0.1.7 | [page](https://clawhub.ai/tenequm/skills/founder-playbook) | Decision validation and thinking frameworks for founders. Use to pressure-test a decision, validate next steps, or sanity-check an approach - "should I", "help me think through", "what am I missing". Covers fundraising, customers, runway. |
 | `ghostwriter` | 0.1.3 | [page](https://clawhub.ai/tenequm/skills/ghostwriter) | Write content by interviewing the user instead of drafting - extract their material through questions, then assemble the piece from their own words. Use when the user needs to write something for an audience or mentions "ghostwriter". |
 | `go-dev` | 0.6.1 | [page](https://clawhub.ai/tenequm/skills/go-dev) | Opinionated Go setup with golangci-lint v2, gofumpt, gotestsum, golang-migrate, and just. Use when starting a Go project, configuring lint, format, test, coverage or CI, writing a Justfile, wiring migrations, or leaving a Makefile workflow. |
