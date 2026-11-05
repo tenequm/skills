@@ -1,8 +1,8 @@
-# Lance changelog - v7 -> v14 (section 14)
+# Lance changelog - v7 -> v15 (section 14)
 
-Part of the Lance v14 reference (`lance-format/lance@v14.0.0-beta.14`; stable pin `v13.0.0`).
+Part of the Lance v15 reference (`lance-format/lance@v15.0.0-beta.10`; stable pin `v14.0.2`).
 Citations are `path:line` relative to the repo root; build a permalink as
-`https://github.com/lance-format/lance/blob/v14.0.0-beta.14/<path>`. Each delta section cites the
+`https://github.com/lance-format/lance/blob/v15.0.0-beta.10/<path>`. Each delta section cites the
 tag current when it was written; line numbers drift between tags - treat them as approximate. Cross-references written as "section N" use the original
 16-section numbering; `lance-reference.md` maps every number to its file.
 
@@ -41,6 +41,14 @@ five consecutive lines (9.1, 10.1, 11.1, 12.1, 13.1 - the last after `v13.1.0-be
 already been tagged), the stable pin is **`v13.0.0`** (2026-10-07; crates.io `lance 13.0.0`, PyPI
 `pylance 13.0.0`), and the tracked frontier is `v14.0.0-beta.14`. See the last two sections.
 
+**Current state (2026-11-05), superseding the paragraph above:** the stable pin is **`v14.0.2`**
+(2026-10-29; GitHub `Latest`, crates.io `lance 14.0.2`, PyPI `pylance 14.0.2`). `v14.0.3` exists
+only as `v14.0.3-rc.1`. **`14.0.0` never reached crates.io** - its cargo publish failed on a
+git-patched `object_store` - so the Rust floor of the line is `14.0.1`, while PyPI and Maven do
+carry `14.0.0`. rc tags and patch finals are not new (rc tags date to `v1.0.0-rc.1`; `v8.0.1` and
+`v9.0.1` were patches); v14 is the first line since v9 to ship a patch final, and the first with two. The 14.1 dev line
+never got a tag before re-rooting to 15 - see the v15 section.
+
 ## Contents
 
 - [The v7.1.0-beta.1 delta](#the-v710-beta1-delta)
@@ -64,13 +72,15 @@ already been tagged), the stable pin is **`v13.0.0`** (2026-10-07; crates.io `la
 - [The v13 line (release-root/13.0.0-beta.N -> v13.0.0-beta.4)](#the-v13-line-release-root1300-betan---v1300-beta4)
 - [The v13.0.0-beta.4 -> v13.0.0 final delta](#the-v1300-beta4---v1300-final-delta)
 - [The v14 line (release-root/14.0.0-beta.N -> v14.0.0-beta.14)](#the-v14-line-release-root1400-betan---v1400-beta14)
+- [v14.0.0-beta.14 -> v14.0.0 final, and the v14.0.x patches](#v1400-beta14---v1400-final-and-the-v140x-patches)
+- [The v15 line (release-root/15.0.0-beta.N -> v15.0.0-beta.10)](#the-v15-line-release-root1500-betan---v1500-beta10)
 
 Other files: `format-file.md` (1-4), `format-table.md` (5-10), `indexes.md` (11-12),
 `ops.md` (13, 15, 16).
 
 ---
 
-## 14. What changed (v7 -> v14)
+## 14. What changed (v7 -> v15)
 
 The v7 tag line ran `v7.0.0-beta.1` through `v7.0.0-beta.17`, then `v7.0.0-rc.1` and
 `v7.0.0`. The v7.1 line opened at `v7.1.0-beta.1`, continued through `v7.1.0-beta.4` and
@@ -1786,3 +1796,415 @@ range name no RUSTSEC ids: `aws-smithy-json` 0.62.4 -> 0.62.5 (#9723), Java `jac
 **In flight, not landed:** the arrow 59 / DataFusion 55 / pyo3 0.29 upgrade (#9647); spilled row
 lineage (bit 11, env-gated); fragment tree (bit 12) and independent covering fields (bit 13),
 both reserved and refused; FRI with stable row ids (bit 9, debug builds only).
+
+### v14.0.0-beta.14 -> v14.0.0 final, and the v14.0.x patches
+
+**145 commits** from `v14.0.0-beta.14` to `v14.0.0` (2026-10-26), then **4** to `v14.0.1`
+(2026-10-28), **4** to `v14.0.2` (2026-10-29, the stable pin) and **6** to `v14.0.3-rc.1`
+(2026-11-02, not yet a final). **5 `breaking-change` PRs** (#10086, #9774, #9717, #9526, #9481),
+**14 `format-change` PRs** (#9481, #9564, #9740, #9878, #9886, #9889, #9920-#9925, #9967, #10155)
+and one `!` commit (#10086). Citations below are at `v14.0.0` unless a tag is named.
+
+**Release-branch shape.** `v14.0.0` is `main`@`69f902d02` (#10191, 2026-10-21) - the commit both
+`release-root/14.1.0-beta.N` and `release-root/15.0.0-beta.N` point at ("Base: 14.0.0-rc.1") - plus
+four commits on `release/v14.0`: `rc.1`, the #10247 backport, `rc.2`, the release. Every later v14
+tag lives only on `origin/release/v14.0`, in the documented progression `rc.1` -> `rc.2` -> stable ->
+`beta.0` -> `rc.1` for patches (`release_process.md:105`): after each final the branch bumps to
+`14.0.N-beta.0`, which means "Unreleased version (exists on branch but not published)" (`:59`),
+takes cherry-picks, cuts an rc, and after the vote (`approve-rc.yml`) the final. All of
+`create-release-branch.yml`, `create-rc.yml`, `approve-rc.yml` and their `ci/*.sh` predate the range.
+Consequences for pinning:
+
+- **Backports are renumbered**: #10363 -> #10364 (14.0.1), #10413 -> #10412 (14.0.2), #10149 ->
+  #10247 (rc.2), #10454 + #10586 -> #10596 (14.0.3-rc.1). Match a fix by title, not PR number.
+  Pending: #10756 (open) brings #10447, #10489, #10505 plus #10327 and #10737 (branch cleanup and
+  creation).
+- **Channels**: Rust finals go to crates.io, rcs and betas are "Not published (use git tag)"
+  (`release_process.md:69`); Python rcs and betas go to fury.io (`pylance-14.0.0rc1` ..
+  `14.0.3rc1`), Java rcs and betas to Maven Central. Maven's `maven-metadata.xml` reports
+  `<release>15.0.0-beta.8` for `org.lance:lance-core` - Maven's "release" field counts betas, so
+  it is no stable signal.
+- **`14.0.0` is missing from crates.io.** The release-triggered cargo publish failed; #10364
+  explains: "The v14.0.0 Rust release failed when `cargo publish` verified `lance-io` against
+  crates.io `object_store 0.14.2`. The crate used `PutMultipartOptions::mode` from an unmerged
+  `object_store` commit pinned through `[patch.crates-io]`; published crates cannot carry that
+  patch" (`Cargo.toml:291` at `v14.0.0`). crates.io goes `13.0.0 -> 14.0.1 -> 14.0.2` for every
+  crate; `lance-jsonb` first appears at 14.0.1; `lance-arrow-scalar` / `lance-arrow-stats` are
+  excluded from the workspace publish and versioned after Arrow (`58.0.0`). The 14.0.0 wheel and
+  14.0.1+ differ in object-store copy code (below).
+
+**Invariants:** still **27** crate dirs, MSRV `1.94.0` (python / jni `1.94`), toolchain 1.98.1,
+arrow `58.0.0`, datafusion `54.0.0`, pyo3 `0.28` (lock `0.28.3`), opendal `0.59.2`, geodatafusion
+`0.5.0`, through `v14.0.3-rc.1`. Moved: **`object_store` 0.14.1 -> 0.14.2**, **`reqwest` 0.12 ->
+0.13** with aws-lc-rs instead of ring (#10028: "This bumps the workspace to reqwest 0.13 and uses
+its `rustls` feature (aws-lc-rs)"; ring stays in the graph through
+`lance-namespace-reqwest-client`), rustls 0.23.46. lance-namespace pins unchanged: Rust `0.13.0`,
+Java `0.12.0`, Python `>=0.13.0,<0.14`. File versions unchanged: `stable_file_version() -> V2_2`,
+`next_file_version() -> V2_3`, `#[default] V2_2` (`rust/lance-file/src/version.rs:19-27,43-45`);
+`WriteParams::default` and `CommitConfig::default` unchanged. Protos 13 -> **15**
+(`clustering.proto`, `encodings_v2_3.proto`).
+
+**Breaking (labeled):**
+
+- **#10086 (rc.1, `!`)** - "BREAKING CHANGE: `lance_linalg::distance::{l2_distance_batch,
+  dot_distance_batch}` and the `L2::l2_batch` / `Dot::dot_batch` trait methods are removed. Use
+  `l2_distance_batch_into` / `dot_distance_batch_into` ... No deprecation period: #10083 treats
+  lance-linalg as internal." `lance_index::vector::kmeans::compute_partition` takes a `&mut [f32]`
+  scratch.
+- **#9481 (beta.16, also `format-change`) - BTree moves to the row-address domain.**
+  `BTREE_INDEX_VERSION` 0 -> 1; on stable-row-id tables `ids` stores `_rowaddr`, while other tables
+  keep writing version 0, so "a user who never turns on stable row ids" sees no change
+  (`rust/lance-index/src/scalar/btree.rs:105-122`). External builders: "they will need to change
+  the column name and ensure they are reading row addrs and not row ids." A `v13.0.0` reader skips a
+  version-1 segment with a warning and scans. **Older writers are the hazard**: they still extend a
+  v1 segment's coverage as if it held row ids, so "An update to another column can then suppress
+  fallback scans for moved rows and silently lose matches" (#10352, which fences them with the
+  writer-only `FLAG_ROW_ADDR_INDICES`, bit 18 - only from `v15.0.0-beta.7`, not in any v14 tag).
+  Keep pre-v14 writers off stable-row-id tables that carry a v1 BTree; "Such an index must be
+  rebuilt."
+- **#9774 (beta.16)** - cleanup gains `delete_concurrency` (Python / Rust / Java) and table config
+  `lance.auto_cleanup.delete_concurrency`; "Concurrency defaults to the initiating store's I/O
+  parallelism".
+- **#9717** (MemWAL Blob v2 write / promotion stack; S3 promotion became "backend-gated,
+  client-streamed conditional promotion") and **#9526** (MemWAL FTS fuzzy matches inside `AND`;
+  `max_extensions` applies per tier).
+
+**Format and feature flags:**
+
+- **Bit 11 is stable and supported in every build** (#9802, beta.16; spec #9886). Renamed
+  `FLAG_SPILLED_ROW_LINEAGE`, the old name a `#[deprecated(since = "14.0.0")]` alias, and
+  `LANCE_ENABLE_UNSTABLE_SPILLED_ROW_LINEAGE` is gone: "Supported in every build. Table
+  configuration controls whether a writer spills sequences" (`feature_flags.rs:71-88`). Spilling
+  stays opt-in (`lance.row_lineage.spill=true`); `v13.0.0` and pre-beta.16 release builds still
+  refuse a spilled table unless the old env var is set.
+- **Bits 16 and 17 reserved, `FLAG_UNKNOWN` `1 << 16` -> `1 << 18`** (`feature_flags.rs:119-131`):
+  `FLAG_ZONE_WRITE_SEEDS` (paired, added to `STICKY_PAIRED_FLAGS`, #9564, beta.19) and
+  `FLAG_OBJECT_METADATA` (writer-only, #9878, beta.22), both masked by `supported_flags_when`
+  (`:347-348`). Bits 9 (debug builds only, `:313-315`), 12 and 13 (masked, `:345-346`) are
+  unchanged.
+- **2.3 got a new grammar; earlier 2.3 files are unreadable** (#9920-#9922, beta.22): "Earlier
+  unstable 2.3 metadata is not supported" (`docs/src/format/file/encoding.md:333-334`); #9921:
+  "Earlier unstable 2.3 files have no compatibility path." Any `next` / 2.3 file written before
+  `v14.0.0-beta.22` must be rewritten from a source that can still read it. Stable 2.1 / 2.2 field
+  numbers are unchanged.
+- **Spec only, no runtime:** zone write seeds v1 (#9564; variable-length zones #10155), clustering
+  metadata (#9878: "This PR defines the persisted format"), experimental PCA pre-transform (#9967,
+  `lance:pca`, model version 1). New pages `format/index/scalar/zone_write_seeds.md` and
+  `format/table/clustering.md`.
+- **`format/table/jsonb.md` deleted** (#9889, beta.15, a revert); `lance-jsonb` stays.
+
+**Defaults and behavior:**
+
+- **AIMD ceiling 5000 -> 10000 req/s** per read / write / delete / list controller (#10153,
+  beta.22; `rust/lance-core/src/utils/aimd.rs:49`), initial 2000, "about 27 seconds" to the
+  ceiling. Deletes now spend the budget too: #9707 (beta.15) - "`AimdThrottledStore::delete_stream`
+  previously forwarded deletes without acquiring delete tokens" - charges one token per request
+  attempt.
+- **`lance-encoding:dict-max-size`**, default 8 MiB (`rust/lance-encoding/src/constants.rs:34`,
+  `primitive.rs:63-64`; #9939): a variable-width dictionary over budget falls back to the regular
+  encoding. Not yet in `encoding.md`.
+- **S3 `aws_copy_if_not_exists` defaults to `multipart`** from 14.0.1: "Published object_store
+  requires an explicit mechanism for conditional S3 copies"
+  (`rust/lance-io/src/object_store/providers/aws.rs:117-123` at `v14.0.1`), replacing the
+  git-patched streamed conditional copy that 14.0.0 shipped.
+- #10008 (beta.22): `download_retry_count` now reaches ranged reads, invalid AIMD backoff ranges
+  fail at store build, OpenDAL S3 rejects an explicit `aws_credentials`.
+- **REST namespace wire changes** (beta.22): `count_rows`, `tags/list` and `stats` use POST and
+  `count_rows` returns a bare integer - "Compatibility: a client from an earlier release gets 405
+  from a new adapter on `list_table_tags`" (#9993); #10190 aligns client and adapter with the spec
+  (identity as `x-api-key` / `Authorization`, branch propagation); #10192 adds
+  `batch_create_table_versions`, `batch_commit_tables`, `update_field_metadata` (default not
+  supported). #9998 (DirectoryNamespace): "`drop_namespace` on a table's id deleted the table's
+  manifest entry and left its data on disk."
+- **FTS stop-word lists rewritten - rebuild FTS indexes.** #10045 (14 Latin-script languages,
+  including English), #10046 (Chinese, Japanese, beta.19), #10048-#10052 (Korean, Arabic, Greek,
+  Russian, Tamil), all in the final. "Existing FTS indices must be rebuilt to align stored terms
+  with the updated tokenizer" (#10045); #10046 adds "Built-in word-list versions are not persisted,
+  so query tokenization for older indices can disagree with their stored terms." Trigger: any
+  inverted index built with `remove_stop_words` on (the default, `tokenizer.rs:644`) using the
+  built-in lists; the Korean list also dropped every single digit from the ICU union, "even in
+  non-Korean documents".
+- Net-new: SQL `IS [NOT] DISTINCT FROM` (#9331), IVF training from supplied samples (#10188),
+  distributed optimize_indices (#9871), Python / Java MinHash LSH (#9965, #9966), Python
+  `fragment_ids` (#9592).
+
+**Fixes needing a rebuild, rewrite or repair:**
+
+- **Legacy blob columns in 2.2 files - fixed only in `v14.0.3-rc.1`.** Trigger: a binary column with
+  `lance-encoding:blob` written at 2.2 through `LanceFragment.create` / `write_fragments` / Java
+  `Fragment.write()`, or `add_columns` / `merge` / `update_columns` / the merge_insert partial path;
+  the next commit (13.0.0 on) promotes the column to Blob v2 and reads fail with "should contain 5
+  child data array(s), had 2". "Tables that the 12.0.0 fragment writer produced this way break on
+  their first commit under 13.0.0 or later" (#10454). #10454 is read-side (no rewrite once on a
+  fixed reader); #10586 stops the writers producing such files.
+- **#10412 (14.0.2)** - "Nullable struct merges can panic on a sliced Boolean child or return
+  incorrect nulls when a parent bitmap is sliced" (LanceDB #4260). Upstream names no repair.
+- **#10145 (beta.22, `critical-fix`)** - 2.2 / 2.3 pages whose mini-block dictionary the writer
+  RLE-compressed: "The write succeeded; every subsequent scan of the resulting file failed." Read
+  side only: upgrade readers, no rewrite; `release/v13.0` got no patch.
+- **#9865 (beta.22, `critical-fix`)** - indexed merge_insert on a data-overlay table whose join key
+  changed after indexing missed the match, "causing a duplicate insert". Dedupe affected tables.
+- **#10109 (beta.20)** - deferred-remap compaction folding an overlay on an indexed field left the
+  index covering pre-overlay values ("`val = <old value>` kept matching"). Rebuild the index.
+- **#10003 (beta.17)** - ZoneMap seeds read from a file that no longer served the column, after a
+  full-column replacement then another single-column replacement: "A matching query then
+  returned 0 rows instead of 10". Rebuild ZoneMap indexes maintained under that pattern (#9868
+  makes column-update writers emit seeds).
+- **#10004 (beta.18)** - legacy row-id and new row-address BTree segments under one name (staged
+  commits) "silently losing matches on stable-row-ID tables"; now rejected. Rebuild mixed indexes.
+- **#10041 (beta.22)** - eager compaction on stable-row-id tables never remapped address-domain
+  (BTree v1) indexes, "silently losing index acceleration on every compaction" - slow, not wrong.
+- **#9768 (beta.15)** - a shallow clone or branch of an emptied stable-row-id table lost
+  `FLAG_STABLE_ROW_IDS`, so appended rows got no stable row ids. Re-clone; deep clones were fine.
+- **#9954 (beta.20)** - "Adding a child to a struct nested inside a list item (`item.in.b`) left the
+  dataset unreadable"; heals on upgrade.
+- **#9900 (beta.15)** - a vector index remap stored default details, so "later optimizes split and
+  joined partitions at the default size". Upstream names no repair.
+- Heal on upgrade: #9819 (beta.16, "ordered scans of more than 8,192 rows came back shuffled"),
+  #9691 (unordered-listing retry could pick an older manifest), #9913 (multipart complete retried
+  after its part ids were drained), #9953 (MemWAL shard manifests safe to prune), #9906 / #9909 /
+  #9910 (read-path errors), #10191 (MergeStream deadlock with small `io_buffer_size`), #10247
+  (Blob v2 descriptor subfield queries, rc.2).
+
+**Not backported.** `critical-fix` PRs merged on `main` after the root and in no v14 tag (first
+tag in brackets): #9092, #9094, #9503, #9785, #9872, #9958, #9963, #9977, #9995, #9996, #10080,
+#10139, #10228, #7238 (`v15.0.0-beta.2`); #9638 (beta.6); #10352 (beta.7); #9999, #10327, #10331,
+#10341, #10376, #10377, #10380, #10408 (beta.8); #9576, #10559 (beta.9); #10736, #10737 (untagged).
+For v14 users the stale-row pair stands out: #9785 "segmented scalar index returns stale rows under
+stable row ids" and #9872 the same for full-text. See the v15 section.
+
+**Managed-blob docs split persists in every v14 tag.** The code still requires
+`lance.blob.managed=true` (`feature_flags.rs:290-301`), but `v14.0.0` through `v14.0.3-rc.1` keep
+"Publishing a new data file containing a Blob v2 field activates the Managed Blob capability,
+including files containing only inline values" (`docs/src/format/table/versioning.md:49`) and
+"Updating an existing table with Blob data files can activate it" (`guide/blob.md:94-95`). #9193
+fixed the text on `main` (`v15.0.0-beta.2`), not on the branch. Trust the code.
+
+**Security:** PyO3 RUSTSEC-2026-0176 (out-of-bounds read in list / tuple iterator `nth`) and
+RUSTSEC-2026-0177 (missing `Sync` bound on `PyCFunction::new_closure`), both "patched = [">=
+0.29.0"]", stay **unfixed in every v14 tag** (pyo3 0.28.3); #9647 closed via #10397 on the v15 line
+(`v15.0.0-beta.5`, pyo3 0.29.3). `deny.toml` ignores added: RUSTSEC-2024-0449 (`serde_yaml` via
+datafusion-substrait), RUSTSEC-2026-0381 / 0382 (`webpki-roots`, `rustls-webpki`, "under 48 hours
+old"), and in 14.0.1 RUSTSEC-2026-0403 (`zstd-safe`, "expires 2026-11-03 ... ignore until an Arrow
+60 and DataFusion upgrade", `deny.toml:91` at `v14.0.2`); the RUSTSEC-2026-0002 (`lru`) ignore was
+dropped.
+
+### The v15 line (release-root/15.0.0-beta.N -> v15.0.0-beta.10)
+
+**532 commits** to `v15.0.0-beta.10` (2026-11-04; `origin/main` is 23 commits further). Citations
+are at `v15.0.0-beta.10`. **23 `breaking-change` PRs**, **8 `!` commits** (#9168, #10251, #10154,
+#9618, #10088, #10418, #8469, #9102), **19 `format-change` PRs** (#8124, #9168, #9193, #9705, #9721,
+#9814, #9898, #9968, #9986, #10150, #10164, #10240, #10267, #10278, #10287, #10299, #10356, #10432,
+#10617) and **27 `critical-fix` PRs**. The v15 betas are on fury (`pylance-15.0.0b1` .. `b10`) and
+GitHub pre-releases; nothing v15 is on crates.io or PyPI.
+
+**Why 14.1 became 15.** `release-root/14.1.0-beta.N` (2026-10-21) and `release-root/15.0.0-beta.N`
+(2026-10-22, "Base: 14.0.0-rc.1 Release root for 15.0.0-beta.N series (same base as
+14.1.0-beta.N)") tag the same commit, `69f902d02` (#10191). Sixteen PRs later the first beta publish
+ran `46a7cfe1f chore: bump to 15.0.0-beta.1 based on breaking change detection`, triggered by
+**#10102** alone (zone write seeds V1, the only labeled PR in that range): "this PR automatically
+activates new reader and writer feature flags on tables with seed-enabled indices. Clients that do
+not support `FLAG_ZONE_WRITE_SEEDS` can no longer read or write the resulting snapshots. This can
+happen with default ZoneMap options, not just an explicit `use_seeds: true`." No `v14.1.*` tag
+exists and fury has no `pylance-14.1*`. The detector is unchanged (`ci/check_breaking_changes.py:30`,
+`ci/publish_beta.sh:84-106`).
+
+**The re-root streak is eight lines, not five.** Every minor line after `v7.1.0` (the last minor
+final ever) re-rooted: 7.2 -> 8, 8.1 -> 9, 9.1 -> 10, 10.1 -> 11, 11.1 -> 12, 12.1 -> 13, 13.1 -> 14,
+14.1 -> 15 - seven consecutive `.1` lines. `release-root/8.1.0-beta.N` exists with **zero** `v8.1*`
+tags ("Release root for 9.0.0-beta.N series (same base as 8.1.0-beta.N)"). Tagged and then
+abandoned: 7.2 (beta.1-5), 9.1 (beta.1-8), 10.1 (beta.1-2), 13.1 (beta.1-2); never tagged: 8.1,
+11.1, 12.1, 14.1. So the "five consecutive lines" count in the 2026-10-13 state paragraph above
+undercounts. Four more labeled PRs already sit on `main` after beta.10 (#10755,
+#10736, #10522, #10471).
+
+**Invariants at beta.10:** **28** crate directories, the new one **`lance-datafusion-exec`**
+(#10251, beta.2) - DataFusion execution helpers built only on the sub-crates: "Crates such as
+`lance-index` depend on this crate instead of `lance-datafusion` so they can compile without
+waiting for the `datafusion` umbrella crate" (`rust/lance-datafusion-exec/src/lib.rs:4-9`);
+`lance-datafusion` re-exports the moved paths. **17** transaction ops (16 wire + `Unknown`), no
+new wire op. **Arrow 59.2.0 / DataFusion 55 / pyo3 0.29 / MSRV 1.95.0** (`Cargo.toml:58,90,138`,
+`python/Cargo.toml:71`; the python crate still says `rust-version = "1.94"`), all from **#10397**
+(beta.5, `breaking-change`), which "Closes #9647" - #9647 is the tracking issue, not a PR.
+`geodatafusion` 0.5.0 -> 0.6.0, and the `[patch.crates-io]` object_store git pin is gone (#10363).
+File versions: no 2.4, 2.3 still the only unstable one (`is_unstable` is `matches!(self, Self::V2_3)`),
+`stable` and the default still 2.2 (`rust/lance-file/src/version.rs:44-51,67-68,192-193`).
+lance-namespace pins unchanged: Rust client `0.13.0`, Python `>=0.13.0,<0.14`, Java `0.12.0`.
+Python `>=3.10`, abi3-py310 wheels.
+
+**Feature flags: four new bits, `FLAG_UNKNOWN` = `1 << 20`** (`rust/lance-table/src/feature_flags.rs:122-140`;
+details in section 7):
+
+- **Bit 16 `FLAG_ZONE_WRITE_SEEDS`** - supported from beta.1 (#10102; `mark_supported(..., true)`,
+  `:488`), paired and sticky. **Default-option ZoneMaps set it**: `use_seeds: None` auto-enables
+  seeds for string, binary, decimal, FixedSizeBinary wider than 8 bytes and nested columns
+  (`rust/lance-index/src/scalar/zonemap.rs:2058-2073`), and every `v14.x` release masks the bit -
+  so one default ZoneMap index on such a column, built by a v15 writer, makes the table
+  unreadable by the stable pin, permanently. Pass `use_seeds: false` while v14 clients remain.
+- **Bit 17 `FLAG_OBJECT_METADATA`** - writer-only, supported from beta.6 (#10383): clustering
+  definitions, `max_clustering_id`, fragment / index-segment `clustering_id` and `metadata` maps.
+- **Bit 18 `FLAG_ROW_ADDR_INDICES`** - writer-only, beta.7 (#10352, `critical-fix`), fencing older
+  writers off stable-row-ID tables with row-address B-tree / Bitmap / LabelList segments.
+- **Bit 19 `FLAG_INLINE_DELETIONS`** - both words, beta.8 (#10164).
+- Sticky sets unchanged from the v14 final; masked bits are now only 64, 512, 4096, 8192.
+  **Docs lag code:** `format/table/versioning.md:49` still says "Bits 16 and 17 are reserved but
+  remain unsupported" - the reverse of the usual direction, and the one that locks clients out.
+
+**Format and proto changes:**
+
+- `DataFile.file_metadata_size_bytes = 8` and `IndexFile.file_metadata_size_bytes = 3` (#9168,
+  `feat(format)!`, beta.2): "This advisory hint lets a reader fetch the last
+  `file_metadata_size_bytes` bytes of the file before decoding the footer. The footer stays
+  authoritative" (`protos/fragment_metadata.proto:197-210`).
+- `DeletionFile.inline = 8` (#10164, beta.8): Roaring bitmap in the manifest, opt-in via
+  `lance.deletions.inline_max_bytes` (`rust/lance/src/dataset/deletions.rs:25`), migration
+  `ds.optimize.inline_deletions()`. "The migration is one way ... every reader that can open the
+  table must be upgraded before migration."
+- MemWAL incarnations (#10432, beta.6): `MemWalIndexDetails.dir_id = 13`, storage under
+  `_{dir_id}_mem_wal/`, `UpdateMemWalState.dir_id = 2`, `Update.mem_wal_dir_id = 11`,
+  `ShardManifest.sealed_by = 16` + `SealedBy`, `fence_shard`, new `Error::StaleMemWal`. No flag
+  guards it and `mem_wal.md` still documents only `_mem_wal/` (section 10).
+- `DataReplacement.data_change = 2` (#9705; "Absent means true"); JSON index
+  `target_index_version = 4` (#9721); new `fts.proto` (global BM25 statistics, #8938) and
+  `cache_diagnostics.proto` (#9781); `encodings_v2_3.proto` adds per-tensor axis delta (#10240)
+  and a pcodec definition (#10617, spec only).
+- New tables may keep input field IDs (`lance:field_id`, #9898, beta.2; `schema.md:207-216`).
+- Index format versions: **ZoneMap V1** is written by default (#10217, beta.4; adds
+  `negative_nan_count`, NaN-free min/max; V0 still read); **Bitmap 0 -> 1 and LabelList 1 -> 2**
+  store row addresses on stable-row-ID tables only (#9814, beta.2). #10299 specs the same
+  migration for JSON, inverted, vector, ngram, RTree and MinHash - "**No implementation changes
+  are included**", so those spec pages run ahead of the code.
+- 2.3-only encodings: ALP / ALP-RD miniblock with "`alp=auto` default" (#10267, beta.2) and
+  automatic axis delta for compressed integer tensors (#10242). v2.1/v2.2 writers untouched.
+- Legacy 0.1 storage now warns at creation: "Support for writing this version will be removed in
+  an upcoming release" (#9476, beta.8; `rust/lance-file/src/version.rs:20-23`).
+
+**Rust / Python API breaks (with migrations):**
+
+- #10251 - "`lance_index::scalar::expression::PlannerIndexExt` is removed. Use the free function
+  `create_filter_plan(expr, index_info, use_scalar_index)`"; `lance_geo::register_functions` is
+  gone (`lance_datafusion::udf::register_functions` still registers everything).
+- #10088 - "`lance_linalg::distance::cosine_distance_batch` and `Cosine::cosine_batch` are
+  removed. Use `cosine_distance_batch_into` / `Cosine::cosine_batch_into`" (l2/dot went in the v14
+  final, #10086).
+- #10418 - "`OldIndexDataFilter` gains `RowAddresses`; downstream exhaustive matches need another
+  arm." #10400 - `NamespaceError::Throttling` gains `retry_after`: "pass `retry_after: None` in
+  explicit constructors". #9438 - `ManifestLocation.last_modified` and #9102 -
+  `Version.manifest_size` break struct literals. #9190 - the RaBitQ raw query context became
+  `#[non_exhaustive]` with a private `dist_table`; use `RabitRawQueryContext::new(...)`.
+- Module moves (labeled breaking): #10600 (`rust/lance/src/index.rs` split), #10605 (MemWAL write
+  path), and in Python #10602 - "No compatibility aliases
+  or forwarding wrappers are retained" and "Old pickle module paths are not compatibility targets".
+  `Tag`, `Branch`, `ExecuteResult`, `IndexFile`, `FieldStatistics`, `DataStatistics`,
+  `DatasetStats`, `SqlQuery` and `VectorIndexReader` are no longer importable from `lance.dataset`
+  (they live in `lance._dataset.*`).
+- Build: "Normal `cargo build -p lance` no longer invokes `protoc`" (#10216, beta.10) - generated
+  `src/pb/*.rs` are checked in, `protos/codegen` regenerates; Python and Java still need protoc for
+  Substrait.
+
+**Silent behavior and default changes (no `breaking-change` label unless noted):**
+
+- **HNSW default `ef` floored at 256** (#9073, beta.2): `ef = max(1.5 * k * refine_factor, 256)`
+  (`rust/lance-index/src/vector/hnsw/builder.rs:1488,1509`), previously `1.5 * k` = 15 at k=10.
+  PR measurements at one partition: GIST1M recall@10 0.567 -> 0.925, SIFT1M 0.828 -> 0.980, p50
+  1.0 -> 3.5 ms and 0.8 -> 1.7 ms. Explicit `ef` still wins.
+- **IVF built from `num_partitions`** now records `ceil(vectors indexed / partitions trained)` as
+  `target_partition_size`, so `optimize_indices` stops joining small partitions down to one
+  (#10154, `fix(index)!`, beta.4).
+- **Unrecognized URL schemes** get `ConditionalPutCommitHandler` instead of `UnsafeCommitHandler`
+  (#8773, beta.8; `rust/lance-table/src/io/commit.rs:1339-1347`).
+- **Automatic cleanup keeps old tagged versions** instead of failing every run (#10541, beta.8);
+  **cleanup rejects a detached checkout** (#10331); **row-change readers require stable row IDs**
+  instead of returning empty sets (#10521).
+- **New retryable conflicts** where commits used to rebase silently: stale `Project` vs schema /
+  field-metadata updates (#10512), `Append` vs a concurrent column replacement (#10502),
+  `CreateIndex` vs `DataReplacement` of a packed parent (#10341), `Restore` vs table-metadata
+  updates (#10629). Section 9.2.
+- Namespace `multi_vector` runs every query vector; both vector fields or a positive `offset` are
+  rejected (#9618, `!`). Non-backslash `LIKE ... ESCAPE` loses index acceleration (#10228).
+  Narrow-key dictionary columns roll to a new data file instead of failing (#10368).
+- **Reverts:** compaction row-order preservation #8400 (beta.4) was reverted in beta.6 by #10440 -
+  "Under steady ingestion, compaction can then keep retrying and never land" - and #9769 re-landed
+  as #10441 (beta.8); the scan-scheduler byte-budget deadlock fix #9576 was reverted by #10636
+  (beta.9).
+- New constants (none of the existing `*_DEFAULT_*` changed): `DEFAULT_MIN_EF = 256`, MemWAL HNSW
+  `DEFAULT_SEARCH_EF = 64`, update-join `DEFAULT_MAX_HASH_ROWS = 250_000` / `DEFAULT_MAX_HASH_BYTES
+  = 1 GiB` (`rust/lance/src/dataset/update_join_options.rs:8-9`) / external pool 256 MiB per
+  partition, `DEFAULT_MAX_TUPLE_SEEKS = 8192`, object-store registry `DEFAULT_MIN_PRUNE_THRESHOLD =
+  64`, FTS `DEFAULT_FTS_SEARCH_CHUNK = 16` and `DEFAULT_POSTING_GROUP_BYTES = 32 KiB`.
+
+**Net-new features:**
+
+- Indexes: external scalar index plugins, `lance::index::register_scalar_index_plugin::<D, P>()`,
+  an unstable interface (#10111, #10224, #10232, beta.1); native RaBitQ primitives, runtime scan
+  strategy, lazy mode through fragment reuse (#9834-#9844, #9940, #10609, #10624, #10683, #10689);
+  `OptimizeOptions::consolidate(max_rows)` merges bounded vector segments "and never trains"
+  (#10335); opt-in `quantized_refine_factor` for IVF_RQ (#8741); prefilter skips provably empty
+  ANN / FTS segments (#10485); per-scan `ignored_scalar_indices` (#9034); `ScalarIndex::lookup`
+  (#9875) and the tuple-predicate planner for composite B-trees (#10347); distributed
+  optimize-indices plan / execute / merge / commit in Python and Java (#10328, #10332); FM index in
+  Python and Java (#10196, #10199); disk cache codecs for ngram / MinHash / RTree (#10423-#10425).
+- Table: version retention rules `CleanupPolicy` / `KeepOne` / `RemoveAll` (#10306),
+  `expire_versions` (#9438), `restore_from(expected_latest_version)` (#10556), expected-version
+  field-metadata commits (#10655), clustering metadata at runtime plus clustering-aware and
+  explicit-group compaction (#10383, #10409, #10445), byte-aware consolidation (#10635),
+  `column_layout_stats` (#9605), spillable sort-merge join for large updates (#9129, new guide
+  `guide/update_join.md`). Section 7.
+- Blob: `ManagedBlobWriter` (#10233), Blob v2 in `UpdateBuilder` (#10388),
+  `Dataset::scan_blobs_as_logical` (#10356).
+- Namespace: directory-manifest table renames (#6975), create / drop `mode` honored and parent
+  namespace required (#9867), Retry-After on throttling (#10400).
+- Tools: `lance-tools table manifest --source <manifest>` (#7970). Upstream now ships its own agent
+  skill, `skills/lance-table-maintenance/` (#9610, beta.9).
+- Docs: 12 new pages (`format/table/blob.md`, `format/table/table_config.md` - a registry of every
+  `lance.*` config key (#8673) - six new user guides and four quickstarts).
+
+**Fixes needing a rebuild, rewrite or repair (not just an upgrade).** None is in any v14 tag
+unless noted:
+
+- **#10352** (beta.7) - the row-address fence "does not modify historical snapshots or repair index
+  coverage already corrupted by an older writer. Such an index must be rebuilt." Trigger: a
+  stable-row-ID table with a B-tree from `v14.0.0-beta.16`+ (#9481) or a Bitmap / LabelList from
+  `v15.0.0-beta.2`+ (#9814), then an older writer updates another column. **Unfenced window:**
+  `v14.0.0-beta.16` through every `v14.0.x` (not in `v14.0.3-rc.1`) and `v15.0.0-beta.2` - `beta.6`.
+- **#9785 / #9872** (beta.2) - with stable row IDs, a multi-segment scalar or FTS index returned
+  rows that no longer match after an update plus an append-only `optimize_indices`; for FTS,
+  merging "carries the stale posting into the merged segment, where it can no longer be filtered
+  out". Rebuild FTS indexes merged under those conditions. Same shape for shared-scan batch IVF
+  (#9638, beta.6) and the FM index after deferred compaction (#10559, beta.9; reindex).
+- **#10080** (beta.2) - constant-first spatial predicates were inverted: "`delete(\"NOT
+  ST_Contains(<region>, geom)\")` deletes every row, including the ones inside the region".
+  Restore affected deletes from an earlier version.
+- **#10494** (beta.8) - indexed `merge_insert` "silently dropping source rows whose keys were
+  entirely NULL". Re-run affected merges.
+- **#10327 / #10392 / #10447 / #10488 / #10489** (beta.8) - cleanup deleted files that branches
+  still read (legacy 2.x branches, aliased URIs, nested names, retained branch sources). Deleted
+  files are gone; restore from backup. #10736 / #10737 (deleted-branch writes, orphaned versions)
+  are on `main` only.
+- **#9995** (beta.2) - replaying a published compaction whose fragment-id reservation failed
+  deleted live files: "Deleting them makes the dataset unreadable". Restore.
+- **#9958 / #9963** (beta.2) - writers persisted files readers reject (dictionary key widening) or
+  "a Boolean child writes a column whose values were never stored" (packed struct). Rewrite.
+- **#9755** (beta.2) - accelerated (torch) cosine IVF_PQ "built indices with much lower recall than
+  the CPU build (for example 0.387 vs 1.000 on 500k x 2048-d embeddings with CUDA)". Rebuild. Related:
+  #10380 (beta.8).
+- **#10408** (beta.8) - classic OR WAND "could omit documents scoring above the returned top-k
+  boundary"; also #10572, #10476 (ngram AND). Heals on upgrade.
+- **#10228** (beta.2) - `LIKE` prefix extraction misread escapes: a B-tree answered `LIKE 'a\b%'`
+  with the wrong rows and a ZoneMap pruned matching fragments. Heals on upgrade; re-run any delete
+  or update that used such a predicate.
+- **#10102** (beta.1) - ZoneMap V0 NaN pruning was wrong ("Only negative NaNs | `x < 0` | Could
+  discard the zone"); the evaluation fix covers existing index files, rebuilding gets V1 stats.
+- Read-path fixes that heal on upgrade: #9911, #10286, #10338, #10219, #9999, #10637, #10376.
+  Legacy blob columns written into 2.2 files by fragment / column writers (#10454, #10586) are also
+  in `v14.0.3-rc.1` as #10596.
+
+**fury wheels.** `pylance-15.0.0b1` .. `b10`, all `cp310-abi3`. `b1`-`b3` and `b10` have all six
+platform wheels; **`b5` - `b9` have no `macosx_11_0_arm64` wheel** (restored by #10594, "merge macOS
+arm64 startup code into text") and **`b4` has no `manylinux_2_28_x86_64`**. Pin `b10` or `b3` on
+Apple silicon.
+
+**On `main` after beta.10 (untagged):** IVF_HNSW_RQ (`feat(index)!`, #10522), B-tree ordered search
+(#10346), recall-target calibration by metric and k (#10695), Python SQL parameter binding (#10439),
+caller-supplied HTTP connector for native cloud stores (#10471, `breaking-change`), Java bounded
+vector consolidation (#10755, `!`), and the branch fixes #10735-#10737.

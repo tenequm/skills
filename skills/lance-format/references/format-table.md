@@ -1,8 +1,8 @@
-# Lance v14 reference - table format (sections 5-10)
+# Lance v15 reference - table format (sections 5-10)
 
-Part of the Lance v14 reference (`lance-format/lance@v14.0.0-beta.14`; stable pin `v13.0.0`).
+Part of the Lance v15 reference (`lance-format/lance@v15.0.0-beta.10`; stable pin `v14.0.2`).
 Citations are `path:line` relative to the repo root; build a permalink as
-`https://github.com/lance-format/lance/blob/v14.0.0-beta.14/<path>`. Line numbers drift between
+`https://github.com/lance-format/lance/blob/v15.0.0-beta.10/<path>`. Line numbers drift between
 tags - treat them as approximate. Cross-references written as "section N" use the original
 16-section numbering; `lance-reference.md` maps every number to its file.
 
@@ -26,7 +26,7 @@ tags - treat them as approximate. Cross-references written as "section N" use th
 - [10. MemWAL](#10-memwal)
 
 Other files: `format-file.md` (1-4), `indexes.md` (11-12), `ops.md` (13, 15, 16),
-`changelog-v7-v14.md` (14).
+`changelog-v7-v15.md` (14).
 
 ---
 
@@ -37,11 +37,13 @@ versioned manifests.
 
 ### 5.1 Dataset directory layout
 
-`docs/src/format/table/layout.md:18-44`:
+`docs/src/format/table/layout.md:24-54`:
 
 ```
 {dataset_root}/
   data/          *.lance                    -- column data files
+                 {data_file_stem}/*.blob    -- Blob v2 Packed / Dedicated sidecars
+  _blobs/        {UUID}.blob                -- independently addressed Managed blobs (v14)
   _versions/     *.manifest                 -- one manifest per version
                  latest_version_hint.json   -- optional latest-version hint
   _transactions/ *.txn                      -- serialized Transaction protobuf per commit
@@ -50,13 +52,14 @@ versioned manifests.
   _refs/         tags/*.json branches/*.json -- tag and branch metadata
   _bt/           ...                        -- fragment tree objects (v13, experimental; 5.6)
   tree/          {branch_name}/...          -- per-branch datasets (v7)
+  _mem_wal/ or _{dir_id}_mem_wal/           -- MemWAL shards (section 10; not in layout.md)
 ```
 
 All file paths inside Lance files are stored **relative to their containing directory** -
 copying the dataset root relocates it with no manifest edits.
 
 **Base paths.** The manifest's `base_paths` array defines alternative storage locations
-(`docs/src/format/table/layout.md:46-83`, `protos/table.proto:295-309`). A `BasePath` has an
+(`docs/src/format/table/layout.md:56-177`, `protos/table.proto:322-335`). A `BasePath` has an
 `id` (uint32, from 0), optional `name`, `is_dataset_root` (true = standard subdirectory
 layout; false = a flat file directory), and an absolute `path`. Data files, deletion files,
 and index metadata each carry an optional `base_id` referencing a base; absent means relative
@@ -65,22 +68,38 @@ Gated by feature flag `FLAG_BASE_PATHS`.
 
 ### 5.2 Manifest
 
-A manifest describes a single immutable version of the dataset (`protos/table.proto:36-293`).
+A manifest describes a single immutable version of the dataset (`protos/table.proto:38-319`).
 Key fields: `fields` (the schema, all fields including nested), `fragments` (the
 `DataFragment` list for this version), `version` (monotonically increasing u64), `timestamp`,
 `writer_version`, `index_section` (file position of index metadata), `data_format`
 (`file_format` + version string - every file in a version shares one format version),
 `config` and `table_metadata` (string maps; `lance.`-prefixed config keys reserved),
 `base_paths`, `branch` (optional; absent = main), `next_row_id` (only with stable row IDs),
-`reader_feature_flags` / `writer_feature_flags`, `transaction_file`. Three fields arrived after
+`reader_feature_flags` / `writer_feature_flags`, `transaction_file`. Five fields arrived after
 `v13.0.0-beta.4`: `fragment_tree` (22, v13 - the experimental fragment metadata tree, 5.6),
-`transaction_section` (23, v14 - the inline transaction's new home, section 9.1) and
-`max_allocated_field_id` (24, v14 - non-reusable field IDs, section 6).
+`transaction_section` (23, v14 - the inline transaction's new home, section 9.1),
+`max_allocated_field_id` (24, v14 - non-reusable field IDs, section 6), and the clustering pair
+`clustering` (25) / `max_clustering_id` (26) (`protos/table.proto:304-317`, spec #9878 in the v14
+final, runtime #10383 in `v15.0.0-beta.6`).
+
+**Clustering and object metadata (v15).** A `Clustering` definition (`protos/clustering.proto:9`,
+`references/docs/format/table/clustering.md`) is an immutable, provider-managed description of
+how data was laid out; fragments (`DataFragment.clustering_id = 15`) and index segments
+(`IndexMetadata.clustering_id = 12`) reference it, and both also gained an opaque
+`map<string, string> metadata` (fragment field 16, index field 13) that "Those operations preserve
+all entries, including unknown keys. New fragments do not inherit entries automatically"
+(`protos/fragment_metadata.proto:86-100`, `protos/table.proto:448-461`). `max_clustering_id` "Never
+decreases, including after definition removal or restore". Any of these sets the writer-only
+`FLAG_OBJECT_METADATA` (bit 17, section 7); readers may ignore them. Compaction planners can stamp
+output fragments with a clustering ID and metadata (#10409) and compact caller-chosen fragment
+groups in place (#10445). Restore brings back the target's definitions and keeps only the
+allocation mark, and refuses concurrent table-metadata updates in either commit order (#10629,
+beta.10).
 
 Two manifest-adjacent messages worth naming explicitly. **`IndexSection`** is what
 `index_section` points at - "a list of index metadata for one dataset version"
-(`protos/table.proto:428-431`), so index metadata is versioned with the table rather than
-living beside it. **`VersionAuxData`** (`:311-317`) attaches arbitrary key/value metadata to a
+(`protos/table.proto:486-489`), so index metadata is versioned with the table rather than
+living beside it. **`VersionAuxData`** (`:337-343`) attaches arbitrary key/value metadata to a
 version and is explicitly "Only load on-demand", i.e. it is *not* paid for on every dataset
 open the way `config` and `table_metadata` are - the right place for per-version annotations
 that most readers never need.
@@ -92,7 +111,7 @@ sorts first lexicographically - enables O(1) latest-version discovery on ordered
 ### 5.3 Fragments
 
 A `DataFragment` is a horizontal partition holding a subset of rows
-(`protos/fragment_metadata.proto:13-88` - `DataFragment`, `DataFile`, `DeletionFile` and
+(`protos/fragment_metadata.proto:13-101` - `DataFragment`, `DataFile`, `DeletionFile` and
 `ExternalFile` moved out of `table.proto` in v13, #9060, which `import public`s the new file):
 `id` (unique, incrementally assigned), `files` (one or more `DataFile`s, each storing a subset of
 columns), an optional `deletion_file` (at most one per fragment per version), `physical_rows`
@@ -101,7 +120,12 @@ and optional row-id / version sequences, inline or (unstable, v13) spilled to hi
 (section 8).
 
 A `DataFile` stores a subset of columns in the Lance file format, with `fields` (the field
-IDs it contains), `column_indices`, file major/minor version, and optional `base_id`. **Every
+IDs it contains), `column_indices`, file major/minor version, and optional `base_id`. Since
+`v15.0.0-beta.2` (#9168, `feat(format)!`) a `DataFile` (field 8) and an `IndexFile` (field 3)
+may carry `file_metadata_size_bytes`, the size of the file's metadata suffix: "This advisory hint
+lets a reader fetch the last `file_metadata_size_bytes` bytes of the file before decoding the
+footer. The footer stays authoritative" (`protos/fragment_metadata.proto:197-210`,
+`protos/table.proto:483`); writers record the exact value or 0, and older readers ignore it. **Every
 negative field id is reserved for system use**, and "A reader MUST skip any negative id when it
 projects the dataset schema onto a data file" (`docs/src/format/table/index.md:136-145`): `-1` is
 in-memory only, `-2` is the tombstone, and `-3`/`-4`/`-5` (v13, #9253) are the hidden `_rowid`,
@@ -188,11 +212,24 @@ rewriting the whole fragment, so the physical cost is small even though the id c
 ### 5.4 Deletion files
 
 Deletes are **soft**: a deletion file (deletion vector) marks deleted row offsets without
-rewriting data files; at most one per fragment per version (`docs/src/format/table/index.md:174-185`).
+rewriting data files; at most one per fragment per version (`docs/src/format/table/index.md:208-219`).
 Two formats: **Arrow IPC** (`.arrow`, a flat `Int32Array` of offsets - sparse deletions) and
 **roaring bitmap** (`.bin` - dense deletions). Offsets are 0-based within the fragment. Path:
 `_deletions/{fragment_id}-{read_version}-{id}.{ext}`. Gated by `FLAG_DELETION_FILES`. Deletes
 avoid invalidating indexes; accumulating deletions slow scans until compacted.
+
+**Inline deletion vectors (v15.0.0-beta.8, #10164, `breaking-change` + `format-change`).**
+`DeletionFile.inline` (field 8) holds the vector in the manifest, "Always the BITMAP encoding
+(a serialized Roaring bitmap of deleted row offsets), whatever `file_type` says"
+(`protos/fragment_metadata.proto:312-318`), so a table whose fragments each lost a few rows stops
+paying one request per fragment. Opt-in per table: `lance.deletions.inline_max_bytes` is a
+per-vector byte budget, "Unset or `0` always writes a file"
+(`rust/lance/src/dataset/deletions.rs:18-25`); `Dataset::inline_deletions` (Python
+`ds.optimize.inline_deletions()`) migrates existing vectors that fit in one metadata-only commit.
+Any inline vector sets `FLAG_INLINE_DELETIONS` (bit 19) in both words, so older clients refuse the
+snapshot. **One-way**: "Setting the budget back to `0` stops new inline writes but does not
+externalize existing vectors, so every reader that can open the table must be upgraded before
+migration" (#10164). The spec pages do not describe inline vectors yet; the proto is authoritative.
 
 ### 5.5 Data overlay files (unstable, v9.1)
 
@@ -209,9 +246,9 @@ fields checked range "over the union of the index's `fields` and `covering_field
 
 Gated by **feature flag 64** (`FLAG_UNSTABLE_DATA_OVERLAY_FILES`,
 `rust/lance-table/src/feature_flags.rs:32`). This is **not a released feature**: writes require
-`LANCE_ENABLE_UNSTABLE_DATA_OVERLAY_FILES` (`feature_flags.rs:138`), and in release builds the
+`LANCE_ENABLE_UNSTABLE_DATA_OVERLAY_FILES` (`feature_flags.rs:171`), and in release builds the
 flag is treated as unknown so a release reader/writer **refuses** an overlay dataset rather than
-silently ignoring an overlay (`feature_flags.rs:291` - the gate is
+silently ignoring an overlay (`feature_flags.rs:447-448` - the gate is
 `cfg!(debug_assertions) || env::var_os(...).is_some()`). Compaction can fold fragments over an
 overlay-count limit (PR #7772).
 
@@ -252,45 +289,54 @@ held above the leaves as mutations until a rewrite is worth it (spec
 table sets `Manifest.fragment_tree` (field 22), leaves `Manifest.fragments` empty, and sets
 `FLAG_FRAGMENT_TREE` (bit 12, 4096) in both flag words (`fragment_metadata.md:54-57`) - the flag is
 mandatory because "Old readers skip unknown fields and would otherwise see an empty table"
-(`protos/table.proto:48`). Tree objects live under `_bt/`, and "Readers must reject absolute
+(`protos/table.proto:49`). Tree objects live under `_bt/`, and "Readers must reject absolute
 paths and paths outside `_bt/`" (`fragment_metadata.md:93-95`); the messages are in
-`protos/fragment_metadata.proto` (`FragmentTreeMetadata` onward, `:318`).
+`protos/fragment_metadata.proto` (`FragmentTreeMetadata` onward, `:360`).
 
 The page itself says "Support for creating or reading tree tables is not yet available in released
 Lance versions" (`fragment_metadata.md:9-11`), and the code agrees: the bit is "Reserved for fragment
-trees. Readers and writers reject it until implemented" (`rust/lance-table/src/feature_flags.rs:82`)
-and is masked out unconditionally in `supported_flags_when` (`:342`), with no env opt-in.
+trees. Readers and writers reject it until implemented" (`rust/lance-table/src/feature_flags.rs:89`)
+and is masked out unconditionally in `supported_flags_when` (`:486`), with no env opt-in - still
+true at `v15.0.0-beta.10`.
 
 ---
 
 ## 6. Schema evolution
 
 Every field, including nested fields, has a unique integer **field ID**, assigned in
-depth-first order from 0 at table creation (`docs/src/format/table/schema.md:203-290`). An ID is
-**preserved** for as long as its field exists, **unique** within a version, and **sparse**; it is
-unique only within one branch of one dataset, so an external reference must name the dataset and
-branch too (`:280-282`). Internal references always use field IDs, never names or positions.
-Nested fields link via `parent_id` (`-1` for top-level). The spec now calls a cast a **type
-replacement**: it "creates a replacement field with a new ID and retires the old identity"
-(`:358-359`). The `json` logical type is JSONB in an Arrow `LargeBinary` field tagged
-`lance.json` (`:191-196`); the byte-level encoding, maintained by the new `lance-jsonb` crate
-(v14, #9534), is specified in `references/docs/format/table/jsonb.md` (#9194).
+depth-first order from 0 at table creation (`docs/src/format/table/schema.md:200-299`). Since
+`v15.0.0-beta.2` (#9898, `format-change`) a writer may instead "take the IDs supplied with the
+input schema, such as the Arrow field metadata `lance:field_id`"; a field without one gets an ID
+above the largest supplied, a negative supplied ID counts as none, supplied IDs must be unique,
+and every ID of the new table must be below 2^30 (`schema.md:207-216`). This applies only at
+creation - on a non-reusable-ID table the writer discards field-ID metadata on fields added later
+(`:253-256`). An ID is **preserved** for as long as its field exists, **unique** within a version,
+and **sparse**; it is unique only within one branch of one dataset, so an external reference must
+name the dataset and branch too (`:293-295`). Internal references always use field IDs, never
+names or positions. Nested fields link via `parent_id` (`-1` for top-level). The spec now calls a
+cast a **type replacement**: it "creates a replacement field with a new ID and retires the old
+identity" (`:371-372`). The `json` logical type is JSONB in an Arrow `LargeBinary` field tagged
+`lance.json` (`references/docs/guide/json.md:23`); the byte-level encoding is maintained by the
+`lance-jsonb` crate (v14, #9534). **There is no JSONB spec page**: #9194 added
+`format/table/jsonb.md`, #9889 reverted it because it "was auto-merged even though its
+`format-spec-vote` check had been vetoed", and the resubmission #9905 is still open, so the
+crate's code is the only byte-level reference.
 
 **Non-reusable field IDs (v14.0.0-beta.9, #8658, `format-change`).** In the legacy mode a writer
 "may choose the next ID from fields the current version still references. It may therefore reuse
-the ID of a dropped field" (`schema.md:235-237`). Setting `Manifest.max_allocated_field_id`
+the ID of a dropped field" (`schema.md:247-249`). Setting `Manifest.max_allocated_field_id`
 (proto field 24) switches the dataset to a persistent high-water mark: every new field gets an ID
-above it, and field-ID metadata a caller puts on new fields is discarded (`:238-244`). The
+above it, and field-ID metadata a caller puts on new fields is discarded (`:250-256`). The
 marker pairs with `FLAG_NON_REUSABLE_FIELD_IDS` (32768) in the **writer** word only - a manifest
 with the reader bit is rejected as corrupt, since "non-reusable field IDs only require writer
-support" (`rust/lance-table/src/feature_flags.rs:455`). Activation is an explicit, one-way
+support" (`rust/lance-table/src/feature_flags.rs:601`). Activation is an explicit, one-way
 migration commit (Rust `Dataset::migrate_to_non_reusable_field_ids`,
-`rust/lance/src/dataset.rs:3320`): "After activation, a restore must fail if it targets a version
-that does not set `max_allocated_field_id`" (`schema.md:260-261`), and an overwrite then gives
-every field, nested ones included, a new ID even when names and types are unchanged
-(`:360-362`). Before activating, every client that can write the table must enforce writer
-feature flags; one that ignores them "may discard the high-water mark and allow field IDs to be
-reused" (`:258`).
+`rust/lance/src/dataset.rs:3638`): "After activation, a
+restore must fail if it targets a version that does not set `max_allocated_field_id`"
+(`schema.md:273-274`), and an overwrite then gives every field, nested ones included, a new ID
+even when names and types are unchanged (`:373-375`). Before activating, every client that can
+write the table must enforce writer feature flags; one that ignores them "may discard the
+high-water mark and allow field IDs to be reused" (`:269-271`).
 
 Schema changes are **metadata-only** wherever possible (`docs/src/guide/data_evolution.md`):
 
@@ -403,20 +449,27 @@ implementation seeing an unknown flag must return "unsupported" (`docs/src/forma
 | 256 | `FLAG_MIXED_DATA_FILE_VERSIONS` | **Supported** as of the `v12.0.0` final - the snapshot may reference recognized V2 data files at different exact versions; both reader and writer bits must be set and stay set |
 | 512 | `FLAG_FRAG_REUSE_WITH_STABLE_ROW_IDS` | Stable row IDs plus a fragment reuse index (v13, #9119). **Debug builds only** - release builds refuse it, no env override |
 | 1024 | `FLAG_FRAGMENT_REUSE_INDEX` | The FRI records tagged transitions (`index_version >= 1`). **Supported since `v13.0.0`** (#9420); paired and sticky |
-| 2048 | `FLAG_UNSTABLE_SPILLED_ROW_LINEAGE` | Some fragment keeps lineage sequences in hidden data-file columns (v13, #9253; section 8). **Unstable** - release builds need `LANCE_ENABLE_UNSTABLE_SPILLED_ROW_LINEAGE` |
+| 2048 | `FLAG_SPILLED_ROW_LINEAGE` | Some fragment keeps lineage sequences in hidden data-file columns (v13, #9253; section 8). **Supported in every build since `v14.0.0-beta.16`** (#9802); the old name `FLAG_UNSTABLE_SPILLED_ROW_LINEAGE` is a `#[deprecated(since = "14.0.0")]` alias and the env var is gone. Spilling itself stays opt-in (`lance.row_lineage.spill`) |
 | 4096 | `FLAG_FRAGMENT_TREE` | Fragment records live in a fragment tree, `Manifest.fragments` empty (v13, #9060; 5.6). **Reserved - always refused** |
 | 8192 | `FLAG_INDEPENDENT_COVERING_FIELDS` | `fields` holds only keys and `covering_fields` is an independent declaration; requires bit 128 in both words (v13, #9159). **Reserved - always refused** |
 | 16384 | `FLAG_MANAGED_BLOBS` | Blob v2 descriptors address Lance-owned objects (v14.0.0-beta.4, #9293); paired, sticky across restore; **opt-in** since beta.14 (below) |
 | 32768 | `FLAG_NON_REUSABLE_FIELD_IDS` | Field-ID high-water mark in force (v14.0.0-beta.9, #8658; section 6). **Writer word only** |
+| 65536 | `FLAG_ZONE_WRITE_SEEDS` | Data files embed version 1 zone write seeds (`references/docs/format/index/scalar/zone_write_seeds.md`). Reserved in the v14 final (#9564), **supported since `v15.0.0-beta.1`** (#10102); paired, sticky across clone and restore |
+| 131072 | `FLAG_OBJECT_METADATA` | Clustering definitions/references, a nonzero `max_clustering_id`, or nonempty fragment / index-segment `metadata` (section 5.2). Reserved in the v14 final (#9878), **supported since `v15.0.0-beta.6`** (#10383). **Writer word only**; recomputed, not sticky |
+| 262144 | `FLAG_ROW_ADDR_INDICES` | Stable-row-ID table holding an index that stores physical row addresses (section 8). `v15.0.0-beta.7`, #10352. **Writer word only**; cleared when the last such index is removed |
+| 524288 | `FLAG_INLINE_DELETIONS` | Some `DeletionFile.inline` vector lives in the manifest (5.4). `v15.0.0-beta.8`, #10164. Both words |
 
-**Flags at or above `1 << 16` (65536) are unknown** and must be rejected as "unsupported"
-(`rust/lance-table/src/feature_flags.rs:113`; `versioning.md:45`). The boundary has moved four
+**Flags at or above `1 << 20` (1048576) are unknown** and must be rejected as "unsupported"
+(`rust/lance-table/src/feature_flags.rs:140`; `versioning.md:49`). The boundary has moved eight
 times: from 128 in v11 when bit 128 was allocated, to `1 << 9` in the `v12.0.0` final when bit 256
-was spent, to `1 << 14` in `v13.0.0` (bits 9-13), and to `1 << 16` in the v14 betas (bits 14-15).
-Below it, `supported_flags_when` (`feature_flags.rs:320-345`) still clears five bits per build:
-64 and 2048 unless the build is debug or their env var is set, 512 unless debug, and 4096 and
-8192 always. Bits 32 and 64 existed in Rust before v11 but were undocumented until the v11 docs
-catch-up. Since v12 the constants are written as bit shifts (`1 << 7`) rather than decimals; the
+was spent, to `1 << 14` in `v13.0.0` (bits 9-13), to `1 << 16` in the early v14 betas (bits 14-15),
+to `1 << 17` and then `1 << 18` in the late v14 betas (bits 16-17 declared but masked out, still so
+at the `v14.0.0` final), to `1 << 19` in
+`v15.0.0-beta.7` and to `1 << 20` in `v15.0.0-beta.8`. Below it, `supported_flags_when`
+(`feature_flags.rs:470-490`) clears only four bits per build: 64 unless the build is debug or
+`LANCE_ENABLE_UNSTABLE_DATA_OVERLAY_FILES` is set, 512 unless debug, and 4096 and 8192 always
+(at `v14.0.0-beta.14` it also cleared 2048, and at `v14.0.0` 65536 and 131072). Bits 32 and 64
+existed in Rust before v11 but were undocumented until the v11 docs catch-up. Since v12 the constants are written as bit shifts (`1 << 7`) rather than decimals; the
 serialized values and compatibility behavior are unchanged.
 
 **Bit 128 changed hands mid-v11 - this is the trap.** v11 first allocated it as
@@ -450,42 +503,42 @@ accepts mixed manifests. The follow-ups landed with it: #8581 (validation), #858
 V2 write targets), #8583 (propagation across dataset operations) and #8584 (compaction
 targeting) are in `v12.0.0`; #8585 exposed it in the bindings in the v13 line.
 
-**Sticky and paired sets.** `STICKY_PAIRED_FLAGS` is now `FLAG_MIXED_DATA_FILE_VERSIONS |
-FLAG_FRAGMENT_REUSE_INDEX | FLAG_MANAGED_BLOBS`, carried in both words across the reset in
-`apply_feature_flags` and into derived manifests by `inherit_sticky_feature_flags`;
+**Sticky and paired sets.** `STICKY_PAIRED_FLAGS` is `FLAG_MIXED_DATA_FILE_VERSIONS |
+FLAG_FRAGMENT_REUSE_INDEX | FLAG_MANAGED_BLOBS | FLAG_ZONE_WRITE_SEEDS` (zone seeds joined in the
+v14 final), carried in both words across the reset in `apply_feature_flags` and into derived
+manifests by `inherit_sticky_feature_flags` (`feature_flags.rs:240,410`);
 `STICKY_WRITER_FLAGS` adds `FLAG_NON_REUSABLE_FIELD_IDS` on the writer side only
-(`feature_flags.rs:131-134`). A **half-set** paired bit is a hard error, not an ambiguity:
-"Manifest has only one of the {name} reader and writer feature bits set, so its semantics are
-undefined" for mixed-version and Managed Blob, and "FRI requires both reader and writer feature
-flags" for 1024 (`validate_paired_feature_flags`, `:409-435`). For bit 32768 the high-water mark
-and the writer bit must agree and the reader bit must stay clear (`:442-459`). Bit 128 is carried
+(`feature_flags.rs:162-167`). Unchanged through `v15.0.0-beta.10`. Bits 17, 18 and 19 are **not**
+sticky: they are re-derived on every commit (bit 17 from the manifest plus the index list,
+`apply_index_object_metadata_flag`, `:390`; bit 18 from the final index list,
+`apply_row_addr_index_feature_flag`, `:373`, which restore and clone must also call; bit 19 from
+the fragments). A **half-set** paired bit is a hard error, not an ambiguity: "Manifest has only
+one of the {name} reader and writer feature bits set, so its semantics are undefined" for
+mixed-version, Managed Blob and zone write seed, and "FRI requires both reader and writer feature
+flags" for 1024 (`validate_paired_feature_flags`, `:554-581`). For bit 32768 the high-water mark
+and the writer bit must agree and the reader bit must stay clear (`:588-605`). Bit 128 is carried
 by its own path, and bit 8192, once implemented, is retained together with it. Mixed-version
 flags also "remain set even if compaction later makes the files homogeneous again"
-(`docs/src/guide/read_and_write.md:94-95`).
+(`docs/src/guide/read_and_write.md:1047-1048`).
 
-**Docs vs code at `v14.0.0-beta.14` - trust the code.** The old bit-1024 split is closed:
-`versioning.md:36` lists it reader/writer `Yes` and the code agrees, since #9420 moved
-`FLAG_UNKNOWN` off the bit in `v13.0.0` (at `v13.0.0-beta.4` the declaration was its only
-occurrence and the bit was refused). The page's "Flag bit 512 is reserved" sentence is gone - 512
-is spent. New splits replace it:
+**Docs vs code at `v15.0.0-beta.10` - trust the code.** Two older splits are closed: bit 2048 (the
+docs and the code now both call spilled lineage stable, `row_id_lineage.md:261-264`) and the
+bit-16384 activation rule (`versioning.md:51` now documents the explicit `lance.blob.managed =
+"true"` opt-in that #9891 put in the code). The live splits:
 
 - **512** - the table (`versioning.md:35`) gives reader/writer `Yes` with no caveat; the code says
   "Understood only by debug builds until support is released" (`feature_flags.rs:57-61`;
-  `frag_reuse_with_stable_row_ids_enabled() = cfg!(debug_assertions)`, `:304-306`), so a release
+  `frag_reuse_with_stable_row_ids_enabled() = cfg!(debug_assertions)`, `:454-455`), so a release
   build refuses an FRI-on-stable-row-ID table outright.
-- **2048** - the lineage page says "A released build treats bit 11 as an unknown feature flag and
-  refuses the dataset" (`row_id_lineage.md:261-262`); the code also accepts it in a release build
-  when `LANCE_ENABLE_UNSTABLE_SPILLED_ROW_LINEAGE` is set (`feature_flags.rs:143`, `:297-299`).
 - **4096 and 8192** - the table is normative (`versioning.md:38-39`); the code masks both
-  unconditionally (`feature_flags.rs:342-343`). Bit 8192 is "Reserved ahead of its implementation.
+  unconditionally (`feature_flags.rs:486-487`). Bit 8192 is "Reserved ahead of its implementation.
   This build masks the bit out in `supported_flags_when`, so it cannot open a table and apply the
-  legacy suffix contract to independent declarations" (`:94-96`).
-- **16384 activation** - the page says "Publishing a new data file containing a Blob v2 field
-  activates the Managed Blob capability, including files containing only inline values"
-  (`versioning.md:47`). Since #9891 (`v14.0.0-beta.14`, code-only, no doc edit) the code activates
-  it only on explicit schema metadata `lance.blob.managed=true` (`MANAGED_BLOBS_META_KEY`,
-  `feature_flags.rs:103-106`); default writes and compaction stay on Inline/Packed/Dedicated
-  descriptors.
+  legacy suffix contract to independent declarations" (`:101-103`).
+- **65536 and 131072 (new in v15, the reverse direction)** - the docs lag the code: "Bits 16 and 17
+  are reserved but remain unsupported" (`versioning.md:49`, rows `:42-43` say "Reserved and
+  unsupported until implemented"), while the build supports both
+  (`mark_supported(&mut supported, FLAG_ZONE_WRITE_SEEDS, true)`, `feature_flags.rs:488-489`) and
+  sets them automatically. Here the code is what will lock out older clients.
 
 **Managed-blob do-not-pin window: `v14.0.0-beta.4` through `beta.13`.** Managed blobs first shipped
 in beta.4, and in those betas "Ordinary Blob V2 writes currently activate `FLAG_MANAGED_BLOBS` and
@@ -494,13 +547,29 @@ earlier refuse such a table, and the bit is sticky across restore - "Existing be
 datasets retain their fence." Same shape as the bit-128 window above: never write Blob v2 data with
 those builds to a table that an older client must still read.
 
+**v15 raises the reader floor by default - a default-option ZoneMap is enough.** ZoneMap's
+`use_seeds` defaults to `None`, "auto-detect based on column type" (`rust/lance-index/src/scalar/
+zonemap.rs:1591-1596`), and auto-detection says yes for Utf8/LargeUtf8/Utf8View, all binary
+types, Decimal128/256, FixedSizeBinary wider than 8 bytes, and every nested type (`:2058-2073`).
+Once such an index exists, "the commit path sets them for every index that requests such a seed"
+(`rust/lance/src/dataset/write/seeds.rs:12-17`) - bit 65536 in both words, sticky. #10102 says it
+plainly: "Clients that do not support `FLAG_ZONE_WRITE_SEEDS` can no longer read or write the
+resulting snapshots. This can happen with default ZoneMap options, not just an explicit
+`use_seeds: true`." **Every `v14.x` release masks bit 16**, so creating a ZoneMap on a string,
+binary, decimal or nested column with a v15 build makes the table unreadable by the current
+stable pin, restore included ("Both bits remain set in derived snapshots, including clone and
+restore", `versioning.md:42`). Set the ZoneMap parameter `use_seeds` to `false` (a serde field of
+`ZoneMapIndexBuilderParams`, `zonemap.rs:1595-1596`) while any v14 client must still read the
+table. The same one-way shape applies to inline deletion vectors (bit 19, 5.4) and, for writers
+only, to row-address indices on stable-row-ID tables (bit 18, section 8).
+
 ### Tags
 
 A tag labels a specific version. Stored as JSON under `_refs/tags/`, always at the root
 regardless of branch. Tag JSON: `branch` (optional; absent = main), `version`, `createdAt` /
 `updatedAt` (RFC 3339), `manifestSize`, `metadata`. **Tagged versions are exempt from
 `cleanup_old_versions()`** - to remove a tagged version you must delete the tag first
-(`docs/src/guide/tags_and_branches.md:61-67`). Tag names: alphanumeric, `.`, `-`, `_`; no
+(`docs/src/guide/tags_and_branches.md:79-80`). Tag names: alphanumeric, `.`, `-`, `_`; no
 `/`.
 
 ### Branches (v7)
@@ -519,14 +588,70 @@ default branch and is equivalent to `None`", so `("main", 2)` and `(None, 2)` na
 (`docs/src/guide/tags_and_branches.md:18-23`). Branch names are case-sensitive. Branches hold references to data files - cleanup will not delete files still referenced by a
 branch, so unused branches must be deleted to reclaim space.
 
+Branch names may no longer reuse a dataset-owned directory name after the first path segment
+(e.g. `exp/data`), checked ASCII-case-insensitively (#10447, `v15.0.0-beta.8`); older branches
+with such names stay readable, and deleting one removes only the reference.
+
 `cleanup_old_versions(policy)` deletes old manifests, unreferenced data/deletion/index files.
 A file referenced by no manifest is deleted only if >=7 days old unless `delete_unverified`
-is set. `CleanupPolicy` knobs: `before_timestamp`, `before_version`, `delete_unverified`,
-`error_if_tagged_old_versions` (default true), `clean_referenced_branches`,
-`delete_rate_limit` (max delete requests/sec, to avoid S3 throttling). A newer
+is set. **Default age: two weeks** - Python `older_than` "defaults to two weeks" when no
+`keep_one`, `retain_versions` or `versions` is given (`python/python/lance/dataset.py:2823-2827`),
+and Rust `AutoCleanupParams::default()` is `interval: 20, older_than: TimeDelta::days(14)`
+(`rust/lance/src/dataset/write.rs:544-551`). Automatic cleanup is **opt-in**:
+`WriteParams.auto_cleanup` "Defaults to `None` (auto-cleanup disabled)" and applies only to a new
+dataset (`write.rs:640-654`; Python `write_dataset(auto_cleanup_options=None)`, `dataset.py:5567`);
+an existing table opts in through config keys or `ds.optimize.enable_auto_cleanup`. Upstream
+warns that enabling it makes every `interval`-th commit list and read every manifest. `CleanupPolicy`
+knobs: `before_timestamp`, `before_version`, `delete_unverified`,
+`error_if_tagged_old_versions` (default true for manual cleanup), `clean_referenced_branches`,
+`delete_rate_limit` (max delete requests/sec, to avoid S3 throttling) and `delete_concurrency`
+(max concurrent deletes across the cleanup and its cascaded branches, default the store's I/O
+parallelism; #9774, v14 final; `docs/src/guide/read_and_write.md:914-923`). A newer
 `Dataset::cleanup(policy)` API (new in v8, PR #7147) splits this into `explain()` (returns a
 `CleanupExplanation` of what would be removed - a dry run) and `execute()`; v9 exposes both to
-**Python and Java** (PR #7248).
+**Python and Java** (PR #7248). Every `lance.auto_cleanup.*` and `lance.compaction.*` key is now
+registered in `references/docs/format/table/table_config.md` (#8673).
+
+**Retention policies (v15.0.0-beta.8, #10306).** Ordered rules replace the single age cut:
+`KeepOne(per_interval, older_than)` thins history to one version per interval past an age, and
+`RemoveAll(older_than)` expires everything older (Python `lance.CleanupPolicy` / `KeepOne` /
+`RemoveAll`; Rust `cleanup::retention::CleanupRule`, `rust/lance/src/dataset/cleanup/retention.rs:22-34`).
+"`CleanupPolicy()` defaults to a single `RemoveAll(older_than=timedelta(days=14))`, matching
+existing cleanup behavior"; ages must strictly increase, `RemoveAll` must be last, and
+"`KeepOne.older_than` must be at least two days", measured from the hinted commit timestamp
+(`read_and_write.md:804-816`). Automatic cleanup takes the same rules as
+`lance.auto_cleanup.policy` (JSON) plus `lance.auto_cleanup.policy_interval` (a version count),
+and `validate_auto_cleanup_config` refuses to mix them with the legacy keys: "retention rules
+require lance.auto_cleanup.policy_interval; remove lance.auto_cleanup.interval and
+lance.auto_cleanup.older_than before activating retention cleanup"
+(`rust/lance-table/src/feature_flags.rs:173-235`). "Older clients ignore this activation key and
+leave automatic retention cleanup disabled" (`read_and_write.md:859-860`).
+
+**Other v15 history controls.**
+
+- `expire_versions` / `explain_expire_versions` (#9438, beta.9; Python `ds.expire_versions`):
+  "Delete expired manifests, and only manifests" - data, deletion and transaction files are left
+  for a later `cleanup_old_versions`, and it never removes the newest version, a tagged version
+  on the current branch, or a branch root (`rust/lance/src/dataset/expire.rs:339-352`). The PR
+  title states the point: "remove history without reading manifests".
+- `Dataset::restore_from(expected_latest_version)` (#10556, beta.8,
+  `rust/lance/src/dataset.rs:1641`): restores only if the caller's expected version is still
+  HEAD, with one conditional attempt and no rebase - plain `restore` silently rebases over an
+  intervening commit. `UpdateFieldMetadataBuilder::with_expected_latest_version` (#10655,
+  beta.9) is the same fence for field metadata.
+- Automatic cleanup now keeps old tagged versions instead of failing every run: it "starts from
+  `error_if_tagged_old_versions(false)`" (#10541, beta.8); manual cleanup keeps the default `true`.
+- Cleanup refuses a detached checkout, where every attached version sorts below the handle and
+  could all be removed (#10331, beta.8, `critical-fix`).
+- `Version.manifest_size: Option<u64>` (#9102, `rust/lance/src/dataset.rs:322`) and
+  `ManifestLocation.last_modified` (#9438, `rust/lance-table/src/io/commit.rs:280` - the object's
+  write time, not `Manifest::timestamp`) are new; both break Rust struct literals.
+
+**Cleanup deleted branch-referenced files before v15.0.0-beta.8.** #10327 (`critical-fix`):
+"Cleanup on main or on a legacy parent deleted files these branches still read" for branches
+written by Lance 2.x; #10392 (a branch recording the same location under another URI spelling),
+#10447 (nested branch names colliding with data directories), #10488 (retained branch source
+snapshots) and #10489 close the rest. Files already deleted are not recoverable by upgrading.
 
 ---
 
@@ -536,8 +661,10 @@ A row has two identifier forms (`docs/src/format/table/row_id_lineage.md`):
 
 - **Row address** - the current physical location. A 64-bit value:
   `row_address = (fragment_id << 32) | local_row_offset`. Exposed as `_rowaddr`. Changes when
-  data is reorganized by compaction or updates. Secondary indexes currently reference rows by
-  row address.
+  data is reorganized by compaction or updates. "Secondary indices (vector indices, scalar
+  indices, full-text search indices) reference rows by their row addresses"
+  (`row_id_lineage.md:30`) - on stable-row-ID tables this is now literally true for more index
+  types (below).
 - **Row ID** - a logical identifier. With **stable row IDs disabled (the default), the row ID
   equals the row address.** With stable row IDs enabled, each row gets a unique
   auto-incrementing u64 (exposed as `_rowid`) that stays constant for the row's lifetime even
@@ -551,7 +678,32 @@ feature flag atomically; because `Merge` conflicts with all data-modifying opera
 successful commit guarantees no concurrent write occurred". Two operational catches:
 **no retries are attempted** (`with_max_retries(0)`), so quiesce concurrent writers first and
 retry yourself on conflict; and it is idempotent, returning `Ok(())` immediately if the table
-already uses stable row IDs (`rust/lance/src/dataset.rs:3266`).
+already uses stable row IDs (`rust/lance/src/dataset.rs:3584`). The spec adds two preconditions
+(`row_id_lineage.md:76-78`): on a manifest with no writer version, first commit a no-op delete
+with predicate `false` and reopen, because "affected releases may have recorded stale counts,
+which would produce incomplete row ID sequences"; and "drop every secondary index so no index
+entry remains in the dataset metadata" with index builds quiesced, since an in-flight index
+commit "can otherwise attach stale physical row addresses after activation". Recreate indexes
+afterwards.
+
+**Row-address indexes on stable-row-ID tables, and the writer fence (v14.0.0-beta.16 ->
+v15.0.0-beta.7).** On a stable-row-ID table, B-tree segments from format version 1 (#9481,
+`v14.0.0-beta.16`) and Bitmap (version 1) / LabelList (version 2) segments (#9814,
+`v15.0.0-beta.2`) store **physical row addresses**, not row IDs: "A segment persisted before
+format version 1 (`IndexMetadata::index_version`) stores a row id here instead"
+(`references/docs/format/index/scalar/btree.md:47`). Tables without stable row IDs keep the old
+versions, since there the two are equal. "Older writers skip version 1 B-tree segments but still
+extend their fragment coverage as if the stored identifiers were stable row IDs. An update to
+another column can then suppress fallback scans for moved rows and silently lose matches"
+(#10352); Bitmap and LabelList segments have the same exposure. The fix
+is the writer-only `FLAG_ROW_ADDR_INDICES` (bit 18, `rust/lance-table/src/feature_flags.rs:130-134`),
+derived from the final index list on every commit, restore and clone. It "does not modify
+historical snapshots or repair index coverage already corrupted by an older writer. Such an index
+must be rebuilt." **Unfenced window:** tables written by `v14.0.0-beta.16` through every `v14.0.x`
+(the fence is not in `v14.0.3-rc.1`) and `v15.0.0-beta.2` - `beta.6` carry address-domain segments
+without the bit. Readers are unaffected (an unsupported index version is skipped and the data
+scanned). A B-tree on the logical `_rowid` (field `-3`) is also the spec'd persisted reverse
+lookup, "using its existing address-domain format" (`row_id_lineage.md:286-292`, #10150).
 
 Assignment uses a monotonic `next_row_id` counter in the manifest; on a
 commit conflict the writer rebases by re-reading the latest counter. On update, Lance writes a
@@ -563,11 +715,11 @@ with five compact segment encodings (Range, RangeWithHoles, RangeWithBitmap, Sor
 Array) - bitpacked. A row-id index is built at table load by aggregating all fragments'
 sequences.
 
-**Inline or spilled to hidden columns (v13, #9253, `format-change`; unstable).** The `external_*`
+**Inline or spilled to hidden columns (v13, #9253, `format-change`; stable since `v14.0.0-beta.16`).** The `external_*`
 arms of the three sequence oneofs (`DataFragment` fields 6, 8, 10) are **retired and reserved** -
 "No Lance writer ever emitted them; the column arms replace that design"
 (`docs/src/format/table/row_id_lineage.md:254-258`; `reserved 6, 8, 10`,
-`protos/fragment_metadata.proto:79`), and Rust's `RowIdMeta::External` /
+`protos/fragment_metadata.proto:77`), and Rust's `RowIdMeta::External` /
 `RowDatasetVersionMeta::External` variants went with them. Sequences "small enough (~200KB encoded
 and under)" stay inline (`row_id_lineage.md:195-197`); "A larger sequence is **spilled to a hidden
 column of one of the fragment's data files**" (`:199-200`). The new arms `column_row_ids` (12),
@@ -582,16 +734,21 @@ column of one of the fragment's data files**" (`:199-200`). The new arms `column
 - Opt-in per table via the `lance.row_lineage.spill` config key, threshold
   `lance.row_lineage.inline_max_bytes` (default `200 * 1024`,
   `rust/lance/src/dataset/rowids/spill.rs:63-76`); "a table that never sets it is unchanged"
-  (`row_id_lineage.md:246-247`).
+  (`row_id_lineage.md:246-248`).
 - Any column arm sets bit 2048 in both words; a reader without it "would take the fragment to have
-  no row IDs at all" (`:249-252`). **Not released**: release builds refuse the bit unless
-  `LANCE_ENABLE_UNSTABLE_SPILLED_ROW_LINEAGE` is set (section 7). The docs briefly declared it
-  stable in `v14.0.0-beta.12` (#9800); #9885 reverted that in beta.13 because it "merged before the
-  required format vote completed".
+  no row IDs at all" (`:250-253`). **Supported in every build since `v14.0.0-beta.16`** (#9802 in
+  code, #9886 in the docs): "Spilled row lineage is a stable table-format feature. Readers and
+  writers that do not support bit 11 MUST refuse a dataset that requires it. Supporting the flag
+  does not opt a table into spilling" (`:261-264`). The env var
+  `LANCE_ENABLE_UNSTABLE_SPILLED_ROW_LINEAGE` is gone; `v13.0.0` and `v14.0.0-beta.1` - `beta.15`
+  release builds refuse the bit unless that env var is set. (History: #9800 declared it stable in beta.12, #9885
+  reverted that in beta.13 because it "merged before the required format vote completed".)
 
 **Change data feed** (stable row IDs only): each row tracks `created_at_version` and
 `last_updated_at_version`, queryable via SQL predicates on `_row_created_at_version` and
-`_row_last_updated_at_version` to find rows inserted or updated between two versions.
+`_row_last_updated_at_version` to find rows inserted or updated between two versions. Before
+`v15.0.0-beta.8` the row-change readers (inserted / updated / upserted rows between versions) on a
+table **without** stable row IDs "silently returned empty change sets"; they now reject it (#10521).
 
 ### Stable row IDs in hand-assembled transactions
 
@@ -630,21 +787,21 @@ conflict-free commit is 1 read IOP + 2 write IOPs.
 
 The `Transaction` message carries `read_version`, `uuid`, optional `tag`, a
 `transaction_properties` string map, and a `oneof operation` with **16 wire operation types**
-(`protos/transaction.proto:416-433`):
+(`protos/transaction.proto:433-449`):
 
 `Append`, `Delete`, `Overwrite`, `CreateIndex`, `Rewrite`, `DataReplacement`, `DataOverlay`,
 `Merge`, `Restore`, `ReserveFragments`, `Update`, `Project`, `UpdateConfig`,
 `UpdateMemWalState`, `Clone`, `UpdateBases`.
 
 The Rust `Operation` enum has **17 variants** since v14 - those 16 plus `Unknown {}`
-(`rust/lance-table/src/transaction/operation.rs:39,261`, #9482), which is never encoded on the
+(`rust/lance-table/src/transaction/operation.rs:39,267`, #9482), which is never encoded on the
 wire (below). `DataOverlay` arrived in the 9.1 dev line (PR #7535/#7536): it attaches overlay files
 supplying new values for a subset of `(row offset, field)` cells without rewriting a fragment's
 base data files (section 5). It is **unstable** - env-gated by
 `LANCE_ENABLE_UNSTABLE_DATA_OVERLAY_FILES`, and release builds refuse overlay datasets (feature
-flag 64 treated as unknown). No wire op was added from v10 through `v14.0.0-beta.14`; the `oneof
-operation` tag range still ends at `DataOverlay data_overlay = 115` (`:432`), and field numbers
-100-199 are now formally reserved for operations (`:410-414`). Do **not** count `RewriteRows` /
+flag 64 treated as unknown). No wire op was added from v10 through `v15.0.0-beta.10`; the `oneof
+operation` tag range still ends at `DataOverlay data_overlay = 115` (`:449`), and field numbers
+100-199 are now formally reserved for operations (`:429-432`). Do **not** count `RewriteRows` /
 `RewriteColumns` toward the total - those are variants of `UpdateMode`, a different enum living
 in the same Rust file.
 
@@ -654,7 +811,7 @@ if it contains an operation they don't know" - so any new op type written inline
 version unopenable for them. New writers store it in `transaction_section` (field 23), which
 those readers ignore; `transaction_section_deprecated` (21) is still read for old manifests but
 "New writers must leave it absent" (`docs/src/format/table/transaction.md:41-47`,
-`protos/table.proto:202,211`). Decoding is now total: "An undecodable or unsupported Transaction
+`protos/table.proto:214,223`). Decoding is now total: "An undecodable or unsupported Transaction
 message must not make the manifest unreadable", and an op number in 100-199 the reader does not
 know decodes as `Operation::Unknown`, which "conflicts with every concurrent transaction" and must
 never be re-encoded or committed (`transaction.md:45`). Rust-side breaks: exhaustive matches need
@@ -666,9 +823,9 @@ became `TryFrom`, failing on `Unknown`. The PR is labeled `format-change`, **not
 **Large transactions spill out of the manifest (v11, PR #7881).** Transactions whose serialized
 size exceeds `MAX_INLINE_TRANSACTION_BYTES` are no longer inlined into the manifest and live
 only in their external `_transactions/` file; readers use the existing fallback path. The
-shipped threshold is **20 MiB** - `rust/lance/src/io/commit.rs:420` under `#[cfg(not(test))]`;
+shipped threshold is **20 MiB** - `rust/lance/src/io/commit.rs:425` under `#[cfg(not(test))]`;
 the 64 KiB figure quoted in the PR description is the `#[cfg(test)]` value only. Applied in all
-three commit paths (`:451`, `:1324`, `:1829`). There is no new configuration knob, the
+three commit paths (`:453`, `:1349`, `:1926`). There is no new configuration knob, the
 transaction file is retained as long as the manifest referencing it, and the measured effect on
 a large workload was a full-commit manifest shrinking from 1576 MiB to ~790 MiB.
 
@@ -690,6 +847,10 @@ changes row addresses; `Merge` adds columns and is "overly general" / high-confl
 few rows change) and `REWRITE_COLUMNS` (optimal when few columns change across many rows);
 `Clone` (shallow = metadata-only referencing the source via `base_paths`, or deep = native
 object-store copy) can only be the first operation in a dataset so it never conflicts.
+`DataReplacement` gained `data_change` (field 2, #9705, `v15.0.0-beta.2`): "Absent means true,
+which is what a writer that predates this field meant. False means the values were only moved to
+new files: index coverage, overlays, and row update versions are left as they are"
+(`protos/transaction.proto:375-380`) - the way to re-layout a column without invalidating indexes.
 
 **A raw deep `Clone` commit is rejected (v13.0.0, #9555).** A deep clone is two steps -
 `Dataset::deep_clone` copies the files, then commits `Clone { is_shallow: false }`, which rewrites
@@ -705,12 +866,12 @@ Targets created the old way must be re-cloned with `deep_clone`.
 `commit_transaction` computes `target_version = read_version + 1`, then runs a retry loop
 (`rust/lance/src/io/commit.rs`). Each attempt loads concurrent transactions since
 `read_version`, builds a `TransactionRebase`, and produces a rebased transaction. The retry
-budget is `CommitConfig.num_retries`, **default 20** (`rust/lance-table/src/io/commit.rs:1743`;
+budget is `CommitConfig.num_retries`, **default 20** (`rust/lance-table/src/io/commit.rs:1833`;
 settable via `CommitBuilder::with_max_retries`), alongside a wall-clock `retry_timeout`, default
-30 s (`DEFAULT_COMMIT_RETRY_TIMEOUT`, `rust/lance/src/io/commit.rs:93`; process-wide override
+30 s (`DEFAULT_COMMIT_RETRY_TIMEOUT`, `rust/lance/src/io/commit.rs:98`; process-wide override
 `LANCE_COMMIT_RETRY_TIMEOUT_SECS`; `CommitBuilder::with_retry_timeout`). Backoff is slot-based,
 seeded from the first attempt's observed commit latency. `num_retries == 0` on an `Overwrite`
-triggers strict-overwrite mode (not subject to any rebasing; `:1711-1712`).
+triggers strict-overwrite mode (not subject to any rebasing).
 
 **The retry clock starts after catch-up (v14 line, #9631).** Previously the `retry_timeout` clock
 started before the first attempt, and that attempt first replays every version committed since
@@ -728,12 +889,18 @@ Three conflict outcomes:
 - **Rebasable** - the transaction is transformed to incorporate the concurrent change while
   preserving intent, then retried automatically inside the commit layer.
 - **Retryable** - cannot rebase but can be re-executed at the application level against the
-  new version; returns a retryable conflict error.
+  new version; returns a retryable conflict error. **"Against the new version" is the caller's
+  job (field-observed):** an application-level retry must reopen or `checkout_latest` the
+  dataset before re-running the operation. Retrying on the same cached `Dataset` handle re-plans
+  against the same stale snapshot and loses the same race every time - an update racing a
+  concurrent fragment rewrite exhausted three attempts in about a second until the handle was
+  refreshed between attempts, after which it succeeded on the next try.
 - **Incompatible** - a fundamental conflict; the commit fails non-retryably.
 
 Compatibility is per-operation and not bidirectional. Examples: `Append` is compatible with
-almost everything including itself (conflicts only with `Overwrite`/`Restore`/
-`UpdateMemWalState`); `Rewrite` is incompatible with `CreateIndex` by default because it
+almost everything including itself (conflicts with `Overwrite`/`Restore`/
+`UpdateMemWalState`, and since `v15.0.0-beta.8` with a `Merge` that replaced a field it wrote -
+below); `Rewrite` is incompatible with `CreateIndex` by default because it
 changes row addresses - **unless a fragment reuse index or stable row IDs are in use**, which
 decouple logical identity from physical address and let those operations proceed without
 conflict.
@@ -754,6 +921,21 @@ Two `v13.0.0` matrix changes, both closing silent-corruption rebases:
   rule `DataReplacement` already had. The spec's Update compatibility list (`transaction.md:403-422`)
   does not mention it yet; the code is authoritative.
 
+Four v15-beta matrix changes of the same kind - each turns a silent rebase into a **retryable**
+conflict, so callers that previously "succeeded" may now see conflicts:
+
+- **`Project` vs schema / field-metadata updates** (#10512, beta.8): "Stale `Project` transactions
+  replace the complete schema from their read version and currently rebase over schema or field
+  metadata updates, silently discarding committed metadata." Now a conflict in either order.
+- **`Append` vs a concurrent column replacement** (#10502, beta.8): a nullable cast or
+  drop-and-readd replaces field IDs, and "Appended files could retain the old IDs and silently
+  read back NULL under the new schema." Append now checks its files' field IDs against the
+  concurrent `Merge` - so `Append` is no longer compatible with every `Merge`.
+- **`CreateIndex` vs `DataReplacement` of a packed parent** (#10341, beta.8, `critical-fix`): an
+  index on `s.x` "could commit over a concurrent replacement of `s` and return stale rows".
+- **`Restore` vs table-metadata updates** (#10629, beta.10): refused in either commit order so
+  stale clustering-provider keys cannot be replayed over restored definitions.
+
 **`preserves_nullability` on `Project` / `Merge`** (v11, #8347, `protos/transaction.proto:169,
 182`). The default `false` means "this operation makes no nullability assertion". A nullability
 *tightening* must **not** set it: the producer proved the claim by scanning at its read version,
@@ -765,7 +947,7 @@ could land nulls that then fail to read under the tightened schema.
 **Dataset *creation* is not covered by any of this.** OCC protects *commits*; the create path
 has no retry loop at all - `do_commit_new_dataset` carries an in-repo
 `// TODO: Allow Append or Overwrite mode to retry using` comment
-(`rust/lance/src/io/commit.rs:662`) and returns `DatasetAlreadyExists` on collision (`:711`) -
+(`rust/lance/src/io/commit.rs:664`) and returns `DatasetAlreadyExists` on collision (`:713`) -
 after first checking whether an ambiguously reported write was in fact its own
 (`verify_commit_outcome`). The retry classifier matches exactly one arm,
 `Error::RetryableCommitConflict` (`rust/lance/src/dataset/write/retry.rs:73`), returning every
@@ -782,14 +964,22 @@ The commit strategy is pluggable via the `CommitHandler` trait. Routing by URI s
 
 | Scheme | Handler |
 |--------|---------|
-| `file` (non-Windows), `s3`, `gs`, `az`, `abfss`, `oss`, `tos`, `memory`, `shared-memory`, `goosefs` | `ConditionalPutCommitHandler` (`rust/lance-table/src/io/commit.rs:1195-1196`) |
+| `file` / `file-object-store` (non-Windows), `s3`, `gs`, `az`, `abfss`, `oss`, `tos`, `memory`, `shared-memory`, `goosefs` | `ConditionalPutCommitHandler` (`rust/lance-table/src/io/commit.rs:1271-1274`) |
 | `cos` (Tencent) | `TencentCosCommitHandler` - **fails closed**, see below (v11, #8369) |
 | `file` (Windows) | `RenameCommitHandler` |
 | `s3+ddb` | `ExternalManifestCommitHandler` (DynamoDB; requires the `dynamodb` feature) |
-| anything else | `UnsafeCommitHandler` (no concurrency check; logs a warning) |
+| anything else | `ConditionalPutCommitHandler` since `v15.0.0-beta.8` (`:1339-1347`); `UnsafeCommitHandler` before |
 
 `goosefs` joined that list in v11 (PR #8134); `abfss`, `tos`, and `shared-memory` were already
 routed there before v10 despite earlier editions of this table omitting them.
+
+**Unrecognized schemes are safe by default from `v15.0.0-beta.8` (#8773).** Before, "every other
+scheme fell through to `UnsafeCommitHandler`, which blind-writes the manifest with no
+create-if-not-exists guard" - concurrent writers to an out-of-tree store registered through the
+`ObjectStore` registry could overwrite each other and all report success. Now they get
+put-if-not-exists and a loud conflict; a store that genuinely lacks conditional put must opt back
+into `UnsafeCommitHandler` with a caller-supplied handler. During a mixed rollout the GooseFS caveat
+(`ops.md`) applies: an older writer still blind-writes, so upgrade every writer first.
 
 **Tencent COS is the one store that cannot self-coordinate** (v11, #8369). COS silently ignores
 put-if-not-exists on buckets that have *ever* had versioning enabled - even if versioning is now
@@ -811,8 +1001,9 @@ object store's native conditional write (`PutMode::Create`, i.e. `If-None-Match:
   (`?ddbTableName=...`). The `ExternalManifestStore` remembers `(uri, version) -> manifest
   path` and stages then finalizes the manifest in the object store.
 
-Note: the `commit.rs` module doc still says the S3 default is `UnsafeCommitHandler` - that
-comment is stale; the actual routing sends `s3://` to `ConditionalPutCommitHandler`.
+Note: the `commit.rs` module doc still says the S3 default is `UnsafeCommitHandler`
+(`rust/lance-table/src/io/commit.rs:17-18`, unchanged at `v15.0.0-beta.10`) - that comment is
+stale; the actual routing sends `s3://` to `ConditionalPutCommitHandler`.
 
 **v10 commit-path changes.** `CommitBuilder::with_source_store` (`rust/lance/src/dataset/write/
 commit.rs:137`, PR #7545) enables cross-store and cross-account `deep_clone`: per-file copy
@@ -868,14 +1059,17 @@ predecessor still carries the identity the writer observed", and `CommitHandler:
 publishes on that condition. Its contract is explicit that this is not the ordinary conflict path:
 "Commit only if `predecessor` is still the manifest at its version, decided with the reservation;
 otherwise [`Error::PrerequisiteFailed`], never a conflict"
-(`rust/lance-table/src/io/commit.rs:1020-1022`).
+(`rust/lance-table/src/io/commit.rs:1095-1097`).
 
 The identity comes from a new `ManifestLocation` field - "A token unique to this manifest record
 in the commit handler's store ... A dataset recreated at the same version has a different one"
 (`pub identity: Option<String>`). **That field is the actual compile break**: the new trait
 methods are all default-implemented, so only code constructing `ManifestLocation` with a struct
 literal must change. No built-in store implements the conditioned contract, and unconditioned
-commits behave exactly as before.
+commits behave exactly as before. The same struct broke literals again in `v15.0.0-beta.9`
+(#9438): `last_modified: Option<DateTime<Utc>>` is "the object's write time, not
+`Manifest::timestamp`", populated only by listings (`rust/lance-table/src/io/commit.rs:270-280`);
+pass `None` when the source cannot provide it.
 
 ### v2 manifest paths are a compatibility fence
 
@@ -906,7 +1100,7 @@ Removed with it: `CacheBackend::invalidate_prefix`, `LanceCache::keys`, `CacheKe
 `Dataset URI, fragment_id, row_id_meta`, up from `Dataset URI, fragment_id`. This was a
 correctness fix, not a tuning change - keyed on `fragment_id` alone, a `WriteMode::Overwrite`
 against a shared `Session` served the *previous* generation's sequence, corrupting stable row
-ids. See the data-loss roundup in `changelog-v7-v14.md`. Java can now also select a registered
+ids. See the data-loss roundup in `changelog-v7-v15.md`. Java can now also select a registered
 native cache backend by URI (e.g. `moka://?capacity=1048576`) or `CacheBackendConfig`, mutually
 exclusive with the size options (#8446).
 
@@ -964,15 +1158,16 @@ contract; in-memory buffering and scheduling are implementation-defined.
   order can resurrect stale rows). Append-only MemWAL tables may omit the primary key.
   Sharding is also a **read** optimization, not only a write one: "When sharding specs are
   available, the planner evaluates query predicates against shard fields and skips shards whose
-  computed shard values cannot match" (`mem_wal.md:611`). A predicate over the shard field
+  computed shard values cannot match" (`mem_wal.md:612`). A predicate over the shard field
   therefore prunes whole shards before any data is touched - so choosing shard fields that
   appear in common filters buys read selectivity, not just write parallelism.
 - **MemTable** - holds rows before flush; a list of Arrow record batches. **A MemTable does not
   have a generation** - generation numbers belong to SSTables. `current_generation` in the shard
   manifest "is the generation number to assign to the next SSTable created by flushing the
-  MemTable" (`docs/src/format/table/mem_wal.md:310`).
+  MemTable" (`docs/src/format/table/mem_wal.md:311`).
 - **WAL** - durable storage of all MemTables in a shard, ordered by generation. Each WAL
-  entry is an Arrow IPC stream file at `_mem_wal/{shard_id}/wal/`, named with bit-reversed
+  entry is an Arrow IPC stream file at `_mem_wal/{shard_id}/wal/` (`_{dir_id}_mem_wal/` for an
+  incarnation created by v15, see Fencing and GC), named with bit-reversed
   64-bit binary (spreads sequential writes across S3 partitions). The writer epoch is in the
   Arrow schema metadata under `writer_epoch` for fencing; since `v14.0.0-beta.5` (#9712,
   `format-change`) a `generation` key records the MemTable generation the entry's batches belong
@@ -994,7 +1189,7 @@ contract; in-memory buffering and scheduling are implementation-defined.
   **v12 added three optional accounting fields** to the `SsTable` proto message (#8981,
   `v12.0.0-beta.14` - the only `format-change`-labeled PR in that range):
   `in_memory_bytes` (field 3), `physical_rows` (field 4), `primary_key_bytes` (field 5)
-  (`protos/table.proto:622,627,638`). They record "what the SSTable holds, as the writer's
+  (`protos/table.proto:695,700,711`). They record "what the SSTable holds, as the writer's
   MemTable accounted for it at flush" (`mem_wal.md:152-153`).
 
   Three traps. (1) These are **payload estimates, not read-cost bounds**: `in_memory_bytes`
@@ -1007,7 +1202,7 @@ contract; in-memory buffering and scheduling are implementation-defined.
   struct literal needs updating.
 - **Shard manifest** - source of truth per shard: `writer_epoch`, shard assignment, WAL
   pointers, and "**SSTable generation state**: `current_generation` and `sstables`"
-  (`mem_wal.md:296`). Versioned, immutable, committed via put-if-not-exists.
+  (`mem_wal.md:297`). Versioned, immutable, committed via put-if-not-exists.
   **v12 renamed and narrowed `ShardManifestStore`** (#8640): `read_latest` -> `latest`,
   `read_latest_uncached` -> `refresh_latest`, and `write` became crate-private - callers reach
   it through `commit_update`, `claim_epoch`, or `initialize_shard`
@@ -1017,7 +1212,7 @@ contract; in-memory buffering and scheduling are implementation-defined.
   (`compacted_sstables`, "the last SSTable compacted into the base table for each shard",
   `mem_wal.md:43`), index catchup, and shard snapshots. Tied to the `UpdateMemWalState`
   transaction. Config gained **`maintain_all_indexes`** (`MemWalIndexDetails` field 12,
-  `protos/table.proto:725`; #9335, v14 line): set, `maintained_indexes` is ignored and the set "is
+  `protos/table.proto:798`; #9335, v14 line): set, `maintained_indexes` is ignored and the set "is
   resolved from the table's indexes each time a MemTable is built, so an index created after the
   MemWAL was installed is picked up and a dropped one falls out"; an index kind the writer cannot
   mirror is skipped rather than making the table unwritable, while an explicitly named one it
@@ -1034,16 +1229,16 @@ either; reimplementing bucketing from anything else will not interoperate.
 ### MemWAL is a parallel stack, not an integration into `Dataset`
 
 Three properties decide whether MemWAL is adoptable for a given system, and none of them are
-stated in the spec pages. All three were re-verified at `v14.0.0-beta.14`.
+stated in the spec pages. All three were re-verified at `v15.0.0-beta.10`.
 
-- **`Dataset::scanner()` has no MemWAL integration.** The whole of
-  `rust/lance/src/dataset/scanner.rs` mentions MemWAL exactly once, in an unrelated comment about
-  phrase matching (`:308`). Fresh rows - MemTable, WAL, and un-compacted SSTables - are reachable
+- **`Dataset::scanner()` has no MemWAL integration.** The scanner (split into
+  `rust/lance/src/dataset/scanner/` submodules by #10072) mentions MemWAL exactly once, in an
+  unrelated comment about phrase matching (`scanner/fts.rs:214`). Fresh rows - MemTable, WAL, and un-compacted SSTables - are reachable
   only through `LsmScanner` (`rust/lance/src/dataset/mem_wal/scanner/builder.rs:195`), which is a
   **narrower** API than the normal scanner: no SQL, no joins, no aggregation, no `take`. A system
   needing DataFusion-grade query over fresh data does not get it from MemWAL.
-- **No manifest feature flag marks a MemWAL table.** The flag set is bits 0-15
-  (`rust/lance-table/src/feature_flags.rs:11-111`) and none of them means "this table has a
+- **No manifest feature flag marks a MemWAL table.** The flag set is bits 0-19
+  (`rust/lance-table/src/feature_flags.rs:11-138`) and none of them means "this table has a
   MemWAL" - the one that briefly existed, `FLAG_MEM_WAL_INDEX_CATCHUP`, was retired before the
   `v11.0.0` final. So an ordinary reader opens the dataset happily and **silently sees only
   base-table data**, missing everything not yet compacted. That is a correctness-of-expectation
@@ -1057,7 +1252,7 @@ explicit tier: "The active MemTable is newer than every published SSTable" (`mem
 and any uncompacted SSTable wins over the base table. The background job formerly called the
 *MemTable Merger* is now the **SSTable Compactor**: "The compaction uses Lance merge-insert
 semantics and updates `compacted_sstables[shard_id]` atomically with the base-table commit"
-(`mem_wal.md:521`).
+(`mem_wal.md:522`).
 
 ### The appender/tailer/flusher model
 
@@ -1107,13 +1302,32 @@ replayed by the new writer. SSTables and their WAL files become GC-eligible only
 after the SSTable is compacted into the base table, all indexes have caught up, and no retained
 base version references them. MemWAL GC is separate from `cleanup_old_versions`.
 
+**MemWAL incarnations (`v15.0.0-beta.6`, #10432, `format-change`).** A stale writer, flush or
+compaction job can outlive the MemWAL it belongs to (MemWAL disabled, table dropped and recreated)
+and used to write into the next incarnation's `_mem_wal/`. Now `initialize_mem_wal` mints an
+8-hex `dir_id` into `MemWalIndexDetails.dir_id` (field 13): it "Names this MemWAL's storage
+directory, `_{dir_id}_mem_wal/` under the table's base path; empty means the legacy `_mem_wal/`"
+(`protos/table.proto:836-844`). Every MemWAL commit names it (`UpdateMemWalState.dir_id = 2`,
+`Update.mem_wal_dir_id = 11`, `protos/transaction.proto:309,418`), and manifest build rejects a
+mismatch with the new never-retryable `Error::StaleMemWal` (`rust/lance-core/src/error.rs:426-433`).
+Lifecycle primitives: `fence_shard` "writes a sentinel at the WAL tip ... so that writer's next
+PUT-IF-NOT-EXISTS fails" (`rust/lance/src/dataset/mem_wal/wal.rs:1459-1465`), and
+`ShardManifest.sealed_by` (field 16, `SealedBy { txn, sealed_at_millis }`) records who sealed a
+shard. Path helpers, `ShardWriterConfig`, `LsmScanner` and `LsmDataSourceCollector` all take the
+`dir_id`; Python defaults it to `""` and Java passes the legacy empty id. Two caveats: **no
+feature flag guards it**, so a pre-v15 client ignores the unknown field and resolves the legacy
+`_mem_wal/` paths; and the spec page `mem_wal.md` still describes only `_mem_wal/`. Also in v15:
+after a terminal SSTable flush failure the writer stops admitting writes, and "A flush that gives
+up, including when close cancels retries, requires reopening the writer and replaying the WAL"
+(#9959, beta.2, `breaking-change`).
+
 The spec treats the **garbage collector as a named subsystem** with its own removal preconditions
 ("The garbage collector may remove obsolete SSTables after:",
-`docs/src/format/table/mem_wal.md:530`) rather than as an incidental cleanup step, and carries a
-matching **reader-consistency model** ("Reader consistency depends on:", `:576`) plus an
+`docs/src/format/table/mem_wal.md:531`) rather than as an incidental cleanup step, and carries a
+matching **reader-consistency model** ("Reader consistency depends on:", `:577`) plus an
 **LSM-tree merging read** section describing how a reader overlays shard state on the base table.
 One physical guarantee worth relying on when reasoning about replay and scan order: "SSTable rows
-are written in forward insert order" (`:192`).
+are written in forward insert order" (`:193`).
 
 **API changes in v11.** `force_seal_active` now returns a `SealFence` instead of `()` (PR #8051,
 `rust/lance/src/dataset/mem_wal/write.rs:4019`) - existing `.await?;` call sites still compile
@@ -1131,8 +1345,8 @@ Everything below changed name only; semantics are unchanged unless noted.
 
 | Layer | Before | After |
 |-------|--------|-------|
-| Proto message | `FlushedGeneration` | `SsTable` (`protos/table.proto:606`) |
-| Proto message | `MergedGeneration` | `CompactedSsTable` (`protos/table.proto:642`) |
+| Proto message | `FlushedGeneration` | `SsTable` (`protos/table.proto:678`) |
+| Proto message | `MergedGeneration` | `CompactedSsTable` (`protos/table.proto:715`) |
 | Proto field | `ShardManifest.flushed_generations` (tag 8) | `sstables` |
 | Proto field | `MemWalIndexDetails.merged_generations` (tag 9) | `compacted_sstables` |
 | Proto field | `Transaction.Merge` field 5, `UpdateMemWalState` field 1 | `compacted_sstables` |
