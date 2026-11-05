@@ -4,6 +4,51 @@ All notable changes to this skill are documented in this file, following [Keep a
 
 ## [Unreleased]
 
+## [0.11.0] - 2026-11-05
+
+Every row re-tested live against acpx 0.21.1 unless noted.
+
+### Fixed
+
+- claude: the built-in adapter range is `^0.95.0` since acpx 0.21.1 (Claude Code
+  2.1.309); the pin example moves to 0.100.0 (Claude Code 2.1.316).
+- codex: pin example 2.5.0 (`@openai/codex ^0.165.0`); recipe model `gpt-6-astra`.
+- A malformed `--agent` and a missing prompt exit 2 (0.21.0, 0.21.1); new catalog
+  strings for both.
+- claude `set` rejections are ACP -32602 with the adapter's reason
+  (`Unknown config option: reasoning_effort`, `Invalid value for config option model`),
+  no longer `Internal error`.
+- `--mcp-config` replaces only the servers acpx passes; codex's `config.toml` servers
+  and claude's user-scope servers (with `ACPX_CLAUDE_INCLUDE_USER_SETTINGS=1`) still
+  load on top.
+- An omitted agent falls back to the configured `defaultAgent`, not always codex.
+- agy server 1.4.5 advertises the same model ids; the shipped reference is ~43k chars.
+
+### Added
+
+- claude: `session/new` has a 60s deadline independent of `--timeout` (exit 3,
+  `CLAUDE_ACP_SESSION_CREATE_TIMEOUT`); `ACPX_CLAUDE_ACP_SESSION_CREATE_TIMEOUT_MS`
+  raises it.
+- `disableExec: true` in a config or `.acpxrc.json` fails every `exec` (exit 1).
+- codex: the sandbox cannot commit in a linked worktree (gitdir outside `--cwd`);
+  `set-mode agent-full-access` on a live session lifts it, like `INITIAL_AGENT_MODE`.
+- Executors inherit the launcher's environment, and codex's zsh re-reads `.zshenv`.
+- `--format json` error envelope: branch on `acpxCode`, `detailCode`, `retryable`.
+- An adapter binary on PATH wins over the npx fallback (source-verified).
+- Fixed-choice questions fail with exit 5 for any agent (docs-verified).
+- Brief hygiene: no nested delegation, a fresh result file per relaunch, no shared
+  fixed temp paths across parallel lanes.
+- Catalog: message-cap overflow, usage limit (do not retry), the unlisted-model
+  warning; claude forwards unknown `--model` ids instead of rejecting at preflight.
+
+### Removed
+
+- Detail the shipped reference now covers: `exec --config-option` ordering, the
+  built-in range migration parenthetical.
+
+Verified against: acpx 0.21.1, claude-agent-acp 0.100.0, codex-acp 2.5.0, agy 1.5.0,
+agy_acp_server 1.4.5.
+
 ## [0.10.1] - 2026-11-05
 
 ### Removed
