@@ -2,6 +2,7 @@
 name: effect-ts
 description: Effect-TS guide for TypeScript, v4 default with v3 support. Use when writing, debugging, or reviewing Effect code across errors, concurrency, services, streams, and schema, or when code imports from 'effect' or any '@effect/*' package.
 metadata:
+  internal: true
   version: "0.6.5"
   categories: "development"
   topics: "effect, typescript, functional-programming, concurrency, error-handling"

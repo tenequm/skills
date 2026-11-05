@@ -2,6 +2,7 @@
 name: swift-macos
 description: macOS apps with Swift 6.3, SwiftUI, SwiftData, Swift Concurrency, Foundation Models, Swift Testing, and ScreenCaptureKit. Use when building native Mac apps - windows, menus, SwiftData, on-device AI, capture, AppKit bridges, notarization.
 metadata:
+  internal: true
   version: "0.8.5"
   categories: "development"
   topics: "swift, swiftui, macos, swiftdata, screencapturekit"

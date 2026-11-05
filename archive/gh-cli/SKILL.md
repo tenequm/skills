@@ -2,6 +2,7 @@
 name: gh-cli
 description: GitHub CLI for remote repository analysis, file fetching, codebase comparison, and discovering trending code/repos. Use when analyzing repos without cloning, comparing codebases, or searching for popular GitHub projects.
 metadata:
+  internal: true
   version: "1.4.0"
   categories: "development, integrations"
   topics: "github, gh-cli, code-search, repo-analysis, pull-requests"

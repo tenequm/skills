@@ -2,6 +2,7 @@
 name: mpp
 description: Build with MPP (Machine Payments Protocol), open machine-to-machine payments over HTTP 402. Use for paid APIs, payment-gated endpoints, agent payment flows, MCP tool payments, or metered billing. Covers mppx (TS), pympp, and mpp Rust SDKs.
 metadata:
+  internal: true
   version: "0.10.2"
   categories: "finance, development"
   topics: "payments, http-402, stablecoins, machine-payments, apis"

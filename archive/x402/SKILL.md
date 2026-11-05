@@ -2,6 +2,7 @@
 name: x402
 description: Build internet-native payments with x402 - HTTP 402 for on-chain micropayments, no accounts or API keys. Use for paid APIs, paywalled content, agent payment flows, or per-call MCP tools. TypeScript, Python, and Go SDKs across EVM and Solana.
 metadata:
+  internal: true
   version: "0.11.3"
   categories: "finance, development"
   topics: "x402, payments, http-402, micropayments, stablecoins"

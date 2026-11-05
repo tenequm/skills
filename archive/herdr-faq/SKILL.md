@@ -2,6 +2,7 @@
 name: herdr-faq
 description: Launch and drive coding agents (codex, claude, agy) through the Herdr CLI; requires a herdr pane (HERDR_ENV=1). Use before starting or prompting a herdr subagent, and when a herdr command fails or an agent seems stuck or silently lost a prompt.
 metadata:
+  internal: true
   version: "0.5.0"
   categories: "agents, operations"
   topics: "herdr, troubleshooting, agent-orchestration, terminal-multiplexer"
