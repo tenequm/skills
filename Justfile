@@ -12,10 +12,11 @@ setup:
     ln -sfn ../../skills/update-skill .claude/skills/update-skill
     ln -sfn ../../skills/update-skill .agents/skills/update-skill
 
-# Offline gate: skill policy, README drift, whitespace, secrets.
-check: lint readme-check
-    git -c core.whitespace=-space-before-tab diff --check "$(git hash-object -t tree /dev/null)"
-    betterleaks dir -c .github/betterleaks.toml --no-banner --redact $(git ls-files | cut -d/ -f1 | sort -u | grep -vx .claude)
+# Local gate: skill policy, whitespace, secrets; regenerates README.md for you to stage.
+check: lint readme hygiene
+
+# Hook and CI gate: same checks, but fails if the staged README.md is stale.
+check-ci: lint readme-check hygiene
 
 # Dry-run every skill publish against ClawHub (network + `clawhub login`).
 preflight:
@@ -46,10 +47,6 @@ preflight:
     problems=$(ls skills | xargs -P 16 -I{} bash -c 'one "$1"' _ {})
     [[ -z $problems ]] || { echo "$problems" >&2; exit 1; }
     echo "Resolved $(ls skills | wc -l | tr -d ' ') publishes."
-
-# Regenerate the skills table in README.md.
-readme:
-    @{{just}} _readme-render > README.md.tmp && mv README.md.tmp README.md
 
 # Show what `release` would publish since the last `skills-*` tag (or `base`).
 release-plan base="":
@@ -175,8 +172,22 @@ lint:
     if grep -q '^E ' <<<"$report"; then grep '^E ' <<<"$report" | cut -c3- >&2; exit 1; fi
 
 [private]
+readme:
+    @{{just}} _readme-render > README.md.tmp && mv README.md.tmp README.md
+
+# Compares against the index, so a regenerated but unstaged README.md still fails the hook.
+[private]
 readme-check:
-    @diff -u README.md <({{just}} _readme-render) >/dev/null || { echo "README.md is out of date: run just readme" >&2; exit 1; }
+    #!/usr/bin/env bash
+    set -euo pipefail
+    staged=$(mktemp); trap 'rm -f "$staged"' EXIT
+    git show :README.md > "$staged"
+    diff -q "$staged" <({{just}} _readme-render "$staged") >/dev/null || { echo "README.md is out of date: run just check and stage it" >&2; exit 1; }
+
+[private]
+hygiene:
+    git -c core.whitespace=-space-before-tab diff --check "$(git hash-object -t tree /dev/null)"
+    betterleaks dir -c .github/betterleaks.toml --no-banner --redact $(git ls-files | cut -d/ -f1 | sort -u)
 
 [private]
 _skills-json:
@@ -190,14 +201,14 @@ _skills-json:
     done | jq -s .
 
 [private]
-_readme-render:
+_readme-render src="README.md":
     #!/usr/bin/env bash
     set -euo pipefail
     TABLE=$({{just}} _skills-json | jq -r --arg base "{{clawhub_base}}" '
       "| Skill | Version | ClawHub | Description |", "|-------|---------|---------|-------------|",
       (.[] | "| `\(.dir)` | \(.fm.metadata.version // "-") | [page](\($base)/\(.dir)) | \(.fm.description // "-" | gsub("\\s+"; " ") | gsub("^ | $"; "") | gsub("\\|"; "\\|")) |")') \
       awk '/<!-- GENERATED_SKILLS_TABLE_START -->/ { print; print ENVIRON["TABLE"]; skip = 1; next }
-           /<!-- GENERATED_SKILLS_TABLE_END -->/ { skip = 0 } !skip' README.md
+           /<!-- GENERATED_SKILLS_TABLE_END -->/ { skip = 0 } !skip' "{{src}}"
 
 [private]
 _release mode base:
