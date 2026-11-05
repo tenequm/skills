@@ -1,6 +1,6 @@
 # React 19
 
-Patterns for type-safe React 19.3 components (latest `19.3.0`). The headline shift from older React: **the React Compiler handles memoization**, `ref` is a normal prop, and `use()` reads context and promises without the old hook-placement rules. Write plain components and let the tooling optimize. For TypeScript specifics (props typing, generics, tsconfig) see [typescript.md](typescript.md).
+Patterns for type-safe React 19.3 components (latest `19.3.1`). The headline shift from older React: **the React Compiler handles memoization**, `ref` is a normal prop, and `use()` reads context and promises without the old hook-placement rules. Write plain components and let the tooling optimize. For TypeScript specifics (props typing, generics, tsconfig) see [typescript.md](typescript.md).
 
 ## Critical rules
 
@@ -162,7 +162,7 @@ const ref = useRef<React.FragmentInstance>(null)   // DOM methods typed via @typ
 
 ### `use(browser())` (19.3)
 
-`browser()` (`import { browser } from "react-dom"`) is a resource for `use()`: "A component can call `use(browser())` to opt out of server-side rendering" - it renders the nearest Suspense fallback on the server and renders for real on the client. Replaces the `useEffect`-mounted-flag pattern for client-only widgets.
+`browser()` (`import { browser } from "react-dom"`) is a resource for `use()`: "A component can call `use(browser())` to opt out of server-side rendering" - it renders the nearest Suspense fallback on the server and renders for real on the client. Replaces the `useEffect`-mounted-flag pattern for client-only widgets. It must sit inside a `<Suspense>` boundary during server rendering - without one the server render fails - and only works in Client Components.
 
 ### Document metadata
 
@@ -208,7 +208,9 @@ pnpm add -D @rolldown/plugin-babel @babel/core @types/babel__core
 
 `reactCompilerPreset({ compilationMode: 'annotation' })` compiles only components marked `"use memo"`; `target: '17' | '18'` supports older React (needs `react-compiler-runtime`).
 
-**Experimental native compiler (plugin-react 6.1+):** `react({ compiler: true })` runs the compiler in Rust via Oxc, no Babel. Install trap: its peer is `oxc-transform-react ^0.152.0`, so `pnpm add -D oxc-transform-react@latest` can fail with ERESOLVE once a newer minor ships - install the version the peer range names (`oxc-transform-react@0.152`). The old `compiler.logDiagnostics` option is deprecated in favor of `compiler.reportDiagnostics`. Stay on the Babel path for production until this graduates.
+**The compiler skips what it can't compile - silently.** `panicThreshold` defaults to `'none'`: a component that breaks the Rules of React is left uncompiled and the build continues. A missing "Memo" badge in React DevTools, or Biome's `useReactCompiler` rule, is how you find those. For incremental rollout use `compilationMode: 'annotation'` or `gating` (compiled code behind a runtime feature flag).
+
+**Experimental native compiler (plugin-react 6.1+):** `react({ compiler: true })` runs the compiler in Rust via Oxc, no Babel. Install trap: its peer is a bounded range (`oxc-transform-react >=0.152.0 <0.157.0` in plugin-react 6.2.1), so `pnpm add -D oxc-transform-react@latest` fails with ERESOLVE whenever oxc ships past it (0.157.0 already has) - install the newest version inside the range (`oxc-transform-react@0.156`). The old `compiler.logDiagnostics` option is deprecated in favor of `compiler.reportDiagnostics`. Stay on the Babel path for production until this graduates.
 
 ### ESLint integration
 
@@ -230,7 +232,7 @@ Manual memoization still applies when you need a **stable value as an effect dep
 - **Partial Pre-rendering (19.2, stable)**: pre-render the static shell of a page, then finish it at request time. New react-dom APIs `prerender` (produce a prelude + a resumable state) and `resume`/`resumeToPipeableStream`/`resumeAndPrerender` continue rendering where the prerender left off. This is a framework/SSR-layer feature - reach for it through your framework, not hand-wired in an SPA.
 - **19.3 behavior changes:** Transitions now render independently instead of entangling into one render; StrictMode double-invokes effects during hydration (matching client roots); a DEV warning fires when a library calls `use()` to suspend but skips `use()` once its cache is warm.
 - **Trusted Types**: React passes `TrustedHTML`/`TrustedScript` values through without coercion. Server Components can render `<Context>` imported from a `'use client'` module directly.
-- **RSC security:** GHSA-wx67-qw84-cm4g (CVE-2026-44907, DoS in Server Functions) affects `react-server-dom-webpack`/`-parcel`/`-turbopack` 19.0.0-19.0.7, 19.1.0-19.1.8, 19.2.0-19.2.7; fixed in 19.0.8/19.1.9/19.2.8 and 19.3. Pure client SPAs are unaffected.
+- **RSC security - upgrade to 19.3.1** (or 19.0.9 / 19.1.10 / 19.2.9). GHSA-xqc2-xf4c-x3h3 (critical, unauthenticated remote code execution in Server Components) and GHSA-h3gv-c5rc-p453 (high, DoS in Server Functions) affect every line through 19.3.0. The earlier GHSA-wx67-qw84-cm4g (CVE-2026-44907) was fixed in 19.0.8/19.1.9/19.2.8 and 19.3.0. Pure client SPAs are unaffected: "If your app's React code does not use a server, your app is not affected."
 - **`cacheSignal`** (RSC) tells you when a `cache()` lifetime is over.
 - **`captureOwnerStack()`** (dev-only) returns the component owner stack for better debugging.
 - **Performance Tracks**: React 19.2 adds Scheduler/Components tracks to Chrome DevTools profiles.

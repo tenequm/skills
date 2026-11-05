@@ -1,6 +1,6 @@
 # shadcn/ui
 
-Copy-in component patterns built on Tailwind v4 and a primitive library (Base UI, Radix UI, or React Aria). shadcn/ui is not a dependency you import - the CLI (latest `4.21.3`) writes component source into your project, which you then own and edit. For the Tailwind layer (theming, tokens) see [tailwind.md](tailwind.md).
+Copy-in component patterns built on Tailwind v4 and a primitive library (Base UI, Radix UI, or React Aria). shadcn/ui is not a dependency you import - the CLI (latest `4.23.0`) writes component source into your project, which you then own and edit. For the Tailwind layer (theming, tokens) see [tailwind.md](tailwind.md).
 
 ## Component authoring pattern
 
@@ -48,7 +48,7 @@ The `cn` helper merges class names with Tailwind conflict resolution. Since CLI 
 export { cn } from "cn"
 ```
 
-Existing projects on the clsx + tailwind-merge helper can switch with `shadcn migrate cn` (works without a `components.json`). `cn` targets Tailwind v4 like tailwind-merge v3; on Tailwind v3 stay on tailwind-merge v2.
+Existing projects on the clsx + tailwind-merge helper can switch with `shadcn migrate cn` (works without a `components.json`). `cn` targets Tailwind v4 like tailwind-merge v3; on Tailwind v3 stay on tailwind-merge v2. `cn` 0.5 requires Node 22+; the API is unchanged.
 
 ## CLI
 
@@ -70,6 +70,8 @@ pnpm dlx shadcn@latest add button --view      # print the item's source without 
 - **`--pointer`** restores `cursor: pointer` on buttons (Tailwind v4 switched buttons to the default cursor); `--no-pointer` keeps v4's default.
 - **`--rtl`** / `migrate rtl` set up right-to-left support (rewrites `ml-4` -> `ms-4`, `text-left` -> `text-start`); `components.json` carries `rtl: true`.
 - **`shadcn docs`** fetches component documentation/API for an agent to read; `--base` selects base, radix, or aria.
+- **`shadcn info --json`** prints the project's resolved configuration - the first thing an agent should read. `shadcn view <items...>` prints registry items without installing them; `shadcn build` builds a registry from `registry.json`.
+- **Official agent skill:** `npx skills add shadcn/ui` installs shadcn's own skill, which runs `shadcn info --json` on every interaction.
 - **`shadcn migrate --list`** shows available migrations: `cn`, `icons`, `base-color` (both take `--from`/`--to`), `radix`, `rtl`.
 
 ### Registries
@@ -95,6 +97,8 @@ you script it, pass `--json` explicitly now that the default is human-readable.
 
 Registries can also be declared in `package.json` (merged with `components.json`). Keep the CLI current: 4.13.1 fixed registry security issues - custom registry headers leaking on cross-origin redirects, path traversal from items without an explicit target, and flag injection via registry-supplied dependency strings.
 
+Registry authors can compose several `registry.json` files with `include` and handle search server-side (`?q=&limit=&offset=` with `pagination`). Since 4.22, `shadcn/schema` and `@shadcn/registry/schema` export **Zod 4** schemas (they no longer typecheck against Zod 3's `z`); since 4.23, `shadcn/mcp` exports an MCP SDK v2 `McpServer`, with `createServer()` for embedding.
+
 Presets are encoded codes that rewrite component code (not just colors): `shadcn preset decode <code>`, `shadcn apply <code> --only theme`.
 
 ### Visual styles
@@ -112,6 +116,7 @@ pnpm dlx shadcn@latest mcp init    # exposes registry/search/add to an AI client
 - **Chat-interface component family** - `MessageScroller`, `Message`, `Bubble`, `Attachment`, and `Marker` for building chat UIs.
 - **`@shadcn/react`** - a new package of unstyled, headless primitives (first one shipped: `@shadcn/react/message-scroller`) for when you want behavior without the styled shadcn layer.
 - **`scroll-fade` and `shimmer`** CSS utilities added to the shadcn utility set.
+- **Toast** (Base UI), **Questionnaire**, **Trace** and **Code Block**, and **AI Elements** for agent and chat UIs.
 
 ## Primitives: Base UI, Radix, React Aria
 
@@ -151,7 +156,9 @@ Pair shadcn form components with React Hook Form + Zod, or React 19 Actions + `u
 
 ## Troubleshooting
 
-- **Dark mode flash:** add `suppressHydrationWarning` to `<html>`; ensure the theme provider uses `attribute="class"`.
+- **Dark mode not switching:** declare `@custom-variant dark (&:where(.dark, .dark *));` (see [tailwind.md](tailwind.md)). In a Vite SPA use shadcn's Vite `ThemeProvider`, which persists the choice in `localStorage` and sets the class on `<html>`; `suppressHydrationWarning` and `attribute="class"` are the Next.js / `next-themes` fixes.
+- **`add` writes `import { cn } from "cn"` and installs a `cn` package:** expected since CLI 4.21 - `cn` is shadcn's own package (https://github.com/shadcn-ui/cn), not a typosquat. Keep it, or run `shadcn migrate cn` to move the whole project over; reverting the dependency leaves the new component broken.
+- **Dialog wider than the screen on phones:** `DialogContent` is `display: grid` with an implicit `auto` column, and grid items default to `min-width: auto`, so a long `<pre>` or a tab row stretches it past `max-w-[calc(100%-2rem)]`. Add `grid-cols-[minmax(0,1fr)]` to the content (or `min-w-0` to the child) and give long code its own `overflow-x-auto` block.
 - **Component overwritten on `add`:** you own the file - re-running `add` without `--overwrite` skips existing files.
 
 ## Resources

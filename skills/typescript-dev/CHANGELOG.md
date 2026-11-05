@@ -7,6 +7,33 @@ and this skill adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.h
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-11-05
+
+### Changed
+- Version targets: Vite 8.3.6, plugin-react 6.2.1, React 19.3.1, Tailwind 4.3.4, Biome 2.6.5, Vitest 5.1.0, Hono 4.13.16, shadcn CLI 4.23.0, cn 0.5.2; now tracking @rolldown/plugin-babel and @hono/node-server.
+- Hono v5 is a release candidate (`hono@next`); hono.md gains a "Preparing for v5" checklist.
+- Biome 2.6: top-level `tailwind.stylesheet`, Tailwind domain needs tailwindcss >= 4, `useSortedClasses` renamed `useTailwindSortedClasses`, `noTailwindRawColors` allows black/white by default.
+- plugin-react 6.2: `oxc-transform-react` peer is now `>=0.152.0 <0.157.0`; `@rolldown/plugin-babel` `parallel` breaks with `reactCompilerPreset()`.
+- Vitest 5.1: trace view is stable with a `mode` option (default `'failure-only'`).
+- Canonical tsconfig is now `tsconfig.app.json` in a solution layout.
+
+### Added
+- Typecheck gate: Vite never type-checks; `tsc -b` with a solution-style tsconfig, plus a `check` / `check:ci` scripts layout with `biome ci --error-on-warnings`.
+- Biome 2.6 surface (`biome inspect`, Markdown/SCSS/YAML, JS plugins preview, new Tailwind rules); Vitest 5.1 `--since-last-run`, `--last-failed`, `coverage.ignoreNode`; TS 7.1 beta specifics; shadcn `info`/`view`/`build` and agent skill; `@hono/cli`; Tailwind `@source inline()` and `@reference`.
+- Testing patterns: `importOriginal` partial mocks, `vi.hoisted`, hook block bodies, import-time env, pinned clocks, environment splits, suite hygiene, fast affected-test gates.
+- Zod v4 `z.union` key-stripping footgun; shadcn `from "cn"` and DialogContent overflow troubleshooting; Hono RPC type-sharing guidance; pnpm dependency-bump practice.
+
+### Fixed
+- Class-based dark mode: `@custom-variant dark` added to the canonical CSS; shadcn's Vite ThemeProvider replaces the next-themes advice.
+- Biome `!**/dir` ancestor-matching gotcha marked fixed in 2.6.3; TS `target` default wording.
+
+### Security
+- React 19.3.0 and earlier: RSC RCE GHSA-xqc2-xf4c-x3h3 (critical) and DoS GHSA-h3gv-c5rc-p453, fixed in 19.3.1.
+- Hono < 4.13.16: GHSA-4m76-xfj5-7975, GHSA-h7mg-cq63-vhpq, GHSA-4h7h-rv7c-7m2v, GHSA-3gg2-335m-rxc6, GHSA-46wx-v44x-9hh2; @hono/node-server < 2.1.6: GHSA-jpvv-r467-5p4w, GHSA-7v5p-43qr-wch5, GHSA-qv5m-9pm6-hqp3.
+- Vitest: GHSA-p458-7748-mcp3 (`@vitest/ui`/`@vitest/browser` < 5.0.5), GHSA-qxg6-89mg-rqv8 and GHSA-xp26-3454-mjgp (`@vitest/mocker` v4 < 4.1.12).
+
+Verified against: vite@8.3.6, @vitejs/plugin-react@6.2.1, @rolldown/plugin-babel@0.3.0, react@19.3.1, tailwindcss@4.3.4, @biomejs/biome@2.6.5, vitest@5.1.0, hono@4.13.16, @hono/node-server@2.1.6, shadcn@4.23.0, cn@0.5.2
+
 ## [0.4.1] - 2026-11-05
 
 ### Removed

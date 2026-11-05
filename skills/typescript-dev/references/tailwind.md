@@ -1,6 +1,6 @@
 # Tailwind CSS v4
 
-Utility-first styling, CSS-first configuration. Tailwind **v4.3** (latest `4.3.3`) configures everything in CSS - there is no `tailwind.config.js`. In a Vite project the integration is the `@tailwindcss/vite` plugin (no PostCSS config). For shadcn/ui component authoring see [shadcn.md](shadcn.md).
+Utility-first styling, CSS-first configuration. Tailwind **v4.3** (latest `4.3.4`) configures everything in CSS - there is no `tailwind.config.js`. In a Vite project the integration is the `@tailwindcss/vite` plugin (no PostCSS config). For shadcn/ui component authoring see [shadcn.md](shadcn.md).
 
 ## CSS-first configuration
 
@@ -22,11 +22,22 @@ Everything lives in your CSS entry. There is no JS/TS config file - migrate any 
 
 The `@import "tailwindcss";` line is mandatory - the Vite plugin alone emits nothing without it. A missing import is the classic "Tailwind produces no styles" bug.
 
+Safelist classes the scanner can't see (CMS content, server-built strings) with `@source inline()`, which supports brace and range expansion; `@source not inline()` blocks classes even when they are detected:
+
+```css
+@source inline("{hover:,}bg-red-{50,{100..900..100},950}");
+@source not inline("{hover:,focus:,}bg-red-{50,{100..900..100},950}");
+```
+
+In a CSS module or a component `<style>` block, `@apply` and theme functions need `@reference "../../app.css";` (your entry stylesheet) so the theme is known without duplicating its CSS in the output.
+
 ## Theming with CSS variables
 
 shadcn/ui maps semantic CSS variables to Tailwind utilities. Define variables under `:root` / `.dark`, then bridge them with `@theme inline`:
 
 ```css
+@custom-variant dark (&:where(.dark, .dark *));   /* dark: follows the .dark class, not the OS */
+
 :root {
   --background: oklch(1 0 0);
   --foreground: oklch(0.145 0 0);
@@ -99,7 +110,7 @@ Mobile-first breakpoints; container queries are first-class in v4 (no plugin):
 </div>
 ```
 
-Dark mode: prefer semantic colors (auto-flip) over manual `dark:` overrides. Use `next-themes` for the toggle (`attribute="class"`), and add `suppressHydrationWarning` to `<html>` to avoid a flash.
+Dark mode: prefer semantic colors (auto-flip) over manual `dark:` overrides. Class-based dark mode needs `@custom-variant dark (&:where(.dark, .dark *));` in your CSS - without it `dark:` utilities follow `prefers-color-scheme` instead of the `.dark` class. In a Vite app, toggle the class with a small `ThemeProvider` (shadcn's Vite dark-mode guide has one: it stores the choice in `localStorage` and sets the class on `<html>`); `next-themes` with `suppressHydrationWarning` is the Next.js recipe.
 
 ## Version-specific features
 
@@ -143,9 +154,10 @@ shadcn/ui colors use `oklch(lightness chroma hue)`: lightness 0-1, chroma 0-0.4 
 ## Notes
 
 - A first-class `@tailwindcss/webpack` loader exists (added v4.2) for webpack projects, and `@tailwindcss/turbopack` for Next.js - relevant only if you're not on Vite.
-- 4.3.3 fixes `@tailwindcss/vite` triggering full page reloads for scanned files Vite processed but hadn't loaded as modules yet - upgrade if HMR keeps full-reloading.
+- 4.3.3 fixes `@tailwindcss/vite` triggering full page reloads for scanned files Vite processed but hadn't loaded as modules yet; 4.3.4 extends that to scanned files Vite never treats as modules (e.g. `.php`) and stops the plugin crashing under Vite's experimental `bundledDev` - upgrade if HMR keeps full-reloading.
+- Browser floor: Tailwind v4 needs Chrome 111, Safari 16.4, and **Firefox 128** - newer than Vite 8's default `firefox114` build target, so Firefox 114-127 runs your JS but may not render Tailwind's CSS correctly.
 - To enforce semantic tokens in CI, Biome's nursery `noTailwindRawColors` rule flags palette classes like `bg-pink-500` (see [biome.md](biome.md)).
-- If you lint CSS with Biome, enable `css.parser.tailwindDirectives` so it understands `@theme`/`@utility`/`@apply` (see [biome.md](biome.md)).
+- If you lint with Biome, point its top-level `tailwind.stylesheet` option at your CSS entry (Biome 2.6): it enables `css.parser.tailwindDirectives` so `@theme`/`@utility`/`@apply` parse, and makes the Tailwind lint rules aware of your own tokens (see [biome.md](biome.md)).
 
 ## Troubleshooting
 

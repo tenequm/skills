@@ -1,6 +1,6 @@
 # Biome
 
-Fast, unified linting, formatting, and import organization for JS/TS/JSX/CSS/GraphQL in a single binary. Biome **2.5** (latest `2.5.15`) does type-aware linting without the TypeScript compiler, GritQL plugins for custom rules, and domain-based rule grouping. Zero config by default, ~97% Prettier compatibility.
+Fast, unified linting, formatting, and import organization for JS/TS/JSX/CSS/GraphQL in a single binary. Biome **2.6** (latest `2.6.5`) does type-aware linting without the TypeScript compiler, GritQL and (developer-preview) JavaScript plugins for custom rules, and domain-based rule grouping. 2.6 also formats and lints **Markdown, SCSS, and YAML**. Zero config by default, ~97% Prettier compatibility.
 
 ## Critical rules
 
@@ -18,7 +18,7 @@ For paths the scanner must skip entirely (even for assists), use the `!!` force-
 { "files": { "includes": ["**", "!!**/legacy-vendor/**"] } }
 ```
 
-**`!**/dir` also matches ancestor directories.** The pattern is tested against the whole path, so if the project itself lives under a directory with that name - e.g. an agent worktree at `<repo>/.claude/worktrees/x/` with `"!**/.claude"` in its config - every file is excluded and Biome checks 0 files (2.5.15 reports `No files were processed`; older setups could pass vacuously). Root-anchor exclusions that refer to the project's own top-level folders (`"!.claude"`, `"!dist"`) and keep `**/` for names that genuinely recur at depth.
+**Before 2.6.3, `!**/dir` also matched ancestor directories.** If the project itself lived under a directory with that name - e.g. an agent worktree at `<repo>/.claude/worktrees/x/` with `"!**/.claude"` in its config - every file was excluded and Biome checked 0 files (`No files were processed`). 2.6.3 stopped applying exclusions to directories above the project root. Root-anchoring exclusions for the project's own top-level folders (`"!.claude"`, `"!dist"`) is still the clearer habit; keep `**/` for names that genuinely recur at depth. To see what a config actually resolves to, run `biome inspect config` (2.6), which follows `extends` and overrides.
 
 ### One command: `biome check`
 
@@ -98,6 +98,8 @@ pnpm biome ci --reporter=concise .                       # short one-line-per-di
 
 `--reporter=concise` (Biome 2.5) prints one `file:line:col: rule: message` line per diagnostic - the recommended reporter when an AI coding agent reads the output, since it saves tokens versus the default rich format.
 
+`biome check` and `biome ci` exit 0 when only warnings remain, so a green run can still carry diagnostics (an unsafe fix such as removing an unused import is reported, not applied). Add the global `--error-on-warnings` flag where warnings should fail the pipeline: `pnpm biome ci --error-on-warnings .`.
+
 ## Configuration details
 
 ### Import organizer
@@ -141,7 +143,7 @@ Domains group lint rules by technology - enable what your stack uses. Levels: `"
 { "linter": { "domains": { "react": "recommended", "test": "recommended", "types": "all" } } }
 ```
 
-Common domains: `react` (auto-detected at `react >= 16`), `next`, `solid`, `vue`, `test` (jest/vitest/mocha/ava), `playwright`, `drizzle`, `tailwind` (auto-detected at `tailwindcss >= 3`; all its rules are nursery), `project` (cross-file: `noImportCycles`, `noUnresolvedImports`), `types` (type inference). The `project` and `types` domains trigger a file scan with small overhead.
+Common domains: `react` (auto-detected at `react >= 16`), `next`, `solid`, `vue`, `test` (jest/vitest/mocha/ava), `playwright`, `drizzle`, `tailwind` (auto-detected at `tailwindcss >= 4.0.0`; all its rules are nursery), `project` (cross-file: `noImportCycles`, `noUnresolvedImports`), `types` (type inference). The `project` and `types` domains trigger a file scan with small overhead.
 
 ## Type-aware linting
 
@@ -188,19 +190,26 @@ The nursery rule `useReactCompiler` (2.5.8+, React domain) reports React Compile
 
 ### Tailwind v4 CSS
 
-To lint CSS that uses Tailwind at-rules, enable `css.parser.tailwindDirectives` so Biome parses `@theme`, `@utility`, and `@apply` instead of erroring on them.
+Point Biome at your Tailwind entry with the top-level `tailwind.stylesheet` option (2.6). It turns on `css.parser.tailwindDirectives`, so `@theme`, `@utility`, and `@apply` parse instead of erroring, and makes the Tailwind rules read your own `@theme` - without it they "recognize only Tailwind CSS's default configuration". `tailwind.mergeFunctions`, `variantFunctions`, and `attributes` tune where class strings are detected.
+
+```json
+{ "tailwind": { "stylesheet": "./src/styles.css" } }
+```
 
 The `tailwind` domain's nursery rules lint class strings in JSX - enable them individually:
 
 ```json
 { "linter": { "rules": { "nursery": {
   "noTailwindRawColors": "error",
+  "useTailwindStaticClassStrings": "error",
+  "noTailwindRestyledComponents": "warn",
+  "useTailwindSortedClasses": "warn",
   "useTailwindShorthandClasses": "warn",
   "noTailwindArbitraryValue": "warn"
 } } } }
 ```
 
-`noTailwindRawColors` enforces this skill's semantic-token rule: it "disallows Tailwind palette colors such as `bg-pink-500` and `text-white`, encouraging design system color utilities such as `bg-primary`." `useTailwindShorthandClasses` suggests `size-4` for `w-4 h-4`.
+`noTailwindRawColors` enforces this skill's semantic-token rule, flagging palette classes like `bg-pink-500` in favor of tokens like `bg-primary`; its `allowBlackAndWhite` option defaults to `true`, so `text-white`/`bg-black` pass unless you set it to `false`. Two 2.6 rules back up the rest of the styling rules: `useTailwindStaticClassStrings` flags dynamically built class strings (the "never assemble class names" rule), and `noTailwindRestyledComponents` reports call-site utilities that change a component's color, typography, spacing, shape, effects, or motion - add a variant instead. `useTailwindShorthandClasses` suggests `size-4` for `w-4 h-4`; `noTailwindArbitraryValue` now allows arbitrary modifiers (`bg-black/[0.5]`) and takes `allowedCategories`/`allowedClasses`. The sorting rule is now `useTailwindSortedClasses` (renamed from `useSortedClasses`, with Tailwind v4 ordering) - `biome migrate --write` renames it in your config.
 
 ## GritQL custom rules
 
@@ -217,7 +226,7 @@ Declarative pattern-matching for project-specific rules. Register `.grit` files 
 }
 ```
 
-Target languages: JavaScript (default), CSS, and JSON.
+Target languages: JavaScript (default), CSS, and JSON. Biome 2.6 also adds **JavaScript plugins** as a developer preview, distributable as packages with a `biome-manifest.json`.
 
 ## Suppression
 
@@ -255,9 +264,11 @@ biome check --watch .            # re-run on file changes (2.5; read-only, no --
 biome explain noFloatingPromises # explain a rule
 biome migrate --write            # after a version bump
 biome upgrade                    # 2.5: self-upgrade standalone (Homebrew/binary) installs
+biome inspect config             # 2.6: print the resolved config (extends, overrides)
+biome migrate stylelint --write  # 2.6: import a Stylelint config
 ```
 
-2.5.15 also restricts the daemon's Unix socket to the current user (`0600`, in a private `biome-daemon` cache dir) - another reason to stay on the latest patch. Biome 2.5 also adds `formatter.delimiterSpacing` (pads `[ 1, 2 ]` / `{ a }` / `( x )` - an accessibility aid for dyslexia; behavior varies per language) and can now format/lint `.svg` files.
+Standalone install without npm: `curl -fsSL https://biomejs.dev/install | bash` (2.6). 2.5.15 also restricts the daemon's Unix socket to the current user (`0600`, in a private `biome-daemon` cache dir) - another reason to stay on the latest patch. Biome 2.5 also adds `formatter.delimiterSpacing` (pads `[ 1, 2 ]` / `{ a }` / `( x )` - an accessibility aid for dyslexia; behavior varies per language) and can now format/lint `.svg` files.
 
 ## Gotchas
 
@@ -273,4 +284,4 @@ biome upgrade                    # 2.5: self-upgrade standalone (Homebrew/binary
 ## Resources
 
 - Docs: https://biomejs.dev/ - Config reference: https://biomejs.dev/reference/configuration/
-- Domains: https://biomejs.dev/linter/domains/ - Migrate: https://biomejs.dev/guides/migrate-eslint-prettier/
+- Domains: https://biomejs.dev/linter/domains/ - Migrate: https://biomejs.dev/installation/migrate-from-other-tools/ - v2.6: https://biomejs.dev/blog/biome-v2-6
