@@ -25,6 +25,9 @@ Thumbs.db
 # Local act secrets
 .act.secrets
 
+# Private leak-scan names (see AGENTS.md)
+.betterleaks.private.toml
+
 # Node modules (if skills include scripts)
 node_modules/
 

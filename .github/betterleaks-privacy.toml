@@ -1,0 +1,40 @@
+# Privacy rules for a public repo: identifiers that are not credentials but must not ship.
+# No path allowlist here, unlike betterleaks.toml, so references/ is scanned too.
+# Private names (projects, hosts, email) belong in the gitignored .betterleaks.private.toml.
+
+[extend]
+useDefault = false
+
+[[rules]]
+id = "session-uuid"
+description = "Session or message UUID (agent transcripts, pond, Codex)"
+regex = '''\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b'''
+
+[[rules.allowlists]]
+description = "Public UUIDs in vendored docs"
+regexTarget = "match"
+regexes = [
+  '''550e8400-e29b-41d4-a716-446655440000''',
+  '''e2fa49d2-f164-4a56-ab99-498090b8fcdf''',
+  '''3211ee0d-133f-43a0-837e-8dc1ecfaa424''',
+  '''829164bf-7fba-4b84-a6b8-76652205bd97''',
+  '''21787352-de2c-4a77-af09-cc0a250d1f04''',
+  '''80a33cf0-ad69-4163-a269-d27756aacb5e''',
+  '''3eff5a8f-b73a-4cfe-8c54-546b475548f0''',
+  '''8b94becd-54e7-41cd-88e6-caae7becc76a''',
+]
+
+[[rules]]
+id = "local-home-path"
+description = "Absolute path under a real user's home directory"
+regex = '''(?:/Users|/home)/[A-Za-z0-9._-]+/'''
+
+[[rules.allowlists]]
+description = "Placeholder and CI home directories"
+regexTarget = "match"
+regexes = ['''^/(?:Users|home)/(?:user|username|you|yourname|me|runner|ubuntu|node|Shared)/$''']
+
+[[rules]]
+id = "local-scratch-path"
+description = "Machine-local temp, scratch, transcript or worktree-slot path"
+regex = '''/private/(?:tmp|var)/|/var/folders/|\.claude/projects/-[A-Za-z]|\.treehouse/[a-z0-9-]+-[0-9a-f]{6}/'''

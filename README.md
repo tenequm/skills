@@ -46,7 +46,7 @@ npx skills add tenequm/skills@<skill-name>
 | `standard-readme` | 0.1.6 | [page](https://clawhub.ai/tenequm/skills/standard-readme) | Writes or audits READMEs against the Standard Readme spec. Use whenever the user asks to create, rewrite, improve, audit, or fix a README, or asks about README quality or structure - even if they never mention "standard readme". |
 | `swift-dev` | 0.3.1 | [page](https://clawhub.ai/tenequm/skills/swift-dev) | Native iOS and macOS apps in Swift 6 - SwiftUI, AppKit, SwiftData, concurrency, Swift Testing, XcodeGen, CallKit and audio, App Intents, devices, TestFlight, code signing, notarization. Use for any iPhone or Mac app, helper or CLI work. |
 | `typescript-dev` | 0.5.0 | [page](https://clawhub.ai/tenequm/skills/typescript-dev) | Full-stack TypeScript with Vite 8, React 19, Tailwind v4, shadcn/ui, Biome, Vitest, and Hono 4. Use when setting up or working in a TypeScript project - components, styling, build and HMR, tests, lint/CI, or a Hono API with type-safe RPC. |
-| `update-skill` | 0.9.0 | [page](https://clawhub.ai/tenequm/skills/update-skill) | Thorough on-demand refresh of one skill in a skills repo - researches usage, upstream, and docs in parallel, gates twice for approval, bumps version, updates CHANGELOG, validates, commits, watches CI. Use to check a skill's freshness. |
+| `update-skill` | 0.10.0 | [page](https://clawhub.ai/tenequm/skills/update-skill) | Thorough on-demand refresh of one skill in a skills repo - researches usage, upstream, and docs in parallel, gates twice for approval, bumps version, updates CHANGELOG, validates, commits, watches CI. Use to check a skill's freshness. |
 <!-- GENERATED_SKILLS_TABLE_END -->
 
 ## Releases

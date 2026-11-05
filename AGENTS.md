@@ -15,6 +15,8 @@ Justfile              # All tooling: check, check-ci, preflight, release
 lefthook.yml          # Git hooks: `just check-ci` on commit, `just preflight` on push
 .github/workflows/ci.yml       # check-ci + preflight on every PR/push, release on main
 .github/betterleaks.toml       # Secret-scan allowlist (placeholder creds in references/)
+.github/betterleaks-privacy.toml  # Session ids, home and scratch paths: never shipped, references/ included
+.betterleaks.private.toml      # Gitignored, main checkout only: private project, host and account names
 ```
 
 Tools: `just`, `yq` (mikefarah v4), `jq`, `betterleaks`, `lefthook`, `clawhub` (npm), `gh`.
