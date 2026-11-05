@@ -59,7 +59,7 @@ Capture state for the rest of the run:
 - Topmost CHANGELOG entry date (if `CHANGELOG.md` exists; this is the "last verified" signal)
 - `git log -1 --format=%cs -- skills/<name>/` date (last touch)
 - `git status --porcelain` snapshot of `<workdir>` and of `${CLAUDE_PROJECT_DIR}` - the baseline for the Phase 6 hygiene check, so pre-existing user files are never flagged or removed
-- `LICENSE.txt` (or the repo's equivalent) present and non-empty - publish pipelines and repo linters commonly hard-fail without it; if missing, queue a fix row in the Phase 3 report
+- A per-skill license file, only if the repo's linter or publish pipeline requires one (ClawHub does not - it licenses every skill MIT-0); if required and missing, queue a fix row in the Phase 3 report
 - `bootstrap_needed` flag = true if `metadata.upstream` is missing OR `CHANGELOG.md` is missing - **unless the skill is upstreamless by nature** (it wraps no package, spec, or living doc - e.g. a workflow or writing skill like `polish`). For those, omitting `metadata.upstream` is correct, not a gap: derive `bootstrap_needed` from the missing `CHANGELOG.md` alone and skip the upstream-candidate proposal.
 
 ## Phase 2 - Parallel research

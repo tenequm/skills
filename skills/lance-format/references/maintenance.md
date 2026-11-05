@@ -50,9 +50,9 @@ Then:
    `docs/src/format` except `format/AGENTS.md` and the `*.png` assets (so every `.md` and every
    `.svg` under it, at any depth), and `docs/src/integrations/datafusion.md` into
    `references/docs/`, preserving the tree. Update the directory counts in `SKILL.md` if docs
-   were added or removed. Two deviations from upstream bytes are expected and enforced by this
-   repo's pre-commit hooks, not drift: trailing whitespace is stripped from every line, and
-   every file ends in exactly one newline - which adds a byte to the four `.drawio.svg` diagrams
+   were added or removed. Two deviations from upstream bytes are expected, not drift - apply
+   both when mirroring (this repo's `just check` fails on trailing whitespace): trailing
+   whitespace is stripped from every line, and every file ends in exactly one newline - which adds a byte to the four `.drawio.svg` diagrams
    (`indices-compaction` 51381 -> 51382, `scalar_index` 8210 -> 8211, `starter-example`
    14622 -> 14623, `indices-fragment handling` 21856 -> 21857). Applying both normalizations to
    a fresh `git archive` of `docs/src` reproduces the committed mirror byte-for-byte.
