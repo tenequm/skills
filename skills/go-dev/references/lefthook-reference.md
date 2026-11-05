@@ -1,11 +1,15 @@
 # Lefthook Reference
 
-Latest: **v2.1.17** (2026-10-05). Single Go binary, no runtime dependency. `go install github.com/evilmartians/lefthook/v2@v2.1.17` needs Go 1.26+; Homebrew, npm, and the GitHub release binaries avoid that floor.
+Latest: **v2.2.2** (2026-10-13). Single Go binary, no runtime dependency. `go install github.com/evilmartians/lefthook/v2@v2.2.2` needs Go 1.27 - "The minimum Go version required is 1.27" (its `go.mod` says `go 1.27.0`); Homebrew, npm, and the GitHub release binaries avoid that floor. A `go get -tool` of v2.2.x raises your own module's `go` line to `1.27.0`.
+
+The config has a JSON schema - "The JSON schema for the config is published at `https://lefthook.dev/schema.json`" - so a `# yaml-language-server: $schema=https://lefthook.dev/schema.json` first line gives editor completion and validation.
 
 Config is discovered at the repo root or in `.config/`, and read fresh on every hook run - "Reinstall is not required when you modify `lefthook.yml`, the configuration file is read every time a git hook is run." Only adding or removing a *hook section* requires `lefthook install`.
 
-## v2.1.15 - v2.1.17 Notes
+## v2.1.15 - v2.2.2 Notes
 
+- **Worktree backups no longer collide** (v2.2.1, v2.2.2) - "fix: generate different patch names when in a worktree" ([#1582](https://github.com/evilmartians/lefthook/pull/1582)) and "fix: cleanup only current stash hash" ([#1597](https://github.com/evilmartians/lefthook/pull/1597)). See the worktree hazard under `stage_fixed`.
+- **AI hook files lost the absolute path** (v2.2.0) - "fix: don't write an install-time lefthook path into AI hook configs" ([#1544](https://github.com/evilmartians/lefthook/pull/1544)). See Agent Hooks below.
 - **The shim fix needs a reinstall.** "fix: quote paths in the generated hook shim" ([#1509](https://github.com/evilmartians/lefthook/pull/1509)) shell-escapes the lefthook binary path baked into `.git/hooks/<hook>` (`internal/templates/hook.tmpl:36-38`). Upgrading the binary alone changes nothing; the fix lands only once `lefthook install` rewrites the shims.
 - **Forced colours reach your jobs.** "feat: propagate forced colors to hook commands via CLICOLOR_FORCE" ([#1547](https://github.com/evilmartians/lefthook/pull/1547)): with colours explicitly on, lefthook sets `CLICOLOR_FORCE=1` for the commands it runs - "An existing `CLICOLOR_FORCE` is never overwritten."
 - **Upgrade past v2.1.15 if lefthook is in your `go.mod`.** v2.1.15 pins `golang.org/x/mod v0.37.0` and `golang.org/x/text v0.38.0`, which carry [GO-2026-6179](https://pkg.go.dev/vuln/GO-2026-6179) and [GO-2026-6180](https://pkg.go.dev/vuln/GO-2026-6180) (x/mod, fixed in 0.40.0) and [GO-2026-5970](https://pkg.go.dev/vuln/GO-2026-5970) (x/text, fixed in 0.39.0), so a lefthook tracked with `go get -tool` pulls them into your module graph and module-level scanners (`govulncheck -scan module`, Dependabot, osv-scanner) flag it. v2.1.16 fixes this - "deps: bump mod and text deps to resolve CVEs" ([#1560](https://github.com/evilmartians/lefthook/pull/1560)) - moving to x/mod v0.41.0 and x/text v0.42.0.
@@ -35,7 +39,7 @@ pre-commit:
 Three more filtering surprises:
 
 - **`exclude` gates the job exactly like `glob`.** "If you've specified `exclude` but don't have a files template in `run` option, lefthook will check `{staged_files}` for `pre-commit` hook and `{push_files}` for `pre-push` hook and apply filtering. If no files left, the command will be skipped."
-- **`**` matches one or more directories, not zero or more.** `glob: "src/**/*.go"` does *not* match `src/file.go`. Use separate patterns, or opt into standard semantics with `glob_matcher: doublestar`.
+- **`**` matches one or more directories, not zero or more.** `glob: "src/**/*.go"` does *not* match `src/file.go`. Use separate patterns, or opt into standard semantics with `glob_matcher: doublestar` - but that flips the meaning of `*` too. The default (gobwas) matcher lets `*` cross `/`, so `glob: "*.go"` matches `internal/user/user.go`; under doublestar `*` stops at a separator and `*.go` matches only root-level files (`internal/run/controller/filter/filter.go:113-133`). Rewrite every glob as `**/*.go` in the same commit that sets `glob_matcher`.
 - **Globs ignore `root`.** "Globs are still calculated from the actual root of the git repo."
 
 ## Skipping During Rebase and Merge
@@ -106,22 +110,22 @@ pre-commit:
 
 Re-stages files after a fixer rewrote them. Since v2.1.12 a failed re-stage fails the hook - "If the `git add` call fails, the hook fails too. Otherwise the commit would silently go through with the unfixed content."
 
-**It re-stages the substituted file list, not the files the command actually touched.** Lefthook stages the same list it handed the job - the filtered `{staged_files}` expansion, or the filtered staged set when the job used no file template (`internal/run/controller/job.go:155-181`). A file the command *created*, or fixed while absent from that list, is left unstaged and the commit goes through without the fix.
+**It re-stages the substituted file list, not the files the command actually touched.** Lefthook stages the same list it handed the job - the filtered `{staged_files}` expansion, or the filtered staged set when the job used no file template (`internal/run/controller/job.go:154-180`). A file the command *created*, or fixed while absent from that list, is left unstaged and the commit goes through without the fix.
 
-**Unstaged work is hidden only for *partially staged* files.** The guard asks git for files dirty in *both* the index and the worktree, and if that list is empty it runs the hook with no stash at all (`internal/git/repo.go:219`, `internal/run/controller/guard.go:73-88`). A file carrying only unstaged changes - never `git add`ed - is not hidden, so the hook judges the on-disk file, not the indexed one. Verified live: an unstaged `Justfile` edit was the version the hook executed. Treat any claim that lefthook hides *all* unstaged changes for the hook's duration as wrong for 2.1.17.
+**Unstaged work is hidden only for *partially staged* files.** The guard asks git for files dirty in *both* the index and the worktree, and if that list is empty it runs the hook with no stash at all (`internal/git/repo.go:219`, `internal/run/controller/guard.go:73-88`). A file carrying only unstaged changes - never `git add`ed - is not hidden, so the hook judges the on-disk file, not the indexed one. Verified live: an unstaged `Justfile` edit was the version the hook executed. Treat any claim that lefthook hides *all* unstaged changes for the hook's duration as wrong for 2.2.2.
 
-**Worktree hazard: the backup is shared across linked worktrees.** With partially staged files present, lefthook writes two backup patches - `.git/info/lefthook-unstaged.patch` for those files and, since v2.1.16, `.git/info/lefthook-unstaged-all.patch` for every unstaged change - and stores a safety stash under the message `lefthook auto backup` (`internal/git/wrapper/wrapper.go:17-18`, `internal/git/wrapper/store_stash.go:3`). All three resolve through the *common* git dir - `git rev-parse --git-path info` and `refs/stash` are shared, not per worktree - so every linked worktree of a repo contends for the same files and stash entry, and two worktrees committing concurrently can destroy each other's unstaged changes. Still open in 2.1.17: [the shared backup patch and stash across linked worktrees](https://github.com/evilmartians/lefthook/issues/1529). Fixed in 2.1.16: [a failed patch re-apply falling back to a bare `git checkout .`](https://github.com/evilmartians/lefthook/issues/1480) that discarded unstaged changes in unrelated files. The `git checkout .` fallback still runs on a conflict (`internal/git/wrapper/discard_all_unstaged_changes.go:3`), but lefthook now re-applies the full-unstaged patch afterwards (`internal/run/controller/guard.go:118-149`).
+**Worktree hazard: upgrade to 2.2.2, then keep worktree commits serial.** With partially staged files present, lefthook writes two backup patches - `lefthook-unstaged.patch` for those files and, since v2.1.16, `lefthook-unstaged-all.patch` for every unstaged change - and stores a safety stash under the message `lefthook auto backup` (`internal/git/wrapper/wrapper.go:18-19`, `internal/git/wrapper/store_stash.go:3`). Both resolve through the *common* git dir - `git rev-parse --git-path info` and `refs/stash` are shared, not per worktree. Up to 2.2.0 that meant every linked worktree contended for the same patch files and stash entry, so concurrent commits could destroy each other's unstaged changes ([#1529](https://github.com/evilmartians/lefthook/issues/1529)). v2.2.1 names the patches per worktree (`lefthook-unstaged.<worktree>.patch`) and v2.2.2 drops only its own stash, found by hash. One narrower race is still open: [#1619](https://github.com/evilmartians/lefthook/issues/1619) - the backup is found by hash but dropped by position, so a sibling worktree's concurrent stash can be dropped instead (fix in PR [#1626](https://github.com/evilmartians/lefthook/pull/1626), unmerged). Fixed in 2.1.16: [a failed patch re-apply falling back to a bare `git checkout .`](https://github.com/evilmartians/lefthook/issues/1480) that discarded unstaged changes in unrelated files. The `git checkout .` fallback still runs on a conflict (`internal/git/wrapper/discard_all_unstaged_changes.go:3`), but lefthook now re-applies the full-unstaged patch afterwards (`internal/run/controller/guard.go:118-147`).
 
 ## Guardrails
 
 ```yaml
 assert_lefthook_installed: true   # bake an exit-1-if-missing check into the installed hook script
-min_version: 2.1.17               # refuse to run under an older lefthook
+min_version: 2.2.2               # refuse to run under an older lefthook
 ```
 
 `assert_lefthook_installed` is the fix for the dormancy failure mode - "fail (with exit status 1) if `lefthook` executable can't be found in $PATH, under node_modules/, as a Ruby gem, or other supported method."
 
-**But it is not a runtime guard.** The flag is only a template argument, baked into the generated `.git/hooks/<hook>` script at `lefthook install` time (`internal/command/install.go:332`, `internal/templates/hook.tmpl:100-105`); nothing in `lefthook run` ever reads it. Flipping it in config changes nothing until you reinstall, and it does nothing at all for a CI job that invokes `lefthook run` directly.
+**But it is not a runtime guard.** The flag is only a template argument, baked into the generated `.git/hooks/<hook>` script at `lefthook install` time (`internal/command/install.go:332`, `internal/templates/hook.tmpl:103-108`); nothing in `lefthook run` ever reads it. Flipping it in config changes nothing until you reinstall, and it does nothing at all for a CI job that invokes `lefthook run` directly.
 
 If you add a secret scanner, give it `priority: 1` so it runs before any formatter - otherwise a fixer can rewrite the file holding a credential before the scan ever reads it:
 
@@ -174,7 +178,7 @@ Named jobs merge across `extends` and local config; unnamed jobs append in defin
 | `lefthook dump` | Print the merged effective config |
 | `lefthook add <hook>` | Scaffold a hook and its script directory |
 | `lefthook check-install` | Report whether hooks are installed |
-| `lefthook self-update` | Update the binary in place |
+| `lefthook self-update` | Update the binary in place - GitHub-release and source builds only; package-manager builds such as Homebrew compile it out (build tag `no_self_update`) |
 | `lefthook version` | Print the version (`--full` includes the commit) |
 
 Three install behaviours worth knowing:
@@ -188,7 +192,7 @@ Three install behaviours worth knowing:
 Track lefthook in `go.mod` (`docs/installation/go.md`) and point the shim at it with the `lefthook:` key - "Provide a full path to lefthook executable or a command to run lefthook. Bourne shell (`sh`) syntax is supported."
 
 ```bash
-go get -tool github.com/evilmartians/lefthook/v2@v2.1.17
+go get -tool github.com/evilmartians/lefthook/v2@v2.2.2
 go tool lefthook install
 ```
 
@@ -197,15 +201,18 @@ go tool lefthook install
 lefthook: go tool lefthook
 ```
 
-The value is baked into the shim at install time and tried before any PATH lookup, with only `LEFTHOOK_BIN` ahead of it (`internal/templates/hook.tmpl:18-24`), so every clone runs the version pinned in `go.mod`. It is not merged from `remotes` or `extends`. `go tool` resolves against the current module and git runs hooks from the worktree root, so this form assumes `go.mod` sits at the root.
+The value is baked into the shim at install time and tried before any PATH lookup, with only `LEFTHOOK_BIN` ahead of it (`internal/templates/hook.tmpl:18-24`), so every clone runs the version pinned in `go.mod`. It is not merged from `remotes` or `extends`. `go tool` resolves against the current module and git runs hooks from the worktree root, so this form assumes `go.mod` (or a `go.work` that includes the module tracking lefthook) sits at the root. Tracking v2.2.x this way raises your module's `go` line to `1.27.0`.
 
-The same applies to the jobs themselves: hook commands resolve tools from the caller's PATH, so a developer without the binary gets a commit that fails with a bare `exit 127`. Track hook tools with `go get -tool` and run them through `go tool` to make them reproducible:
+The same applies to the jobs themselves: hook commands resolve tools from the caller's PATH, so a developer without the binary gets a commit that fails with a bare `exit 127`. Run small tools through `go tool` to make them reproducible - but not golangci-lint, which upstream says not to install as a tool directive (see SKILL.md); pin its binary in the repo's version-manager config (`.mise.toml`, `.tool-versions`) instead:
 
 ```yaml
 pre-commit:
   commands:
-    lint:
-      run: go tool golangci-lint run ./...
+    fmt-check:
+      glob: "*.go"
+      run: go tool gofumpt -l {staged_files}
+    test:
+      run: go tool gotestsum --format testname -- -short ./...
 ```
 
 ## Environment Variables
@@ -221,7 +228,7 @@ pre-commit:
 | `CI` | Recognised by `fail_on_changes: ci` and skip/only conditions |
 | `NO_COLOR` / `CLICOLOR_FORCE` | Disable / force colour |
 
-**`LEFTHOOK=0` fails silently open.** `lefthook run` checks the variable before anything else and returns success having done nothing (`internal/command/run.go:49`, which also accepts `false`), and the generated `.git/hooks/*` script exits 0 on the literal `0` before it even looks for the binary (`internal/templates/hook.tmpl:7-9`). A CI job that inherits `LEFTHOOK=0` from its environment goes green without running a single check, and nothing in the output says so.
+**`LEFTHOOK=0` fails silently open.** `lefthook run` checks the variable before anything else and returns success having done nothing (`internal/command/run.go:50`, which also accepts `false`), and the generated `.git/hooks/*` script exits 0 on the literal `0` before it even looks for the binary (`internal/templates/hook.tmpl:7-9`). A CI job that inherits `LEFTHOOK=0` from its environment goes green without running a single check, and nothing in the output says so.
 
 ## Agent Hooks (`ai:`, beta)
 
@@ -233,7 +240,7 @@ ai:
     Stop: validate
 ```
 
-Keys under a provider must be that provider's own event names. Claude, Codex, and Cursor keep user-authored entries in their settings files across install and uninstall; Copilot's file is rewritten wholesale.
+Since v2.2.0 the generated command is not an absolute install path: "Generated hook commands use the [`lefthook`](./lefthook.md) config value when set. Otherwise they use plain `lefthook`, so it must be on `PATH` for the AI tool." With `lefthook: go tool lefthook` above, the agent runs `go tool lefthook run <hook>`. Keys under a provider must be that provider's own event names. Claude, Codex, and Cursor keep user-authored entries in their settings files across install and uninstall; Copilot's file is rewritten wholesale.
 
 ## CI
 

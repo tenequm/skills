@@ -8,7 +8,7 @@ v4.20.0 is worth upgrading for regardless of the pin mechanics:
 
 - **S3 sources silently truncated at 1000 migrations** - "fix(source/aws_s3): paginate ListObjects to load >1000 migrations".
 - **Quadratic startup cost removed** - "perf(source): build migrations index lazily to avoid quadratic startup".
-- **Security, partial:** migrate's own code moved from `docker/docker` to the `moby/moby/api` and `moby/moby/client` modules, but v4.20.1's `go.mod` still lists `github.com/docker/docker v28.5.2+incompatible // indirect`, pulled in by `dhui/dktest`. Scanners keep flagging it - open issue [golang-migrate/migrate#1444](https://github.com/golang-migrate/migrate/issues/1444) "Dependencies still trigger CVE-2026-41568" (milestone v4.21.0).
+- **Security, partial:** migrate's own code moved from `docker/docker` to the `moby/moby/api` and `moby/moby/client` modules, but v4.20.1's `go.mod` still lists `github.com/docker/docker v28.5.2+incompatible // indirect`, pulled in by `dhui/dktest`. Scanners keep flagging it - open issue [golang-migrate/migrate#1444](https://github.com/golang-migrate/migrate/issues/1444) "Dependencies still trigger CVE-2026-41568" (milestone v4.21.0). The released artefacts carry more: open PR [#1458](https://github.com/golang-migrate/migrate/pull/1458) says "`v4.20.1` pins several modules with known vulnerabilities, so Trivy and govulncheck flag the release binary and the `migrate/migrate` Docker image" (x/crypto, x/net, x/text, grpc, klauspost/compress, otel/sdk) and proposes a v4.20.2. `go install ...@v4.20.1` builds with exactly the versions in v4.20.1's `go.mod`, so a self-built CLI inherits them too; scan the binary you actually deploy (`govulncheck -mode=binary`).
 
 ## Installation
 
@@ -28,7 +28,7 @@ curl -L https://github.com/golang-migrate/migrate/releases/download/v4.20.1/migr
 go install -tags 'postgres' github.com/golang-migrate/migrate/v4/cmd/migrate@v4.20.1
 
 # Docker
-docker run -v $(pwd)/migrations:/migrations --network host migrate/migrate \
+docker run -v $(pwd)/migrations:/migrations --network host migrate/migrate:v4.20.1 \
     -path=/migrations/ -database "postgres://localhost:5432/db" up
 ```
 

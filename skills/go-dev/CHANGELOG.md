@@ -7,6 +7,34 @@ and this skill adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.h
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-11-05
+
+### Changed
+- Go `1.27.1` -> `1.27.3`: go1.27.2 and go1.27.3 fix 16 stdlib and toolchain advisories, so `toolchain go1.27.1` now fails govulncheck (GO-2026-6809 and eight more). govulncheck `v1.8.0` -> `v1.9.0`.
+- golangci-lint `v2.14.0` -> `v2.15.0`. v2.13.2 cannot load packages built by go1.27.3 ("export data version 5 is greater than maximum supported version 4"), so the floor for a current Go 1.27 toolchain is v2.14.0.
+- lefthook `v2.1.17` -> `v2.2.2`: `go install` needs Go 1.27, and `go get -tool` raises the module's `go` line. The worktree backup collision (#1529) is fixed; a narrower stash race (#1619) is still open.
+- just `1.58.0` -> `1.59.0` (paths that are not valid unicode now error); mockery `v3.8.0` -> `v3.9.0`; `migrate/migrate` Docker image pinned to `v4.20.1`.
+- `vuln` recipe and CI job run `govulncheck -test -tags=integration`: govulncheck skips test files by default.
+
+### Fixed
+- Removed the revive `unhandled-error` override: golangci-lint loads revive in syntax mode and the rule reported nothing on v2.14.0 or v2.15.0.
+- `nonamedreturns` and revive `confusing-results` (via `enable-all-rules`) left same-typed results with no passing form; the template disables `confusing-results`.
+- The template's `nolintlint` now sets `require-explanation` and `require-specific`; both default to false, so "enforced by nolintlint" was not true.
+- `exhaustive` 0.15.0 renamed its options; the old names fail `config verify` (exit 3).
+- setup-go's default cache key hashes `go.mod`, not `go.sum`; it also ignores the `toolchain` line once `GOTOOLCHAIN=local` is set.
+- The lefthook lint job split staged file names on whitespace; `glob_matcher: doublestar` makes `*.go` match only root-level files; `self-update` is absent from package-manager builds.
+- `go tool golangci-lint` examples in the lefthook and Justfile references contradicted the skill's own advice; tool-directive dependency bleed applies to every tool.
+- golangci-lint config discovery starts from the first analyzed path; `golangci-lint migrate` still writes the deprecated gofumpt `extra-rules`; gopls short-form key in the Helix example.
+
+### Added
+- `references/go-toolchain-reference.md`: `go.work` workspaces, build, module and test caches (including sandboxed agents), version stamping, cross-OS builds, private modules, container builds.
+- `references/go-correctness-reference.md`: recurring review findings - filesystem confinement (`filepath.IsLocal`, `os.Root`), context lifetimes, child processes, timers and mutexes, string and encoding traps, CLI and HTTP pitfalls, database/sql and SQLite.
+- Testing: proving a test is load-bearing, per-package test processes, keeping timing tests out of `-race`, `synctest` bubble rules, `go test -list` inventories, metadata-keyed test cache and `GODEBUG=gocachetest=1`, hermetic environments.
+- Footgun for sandboxed and agent runs (`GOCACHE`, `httptest` bind errors, Justfile-only `GOFLAGS`); govulncheck binary/toolchain mismatch; `export data version` typecheck failures.
+- `go fix -diff` / `go vet -diff` gates; GODEBUG defaults flipping with the `go` directive; triage after a linter bump (`--max-same-issues=0`, shifted `//nolint` lines); `internal/` rule by import path; lefthook JSON schema; golangci-lint v2.15.0 upgrade notes and exit codes 5 and 6.
+
+Verified against: go@1.27.3, golangci-lint@v2.15.0, just@1.59.0, lefthook@v2.2.2
+
 ## [0.6.1] - 2026-11-05
 
 ### Removed

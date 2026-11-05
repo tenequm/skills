@@ -6,7 +6,7 @@ gofumpt is a **strict superset of gofmt** - any code formatted by gofumpt produc
 
 **Upgrading to v0.12.0 reformats imports.** Four fixes change output on real code, so expect a one-time diff: a std import carrying a comment is "no longer moved into the top import group, as the comment stayed behind and ended up detached at the bottom of the group"; moving a std import up "no longer leaves an empty line where it used to be"; a copyright header or package doc "no longer makes gofumpt treat a single-line first declaration as multi-line"; and an assignment whose right-hand side is split by a comment "is now left alone". Go 1.27's gofmt adds a fifth source of churn: a column-alignment fix means "running gofmt from Go 1.27 on previously formatted code may produce minor whitespace changes", and v0.12.0 inherits it from `go/printer`. Land the reformat as its own commit.
 
-**golangci-lint lags gofumpt.** golangci-lint v2.14.0 bundles `mvdan.cc/gofumpt v0.12.0`, so today `golangci-lint fmt` and a standalone v0.12.0 binary agree (v2.13.2 still vendored v0.11.0 and disagreed on exactly the cases above). The lag recurs whenever gofumpt releases first: master already carries 33 unreleased commits (2026-09-22/23), 16 of them output-changing `format:` fixes such as "format: don't join imports whose comments would be left behind". Do not use one as fixer and the other as gate.
+**golangci-lint lags gofumpt.** golangci-lint v2.14.0 and v2.15.0 bundle `mvdan.cc/gofumpt v0.12.0`, so today `golangci-lint fmt` and a standalone v0.12.0 binary agree (v2.13.2 still vendored v0.11.0 and disagreed on exactly the cases above). The lag recurs whenever gofumpt releases first: master carries 65 unreleased commits through 2026-10-12, most of them output-changing `format:` fixes such as "format: leave naked returns alone with unnamed results" and "format: split build constraints out of doc comments". Do not use one as fixer and the other as gate.
 
 ## Installation
 
@@ -148,7 +148,7 @@ call govim#config#Set("Gofumpt", 1)
 ```toml
 # ~/.config/helix/languages.toml
 [language-server.gopls.config]
-"formatting.gofumpt" = true
+gofumpt = true   # gopls: "All clients but VS Code should use the short form"
 ```
 
 ### Zed
@@ -216,7 +216,7 @@ Run: `golangci-lint fmt`
 
 Since golangci-lint v2.13.0 (which bundles gofumpt 0.11.0) the extra rules are selected individually - "`gofumpt`: from 0.9.2 to 0.11.0 (new options: `extra.group-params`, `extra.clothe-returns`, `extra.balance-calls`)".
 
-**`extra-rules: true` is deprecated, and it is not a neutral shorthand.** golangci-lint marks it `# Deprecated: use `extra` instead.` and warns on every run: `` `extra-rules` is deprecated, please use `extra.group-params` instead ``. More importantly it enables *all three* rules, `balance_calls` included - in gofumpt's own code `ExtraRules` calls `Extra.Set("true")`, whose branch sets `GroupParams`, `ClotheReturns` **and** `BalanceCalls`. Since `balance_calls` is the rule gofumpt deliberately demoted as controversial and disabled by default, `extra-rules: true` silently opts you back into it. Use the `extra:` map. The next golangci-lint release rewrites that warning to "please use `extra.group-params` and `extra.clothe-returns` instead" (golangci-lint#6835) - following it drops `balance_calls`, which is what the `extra:` map above already does.
+**`extra-rules: true` is deprecated, and it is not a neutral shorthand.** golangci-lint marks it `# Deprecated: use `extra` instead.` and warns on every run: `` `extra-rules` is deprecated, please use `extra.group-params` instead ``. More importantly it enables *all three* rules, `balance_calls` included - in gofumpt's own code `ExtraRules` calls `Extra.Set("true")`, whose branch sets `GroupParams`, `ClotheReturns` **and** `BalanceCalls`. Since `balance_calls` is the rule gofumpt deliberately demoted as controversial and disabled by default, `extra-rules: true` silently opts you back into it. Use the `extra:` map. Since v2.15.0 the warning reads "please use `extra.group-params` and `extra.clothe-returns` instead" (golangci-lint#6835) - following it drops `balance_calls`, which is what the `extra:` map above already does. `golangci-lint migrate` still writes `extra-rules` when it converts a v1 config (`pkg/commands/internal/migrate/migrate_formatters.go:87-91`), so rewrite it after migrating.
 
 ## Diagnostics
 
