@@ -5,6 +5,13 @@ homepage_base := "https://github.com/tenequm/skills/tree/main/skills/"
 clawhub_base := "https://clawhub.ai/tenequm/skills"
 just := just_executable()
 
+# One-time per clone: git hooks plus the repo-local /update-skill command.
+setup:
+    lefthook install
+    mkdir -p .claude/skills .agents/skills
+    ln -sfn ../../skills/update-skill .claude/skills/update-skill
+    ln -sfn ../../skills/update-skill .agents/skills/update-skill
+
 # Offline gate: skill policy, README drift, whitespace, secrets.
 check: lint readme-check
     git -c core.whitespace=-space-before-tab diff --check "$(git hash-object -t tree /dev/null)"

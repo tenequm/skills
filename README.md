@@ -61,7 +61,7 @@ Issues and pull requests are welcome. Before opening a PR:
 - run `just readme` if skill metadata changed
 - run `just check` (offline lint) and `just preflight` (ClawHub dry-run, needs `clawhub login`)
 
-Run `lefthook install` once to get both as git hooks.
+Run `just setup` once per clone to get both as git hooks and the `/update-skill` command.
 
 ## License
 

@@ -18,7 +18,7 @@ lefthook.yml          # Git hooks: `just check` on commit, `just preflight` on p
 ```
 
 Tools: `just`, `yq` (mikefarah v4), `jq`, `betterleaks`, `lefthook`, `clawhub` (npm), `gh`.
-Run `lefthook install` once per clone.
+Run `just setup` once per clone: installs the lefthook hooks and links `skills/update-skill` into the gitignored `.claude/skills/` and `.agents/skills/`.
 
 ## Adding a Skill
 
@@ -90,7 +90,7 @@ Path: `skills/<name>/CHANGELOG.md`. Format: [Keep a Changelog v2.0.0](https://ke
 
 ### `/update-skill` command
 
-Use `/update-skill <skill-name>` (linked into `.claude/skills/` and `.agents/skills/`) to maintain both fields. It runs research, gates approvals, applies edits, bumps version, updates CHANGELOG, runs `just check`, and commits + pushes on confirmation.
+Use `/update-skill <skill-name>` (linked by `just setup`) to maintain both fields. It runs research, gates approvals, applies edits, bumps version, updates CHANGELOG, runs `just check`, and commits + pushes on confirmation.
 
 ## Rules
 
