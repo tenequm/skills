@@ -2,7 +2,7 @@
 name: ghostwriter
 description: Write content by interviewing the user instead of drafting - extract their material through questions, then assemble the piece from their own words. Use when the user needs to write something for an audience or mentions "ghostwriter".
 metadata:
-  version: "0.1.2"
+  version: "0.1.3"
   categories: "creative"
   topics: "writing, interviewing, content, drafting, ghostwriting"
   openclaw:

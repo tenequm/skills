@@ -4,6 +4,12 @@ All notable changes to this skill are documented in this file, following [Keep a
 
 ## [Unreleased]
 
+## [0.10.1] - 2026-11-05
+
+### Removed
+
+- Per-skill `LICENSE.txt`: ClawHub licenses every published skill MIT-0.
+
 ## [0.10.0] - 2026-10-23
 
 ### Fixed

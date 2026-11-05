@@ -2,7 +2,7 @@
 name: polish
 description: Pre-release code review - lint and type checks, parallel review agents (cleanliness, design, efficiency, side-effect gating), findings validated, fixes on approval. Reviews a GitHub PR when given one. Run before committing, pushing, or on a PR.
 metadata:
-  version: "3.1.0"
+  version: "3.1.1"
   categories: "development"
   topics: "code-review, linting, refactoring, pre-release, diff-review"
   openclaw:

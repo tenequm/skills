@@ -2,7 +2,7 @@
 name: rust-dev
 description: Day-1 guide to building well in Rust - ownership, errors as values, String vs &str, Box/Rc/Arc, anyhow vs thiserror, and a crate shortlist (tokio, serde, axum, sqlx). Use when starting a Rust project, fighting the borrow checker, or picking crates.
 metadata:
-  version: "0.8.0"
+  version: "0.8.1"
   categories: "development"
   topics: "rust, ownership, cargo, crates, tokio"
   upstream: "rust@1.99.0, tokio@1.53.2, axum@0.8.9, reqwest@0.13.5, sqlx@0.9.0, jiff@0.2.37, kache@1.0.0, dist@0.33.0, release-plz-action@0.5.139"

@@ -2,7 +2,7 @@
 name: skills-best-practices
 description: Opinionated best practices for building Agent Skills - SKILL.md structure, frontmatter, description writing, progressive disclosure, testing, distribution. Use when creating or reviewing a skill, or debugging why one will not trigger.
 metadata:
-  version: "0.9.0"
+  version: "0.9.1"
   categories: "agents, knowledge"
   topics: "agent-skills, skill-authoring, prompt-design, spec, best-practices"
   openclaw:

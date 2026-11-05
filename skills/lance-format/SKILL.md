@@ -2,7 +2,7 @@
 name: lance-format
 description: Deep reference for Lance v14 columnar format, its Rust crates, and pylance - file encodings, table format, indexes, schema evolution, time travel. Use when building on the Lance crates or reading .lance datasets, not the LanceDB product.
 metadata:
-  version: "0.21.1"
+  version: "0.21.2"
   categories: "development, integrations"
   topics: "lance, columnar-format, vector-search, rust, lakehouse"
   upstream: "lance-format/lance@v14.0.0-beta.14"

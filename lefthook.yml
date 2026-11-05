@@ -1,0 +1,9 @@
+pre-commit:
+  jobs:
+    - name: check
+      run: just check
+
+pre-push:
+  jobs:
+    - name: preflight
+      run: just preflight

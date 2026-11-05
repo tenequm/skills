@@ -5,30 +5,71 @@ on:
     branches: [main]
   pull_request:
 
+permissions:
+  contents: read
+
 jobs:
-  lint:
+  check:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
-      - uses: taiki-e/install-action@just
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v6
+      - uses: taiki-e/install-action@v2
         with:
-          python-version: "3.12"
-      - uses: astral-sh/setup-uv@v4
+          tool: just
+      - name: Install betterleaks
+        env:
+          VERSION: "1.9.0"
+          SHA256: f8b185a39ffcece2a1ca82bf3a4e7435cd81963ffd16b7a9128daf75f35f6de7
+        run: |
+          curl -fsSLo bl.tgz "https://github.com/betterleaks/betterleaks/releases/download/v${VERSION}/betterleaks_${VERSION}_linux_x64.tar.gz"
+          echo "${SHA256}  bl.tgz" | sha256sum -c -
+          sudo tar -xzf bl.tgz -C /usr/local/bin betterleaks && rm bl.tgz
+      - run: just check
+
+  preflight:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: just
       - uses: actions/setup-node@v6
         with:
           node-version: "22"
-      # `just check` resolves every publish against ClawHub with `--dry-run`.
-      # The token is required: without it the CLI cannot resolve the publisher,
-      # so a slug another publisher also owns fails as ambiguous.
-      - name: Install ClawHub CLI
-        run: npm install -g clawhub
+      - run: npm install -g clawhub
+      # Without the publisher identity a slug another publisher also owns resolves as ambiguous.
       - name: Authenticate to ClawHub
         env:
           CLAWHUB_TOKEN: ${{ secrets.CLAWHUB_TOKEN }}
-        run: |
-          [ -n "$CLAWHUB_TOKEN" ] || (echo "CLAWHUB_TOKEN secret is required." && exit 1)
-          clawhub login --token "$CLAWHUB_TOKEN" --no-browser
-      - run: just check
-      - name: Ensure no uncommitted changes
-        run: git diff --exit-code
+        run: clawhub login --token "$CLAWHUB_TOKEN" --no-browser
+      - run: just preflight
+
+  release:
+    if: github.event_name == 'push'
+    needs: [check, preflight]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    concurrency:
+      group: release-skills
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: just
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "22"
+      - run: npm install -g clawhub
+      - name: Authenticate to ClawHub
+        env:
+          CLAWHUB_TOKEN: ${{ secrets.CLAWHUB_TOKEN }}
+        run: clawhub login --token "$CLAWHUB_TOKEN" --no-browser
+      - name: Publish changed skills
+        env:
+          CLAWHUB_DISABLE_TELEMETRY: "1"
+          GH_TOKEN: ${{ github.token }}
+        run: just release
