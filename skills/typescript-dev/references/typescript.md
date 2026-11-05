@@ -13,8 +13,9 @@ New defaults that **break builds** if ignored:
 
 - `types` defaults to `[]`. Ambient `@types/*` no longer leak in globally - list what you need (`"types": ["vite/client", "node"]`). `["*"]` restores the old include-everything behavior.
 - Side-effect imports are checked, so `import "./styles.css"` errors (TS2882) unless something declares the module - in a Vite app that is `vite/client` in `types`.
-- `module` defaults to `esnext` and `target` to a floating current-year ES version; they no longer default to `nodenext`. Pick deliberately per project type (below).
+- `module` defaults to `esnext`, and `target` to "the current stable ECMAScript version immediately preceding `esnext`" - a moving value. Pick both deliberately per project type (below).
 - `rootDir` defaults to the tsconfig directory rather than being inferred from inputs - set it explicitly for non-trivial layouts.
+- `lib.dom.d.ts` now includes `dom.iterable` and `dom.asynciterable` (6.0), so `"lib": ["ES2023", "DOM"]` is enough.
 - 7.0 only: `libReplacement` is `false` by default and `stableTypeOrdering` is always on.
 
 Deprecated in 6.0, **errors in 7.0**:
@@ -54,6 +55,8 @@ Deprecated in 6.0, **errors in 7.0**:
 ```
 
 **`bundler` vs `nodenext`.** For code a bundler consumes (a Vite app), `module: preserve` + `moduleResolution: bundler` is correct - it lets you write extensionless imports and leaves module syntax for Vite/Rolldown. For code Node runs directly (scripts, a server entry), use `module: nodenext` (which sets resolution to match) and write real `.js` extensions on relative imports.
+
+**Solution layout.** create-vite splits this into `tsconfig.app.json` (the config above, `include: ["src"]`) and `tsconfig.node.json` (`include: ["vite.config.ts"]`, `types: ["node"]`, `module: nodenext`), both referenced from a `tsconfig.json` with `"files": []`, and builds with `tsc -b && vite build` - Vite itself never type-checks. `tsc -b` works with `noEmit` and no `composite`; set `tsBuildInfoFile` to `./node_modules/.tmp/<name>.tsbuildinfo` so incremental build info, which speeds up warm checks, stays out of the source tree.
 
 **`exactOptionalPropertyTypes`** distinguishes "absent" from "present but `undefined`": an optional prop that may be passed `undefined` (e.g. forwarding an optional field) must be declared `prop?: T | undefined`.
 
@@ -150,9 +153,17 @@ if (!result.success) {
 }
 ```
 
+**`z.union` strips the losing variant's fields.** For object schemas it returns the first member that parses, and `z.object` strips unknown keys, so `z.union([Base, Extended])` hands back an `Extended` value without its extra fields - and reordering only moves the loss to the other variant. Tag the variants and use `z.discriminatedUnion("kind", [...])`, or parse with the schema you already know applies:
+
+```tsx
+const Pr = z.object({ kind: z.literal("pr"), title: z.string(), merged: z.boolean() })
+const Discussion = z.object({ kind: z.literal("discussion"), title: z.string(), repo: z.string() })
+const Result = z.discriminatedUnion("kind", [Pr, Discussion])   // keeps each variant's fields
+```
+
 ## TypeScript 7 in practice
 
-**No JS API in 7.0.** The `typescript@7` package exposes only `version` plus `unstable/*` subpaths - "it does not ship with an API. We expect TypeScript 7.1 to ship with a new (and different) API." Tools that `import ts from "typescript"` break on 7.0. In this stack, Biome, `@vitejs/plugin-react`, and the shadcn CLI (bundles its own TS via ts-morph) are unaffected; **typescript-eslint** (peer `typescript <6.1.0`), and Volar-based checkers for **Vue, Astro, Svelte, and MDX** still need 6.0.
+**No JS API in 7.0.** The `typescript@7` package exposes only `version` plus `unstable/*` subpaths - "it does not ship with an API. We expect TypeScript 7.1 to ship with a new (and different) API." Tools that `import ts from "typescript"` break on 7.0. In this stack, Biome, `@vitejs/plugin-react`, and the shadcn CLI (bundles its own TS via ts-morph) are unaffected; **typescript-eslint** (peer `typescript <6.1.0`, still true in 8.72), and Volar-based checkers for **Vue, Astro, Svelte, and MDX** still need 6.0.
 
 **Side-by-side with 6.0** - the official alias pair keeps the 6.0 API for tools while `tsc` is 7.0:
 
@@ -177,10 +188,12 @@ if (!result.success) {
 
 **Parallelism:** `--checkers` (default 4 type-check workers), `--builders` (parallel project-reference builds), `--singleThreaded`. On small CI runners lower `--checkers`, and fix the number across environments for reproducible results.
 
-**Nightlies** resume under the `typescript` package's `next` tag (`typescript@next`); `@typescript/native-preview` is frozen. TS 7.1 (new API, `es2026` target) is in beta.
+**Nightlies** resume under the `typescript` package's `next` tag (`typescript@next`); `@typescript/native-preview` is frozen.
+
+**TS 7.1** (beta 2026-10-20, RC expected about a month later) brings the API back with new entry points - `typescript/sync`, `typescript/async`, plus `typescript/fs` and `typescript/ast`: "TypeScript 7.1 ships a new API that allows building powerful tools". That is what typescript-eslint and other API consumers will move to. It also adds **content mappers** (`contentMappers` in tsconfig, run with `tsc --runExternalCode`), the plugin point for checking `.vue`/`.astro`/`.svelte`/MDX on 7.x; an `es2026` target; import attributes in ambient module declarations; and stricter checks on distributive type parameters (new errors like "'B' is only assignable to the non-distributed 'A'"). Until 7.1 is GA, keep the 6.0 alias pair above for API consumers.
 
 ## Resources
 
-- TS 7.0 announcement: https://devblogs.microsoft.com/typescript/announcing-typescript-7-0/
+- TS 7.0 announcement: https://devblogs.microsoft.com/typescript/announcing-typescript-7-0/ - TS 7.1 beta: https://devblogs.microsoft.com/typescript/announcing-typescript-7-1-beta/
 - TS 6.0 announcement: https://devblogs.microsoft.com/typescript/announcing-typescript-6-0/
 - Source and issues: https://github.com/microsoft/TypeScript - Release notes: https://www.typescriptlang.org/docs/handbook/release-notes/

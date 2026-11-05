@@ -1,6 +1,6 @@
 # Vite 8
 
-Build tooling and dev server. Vite 8 (stable, latest `8.3.3`) ships **Rolldown** - a Rust-based bundler from the Vite team - as its single default bundler, replacing both esbuild and Rollup. It is ESM-only and requires Node.js 20.19+ / 22.12+ (the rest of this stack - Vitest 5, `@rolldown/plugin-babel` - needs 22.12+).
+Build tooling and dev server. Vite 8 (stable, latest `8.3.6`) ships **Rolldown** - a Rust-based bundler from the Vite team - as its single default bundler, replacing both esbuild and Rollup. It is ESM-only and requires Node.js 20.19+ / 22.12+ (the rest of this stack - Vitest 5, `@rolldown/plugin-babel` - needs 22.12+).
 
 ## Vite 8 essentials
 
@@ -9,6 +9,7 @@ Build tooling and dev server. Vite 8 (stable, latest `8.3.3`) ships **Rolldown**
 - **Default browser target** is `'baseline-widely-available'`, which in Vite 8 resolves to `['chrome111', 'edge111', 'firefox114', 'safari16.4', 'ios16.4']` (bumped from Vite 7's 107/107/104/16). Override with `build.target: 'es2022'` or an explicit list.
 - **Default minifiers changed:** JavaScript is minified by **Oxc** (`build.minify` default `'oxc'`), CSS by **Lightning CSS** (`build.cssMinify` default `'lightningcss'`). `build.minify: 'esbuild'` still works but is deprecated and requires installing `esbuild` yourself.
 - **Install grew ~15 MB** vs Vite 7 (Lightning CSS + the Rolldown binary are now regular dependencies).
+- **Vite never type-checks** - "Vite only performs transpilation on `.ts` files and does **NOT** perform type checking." Gate builds with `tsc -b && vite build` (see [typescript.md](typescript.md)).
 
 ## New in Vite 8.1 - 8.3
 
@@ -19,7 +20,7 @@ Build tooling and dev server. Vite 8 (stable, latest `8.3.3`) ships **Rolldown**
 - `import.meta.glob` gained a `caseSensitive` option; `html.additionalAssetSources` lets asset discovery see custom HTML elements/attributes.
 - **Top-level `input`** (8.2) - one place to declare entry points; it becomes the default for `build.rolldownOptions.input`, `build.lib.entry`, `build.ssr`, and `optimizeDeps.entries`.
 - **Top-level `tsconfig`** (8.3) - forces one tsconfig for all files. Discouraged: it "overrides Vite's per-file tsconfig discovery."
-- **`devtools`** option (8.3) - Vite DevTools now covers the dev server too: install `@vitejs/devtools-vite` (dev) and/or `@vitejs/devtools-rolldown` (build analysis); it runs for both `serve` and `build` unless limited with `apply`.
+- **`devtools`** option (8.3) - Vite DevTools now covers the dev server too: install the base `@vitejs/devtools` package plus `@vitejs/devtools-vite` (dev server) and/or `@vitejs/devtools-rolldown` (build analysis); it runs for both `serve` and `build` unless limited with `apply`.
 - Dynamic `import()` accepts `#` subpath imports (from `package.json` `imports`).
 
 ## Configuration
@@ -96,7 +97,7 @@ On Cloudflare, keep two channels straight: `VITE_`-prefixed `.env` values are st
 
 ## Plugin ecosystem
 
-- **`@vitejs/plugin-react`** (v6) - Fast Refresh + JSX transform. v6 dropped Babel as a dependency (React Refresh runs through Oxc) and **removed the inline `babel` option**; run Babel-based transforms like the React Compiler through `@rolldown/plugin-babel` instead. Place last among framework plugins. v6 requires Vite 8 (use v5 if you must stay on Vite 7).
+- **`@vitejs/plugin-react`** (v6) - Fast Refresh + JSX transform. v6 dropped Babel as a dependency (React Refresh runs through Oxc) and **removed the inline `babel` option**; run Babel-based transforms like the React Compiler through `@rolldown/plugin-babel` instead. Place last among framework plugins. v6 requires Vite 8 (use v5 if you must stay on Vite 7). 6.2.1+ adds `refreshInclude`/`refreshExclude` to skip Fast Refresh for files that never run in the browser. Leave `@rolldown/plugin-babel`'s `parallel` option off with `reactCompilerPreset()`: the preset cannot be sent to a worker thread, so the build fails.
 - **`@tailwindcss/vite`** - native Tailwind v4 integration, no PostCSS config. API unchanged across v4.x.
 - **`@tanstack/router-plugin/vite`** - file-based routes; `tanstackRouter({ autoCodeSplitting: true })`. Must precede `react()`.
 - **`@tanstack/react-start/plugin/vite`** - full-stack TanStack Start; bundles the router plugin (don't add both).
@@ -129,7 +130,7 @@ Setting it to `true` disables the check entirely and is a DNS-rebinding risk - s
 
 ### forwardConsole (new in Vite 8)
 
-`server.forwardConsole` forwards browser runtime errors to the Vite server terminal - `true` forwards unhandled errors plus `console.error`/`console.warn` (not every log). It defaults to auto - **on when an AI coding agent is detected**, off otherwise - which is handy when an agent is driving the build and can't see the browser console.
+`server.forwardConsole` forwards browser runtime errors to the Vite server terminal - `true` forwards unhandled errors plus `console.error`/`console.warn` (not every log). It defaults to auto - **on when an AI coding agent is detected**, off otherwise - which is handy when an agent is driving the build and can't see the browser console. For finer control pass an object: `{ unhandledErrors: true, logLevels: ['error', 'warn', 'info'] }`.
 
 ### HMR troubleshooting
 
@@ -139,6 +140,7 @@ Setting it to `true` disables the check entirely and is a DNS-rebinding risk - s
 | HMR not connecting behind a proxy | Set `server.ws.clientPort` (e.g. `443`) |
 | CSS not updating | Confirm `@tailwindcss/vite` is in plugins and `@import "tailwindcss";` is in your CSS entry |
 | Stale chunk after a build | Hard-refresh (`Cmd/Ctrl+Shift+R`) to bust the cached bundle |
+| Error overlay shows failed imports right after `git pull` | Dependencies changed: reinstall (`pnpm install --frozen-lockfile`), then restart with `vite --force` to re-run dependency optimization |
 | `Tsconfig not found` from `builtin:vite-transform` in Docker/CI only | Vite's transform reads the full tsconfig `extends` chain - copy every extended tsconfig (e.g. the repo-root one) into the image |
 
 The WebSocket knobs (`protocol`/`host`/`port`/`path`/`clientPort`/`timeout`/`server`) moved from `server.hmr.*` to `server.ws.*`. The old `server.hmr.*` keys are deprecated but auto-synced, so existing configs keep working; write new ones under `server.ws`.

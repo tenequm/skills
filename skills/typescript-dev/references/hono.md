@@ -7,21 +7,30 @@ dependencies; the `hono/tiny` preset is under 14kB. It is the backend/edge count
 this stack's React frontend - its RPC client (`hc`) shares server types directly with
 React, giving end-to-end type safety without code generation.
 
-Version target: **hono@4.13.13** (Hono 4 is current; v5 is in development on a `v5` branch -
-ESM-only, Node.js 22.12+ - with no npm release yet). On Node, use `@hono/node-server@2`, which
-requires Node.js >= 20. Adapters/middleware are versioned independently (`@hono/node-server@2`,
+Version target: **hono@4.13.16** (Hono 4 is current; **v5 is a release candidate** - `npm i hono@next`
+installs 5.0.0-rc.1, ESM-only, Node.js 22.12+; see "Preparing for v5" below). On Node, use
+`@hono/node-server@2` (latest 2.1.6), which requires Node.js >= 20 and accepts Hono v5 prereleases
+as a peer. Adapters/middleware are versioned independently (`@hono/node-server@2`,
 `@hono/zod-validator`, `@hono/zod-openapi@1`, and the runtime adapters `@hono/cloudflare-workers`,
 `@hono/bun`, `@hono/deno`).
 
-> **Keep Hono patched - it ships security fixes frequently.** Since 2026-08 alone: `serveStatic`
+> **Keep Hono patched - it ships security fixes frequently.** 4.13.16 (2026-11-01) fixed five at
+> once: `mount()`/`app.mount()` forwarding a path that skips middleware scoped inside the prefix
+> (GHSA-4m76-xfj5-7975); RegExpRouter - including the default `SmartRouter` - skipping wildcard
+> middleware for some patterns (GHSA-h7mg-cq63-vhpq, affects >= 4.1.4); `validator('form')`
+> skipping validation for `multipart/form-data` with extra parameters (GHSA-4h7h-rv7c-7m2v); the
+> `css` helper allowing HTML injection (GHSA-3gg2-335m-rxc6); and `csrf()` not checking
+> `text/ping` requests (GHSA-46wx-v44x-9hh2). `@hono/node-server` 2.1.6 (2026-11-02) fixed a raw
+> backslash in the path bypassing proxy ACLs (GHSA-jpvv-r467-5p4w, also fixed in 1.19.18) and two
+> `upgradeWebSocket` bugs (GHSA-7v5p-43qr-wch5, GHSA-qv5m-9pm6-hqp3). Earlier, since 2026-08: `serveStatic`
 > double-decoding the path, bypassing middleware on static routes (GHSA-5r4p-p66f-jhc7, fixed
 > 4.13.11; the same bug in `@hono/node-server` is GHSA-rmxm-3fg6-px4f, fixed **only** in 2.1.3 -
-> the 1.x line has no fix); `hono/jsx` boundary components rendering strings unescaped (XSS,
+> the 1.x line has no fix for it); `hono/jsx` boundary components rendering strings unescaped (XSS,
 > GHSA-hxh3-vqpv-xpqv, 4.13.7); unbounded `parseBody({ dot: true })` nesting (memory DoS,
 > GHSA-g6gw-c38x-mqfc, 4.13.5); query parsing past the URL fragment (GHSA-crvj-82cr-hjcx, 4.13.5);
 > `toSSG()` path escape (GHSA-gqvv-2mrq-wpjv, 4.13.5); `memo()` leaking SSR output across users
 > (GHSA-f23p-vx2j-j53r, 4.12.34); CORS ReDoS when `allowHeaders` is unset (GHSA-8j4g-w8fx-2239,
-> 4.12.34). Pin `hono >= 4.13.11` and `@hono/node-server >= 2.1.3`, and track the latest patch.
+> 4.12.34). Pin `hono >= 4.13.16` and `@hono/node-server >= 2.1.6`, and track the latest patch.
 
 > **For anything this file does not cover, fetch Hono's own LLM-optimized docs** - they are
 > the fastest authoritative source and are kept in sync with releases:
@@ -31,6 +40,11 @@ requires Node.js >= 20. Adapters/middleware are versioned independently (`@hono/
 >
 > This reference is the curated 80% you need most often; the `llms-*.txt` files are the
 > exhaustive long tail (every middleware option, every runtime's getting-started, edge cases).
+
+> **Agent tooling:** `@hono/cli` (`hono`) "loads your Hono app directly, so an agent can inspect
+> and test the app without starting a server": `hono routes` prints the route table, `hono request
+> /path` sends a request through `app.request()`, and `hono snapshot`/`hono diff` show what
+> uncommitted changes do to the app's behavior.
 
 ```sh
 npm create hono@latest my-app          # scaffold (prompts for a template)
@@ -270,7 +284,10 @@ matches but the method doesn't), `mount`, `context-storage`, `timeout`, `languag
 4.13 behavior changes to know when upgrading: the `cache` middleware's internal key format
 changed (entries live under `/.hono/cache?__hono_cache_key=...`, so `caches.delete(url)` by plain
 URL no longer hits them); CORS default `allowMethods` now includes `QUERY`; and `RegExpRouter`
-rejects unsupported path combinations at registration, so a bad pattern fails at boot.
+rejects unsupported path combinations at registration, so a bad pattern fails at boot. Since 4.13.16 a
+custom pattern that can match the empty string (`{[0-9]*}`) throws `UnsupportedPathError`, and
+`PreparedRegExpRouter` data must be regenerated; `serveStatic` serves only GET and HEAD (4.13.14,
+node-server 2.1.5).
 
 ```ts
 import { cors } from 'hono/cors'
@@ -395,6 +412,15 @@ serialization (e.g. bracket arrays) with `hc<AppType>(url, { buildSearchParams }
 **Do not** use `c.notFound()` on routes the client calls - its result can't be inferred. Use
 `c.json({ error: '...' }, 404)` instead. Global `onError` responses aren't auto-inferred;
 merge them with `ApplyGlobalResponse<typeof app, { 500: { json: { error: string } } }>`.
+Return the response from the handler itself (`await` first, then `return c.json(...)`): "A handler
+that returns a `.then()` chain directly loses its response type, so the client infers `unknown`."
+
+**Sharing `AppType` with a Vite frontend:** `import type { AppType } from '../server'` is erased at
+build time, so server-only modules (env loaders, DB clients) never reach the client bundle - don't
+hand-mirror server types or cast `fetch` results with `as` to dodge it. What the client does need is
+to type-check the server's type graph: with TS 6/7's `types: []` default, a client tsconfig with only
+`"vite/client"` can fail on server files that use Node globals. Add the server's ambient types to the
+client project, or emit the server's `.d.ts` and use `hcWithType` (below).
 
 Larger apps: chain `.route()` and export the chained result's type:
 
@@ -645,6 +671,22 @@ For a typed test client mirroring the RPC client, use `testClient(app)` from `ho
 On Cloudflare Workers, Cloudflare recommends `@cloudflare/vitest-pool-workers`. (This skill's
 [vitest.md](vitest.md) covers the runner itself.)
 
+## Preparing for v5
+
+`hono@next` is 5.0.0-rc.1; the official guide is https://hono.dev/docs/guides/migrating-to-v5. The
+changes that touch patterns in this file:
+
+- `onError()` and `notFound()` register routable middleware: `app.onError((c) => ...)` (or
+  `(c, next)`) reads the error from `c.error` instead of taking `(err, c)`, and registrations
+  compose rather than replacing the previous handler.
+- `c.req.json()` returns `Promise<unknown>` (validate it); `c.req.query()` values may be `undefined`.
+- `c.json()` throws for a value that is not JSON-serializable - `c.json(undefined)` included.
+- Wildcard matching is the same in every router.
+- `hono/<runtime>` adapter imports are gone - use `@hono/cloudflare-workers`, `@hono/bun`,
+  `@hono/deno`, `@hono/node-server`. `hono/cloudflare-pages` and `app.mount()` are removed (use
+  the Mount middleware from `hono/mount`).
+- ESM-only, Node.js 22.12+.
+
 ## Best practices
 
 1. **Write handlers inline after the path** - `app.get('/books/:id', (c) => ...)`. A separate
@@ -675,7 +717,7 @@ On Cloudflare Workers, Cloudflare recommends `@cloudflare/vitest-pool-workers`. 
 - Doc-page index: https://hono.dev/llms.txt
 
 **Official docs:**
-- Home / getting started: https://hono.dev/docs/
+- Home / getting started: https://hono.dev/docs/ - Migrating to v5: https://hono.dev/docs/guides/migrating-to-v5
 - API reference - App: https://hono.dev/docs/api/hono - Context:
   https://hono.dev/docs/api/context - Request: https://hono.dev/docs/api/request - Routing:
   https://hono.dev/docs/api/routing
