@@ -18,10 +18,8 @@ DEFAULT_LATEST_TAG = "skills-latest"
 DEFAULT_CLAWHUB_BASE = "https://clawhub.ai/tenequm/skills"
 
 CLAWHUB_SLUG_OVERRIDES: dict[str, str] = {
-    "erc-8004": "erc-8004-development",
     "founder-playbook": "founder-playbook-web3",
     "polish": "code-polish",
-    "x402": "x402-development",
 }
 
 
