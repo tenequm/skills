@@ -13,9 +13,11 @@ setup:
     ln -sfn ../../skills/update-skill .agents/skills/update-skill
 
 # Local gate: skill policy, whitespace, secrets; regenerates README.md for you to stage.
+[parallel]
 check: lint readme hygiene
 
 # Hook and CI gate: same checks, but fails if the staged README.md is stale.
+[parallel]
 check-ci: lint readme-check hygiene
 
 # Dry-run every skill publish against ClawHub (network + `clawhub login`).
