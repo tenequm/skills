@@ -7,6 +7,42 @@ and this skill adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.h
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-11-05
+
+### Added
+
+- SKILL.md: module paths (`crate::`, `super::`, `self::`, `pub use` re-exports); keeping `main.rs` thin so `tests/` can reach the logic; `cargo run -- <args>`, `RUST_BACKTRACE=1`, and `rustup update` in Day-1 Setup; anti-pattern #10, a `File::lock` is held by any descriptor "duplicated or inherited from it", so call `unlock()` in `Drop`.
+- references/testing.md: regression tests that cannot fail (fixture not where old and new behavior differ, race tests by brute force, hand mutations that did not apply); measuring a flake over N runs; iteration order is not an API; the Book's "can't create integration tests" rule for `main.rs`; `TempDir` binding lifetime and `.keep()` leaks; multiple name filters after `--`, `--exact`, and `--test-threads=1` as a diagnostic; `#[cfg(windows)]` tests compiled out locally and Windows `Path::is_absolute` semantics; insta normalization with `filters` and `cargo insta test`.
+- references/async-basics.md: `select!` over `&mut handle` in a loop panics with "JoinHandle polled after completion"; disable the branch with an `, if` precondition.
+- references/dev-environment.md: repo-local `[alias]`, and the built-in `b`/`c`/`d`/`t`/`r`/`rm` aliases it silently redefines; macOS XProtect developer-tool exemption (rustc UI suite 9m42s to 3m33s); check/clippy and build artifacts are different units, so give a lint job its own target dir; `cargo update --precise`, `cargo tree --duplicates`, and a `cargo metadata --locked` drift check; jobs that write a shared cache must not hold secrets; `linker_messages` and `build.warnings`.
+- references/crate-shortlist.md: `EnvFilter::from_default_env()` falls back to ERROR only, so give it a real default; clap `#[arg(env = ...)]` needs the `env` feature and `hide_env_values` for secrets; itertools, rand/fastrand, walkdir/ignore, indicatif, directories, rusqlite in Honorable Mentions.
+- references/traits-and-generics.md: `enumerate`/`zip`/`any`/`position`/`fold`/`rev`; sorting, why `f64` is not `Ord`, and `total_cmp`.
+- references/ownership-and-types.md: `floor_char_boundary` (1.91) for truncating to a byte budget.
+- references/error-handling.md: `Command::output()` is `Ok` on a failing child, so check `status.success()`.
+- references/performance.md: buffered output with `BufWriter` over a locked stdout, and `flush()` before drop.
+- references/releasing.md: `strip` and `opt-level = "z"` for binary size; raise the `Cargo.toml` requirement, not just the lock, when a fix needs a dependency patch release.
+
+### Changed
+
+- Rust 1.99.1: `rust-toolchain.toml` pin bumped from 1.99.0; dev-environment.md adds its FFI `bool` miscompile as the newest point-release example.
+- references/dev-environment.md: kache re-verified against 2.0.0 (pin was 1.0.0). Install `kache` and `kache-engine` together; `kache daemon restart` and `kache doctor --probe` after upgrading; key schema 33 makes a 1.x to 2.0 upgrade a cold build; disk-pressure recovery is on by default since 1.2.0 (10 GiB, `0` in CI); adaptive incremental skips the cache for "up to eight builds"; worktree incremental seeding; `target/check` for check and clippy; target discovery across worktrees; `kache config set`; AWS profiles fail explicitly; kache-action example pinned to 2.0.0, and its save step skips cancelled runs.
+- references/dev-environment.md: `[profile.dev.package."*"]` uses `opt-level = 1`, with `3` for named hot crates; the line-tables-only gain is framed as something to measure.
+- references/dev-environment.md: advisory examples refreshed to rustls 0.23.46 (RUSTSEC-2026-0346 to -0349), rustls-webpki (RUSTSEC-2026-0382), and the yanked tokio 1.54.0 (RUSTSEC-2026-0384).
+- references/releasing.md: dist 0.34.0, now current on crates.io, moved Apple Silicon builds to `macos-15`, so regenerate `release.yml`; cargo-zigbuild #479 fixed in 0.24.0.
+- references/crate-shortlist.md and SKILL.md: jiff 0.2.39 (`jiff-sqlx` serde support), and blessed.rs now "weakly recommend[s] jiff" with `time` as the third option.
+- Date stamps re-verified to November 2026: rustfmt `imports_granularity`/`group_imports` still unstable, and `cfg_select!` arms are not formatted on stable.
+
+### Fixed
+
+- references/dev-environment.md: committing `build.warnings = "deny"` is not safe on a pinned toolchain alone. 1.97's `linker_messages` lint is exempt from `-D warnings` but not from `build.warnings` (cargo#17142), so a linker or Xcode update fails the build; `linker_messages = "allow"` restores the old behavior. The `build.warnings` quote is now attributed to the 1.97 release notes.
+- references/releasing.md: the packaging guard ran `cargo package --list` without `--locked`, which rewrites a stale `Cargo.lock` on disk.
+- references/async-basics.md: `large_futures` is a `pedantic` lint (16 KiB threshold), so it finds nothing until enabled.
+- SKILL.md: for `0.x` crates the minor version is the breaking one; a closer `rust-toolchain.toml` beats a farther `rustup override`; the crate-shortlist entry no longer says "8 crates".
+- references/project-shape.md: a member's `default-features = false` override is unified away when members build together, and `cargo fix --edition` removes it.
+- references/performance.md: `[profile.dist]` uses thin LTO, matching releasing.md and SKILL.md.
+
+Verified against: rust@1.99.1, tokio@1.54.1, jiff@0.2.39, kache@2.0.0, dist@0.34.0, release-plz-action@0.5.148
+
 ## [0.8.1] - 2026-11-05
 
 ### Removed

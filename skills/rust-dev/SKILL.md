@@ -2,10 +2,10 @@
 name: rust-dev
 description: Day-1 guide to building well in Rust - ownership, errors as values, String vs &str, Box/Rc/Arc, anyhow vs thiserror, and a crate shortlist (tokio, serde, axum, sqlx). Use when starting a Rust project, fighting the borrow checker, or picking crates.
 metadata:
-  version: "0.8.1"
+  version: "0.9.0"
   categories: "development"
   topics: "rust, ownership, cargo, crates, tokio"
-  upstream: "rust@1.99.0, tokio@1.53.2, axum@0.8.9, reqwest@0.13.5, sqlx@0.9.0, jiff@0.2.37, kache@1.0.0, dist@0.33.0, release-plz-action@0.5.139"
+  upstream: "rust@1.99.1, tokio@1.54.1, axum@0.8.9, reqwest@0.13.5, sqlx@0.9.0, jiff@0.2.39, kache@2.0.0, dist@0.34.0, release-plz-action@0.5.148, cargo-zigbuild@0.24.1, insta@1.49.0"
   openclaw:
     homepage: https://github.com/tenequm/skills/tree/main/skills/rust-dev
     emoji: "🦀"
@@ -40,6 +40,7 @@ cargo new --lib my-lib    # library (src/lib.rs)
 # 4. The dev loop (memorize these four)
 cargo check     # fast type-check, no codegen
 cargo run       # build and run (binary)
+cargo run -- --verbose in.txt   # args after `--` go to your program, not to cargo
 cargo test      # build and run tests (incl. doctests)
 cargo clippy --all-targets   # lint, incl. tests/ and benches/ (run before pushing)
 cargo fmt       # format
@@ -48,9 +49,14 @@ cargo fmt       # format
 cargo add tokio --features full
 cargo remove tokio
 cargo update                 # recompute Cargo.lock within existing semver ranges
+
+# 6. Update the toolchain when a new stable ships (every six weeks)
+rustup update
 ```
 
-`cargo update` only moves within the version ranges already in `Cargo.toml`. Crossing a major version (`1.x` to `2.0`) needs a `Cargo.toml` edit or `cargo add <crate>@2`.
+`cargo update` only moves within the version ranges already in `Cargo.toml`. Crossing a breaking version (`1.x` to `2.0`) needs a `Cargo.toml` edit or `cargo add <crate>@2`. For a `0.x` crate - most of the shortlist below - the minor number is the breaking one: Cargo treats versions as compatible when "their left-most non-zero major/minor/patch component is the same", so `axum` `0.8` to `0.9` is as breaking as `1.x` to `2.0`.
+
+When a program panics, run it again with `RUST_BACKTRACE=1 cargo run` to see the call stack that led there - the panic message suggests it, and it is the first thing to reach for.
 
 **rust-analyzer is mandatory.** It is the language server every editor uses (VS Code, Zed, Neovim, Helix, RustRover uses its own engine but is comparable). In VS Code, install the `rust-analyzer` extension and set `rust-analyzer.check.command` to `"clippy"` so you get lint feedback on save.
 
@@ -228,7 +234,7 @@ These cover most real apps. Add them as needed; they are not all required.
 | `tracing` + `tracing-subscriber` | Structured logging. The default for any async code (replaces `log`) |
 | `axum` | Web framework. Built on `tokio` + `hyper` + `tower`. The 2026 default |
 | `sqlx` | Database access. Async, compile-time checked queries. PostgreSQL, MySQL, SQLite |
-| `chrono` | Dates and times. The maintainer announced soft-deprecation in Jan 2026 and recommends `jiff` for new code. `jiff` (BurntSushi) is the successor but still pre-1.0 as of September 2026 (0.2.x, with the 1.0 tracking issue open and no date). Pick `chrono` for `serde`/`sqlx` integration today, `jiff` if you can tolerate pre-1.0 churn |
+| `chrono` | Dates and times. The maintainer announced soft-deprecation in Jan 2026 and recommends `jiff` for new code. `jiff` (BurntSushi) is the successor but still pre-1.0 as of November 2026 (0.2.x, with the 1.0 tracking issue open and no date); blessed.rs now "weakly recommend[s] jiff" and names `time` as the other well-integrated option. Pick `chrono` for `serde`/`sqlx` integration today, `jiff` if you can tolerate pre-1.0 churn |
 
 See `references/crate-shortlist.md` for one minimal example each.
 
@@ -245,6 +251,7 @@ These are the mistakes that show up in every newcomer's code review. Avoid them.
 7. **Reaching for `unsafe`.** App developers should essentially never need it. `unsafe` does not turn off the borrow checker; it lets you do five specific things (deref raw pointers, call unsafe functions, access mutable statics, implement unsafe traits, access union fields) with the contract that you have manually verified the invariants.
 8. **Reading untrusted input with `.lines()` or `read_line`.** These allocate without bound. `BufRead::read_line`'s own docs warn that "it is possible for an attacker to continuously send bytes without ever sending a newline or EOF" - and `.lines()` inherits that behavior, since each item is a `read_line` under the hood. Either way a hostile or malformed peer can drive your process out of memory. Bound the read with `Read::take(n)`, and use `BufRead::skip_until` (stable since 1.83) to discard an over-long line. `for line in reader.lines()` is the first thing every tutorial teaches and almost none mention this.
 9. **Trusting `std::fs::write` with data you cannot lose.** It truncates and then writes in place, so a crash or power loss mid-write leaves a zero-length or half-written file - and a successful return does not mean the bytes reached the disk. For state files and manifests: write to a temp file *in the same directory*, call `File::sync_all()`, `rename` it over the target, and on Unix also `sync_all()` the parent directory so the rename itself survives a reboot. (`tempfile::NamedTempFile::persist` does the rename, not the syncs.)
+10. **Assuming a file lock ends when the `File` drops.** `File::lock` (stable since 1.89) is released when the file "(along with any other file descriptors/handles duplicated or inherited from it) is closed, or if the [`unlock`] method is called". A process spawned on another thread at that moment briefly holds an inherited duplicate between fork and exec, so a lock released only by dropping the `File` is sometimes still held when the next caller tries to take it - which surfaces as a flaky test long before it surfaces in production. Call `file.unlock()` explicitly in your guard's `Drop`.
 
 ## What to Defer
 
@@ -309,7 +316,7 @@ style_edition = "2024"
 edition       = "2024"
 ```
 
-That is enough. rustfmt's defaults are good. Some teams add `use_small_heuristics = "Max"` to keep more code on single lines. Fancy options like `imports_granularity` and `group_imports` are still nightly-only as of October 2026 (rustfmt tracking issues #4991 and #5083).
+That is enough. rustfmt's defaults are good. Some teams add `use_small_heuristics = "Max"` to keep more code on single lines. Fancy options like `imports_granularity` and `group_imports` are still nightly-only as of November 2026 (rustfmt tracking issues #4991 and #5083), and rustfmt does not format the arms of a `cfg_select!` on stable yet.
 
 Run `cargo fmt` before you start editing (or commit any pre-existing drift on its own) so formatting noise stays out of your diff, and make `cargo fmt --check` its own CI step.
 
@@ -319,12 +326,12 @@ Pins the toolchain per project so everyone on the team uses the same Rust - but 
 
 ```toml
 [toolchain]
-channel    = "1.99.0"
+channel    = "1.99.1"
 components = ["rustfmt", "clippy", "rust-src"]
 profile    = "minimal"
 ```
 
-The file is a rustup feature. A `rustc` from Nix, a distro package, or Homebrew ignores it, so on those machines you get whatever compiler is installed. Even under rustup it is not the top of the precedence list: a `rustup override set` for the directory (and `RUSTUP_TOOLCHAIN`, and `cargo +toolchain`) wins over it, so a forgotten override silently makes the file dead weight. `rustup show` tells you which toolchain is active and why; `rustup override unset` clears it.
+The file is a rustup feature. A `rustc` from Nix, a distro package, or Homebrew ignores it, so on those machines you get whatever compiler is installed. Even under rustup it is not the top of the precedence list: a `rustup override set` for the directory (and `RUSTUP_TOOLCHAIN`, and `cargo +toolchain`) wins over it, so a forgotten override silently makes the file dead weight. Overrides and the file also rank by proximity: a `rust-toolchain.toml` closer to the current directory beats a directory override set further up. `rustup show` tells you which toolchain is active and why; `rustup override unset` clears it.
 
 ## .gitignore
 
@@ -360,6 +367,10 @@ Inline modules with `mod { ... }` until a file gets long, then split. Do not pre
 
 **Everything is private by default**, including to a parent module. `mod config;` makes the module exist; it does not make anything inside it reachable. That is the source of the most common early "why can't I call this" error, and the fix is a visibility keyword on the item (and on the module, if it is nested): `pub` exposes it to the outside world, `pub(crate)` exposes it only within your own crate. `pub(crate)` is the right default for anything that is not part of a library's published API - it is what lets the `unreachable_pub` lint in the table below tell you something useful.
 
+**Naming an item in another module** is the next error after visibility (`unresolved import`). A path starting with `crate::` is absolute from your crate root, `super::` is the parent module, and `self::` the current one: `use crate::config::Config;` works from anywhere in the crate, `use super::helper;` from a child module. `pub use` re-exports an item at a shorter path - `pub use crate::api::users::User;` in `lib.rs` lets callers write `my_lib::User` without seeing your internal layout.
+
+**Keep `main.rs` thin**, even in a binary: argument parsing plus a call into `lib.rs`. Integration tests in `tests/` can only reach a library crate, so logic left in `main.rs` cannot be tested from there (see `references/testing.md`).
+
 The layout above is one crate. The moment you want a second - a shared library plus a CLI, a server plus its client - you need a Cargo **workspace**, along with the `Cargo.toml` machinery that goes with growing past a single crate: feature flags, build scripts, and what `rust-version` actually controls. That is `references/project-shape.md`.
 
 ## Learning Path
@@ -382,7 +393,7 @@ Detailed material lives in `references/`. Read each when you hit the topic.
 - **error-handling.md** - `Result`, `?`, `anyhow` vs `thiserror` patterns, wrapping at the boundary rather than before it, custom error enums, when `panic!` is appropriate
 - **traits-and-generics.md** - traits as bounds, `dyn` vs `impl Trait` vs generics, common derives, `From`/`Into`/`Display`/`Debug`, closures and the `Fn`/`FnMut`/`FnOnce` family, blanket impls, the orphan rule
 - **async-basics.md** - threads and `mpsc` before async, `tokio`, `#[tokio::main]`, `.await`, `Send`/`Sync`, bounded concurrency, cancellation and graceful shutdown on SIGTERM, common pitfalls (blocking in async, `MutexGuard` across `.await`)
-- **crate-shortlist.md** - minimal usage example for each of the 8 crates above
+- **crate-shortlist.md** - a minimal usage example for each crate above, plus the production defaults that bite
 - **project-shape.md** - past one crate: workspaces and inherited dependencies, `[workspace.lints]`, feature flags, `build.rs`, what `rust-version` controls, `#[non_exhaustive]`
 - **testing.md** - what to test and what to skip, pragmatic test organization, keeping the suite fast, the minimal high-value tool kit
 - **dev-environment.md** - the fast build loop, build caching (kache setup and its quirks, sccache, rust-cache), keeping `target/` in check, platform-aware linker guidance, CI, file watchers

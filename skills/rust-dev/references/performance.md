@@ -74,7 +74,7 @@ A note on profiles: `cargo bench` inherits `[profile.release]`, so an aggressive
 ```toml
 [profile.dist]      # build shipping artifacts with `cargo build --profile dist`
 inherits = "release"
-lto = "fat"
+lto = "thin"        # "fat" squeezes out a little more, at a much slower link
 codegen-units = 1
 ```
 
@@ -86,6 +86,7 @@ Before micro-optimizing, the changes that actually move the needle in typical Ru
 
 - **Allocations.** Needless `.clone()` on a hot path, or building a `Vec` without `Vec::with_capacity` when the size is known, are the most common real costs. A profiler will point you straight at them.
 - **`into_iter()` instead of `.iter()` when you are transforming a collection you own.** Iterating by reference keeps every source element alive until the whole transform finishes, so peak memory holds both representations at once. `into_iter()` lets each source element drop as it is consumed. On a large decode this is a one-word change that can halve the peak.
+- **Buffered output.** `println!` takes the stdout lock on every call, and stdout is line-buffered, so each newline becomes a write syscall and a loop printing a million lines is dominated by them - the usual reason a Rust CLI loses to a Python script. Lock once and buffer: `let mut out = std::io::BufWriter::new(std::io::stdout().lock());`, then `writeln!(out, ...)?`. Same for files: wrap `File` in `BufWriter` / `BufReader`. Then call `out.flush()?` yourself before it goes out of scope - std warns "It is critical to call `flush` before `BufWriter<W>` is dropped", because drop flushes but ignores any error.
 - **Data parallelism.** For CPU-bound work over a collection, `rayon` turns `.iter()` into `.par_iter()` and uses every core - often the biggest win for the least code.
 - **Avoid premature `Arc`/`Box`/`dyn`.** Indirection has a cost; reach for it when the design needs it, not preemptively.
 - **Async is for I/O concurrency, not speed.** If your workload is CPU-bound, async adds overhead without benefit - use threads or `rayon`.

@@ -251,6 +251,14 @@ Prefer this over `std::process::exit`, which ends the process on the spot withou
 - **`.unwrap()` because the error type is annoying**: define the conversion with `From` once, then `?` everywhere.
 - **Catching every error and logging it**: errors are values; let them propagate to a single point that decides how to log or display them. Your app likely has one or two such points (request handler, CLI entry).
 - **Ignoring `Result`**: `let _ = fallible();` discards an error silently. The compiler warns by default; do not silence the warning without a comment.
+- **Treating `Command::output()?` as "the command succeeded"**: the `Result` covers only failing to *run* the child. std: "this method does **not** return an error if the child runs and then exits unsuccessfully, or is terminated by a signal." Check the status yourself - the subprocess twin of reqwest's `error_for_status()`:
+
+  ```rust
+  let out = std::process::Command::new("git").args(["rev-parse", "HEAD"]).output()?;
+  if !out.status.success() {
+      anyhow::bail!("git failed ({}): {}", out.status, String::from_utf8_lossy(&out.stderr));
+  }
+  ```
 
 ## Quick Reference
 
