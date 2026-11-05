@@ -184,10 +184,20 @@ readme-check:
     git show :README.md > "$staged"
     diff -q "$staged" <({{just}} _readme-render "$staged") >/dev/null || { echo "README.md is out of date: run just check and stage it" >&2; exit 1; }
 
+# The private config is gitignored, so it is looked up in the main checkout: a linked
+# worktree (treehouse slot) has no copy of it. CI has none and skips that pass.
 [private]
 hygiene:
+    #!/usr/bin/env bash
+    set -euo pipefail
     git -c core.whitespace=-space-before-tab diff --check "$(git hash-object -t tree /dev/null)"
-    betterleaks dir -c .github/betterleaks.toml --no-banner --redact $(git ls-files | cut -d/ -f1 | sort -u)
+    targets=$(git ls-files | cut -d/ -f1 | sort -u)
+    failed=0
+    betterleaks dir -c .github/betterleaks.toml --no-banner --redact $targets || failed=1
+    betterleaks dir -c .github/betterleaks-privacy.toml --no-banner $targets || failed=1
+    private="$(dirname "$(git rev-parse --path-format=absolute --git-common-dir)")/.betterleaks.private.toml"
+    if [[ -f $private ]]; then betterleaks dir -c "$private" --no-banner --redact $targets || failed=1; fi
+    exit $failed
 
 [private]
 _skills-json:
