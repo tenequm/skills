@@ -7,6 +7,20 @@ and this skill adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.h
 
 ## [Unreleased]
 
+## [0.10.0] - 2026-11-05
+
+### Added
+
+- Three usage lanes replace the single pond agent: summaries (settled conclusions), corrections (the user overriding how the tool or the skill was used), and a usage audit of sessions where the skill was loaded.
+- Report section 6, Operational learnings: `L` rows kept apart from the edit table, with an attestation of lanes, window, sessions read and query timings. GATE 1 accepts `L` IDs, and the no-op short-circuit requires section 6 to be empty.
+- pond interim notes: query shapes, filters and timings for a word-indexed remote store, pasted into every usage brief because subagents cannot read MCP resources. Remove once tenequm/pond#369 lands.
+- A usage row that conflicts with a recipe in the user's CLAUDE.md or AGENTS.md is kept and marked as a conflict.
+
+### Changed
+
+- The usage angle no longer asks for semantic queries: pond is word-indexed, so lanes query with the literal words expected in the text.
+- pond docs link points to https://pond.locker/.
+
 ## [0.9.0] - 2026-11-05
 
 ### Changed
