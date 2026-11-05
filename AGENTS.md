@@ -1,51 +1,53 @@
 # Skills Repository
 
-Public skills repo. Owner: @opwizardx
+Public skills repo. Owner: @tenequm
 
 ## Structure
 
 ```
 skills/<name>/
-├── SKILL.md          # Frontmatter (name, description, metadata.version) + body
-├── references/       # On-demand detailed docs
-└── LICENSE.txt       # Apache-2.0 (required by ClawHub; copy from any existing skill)
+├── SKILL.md          # Frontmatter + body
+├── references/       # On-demand detailed docs (optional)
+└── CHANGELOG.md      # Optional, see below
 
-scripts/
-├── generate_readme.py         # README table + ClawHub slug overrides
-├── prepare_skill_release.py   # Build release manifest from git diff
-├── publish_release.py         # Publish to ClawHub + GitHub Releases
-└── check_skills.py            # Repo policy linter
-
-Justfile                       # Task runner (just check, just readme, etc.)
-.github/workflows/release.yml  # CI: auto-publish on push to main
+archive/<name>/       # Retired skills: not published, marked `metadata.internal: true`
+Justfile              # All tooling: check, preflight, readme, release
+lefthook.yml          # Git hooks: `just check` on commit, `just preflight` on push
+.github/workflows/ci.yml       # check + preflight on every PR/push, release on main
+.github/betterleaks.toml       # Secret-scan allowlist (placeholder creds in references/)
 ```
+
+Tools: `just`, `yq` (mikefarah v4), `jq`, `betterleaks`, `lefthook`, `clawhub` (npm), `gh`.
+Run `lefthook install` once per clone.
 
 ## Adding a Skill
 
-1. Create `skills/<name>/SKILL.md` with frontmatter:
+1. Create `skills/<name>/SKILL.md`:
    ```yaml
    ---
    name: skill-name
    description: What it does and when to use it. Include trigger phrases.
    metadata:
      version: "0.1.0"
+     categories: "development"
+     topics: "example-topic"
+     openclaw:
+       homepage: https://github.com/tenequm/skills/tree/main/skills/skill-name
+       emoji: "🧰"
    ---
    ```
 2. Add optional `references/` for detailed docs
-3. Commit with conventional commits (`feat`, `fix`, `chore`, etc.)
+3. `just readme`, then `just check` and `just preflight`
+4. Commit with conventional commits (`feat`, `fix`, `chore`, etc.)
+
+No per-skill `LICENSE.txt`: ClawHub licenses every published skill MIT-0 and rejects
+conflicting terms; the repo itself is MIT (`LICENSE`).
 
 ## ClawHub catalog metadata (required)
 
 `metadata.categories` and `metadata.topics` are flat comma-separated strings. They are
-repo-local fields: ClawHub never reads frontmatter for them, so the release pipeline
-translates them into `clawhub skill publish --categories/--topics`.
-
-```yaml
-metadata:
-  version: "0.1.3"
-  categories: "agents, productivity"
-  topics: "context, handoff, compaction"
-```
+repo-local fields: ClawHub never reads frontmatter for them, so `just release` translates
+them into `clawhub skill publish --categories/--topics`.
 
 - `categories` is required. A skill first published without it is stored as `other`
   permanently until someone re-publishes or edits it on ClawHub.
@@ -53,8 +55,9 @@ metadata:
   communication, creative, knowledge, agents, operations, security, finance, lifestyle, other`.
   `other` cannot be combined with a specific category.
 - Max 5 topics, each <= 48 chars, lowercase and hyphen-separated. ClawHub rejects 16
-  reserved names (`official`, `verified`, `featured`, `trusted`, ...); `check_skills.py`
+  reserved names (`official`, `verified`, `featured`, `trusted`, ...); `just check`
   rejects them first.
+- `metadata.openclaw` is required with `homepage` (the skill's tree URL) and `emoji`.
 - Do not add a `skill-card.md`. The ClawHub CLI strips any root `skill-card.md` before
   upload and the registry generates its own card after the security scan.
 
@@ -70,7 +73,7 @@ metadata:
   upstream: "effect@4.0.0-beta.58, @effect/platform@0.70.0"
 ```
 
-- Optional. Skills with no upstream tool (e.g., `polish`, `impactful-writing`) omit it.
+- Optional. Skills with no upstream tool (e.g., `polish`, `grill-me`) omit it.
 - Comma-separated `<name>@<version>` entries. npm scopes (`@scope/pkg`) work because the leading `@` is part of the name.
 - Concrete release tags or commit SHAs only. Floating tags (`@latest`, `@next`, `@beta`, `@canary`) are rejected.
 - Anthropic's `metadata: dict[str, str]` contract is respected (flat string, not nested object).
@@ -87,14 +90,15 @@ Path: `skills/<name>/CHANGELOG.md`. Format: [Keep a Changelog v2.0.0](https://ke
 
 ### `/update-skill` command
 
-Use `/update-skill <skill-name>` (at `.claude/skills/update-skill/`) to maintain both fields. It runs research, gates approvals, applies edits, bumps version, updates CHANGELOG, runs `just check`, and commits + pushes on confirmation.
+Use `/update-skill <skill-name>` (linked into `.claude/skills/` and `.agents/skills/`) to maintain both fields. It runs research, gates approvals, applies edits, bumps version, updates CHANGELOG, runs `just check`, and commits + pushes on confirmation.
 
 ## Rules
 
 - Single-file SKILL.md by default; split to references/ only when content is conditionally loaded (big chunks needed by only some invocations). Skills that must travel as one file stay single-file - condense, don't split
 - All code examples must work - no pseudocode
-- Size: 25k chars recommended, 50k chars hard ceiling (`wc -c`; CI-enforced via check_skills.py; line counts are not a metric). Condense carefully - never drop load-bearing content to hit a number
-- **ALWAYS** bump `metadata.version` in frontmatter when any file in a skill is modified (SKILL.md or references/). Use semver: patch for fixes, minor for new content, major for breaking changes
+- Size: 25k recommended, 50k hard ceiling (`wc -c` bytes; enforced by `just check`; line counts are not a metric). Condense carefully - never drop load-bearing content to hit a number
+- Descriptions: 250 chars max (enforced)
+- **ALWAYS** bump `metadata.version` in frontmatter when any file in a skill is modified (SKILL.md or references/). Use semver: patch for fixes, minor for new content, major for breaking changes. `just release` fails on a changed skill without a bump
 - No unnecessary files (no README.md, package.json, project.json per skill)
 - Use conventional commits
 
@@ -105,44 +109,37 @@ Use `/update-skill <skill-name>` (at `.claude/skills/update-skill/`) to maintain
 - Links to official docs
 - No deprecated APIs, no filler content
 
-## Release Process
+## Commands
 
-### Automated (CI)
-On push to `main`, `.github/workflows/release.yml`:
-1. Runs `just check` (lint, typecheck, skill validation, ClawHub publish preflight, README sync)
-2. Diffs changed skills, builds manifest + zip bundles
-3. Publishes changed skills to ClawHub via `clawhub` CLI
-4. Creates a GitHub Release tagged `skills-<short-sha>` (first 7 chars; verify with `gh release view skills-$(git rev-parse --short HEAD)`) with bundles and notes
-
-### Manual publishing
 ```bash
-clawhub --no-input skill publish skills/<folder> \
-  --slug <clawhub-slug> --name "Display Name" \
-  --version <version> --changelog "..." --tags latest \
-  --categories "<slugs>" --topics "<topics>" \
-  --source-repo tenequm/skills --source-commit <sha> --source-path skills/<folder>
+just check          # Offline: skill policy lint, README drift, whitespace, secrets (~1s)
+just preflight      # ClawHub publish dry-run for every skill (network + clawhub login)
+just readme         # Regenerate the README skills table
+just release-plan   # What would publish since the last skills-* tag
+just release        # Publish + GitHub release (CI runs this on main)
 ```
 
+## Release Process
+
+On push to `main`, `ci.yml` runs `check` and `preflight`, then the `release` job runs
+`just release`:
+1. Diffs `skills/` against the last `skills-*` tag; every changed skill must have a new `metadata.version`
+2. Publishes each changed skill to ClawHub with categories, topics and source provenance
+3. Creates GitHub release `skills-<short-sha>` (notes only, no assets), which also creates the tag
+
+A failed publish creates no tag, so the next run retries the same range; versions already
+on ClawHub are skipped.
+
 ### Slugs, URLs, licensing
-- Slugs are scoped per publisher, not globally unique: two owners can hold the same slug,
-  and the bare form then resolves ambiguously (`AMBIGUOUS_SKILL_SLUG`). Always link and
+- ClawHub slug = folder name. Slugs are scoped per publisher: two owners can hold the same
+  slug, and the bare form then resolves ambiguously (`AMBIGUOUS_SKILL_SLUG`). Always link and
   install owner-scoped: page `https://clawhub.ai/tenequm/skills/<slug>`, install
   `@tenequm/<slug>`. There is no unscoped skill URL - `/skills/<slug>` is parsed as
   owner `skills` and renders not-found.
-- ClawHub licenses every published skill `MIT-0` registry-wide; no per-skill override.
-  The Apache-2.0 `LICENSE.txt` still ships in the bundle for the source repo.
-- `clawhub skill rename <slug> <new-slug>` keeps the old slug as a redirect.
-
-### ClawHub slug overrides
-Some folder names collide with existing ClawHub slugs. Overrides live in `CLAWHUB_SLUG_OVERRIDES` in `scripts/generate_readme.py` and are applied automatically by the release pipeline. When publishing manually, use the correct `--slug` value from that dict.
-
-### Key commands
-```bash
-just check                          # Full validation gate (lint + agentskills validate + ClawHub dry-run preflight)
-just readme                         # Regenerate README skills table
-just release-prepare <before> <after>  # Build release manifest
-just release-publish                # Publish manifest to ClawHub + latest bundles
-```
+- `clawhub skill rename <slug> <new-slug>` and `clawhub skill merge <src> <dst>` keep the old slug as a redirect.
+- Retiring a skill: `git mv skills/<name> archive/`, add `metadata.internal: true`, then
+  `clawhub delete @tenequm/<slug> --reason "..."` (soft delete; `undelete` works while the
+  slug is reserved, 30 days) or `clawhub skill merge` into its successor.
 
 ### Rate limit
 ClawHub allows max 200 **new** skills per 24 hours. Updates to existing skills are not rate-limited.

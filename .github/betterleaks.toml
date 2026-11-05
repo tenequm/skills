@@ -1,0 +1,6 @@
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "Reference docs carry placeholder credentials in code examples"
+paths = ['''^(skills|archive)/[^/]+/references/.*\.md$''']
