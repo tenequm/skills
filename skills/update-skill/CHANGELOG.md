@@ -7,6 +7,13 @@ and this skill adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.h
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-11-05
+
+### Changed
+
+- Every run uses a separate worktree on `chore/update-<name>`; the yes/no question and the in-place path are gone, and how to create the worktree is left to the environment.
+- Phase 6: `just check` regenerates `README.md` in this repo - stage it with the skill changes.
+
 ## [0.8.6] - 2026-11-05
 
 ### Changed

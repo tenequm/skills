@@ -11,9 +11,9 @@ skills/<name>/
 └── CHANGELOG.md      # Optional, see below
 
 archive/<name>/       # Retired skills: not published, marked `metadata.internal: true`
-Justfile              # All tooling: check, preflight, readme, release
-lefthook.yml          # Git hooks: `just check` on commit, `just preflight` on push
-.github/workflows/ci.yml       # check + preflight on every PR/push, release on main
+Justfile              # All tooling: check, check-ci, preflight, release
+lefthook.yml          # Git hooks: `just check-ci` on commit, `just preflight` on push
+.github/workflows/ci.yml       # check-ci + preflight on every PR/push, release on main
 .github/betterleaks.toml       # Secret-scan allowlist (placeholder creds in references/)
 ```
 
@@ -37,7 +37,7 @@ Run `just setup` once per clone: installs the lefthook hooks and links `skills/u
    ---
    ```
 2. Add optional `references/` for detailed docs
-3. `just readme`, then `just check` and `just preflight`
+3. `just check` (stage the regenerated `README.md`) and `just preflight`
 4. Commit with conventional commits (`feat`, `fix`, `chore`, etc.)
 
 No per-skill `LICENSE.txt`: ClawHub licenses every published skill MIT-0 and rejects
@@ -112,16 +112,16 @@ Use `/update-skill <skill-name>` (linked by `just setup`) to maintain both field
 ## Commands
 
 ```bash
-just check          # Offline: skill policy lint, README drift, whitespace, secrets (~1s)
+just check          # Local, offline: skill policy lint, whitespace, secrets; regenerates the README table (~1s)
+just check-ci       # Same, but fails if the staged README.md is stale instead of rewriting it (hook + CI)
 just preflight      # ClawHub publish dry-run for every skill (network + clawhub login)
-just readme         # Regenerate the README skills table
 just release-plan   # What would publish since the last skills-* tag
 just release        # Publish + GitHub release (CI runs this on main)
 ```
 
 ## Release Process
 
-On push to `main`, `ci.yml` runs `check` and `preflight`, then the `release` job runs
+On push to `main`, `ci.yml` runs `check-ci` and `preflight`, then the `release` job runs
 `just release`:
 1. Diffs `skills/` against the last `skills-*` tag; every changed skill must have a new `metadata.version`
 2. Publishes each changed skill to ClawHub with categories, topics and source provenance

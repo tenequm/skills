@@ -1,7 +1,7 @@
 pre-commit:
   jobs:
     - name: check
-      run: just check
+      run: just check-ci
 
 pre-push:
   jobs:

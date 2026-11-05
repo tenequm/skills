@@ -3,7 +3,7 @@ name: update-skill
 description: Thorough on-demand refresh of one skill in a skills repo - researches usage, upstream, and docs in parallel, gates twice for approval, bumps version, updates CHANGELOG, validates, commits, watches CI. Use to check a skill's freshness.
 argument-hint: "[skill-name]"
 metadata:
-  version: "0.8.6"
+  version: "0.9.0"
   categories: "agents, automation"
   topics: "skill-maintenance, versioning, changelog, research, agent-skills"
   openclaw:
@@ -31,20 +31,13 @@ These rules apply across all phases:
 - **Non-resume.** If the session is interrupted between GATE 1 and GATE 2, re-run `/update-skill <name>` from scratch. There is no checkpoint or resume mechanism.
 - **Duplicate triggers.** If a scheduled task or a repeated invocation fires while a run is holding at a gate, hold at the emitted gate and answer from the existing report - never redo research or re-apply edits.
 - **No `--no-verify`, no `--amend`, no force-push** unless the user explicitly authorizes it for this run. Per the repo's CLAUDE.md or AGENTS.md.
-- **Working directory.** Every path, every `just check`, and every working git command (`status`/`diff`/`add`/`commit`/`push`) in the phases below runs against `<workdir>` - the worktree created in Phase 0 if the user opted in, otherwise `${CLAUDE_PROJECT_DIR}`. Use absolute paths under `<workdir>`; do not mix in the main checkout once a worktree is chosen. The exception is Phase 0's own `git worktree add`/`remove`, which must run against `${CLAUDE_PROJECT_DIR}` (the main checkout).
+- **Working directory.** Every path, every `just check`, and every working git command (`status`/`diff`/`add`/`commit`/`push`) in the phases below runs against `<workdir>` - the Phase 0 worktree. Use absolute paths under `<workdir>`; do not mix in the main checkout.
 - **Scratch directory for toolchains.** Pick one scratch directory outside every checkout (the session scratchpad if the harness provides one, else `mktemp -d`) and name it in every subagent brief. Every build or toolchain command - `swift`, `xcodebuild`, `npm`, `cargo`, `uv`, `go` and the like, including `--help` probes and scratch packages - runs with that directory as its working directory. Subagents start in the main checkout, so a bare `swift build --help` leaves a `.build/` there.
 - **No backticks in shell arguments.** Single-quote search patterns (`rg -n 'pattern' path`). In zsh and bash a backtick inside a double-quoted argument is command substitution, and one such `rg` pattern has printed the whole environment, secrets included, into a transcript.
 
-## Phase 0 - Worktree choice (ask first)
+## Phase 0 - Separate worktree
 
-After resolving `<name>`, ask exactly once: "Run this update in a dedicated git worktree, so you can update other skills in parallel? (yes / no)". Wait for the reply.
-
-- **no** (default) -> set `<workdir>` = `${CLAUDE_PROJECT_DIR}` and proceed to Phase 1 in the current checkout.
-- **yes** -> create an isolated worktree on a fresh branch and use it as `<workdir>` for the entire run:
-  ```bash
-  git -C "${CLAUDE_PROJECT_DIR}" worktree add "${CLAUDE_PROJECT_DIR}/../skills-<name>" -b chore/update-<name>
-  ```
-  Set `<workdir>` = `${CLAUDE_PROJECT_DIR}/../skills-<name>`. If that path or branch already exists, add the same numeric suffix (`-2`, `-3`, ...) to both the worktree path and the branch name until both are free, and carry that suffix into `<workdir>`. Every later phase - reads, edits, `just check`, diff review, commit, push - operates inside `<workdir>`. The Phase 7 branch guard will see `chore/update-<name>` and route to the push + PR flow automatically. Keep the worktree until the PR is **merged** - follow-up review rounds reuse it instead of recreating it. Then clean up in order: `git -C "${CLAUDE_PROJECT_DIR}" worktree remove "<workdir>"` first, then delete the branch (`git branch -d chore/update-<name>`) - a branch delete fails while a worktree still holds the branch. `git worktree remove` refuses if there are uncommitted changes (leave it in place and tell the user if so); `git worktree prune` clears stale entries left by interrupted runs. If a generated file (e.g. `README.md`) conflicts when the PR falls behind the default branch, rebase and re-run the generator - never hand-merge generated output. If the user aborts before a PR exists, remove the worktree and delete the branch the same way.
+Run the whole update in a separate worktree on a new branch `chore/update-<name>`, so several skills can be updated in parallel. `<workdir>` is that worktree's absolute path. Keep it until the PR merges, then remove it and delete the branch.
 
 ## Phase 1 - Pre-flight read
 
@@ -156,7 +149,7 @@ Apply each approved row with Edit/Write; batch independent edits in parallel. Th
 
 ## Phase 5 - Repo validation gate
 
-If the repo defines a validation command - check its CLAUDE.md/AGENTS.md or `Justfile`/`package.json` (e.g. `just check`, `npm run lint`, `make check`) - run it from `<workdir>` (the repo root, or the Phase 0 worktree). In this repo that is `just check`, which also regenerates `README.md` (the most common CI failure cause). On failure, surface the error verbatim, fix the root cause, and re-run until clean. If the failure looks unrelated to this run's edits, attribute before debugging: stash the changes (`git stash -u`) and re-run the gate on a clean tree. Failing identically means the breakage is pre-existing (an environment flake or repo issue) - unstash, report it to the user, and don't sink this run into debugging it. No `--no-verify`, no `--amend`, no hook-skipping. If the repo has no validation gate, skip this phase and note it.
+If the repo defines a validation command - check its CLAUDE.md/AGENTS.md or `Justfile`/`package.json` (e.g. `just check`, `npm run lint`, `make check`) - run it from `<workdir>`. In this repo that is `just check`, which also regenerates `README.md` - stage it with the skill changes, a stale `README.md` is the most common CI failure. On failure, surface the error verbatim, fix the root cause, and re-run until clean. If the failure looks unrelated to this run's edits, attribute before debugging: stash the changes (`git stash -u`) and re-run the gate on a clean tree. Failing identically means the breakage is pre-existing (an environment flake or repo issue) - unstash, report it to the user, and don't sink this run into debugging it. No `--no-verify`, no `--amend`, no hook-skipping. If the repo has no validation gate, skip this phase and note it.
 
 ## Phase 6 - Privacy scan + diff review + GATE 2
 
@@ -170,7 +163,7 @@ An unresolved `[LEAK]` is a hard blocker: redact each finding, re-run the scan, 
 
 ### Checkout hygiene (hard blocker)
 
-Run `git status --porcelain` in `<workdir>` and, when a worktree is in use, in `${CLAUDE_PROJECT_DIR}` too - subagents can write into the main checkout even when the run edits a worktree. Any path missing from the Phase 1 snapshot and outside `skills/<name>/` and the generated `README.md` is a leftover from this run (a `.build/`, `node_modules/`, a scratch package): show it to the user, remove it, and re-check before GATE 2. Never gitignore it away - that hides the next leak from this check.
+Run `git status --porcelain` in `<workdir>` and in `${CLAUDE_PROJECT_DIR}` too - subagents can write into the main checkout even when the run edits a worktree. Any path missing from the Phase 1 snapshot and outside `skills/<name>/` and the generated `README.md` is a leftover from this run (a `.build/`, `node_modules/`, a scratch package): show it to the user, remove it, and re-check before GATE 2. Never gitignore it away - that hides the next leak from this check.
 
 ### Diff review
 

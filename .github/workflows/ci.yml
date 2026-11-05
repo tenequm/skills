@@ -24,7 +24,7 @@ jobs:
           curl -fsSLo bl.tgz "https://github.com/betterleaks/betterleaks/releases/download/v${VERSION}/betterleaks_${VERSION}_linux_x64.tar.gz"
           echo "${SHA256}  bl.tgz" | sha256sum -c -
           sudo tar -xzf bl.tgz -C /usr/local/bin betterleaks && rm bl.tgz
-      - run: just check
+      - run: just check-ci
 
   preflight:
     runs-on: ubuntu-latest
