@@ -7,6 +7,76 @@ and this skill adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.h
 
 ## [Unreleased]
 
+## [0.22.0] - 2026-11-05
+
+### Added
+
+- The `v14.0.0` final and its patches (`v14.0.1`, `v14.0.2`, `v14.0.3-rc.1`) plus a new **v15
+  line** section (`release-root/15.0.0-beta.N -> v15.0.0-beta.10`) in
+  `references/changelog-v7-v15.md`, and "The v14 final and v15 delta" in `SKILL.md`.
+- Manifest flag bits 16-19 (`FLAG_ZONE_WRITE_SEEDS`, `FLAG_OBJECT_METADATA`,
+  `FLAG_ROW_ADDR_INDICES`, `FLAG_INLINE_DELETIONS`) and the hazard that one v15 write with a
+  default-option ZoneMap locks every v14 client out of the table (#10102).
+- The 2.3 Planar layout and its codecs (ALP/ALP-RD, AxisDelta; Pcodec as a format definition
+  only); the per-index move to
+  the row-address domain (BTree v1, Bitmap v1, LabelList v2, ZoneMap V1) and the #10352 writer
+  fence; new table-format surface (clustering, inline deletions, object metadata,
+  `file_metadata_size_bytes`, `DataReplacement.data_change`, `lance:field_id`, MemWAL `dir_id`,
+  the `table_config.md` key registry).
+- Rebuild/rewrite/repair-class fixes from the v14 final, the v14 patches and the v15 betas, with
+  the backported-vs-main-only split; FTS indexes must be rebuilt on 13 -> 14 for stop-word and
+  affected-language configs (#10045-#10052).
+- v15 features: retention policies, `expire_versions` and `restore_from`, update-join
+  strategies, external scalar index plugins, `consolidate`, `ManagedBlobWriter`, `local_fsync`,
+  cache diagnostics; the release-branch patch model and backport renumbering;
+  upstream's own `lance-table-maintenance` agent skill; the Doris integration and new namespace
+  catalogs.
+- Build prerequisites: `protoc` through v14 (and the shim trap), none for default v15 Rust
+  builds (#10216); the compile cost of the default backend features.
+- Field-verified practice in `references/performance.md` Part B: `cleanup_old_versions`
+  `failed_deletes` semantics (#9414), AIMD throttle misclassification, reopen before an
+  application-level retry, typed `IndexNotFound`, a measured 12 -> 13 upgrade, and two
+  benchmarking traps.
+
+### Changed
+
+- **Breaking:** tracked tag moves to `v15.0.0-beta.10`; the **stable pin moves `v13.0.0` ->
+  `v14.0.2`**. `v14.0.0` never reached crates.io, so the Rust floor of the line is 14.0.1.
+- **Breaking:** 28 crates (`lance-datafusion-exec`), MSRV 1.95.0, arrow 59.2 / DataFusion 55 /
+  pyo3 0.29 in v15 (#10397, closing #9647); the v14 line stays on arrow 58 / DataFusion 54 /
+  pyo3 0.28.
+- **Breaking:** `FLAG_UNKNOWN` moved `1 << 16` -> `1 << 18` (v14.0.0) -> `1 << 20` (v15); bit 11
+  is supported in every build since `v14.0.0-beta.16`.
+- The release train has re-rooted on eight consecutive lines (7.2 through 14.1), not five.
+- v14 and v15 compile breaks, Python import moves (#10602) and silent default changes (HNSW `ef`
+  floor, `target_partition_size`, unknown-scheme commit handler, AIMD ceiling, REST namespace
+  POST).
+- Docs mirror refreshed to `v15.0.0-beta.10`: 61 md + 5 svg. `quickstart/index.md` is excluded
+  as LanceDB product content.
+- `references/changelog-v7-v14.md` renamed to `references/changelog-v7-v15.md`.
+
+### Removed
+
+- Citations of `format/table/jsonb.md`, reverted upstream (#9889; resubmission #9905 open).
+
+### Fixed
+
+- Version cleanup defaults: `cleanup_old_versions` removes versions older than 14 days, not 7,
+  and auto-cleanup is opt-in (`WriteParams.auto_cleanup` defaults to `None`).
+- "Stable row IDs avoid remapping entirely" no longer holds; compaction still remaps or rebuilds
+  affected indexes.
+- "Lance issues no fsync of its own" now carries a version scope: v15 adds opt-in `local_fsync`.
+- Default Rust builds no longer need `protoc` in v15 (#10216).
+- The managed-blob docs split persists in every v14 tag, `v14.0.2` included; the v15 docs are
+  corrected. The v15 docs now lag the code on bits 16 and 17.
+
+### Security
+
+- PyO3 RUSTSEC-2026-0176 and RUSTSEC-2026-0177 are fixed in v15 from beta.5 and remain unfixed
+  in every v14 tag.
+
+Verified against: lance-format/lance@v15.0.0-beta.10
+
 ## [0.21.2] - 2026-11-05
 
 ### Changed
