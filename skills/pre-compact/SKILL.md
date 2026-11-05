@@ -2,7 +2,7 @@
 name: pre-compact
 description: Prepare the session for context compaction - write a handoff file a fresh session can continue from, propose updates to the project's durable docs, apply them on approval or with `auto`. Use before compacting or clearing context, or on "pre-compact".
 metadata:
-  version: "0.1.4"
+  version: "0.1.5"
   categories: "agents, productivity"
   topics: "context, handoff, compaction, session-state, documentation"
   openclaw:

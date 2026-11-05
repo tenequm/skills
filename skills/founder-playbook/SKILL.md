@@ -2,7 +2,7 @@
 name: founder-playbook
 description: Decision validation and thinking frameworks for founders. Use to pressure-test a decision, validate next steps, or sanity-check an approach - "should I", "help me think through", "what am I missing". Covers fundraising, customers, runway.
 metadata:
-  version: "0.1.6"
+  version: "0.1.7"
   categories: "productivity, knowledge"
   topics: "startups, fundraising, decision-making, product-strategy, web3"
   openclaw:

@@ -7,6 +7,16 @@ and this skill adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.h
 
 ## [Unreleased]
 
+## [0.21.2] - 2026-11-05
+
+### Changed
+
+- `references/maintenance.md`: the two mirror normalizations are applied by hand now that the repo hooks no longer rewrite files.
+
+### Removed
+
+- Per-skill `LICENSE.txt`: ClawHub licenses every published skill MIT-0.
+
 ## [0.21.1] - 2026-10-13
 
 ### Changed

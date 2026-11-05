@@ -7,6 +7,16 @@ and this skill adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.h
 
 ## [Unreleased]
 
+## [0.8.6] - 2026-11-05
+
+### Changed
+
+- Phase 1 pre-flight asks for a per-skill license file only when the repo requires one; ClawHub licenses every skill MIT-0.
+
+### Removed
+
+- Per-skill `LICENSE.txt`: ClawHub licenses every published skill MIT-0.
+
 ## [0.8.5] - 2026-10-13
 
 ### Fixed

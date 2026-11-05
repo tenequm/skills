@@ -2,7 +2,7 @@
 name: i-have-adhd
 description: 'Shape output for a reader with ADHD: lead with the next action, number multi-step work, restate state, suppress tangents, make wins visible. Use when the user types /i-have-adhd or asks for ADHD mode; stays on until "stop adhd mode".'
 metadata:
-  version: "0.1.0"
+  version: "0.1.1"
   categories: "productivity, communication"
   topics: "adhd, output-style, formatting, focus, accessibility"
   openclaw:

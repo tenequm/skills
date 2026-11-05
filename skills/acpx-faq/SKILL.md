@@ -2,7 +2,7 @@
 name: acpx-faq
 description: Run coding agents (codex, claude, agy) through the acpx ACP CLI - one-shot dispatch into named sessions you can watch live. Use before launching or prompting a subagent, or when a command fails, a session is missing, or a prompt is lost.
 metadata:
-  version: "0.10.0"
+  version: "0.10.1"
   categories: "agents, operations"
   topics: "acpx, acp, agent-orchestration, troubleshooting, headless-agents"
   upstream: "acpx@0.20.0, @agentclientprotocol/claude-agent-acp@0.94.0, @agentclientprotocol/codex-acp@2.2.2, agy@1.2.14, agy_acp_server@1.4.1"

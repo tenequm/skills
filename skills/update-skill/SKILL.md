@@ -3,7 +3,7 @@ name: update-skill
 description: Thorough on-demand refresh of one skill in a skills repo - researches usage, upstream, and docs in parallel, gates twice for approval, bumps version, updates CHANGELOG, validates, commits, watches CI. Use to check a skill's freshness.
 argument-hint: "[skill-name]"
 metadata:
-  version: "0.8.5"
+  version: "0.8.6"
   categories: "agents, automation"
   topics: "skill-maintenance, versioning, changelog, research, agent-skills"
   openclaw:

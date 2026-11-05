@@ -2,7 +2,7 @@
 name: standard-readme
 description: Writes or audits READMEs against the Standard Readme spec. Use whenever the user asks to create, rewrite, improve, audit, or fix a README, or asks about README quality or structure - even if they never mention "standard readme".
 metadata:
-  version: "0.1.5"
+  version: "0.1.6"
   categories: "knowledge, development"
   topics: "readme, documentation, standard-readme, markdown, open-source"
   openclaw:

@@ -2,7 +2,7 @@
 name: python-dev
 description: Opinionated Python development setup with uv, ty, ruff, pytest, lefthook, and just. Use when creating a new Python project, writing or fixing pyproject.toml, or configuring linting, formatting, type checking, testing, git hooks, or CI.
 metadata:
-  version: "0.3.0"
+  version: "0.3.1"
   categories: "development"
   topics: "python, uv, ruff, pytest, lefthook"
   upstream: "uv@0.12.11, ty@0.0.79, ruff@0.16.6, pytest@9.1.1, pytest-asyncio@1.4.0, lefthook@2.1.12"

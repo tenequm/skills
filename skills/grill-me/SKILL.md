@@ -2,7 +2,7 @@
 name: grill-me
 description: Interview the user relentlessly about a plan or design until reaching shared understanding, resolving each branch of the decision tree. Use when user wants to stress-test a plan, get grilled on their design, or mentions "grill me".
 metadata:
-  version: "0.1.3"
+  version: "0.1.4"
   categories: "agents, productivity"
   topics: "planning, design-review, stress-test, interviewing, decision-making"
   openclaw:

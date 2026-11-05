@@ -2,7 +2,7 @@
 name: swift-dev
 description: Native iOS and macOS apps in Swift 6 - SwiftUI, AppKit, SwiftData, concurrency, Swift Testing, XcodeGen, CallKit and audio, App Intents, devices, TestFlight, code signing, notarization. Use for any iPhone or Mac app, helper or CLI work.
 metadata:
-  version: "0.3.0"
+  version: "0.3.1"
   categories: "development"
   topics: "swift, swiftui, ios, macos, xcode"
   upstream: "swift@6.4, xcode@27.1, ios@27.1, macos@27.0, LiveKit@2.18.0, xcodegen@2.46.0"

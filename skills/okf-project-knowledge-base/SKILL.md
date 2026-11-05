@@ -2,7 +2,7 @@
 name: okf-project-knowledge-base
 description: Durable project knowledge as Git-native OKF bundles (docs/knowledge/, one concept per file, with provenance and trust tiers). Use to record a decision, finding, or rule that must outlive the session. Not session state or agent instructions.
 metadata:
-  version: "0.3.0"
+  version: "0.3.1"
   categories: "agents, knowledge"
   topics: "okf, knowledge-base, agent-memory, provenance, documentation"
   openclaw:
