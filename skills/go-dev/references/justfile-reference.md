@@ -1,6 +1,6 @@
 # Justfile Reference for Go Projects
 
-`just` is a command runner (not a build system). It runs recipes defined in a `Justfile`. Latest: **1.58.0** (2026-08-03).
+`just` is a command runner (not a build system). It runs recipes defined in a `Justfile`. Latest: **1.59.0** (2026-10-14). 1.59.0 has one breaking change - "Require unicode paths" - so a current, home, config, runtime or temp directory that is not valid UTF-8 is now a hard error (`current directory is not valid unicode`) rather than a lossy conversion.
 
 ## Installation
 
@@ -161,7 +161,7 @@ set dotenv-required               # Fail if the env file is missing
 set dotenv-override               # .env wins over the ambient environment
 set working-directory := "backend"  # Default dir for every recipe
 set indentation := "    "         # Indentation --fmt/--dump write (validates nothing)
-set minimum-version := "1.58.0"   # Error if `just` is older than this
+set minimum-version := "1.59.0"   # Error if `just` is older than this
 set script-interpreter := ["bash", "-euo", "pipefail"]  # Default for [script] recipes
 set fallback                      # Search parent directories for a recipe
 set no-exit-message               # Suppress just's own error line on failure
@@ -470,14 +470,16 @@ just --jobs 4          # Cap parallelism for [parallel] dependencies
 
 Three ways a recipe that reads correctly still fails:
 
-**`go tool` is scoped to the current directory's module.** Per `go help tool`, "additional tools may be defined in the go.mod of the current module" - so in a monorepo, a recipe invoked from the repo root fails with `go: no such tool "golangci-lint"` even though the tool is tracked in the submodule. Pin the directory on the recipe:
+**`go tool` is scoped to the current directory's module.** Per `go help tool`, "additional tools may be defined in the go.mod of the current module" - so in a monorepo of independent modules, a recipe invoked from the repo root fails with `go: no such tool "gotestsum"` even though the tool is tracked in the submodule. Pin the directory on the recipe:
 
 ```just
-[group('quality')]
+[group('test')]
 [working-directory('services/api')]
-lint:
-    go tool golangci-lint run ./...
+test:
+    go tool gotestsum --format testname -- -race ./...
 ```
+
+Under a `go.work` workspace the trap disappears - "In workspace mode, you can use `go tool` to run a tool declared in any workspace module" - so a root recipe can call any module's tool. golangci-lint stays a pinned binary either way (SKILL.md explains why).
 
 **Fail fast on a missing tool with `require()`** (1.39.0) - it returns the executable's full path "or halt[s] with an error if no executable with `name` exists". Call it inside the recipe body, `{{ require("golangci-lint") }} run ./...`, so only that recipe fails; a top-level `tool := require(...)` assignment is evaluated for every recipe. The error names the missing binary instead of a bare `exit 127`.
 
@@ -508,7 +510,7 @@ Surface worth knowing about, none of it needed for the Justfile above:
 |---------|--------------|
 | Agent skill | just ships its own: "A skill for agents is available in [skills/just] and may be installed manually or with `npx skills add casey/just --global`" |
 | `just-lsp` / `just-mcp` | An LSP server, and an MCP adapter - "just-mcp provides a model context protocol adapter to allow LLMs to query the contents of justfiles and run recipes" |
-| `[cache]` (1.54.0) | "Skip recipe invocations when a matching entry exists in the cache." Needs `set unstable` - "The `[cache]` attribute may only be used with script recipes and is currently unstable." |
+| `[cache]` (1.54.0) | "Skip recipe invocations when a matching entry exists in the cache." Needs `set unstable` - "The `[cache]` attribute may only be used with script recipes and is currently unstable." 1.59.0 added `[cache(environment = EXPRESSION)]` to fold environment variables into the cache key |
 | `set lists` (1.53.0) | "Values may be lists of strings instead of strings. Currently unstable." |
 | `set guards` / `set lazy` (1.47.0) | Stable settings: `guards` - "Enable the `?` guard sigil on recipe lines."; `lazy` - "Don't evaluate unused variables." |
 | Remote and markdown justfiles | Run recipes from a URL, or keep them in fenced code blocks inside a Markdown file |

@@ -1,6 +1,6 @@
 # gotestsum Reference
 
-Latest: **v1.13.0** (September 2025; still current as of 2026-09). Module: `gotest.tools/gotestsum`. Requires Go 1.24+.
+Latest: **v1.13.0** (September 2025; still current as of 2026-11; last commit 2026-04-14). Module: `gotest.tools/gotestsum`. Requires Go 1.24+.
 
 A test runner that wraps `go test -json` with readable output, watch mode, JUnit XML, and rerun capabilities.
 

@@ -1,27 +1,27 @@
 # golangci-lint v2 Reference
 
-Latest: **v2.14.0** (2026-09-24). Requires `version: "2"` in config.
+Latest: **v2.15.0** (2026-10-16). Requires `version: "2"` in config.
 
-**Go version floor:** "golangci-lint supports Go versions lower or equal to the Go version used to compile it." Go 1.27 support arrived in v2.13.0 ("🎉 go1.27 support"), so a Go 1.27 project needs v2.13 or newer - an older pin fails outright rather than degrading. `go install` of v2.14.0 itself requires Go 1.26 (its `go.mod` says `go 1.26.0`).
+**Go version floor:** "golangci-lint supports Go versions lower or equal to the Go version used to compile it." Go 1.27 support arrived in v2.13.0 ("🎉 go1.27 support"), so a Go 1.27 project needs v2.13 or newer - an older pin fails outright rather than degrading. The floor can move inside one Go minor: v2.13.2 handles go1.27.1 and go1.27.2 but fails on go1.27.3 with `could not load export data: ... export data version 5 is greater than maximum supported version 4` as a `typecheck` issue on every import, while v2.14.0 and v2.15.0 pass. `go install` of v2.15.0 itself requires Go 1.26 (its `go.mod` says `go 1.26.0`).
 
 ## Installation
 
 ```bash
 # Binary (recommended)
-curl -sSfL https://golangci-lint.run/install.sh | sh -s -- -b $(go env GOPATH)/bin v2.14.0
+curl -sSfL https://golangci-lint.run/install.sh | sh -s -- -b $(go env GOPATH)/bin v2.15.0
 
 # Homebrew - "Homebrew can use an unexpected version of Go to build the binary",
 # and it cannot pin a version. Prefer the binary installer.
 brew install golangci-lint
 
 # Docker
-docker run --rm -v $(pwd):/app -w /app golangci/golangci-lint:v2.14.0 golangci-lint run
+docker run --rm -v $(pwd):/app -w /app golangci/golangci-lint:v2.15.0 golangci-lint run
 
 # mise (uses the aqua backend, so it fetches the GitHub binary)
-mise use -g golangci-lint@2.14.0
+mise use -g golangci-lint@2.15.0
 
 # go install (not recommended - dependency conflicts possible)
-go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.14.0
+go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.15.0
 ```
 
 **Upstream recommends binary installation and warns against the tools pattern:** "Using `go install`/`go get`, \"tools pattern\", and `tool` command/directives installations aren't guaranteed to work. We recommend using binary installation." Seven reasons are listed, the load-bearing one for shared repos being that "the dependencies of a tool can modify the dependencies of another tool or your project". There is a blunt "We don't recommend using `go tool`" on top.
@@ -30,7 +30,7 @@ If you need it in `go.mod` anyway, isolate it behind a dedicated module file so 
 
 ```bash
 go mod init -modfile=golangci-lint.mod github.com/org/repo/golangci-lint
-go get -tool -modfile=golangci-lint.mod github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.14.0   # rerun with a new tag to update
+go get -tool -modfile=golangci-lint.mod github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.15.0   # rerun with a new tag to update
 go tool -modfile=golangci-lint.mod golangci-lint run
 ```
 
@@ -58,9 +58,9 @@ golangci-lint run --default=none --enable=govet  # Run specific linters
 
 ## Config File Structure
 
-Config file: `.golangci.yml` (searched in CWD, then parent dirs, then home).
+Config file: `.golangci.yml`, `.golangci.yaml`, `.golangci.toml` or `.golangci.json`. golangci-lint "searches for config files in all directories from the directory of the first analyzed path up to the root", then the home directory - so the first path argument, not the shell's working directory, decides which config wins.
 
-JSON Schema: use the **versioned** URL matching your binary, e.g. `https://golangci-lint.run/jsonschema/golangci.v2.14.jsonschema.json`. The unversioned `golangci.jsonschema.json` follows the *latest release* - the release bot rewrites it after each tag ("docs: update documentation assets") - so it drifts ahead of an older pinned binary. Master is `golangci.next.jsonschema.json`, the file embedded in the binary for `config verify` (`jsonschema/jsonschema.go:12`). `golangci-lint config verify` against the installed binary is the authoritative check.
+JSON Schema: use the **versioned** URL matching your binary, e.g. `https://golangci-lint.run/jsonschema/golangci.v2.15.jsonschema.json`. The unversioned `golangci.jsonschema.json` follows the *latest release* - the release bot rewrites it after each tag ("docs: update documentation assets") - so it drifts ahead of an older pinned binary. Master is `golangci.next.jsonschema.json`, the file embedded in the binary for `config verify` (`jsonschema/jsonschema.go:12`). `golangci-lint config verify` against the installed binary is the authoritative check.
 
 `.golangci.reference.yml` in the repo lists every supported option with descriptions and defaults - "There is a `.golangci.reference.yml` file with all supported options, their descriptions, and default values."
 
@@ -68,7 +68,7 @@ JSON Schema: use the **versioned** URL matching your binary, e.g. `https://golan
 
 `GOLANGCI_LINT_CACHE` overrides the default `golangci-lint` dir under the user cache dir, and "the path must be absolute" (docs/content/docs/configuration/cli.md). `golangci-lint cache clean` deletes whatever `GOLANGCI_LINT_CACHE` resolves to in the shell that runs it (`cache.DefaultDir()`), so running it by hand outside a recipe that sets the var wipes the default dir and leaves the recipe's cache untouched. Clean from inside the same environment the lint runs in.
 
-**Exit 7 after "0 issues." is a failure, not a pass.** Exit codes are `1` issues found, `3` failure, `4` timeout, `7` an error was logged (`pkg/exitcodes/exitcodes.go`) - e.g. a typecheck error the linter "couldn't parse and ... just logged" (`pkg/commands/run.go:479`). The common trigger is a cache that cannot be written - a sandboxed agent, read-only `HOME`, a locked-down CI runner - which logs `operation not permitted` under `go-build` and also drops analyzer facts on every run, the same root cause as the phantom-nolintlint footgun. Point both `GOCACHE` and `GOLANGCI_LINT_CACHE` at writable absolute paths, and read stderr before trusting the summary line.
+**Exit 7 after "0 issues." is a failure, not a pass.** Exit codes are `1` issues found, `3` failure, `4` timeout, `5` no Go files, `6` no config file detected, `7` an error was logged (`pkg/exitcodes/exitcodes.go`) - e.g. a typecheck error the linter "couldn't parse and ... just logged" (`pkg/commands/run.go:479`). The common trigger is a cache that cannot be written - a sandboxed agent, read-only `HOME`, a locked-down CI runner - which logs `operation not permitted` under `go-build` and also drops analyzer facts on every run, the same root cause as the phantom-nolintlint footgun. Point both `GOCACHE` and `GOLANGCI_LINT_CACHE` at writable absolute paths, and read stderr before trusting the summary line.
 
 **Cache isolation does not buy you concurrency.** The run lock is a single file in the system temp dir - `filepath.Join(os.TempDir(), "golangci-lint.lock")` - so two runs collide no matter how their caches are separated. A second run retries for five seconds and then exits with `parallel golangci-lint is running`. Two knobs change this:
 
@@ -183,8 +183,8 @@ Enabled when `default: standard` (the default):
 | durationcheck | Two durations multiplied together | |
 | errcheck | Unchecked errors (default) | |
 | errchkjson | Types passed to json encoding | |
-| errorlint | Go 1.13+ error wrapping issues | Yes |
-| exhaustive | Enum switch exhaustiveness | |
+| errorlint | Go 1.13+ error wrapping issues. Its autofix is semantic: `%v` -> `%w` and `err ==` -> `errors.Is` change error identity, so review `--fix` output | Yes |
+| exhaustive | "Check that expression switches and type switches are exhaustive." v0.15.0 (golangci-lint v2.15.0) renamed options - `explicit-exhaustive-switch`/`-map` -> `explicit-exhaustive`, `check: [map]` -> `mapliteral`, `ignore-enum-members` -> `ignore-constants`, `ignore-enum-types` -> `ignore-types` - and the old names fail `config verify`. Report messages changed too, which breaks text-matching `exclusions.rules` | |
 | fatcontext | Nested contexts in loops | Yes |
 | gosec | Security problems | |
 | govet | Suspicious constructs (default) | Yes |
@@ -240,7 +240,7 @@ Enabled when `default: standard` (the default):
 | usetesting | Use testing package replacements | Yes |
 | wastedassign | Wasted assignments | |
 | whitespace | Unnecessary newlines | Yes |
-| wrapcheck | Error wrapping from external packages | |
+| wrapcheck | Error wrapping from external packages. Your own sibling packages (sqlc output included) count as external unless `ignore-package-globs` names the module path - and a module rename silently breaks those globs | |
 | wsl_v5 | Whitespace/cuddling style (replaces `wsl`) | |
 
 ### Also Available (not in the sets above)
@@ -349,7 +349,7 @@ linters:
 
 ### Maximum (enable all, disable noisy ones)
 
-Pin the golangci-lint version exactly when using `all` - upstream: "It's important to have reproducible CI: don't start to fail all builds at the same time. With golangci-lint this can happen if you use option `linters.default: all` and a new linter is added" (docs/content/docs/welcome/install/ci.md). `version: latest` in the Action or a `brew upgrade` pulls in new linters unannounced; a minor pin like `v2.14` still floats across patch releases, which bump linter versions ("or even without `linters.default: all` when one upstream linter is upgraded").
+Pin the golangci-lint version exactly when using `all` - upstream: "It's important to have reproducible CI: don't start to fail all builds at the same time. With golangci-lint this can happen if you use option `linters.default: all` and a new linter is added" (docs/content/docs/welcome/install/ci.md). `version: latest` in the Action or a `brew upgrade` pulls in new linters unannounced; a minor pin like `v2.15` still floats across patch releases. Upstream calls a patch release "intended to not break your lint build", but patches bump linter versions, so pin the full `v2.15.0` when the build must be reproducible ("or even without `linters.default: all` when one upstream linter is upgraded").
 
 ```yaml
 linters:
@@ -384,7 +384,7 @@ func complexFunction() { ... }
 //nolint:unparam
 package pkg
 
-// With justification (recommended, enforced by nolintlint):
+// With justification (enforced by nolintlint only with `require-explanation: true`; default false):
 var x int //nolint:revive // legacy code, scheduled for cleanup
 ```
 
@@ -452,7 +452,7 @@ Linters not bundled with golangci-lint can be compiled into a custom binary. Def
 
 ```yaml
 # .custom-gcl.yml
-version: v2.14.0
+version: v2.15.0
 name: custom-golangci-lint
 destination: ./bin
 plugins:
@@ -521,7 +521,7 @@ jobs:
           go-version: stable
       - uses: golangci/golangci-lint-action@v9
         with:
-          version: v2.14
+          version: v2.15
           # only-new-issues: true  # For incremental adoption
 ```
 
@@ -535,7 +535,7 @@ Key options:
 
 | Option | Default | Description |
 |--------|---------|-------------|
-| `version` | *(optional)* | e.g. `v2.14`, `v2.14.0`, or `latest`. Declared `required: false` in `action.yml` - omit it and the action resolves a default |
+| `version` | *(optional)* | e.g. `v2.15`, `v2.15.0`, or `latest`. Declared `required: false` in `action.yml` - omit it and the action resolves a default |
 | `version-file` | - | Read the version from `.golangci-lint-version` or `.tool-versions` |
 | `install-mode` | `binary` | `binary`, `goinstall`, or `none` (use a golangci-lint already on `PATH`, e.g. from mise). "`goinstall` is not recommended" |
 | `install-only` | false | Install the binary without running it |
@@ -575,22 +575,24 @@ jobs:
           go-version: stable
       - uses: golangci/golangci-lint-action@v9
         with:
-          version: v2.14
+          version: v2.15
           working-directory: ${{ matrix.modules }}
 ```
 
 The single-job alternative is `experimental: "automatic-module-directories"`, which "will run golangci-lint in each module directory" under `working-directory` (or the root). Caveats from the README: all runs share one cache key, "The version detection will only work if the project has a single module", and a custom build file must sit in the root (or `working-directory`).
 
+**A `go.work` workspace needs neither.** With every module in the workspace, one run from the root covers them all: `golangci-lint run $(go list -m -f '{{.Dir}}/...')`. A bare `./...` fails at a root that has no `go.mod` (`directory prefix . does not contain modules listed in go.work`), and under `go work vendor` the `work` package pattern also matches vendored third-party packages, so list the module directories explicitly.
+
 ### Other CI pieces
 
-- **govulncheck:** `golang/govulncheck-action@v1` takes `go-version-file`, `cache-dependency-path`, `work-dir`, and `output-format` (`text`, `json`, `sarif`). Only `text` gates the job - "Specifying the output format 'json' or 'sarif' will return success even if there are some vulnerabilities detected." Use `sarif` for the Security tab, `text` for a failing check. **`go-version-file` alone is silently ignored:** `go-version-input` defaults to `'stable'` and setup-go prefers `go-version` ("Both go-version and go-version-file inputs are specified, only go-version will be used"), so stdlib advisories are judged against the newest Go, not yours. Pass `go-version-input: ''` with it. The action also installs `govulncheck@latest`, so for a pinned scanner use the plain `go install ...@v1.8.0` step from SKILL.md.
+- **govulncheck:** `golang/govulncheck-action@v1` takes `go-version-file`, `cache-dependency-path`, `work-dir`, and `output-format` (`text`, `json`, `sarif`). Only `text` gates the job - "Specifying the output format 'json' or 'sarif' will return success even if there are some vulnerabilities detected." Use `sarif` for the Security tab, `text` for a failing check. **`go-version-file` alone is silently ignored:** `go-version-input` defaults to `'stable'` and setup-go prefers `go-version` ("Both go-version and go-version-file inputs are specified, only go-version will be used"), so stdlib advisories are judged against the newest Go, not yours. Pass `go-version-input: ''` with it. The action also installs `govulncheck@latest`, so for a pinned scanner use the plain `go install ...@v1.9.0` step from SKILL.md. Whichever you use, pass `-test` ("analyze test files (only valid for source mode, default false)") and your build tags, or test-only dependencies and tagged suites are never scanned.
 - **Keeping pins current:** "Renovate can update both the action and the `golangci-lint` version it uses" (action README) through its github-actions manager, which beats bumping the `version:` input by hand.
 - **just:** CI never runs the Justfile unless the job installs `just`. `extractions/setup-just@v4` (latest tag v4.0.0, input `just-version`) or `taiki-e/install-action@just`:
 
 ```yaml
 - uses: extractions/setup-just@v4
   with:
-    just-version: 1.58.0
+    just-version: 1.59.0
 - run: just check
 ```
 
@@ -646,6 +648,9 @@ Run `golangci-lint migrate` to auto-convert v1 configs.
 | v2.13.0 | **Go 1.27 support**; `exhaustruct` deprecated in favour of `exhaustruct_v5`; gofumpt 0.11.0 with granular `extra.*` options; `govet-modernize` 0.49.0 |
 | v2.13.1 | Linter bug fixes |
 | v2.13.2 | Cache-entropy fix; linter deps bumped (`staticcheck` 0.8.1, `iface` 1.5.1, `unparam`); `canonicalheader` moved to a temporary fork. No config-schema change |
-| v2.14.0 | gofumpt 0.11.0 -> 0.12.0; "fix: cache of facts reloading" (#6810, fixes #6807); "fix: ignore TextEdits outside the analyzed file" (#6816); revive 1.15.0 -> 1.17.0 (new rules `marshal-receiver`, `multiline-if-init`, `use-slices-concat`); gosec 2.29.0 "re-enable G407"; bodyclose `//bodyclose:handled` directive; `exhaustruct_v5` option `allow-empty-blank-assignments`. No new linters (current release) |
+| v2.14.0 | gofumpt 0.11.0 -> 0.12.0; "fix: cache of facts reloading" (#6810, fixes #6807); "fix: ignore TextEdits outside the analyzed file" (#6816); revive 1.15.0 -> 1.17.0 (new rules `marshal-receiver`, `multiline-if-init`, `use-slices-concat`); gosec 2.29.0 "re-enable G407"; bodyclose `//bodyclose:handled` directive; `exhaustruct_v5` option `allow-empty-blank-assignments`. No new linters |
+| v2.15.0 | Linter bumps only, no new linters or formatters; still bundles gofumpt v0.12.0. `exhaustive` 0.13.0 -> 0.15.0 (renamed options, new messages, now a slow linter); errcheck 1.20.0 -> 1.30.0; wrapcheck 2.13.0; revive 1.17.1 (`add-constant` inspects more code); `govet-modernize` 0.52.0; gosec concurrency defaults to `GOMAXPROCS`; gofumpt deprecation warning now names both `extra.*` options (#6835). Current release |
 
 **Upgrading to v2.14.0 surfaces new findings on unchanged code.** With `revive: enable-all-rules: true` the three new revive rules switch on automatically, and gosec re-enables G407, so budget a cleanup pass (or `disable` those rules) when bumping. #6816 fixes `--fix` corrupting code when an analyzer splits one fix's edits across files - #6671, where modernize `atomictypes` appended `b.go`'s edit onto the end of `a.go`; the fix drops the out-of-file edits rather than applying them ("Not the perfect fix, but good enough for now"), so such a fix now lands only in the reported file. Build after `--fix` and finish the other files by hand.
+
+**Upgrading to v2.15.0 breaks configs, not just code.** A config that sets the old `exhaustive` option names fails `config verify` (exit 3: `additional properties 'explicit-exhaustive-switch' ... not allowed`) even though the changelog says they "still exist, and partially work" - the embedded schema dropped them, and golangci-lint-action verifies before every run. Rename them in the same commit as the pin bump. revive 1.17.1 warns that `add-constant` "now inspects nested call arguments and function literal signatures (#1843), so existing projects may see new findings after upgrading", and `enable-all-rules` turns it on.
