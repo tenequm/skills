@@ -47,13 +47,25 @@ fn hits_real_db() { /* ... */ }
 cargo test parse            # only tests whose name contains "parse"
 cargo test -- --ignored     # only the #[ignore] tests
 cargo test -- --show-output # print stdout of passing tests too (captured by default)
+cargo test -- parse render  # several name filters: they go AFTER the --
+cargo test -- --exact parser::tests::parses_empty_input   # one test, full path
 ```
 
-Flags after the `--` go to the test binary, not to cargo. `#[ignore]` is the honest home for a slow or environment-dependent test you still want runnable on demand; give it a reason string so the next reader knows what it needs.
+Flags after the `--` go to the test binary, not to cargo. Cargo itself accepts only one positional filter: `cargo test parse render` fails with "unexpected argument 'render' found".
+
+`cargo test -- --test-threads=1` runs tests one at a time, and it is the first thing people reach for when tests interfere with each other. Use it to *confirm* a shared-state problem, not to settle on - the interference is a real bug in the test or the code (see "Test isolation" below). `#[ignore]` is the honest home for a slow or environment-dependent test you still want runnable on demand; give it a reason string so the next reader knows what it needs.
 
 ## The reproduce-then-fix habit
 
 The single highest-ROI testing habit: when you find a bug, write the failing test *first*, watch it fail, then fix the bug. Confirm the test actually catches the bug by reverting the fix and seeing it go red again. A regression test that still passes when you delete the fix is worthless - and that happens more often than you would think.
+
+The ways it goes wrong are specific enough to check for:
+
+- **The fixture does not sit where old and new behavior differ.** A fixture of one row per page passes under both the buggy rule and the fixed one; pick inputs the old code gets wrong.
+- **The test tries to provoke a race by brute force.** Hammering threads or spawning processes until the bug shows up passes on broken code a good share of the time. Construct the state the race produces instead: to prove a lock is released while a child process holds an inherited descriptor, hold a `try_clone()` of the file handle - exactly what the child holds - release, and assert the lock can be taken again.
+- **The mutation did not apply.** When you break the code by hand (or with `sed`) to watch the test fail, check the edit landed - `cargo fmt` may have reflowed the line your pattern targets, and "still passes" then means nothing. `cargo-mutants` does this systematically.
+
+For a flaky test, measure before and after: run it N times in a loop (`for i in $(seq 25); do cargo test -q name || break; done`) and report the rate, such as 1 failure in 25 before and 0 in 25 after. One green rerun proves nothing, and "passed on three reruns, so it is flaky" is how a real race - a lock, an ordering assumption - stays in the code.
 
 ## Purity over "unit vs integration"
 
@@ -99,6 +111,8 @@ mod tests;          // lives in src/parser/tests.rs
 ```
 
 **Integration tests** live in `tests/`. Each file there is compiled as a *separate crate* that links your library and uses it through its public API only - the same surface your users see.
+
+That has a consequence for binaries. The Book: "If our project is a binary crate that only contains a _src/main.rs_ file and doesn't have a _src/lib.rs_ file, we can't create integration tests in the _tests_ directory". A private `fn` in `main.rs` is unreachable from `tests/` even when the crate has a `lib.rs` next to it. Keep `main.rs` to argument parsing and dispatch, put the logic in `lib.rs`, and test it in-process; reserve driving the built binary (`assert_cmd`) for what really is end-to-end.
 
 ```
 tests/
@@ -185,9 +199,11 @@ Fire-and-forget concurrency (`spawn` something and drop the handle) is hard to t
 
 Tests run in parallel. Anything touching shared external state needs per-test isolation:
 
-- Filesystem: `tempfile::TempDir` gives each test its own directory, cleaned up on drop.
+- Filesystem: `tempfile::TempDir` gives each test its own directory, cleaned up on drop. So hold the binding for the whole test (`let dir = TempDir::new()?;`, then pass `dir.path()`): `let _ = TempDir::new()` deletes it on the same line, and `TempDir::keep()` (formerly `into_path`) persists it - an easy way to dodge the lifetime that leaks a directory on every run.
 - Databases: `#[sqlx::test]` creates and migrates a fresh database per test automatically.
 - In-memory resources keyed by name: generate a unique name per test (e.g. a UUID) so parallel tests do not collide.
+
+**Iteration order is not an API.** A test that takes "the first" entry of a `HashMap`, a `HashSet`, or a database scan with no `ORDER BY` passes or fails depending on the run - `HashMap`'s hasher is randomly seeded per process, so the order changes between runs of the same binary. Select the entry you mean by key, or sort before asserting.
 
 `cargo-nextest` runs each test in its own process, which makes isolation failures (tests that share a global, or call `std::env::set_var`) surface as real failures. Treat those as latent bugs to fix, not a reason to serialize the suite.
 
@@ -212,6 +228,12 @@ A `#[cfg(test)]` support module inside `src/` needs the same treatment, since it
 
 **`#![recursion_limit]` is a crate-root attribute, and every file in `tests/` is its own crate root.** When trait solving overflows (`E0275: overflow evaluating the requirement ... Send`, a real risk for deeply-nested async futures under `#[tracing::instrument]`), the attribute must go on the crate that actually overflows. If your library compiles fine but the integration binary does not, it belongs at the top of `tests/integration.rs` - putting it in `src/lib.rs` does nothing for the test crate. Related: an overflow that reproduces only in CI is often a clean-build-vs-incremental-cache difference, not a toolchain mismatch, and trait-solving limits can genuinely differ by target.
 
+## Platform-specific tests are not run on your machine
+
+A `#[cfg(windows)]` test is compiled out on macOS and Linux, so your local pass count does not change when you add one - nothing has run it. Run it in a real Windows CI job; `cargo check --tests --target x86_64-pc-windows-msvc` at least proves it compiles (and can still fail on build scripts that compile C).
+
+Windows path semantics are the usual reason those tests exist. `Path::is_absolute()` is false for `\data` and `/data`, which have no drive, and for the drive-relative `C:data` - "On Windows, a path is absolute if it has a prefix and starts with the root". And `Path` equality compares components exactly while NTFS is case-insensitive, so `TOOL.CMD` found through `PATHEXT` does not equal `tool.cmd`.
+
 ## Coverage is a diagnostic, not a target
 
 Coverage percentage has sharply diminishing returns - the last 10% costs far more than the first 90% and rarely catches proportional bugs. Use a coverage tool (`cargo-llvm-cov`) to *find* untested branches you care about, then decide case by case. Do not wire a coverage threshold into CI and chase a number; that pressure produces low-value tests that exist only to move the metric.
@@ -231,7 +253,7 @@ Reach for these when a specific need appears:
 
 | Tool | Use it when |
 |---|---|
-| `insta` | Output is large or structured (serializer output, API responses, CLI text). Review every diff with `cargo insta review`; never blind-run `cargo insta accept` - an unreviewed baseline certifies nothing. On Rust 1.99+ use insta 1.49.0 or later: older serialized-snapshot macros used as a test's last line, with no trailing `;`, trip the new `semicolon_in_expressions_from_non_local_macros` warning, which fails the test build under `build.warnings = "deny"`. |
+| `insta` | Output is large or structured (serializer output, API responses, CLI text). Review every diff with `cargo insta review`; never blind-run `cargo insta accept` - an unreviewed baseline certifies nothing. On Rust 1.99+ use insta 1.49.0 or later: older serialized-snapshot macros used as a test's last line, with no trailing `;`, trip the new `semicolon_in_expressions_from_non_local_macros` warning, which fails the test build under `build.warnings = "deny"` (`assert_binary_snapshot!` still does in 1.49.0, so end it with `;`). Normalize what changes for reasons you do not care about - the version string, OS-specific default paths - before asserting, with `.replace()` or insta's opt-in `filters` feature; otherwise every release bump churns the snapshots and Windows CI fails on `%APPDATA%`. Plain `cargo test` stops at the first failing snapshot in a test; `cargo insta test` runs them all, then `cargo insta review`. |
 | `wiremock` | Your code calls a third-party HTTP API - run a real local mock server instead of mocking the HTTP client. |
 | `#[sqlx::test]` | Database code - per-test isolated database, lighter than `testcontainers`. |
 | `assert_cmd` + `predicates` | You ship a CLI binary and want to assert on exit code / stdout / stderr. |

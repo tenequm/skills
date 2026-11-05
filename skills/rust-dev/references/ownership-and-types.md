@@ -92,7 +92,7 @@ for (i, c) in s.char_indices() {} // byte offset paired with the char at it
 &s[0..2];                         // a &str slice by BYTE range
 ```
 
-Range slicing is allowed, but it panics if an endpoint lands inside a multi-byte character - `&s[0..2]` above cuts `é` in half at runtime. Slice on offsets you got from the string itself (`char_indices`, `find`, `split`), never on arithmetic you did yourself. When you genuinely want fixed-width elements, you want `Vec<u8>` or `&[u8]`, not a string.
+Range slicing is allowed, but it panics if an endpoint lands inside a multi-byte character - `&s[0..2]` above cuts `é` in half at runtime. Slice on offsets you got from the string itself (`char_indices`, `find`, `split`), never on arithmetic you did yourself. To cut to a byte budget - a log line, a database column - round the limit to a character boundary first: `&s[..s.floor_char_boundary(max_bytes)]` (stable since 1.91; `ceil_char_boundary` rounds up). In std's words it helps "truncate a string so that it's still valid UTF-8, but doesn't exceed a given number of bytes." When you genuinely want fixed-width elements, you want `Vec<u8>` or `&[u8]`, not a string.
 
 ## `Vec<T>` vs `&[T]` vs `[T; N]`
 

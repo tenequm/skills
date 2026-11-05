@@ -284,6 +284,20 @@ impl Iterator for Counter {
 }
 ```
 
+The adapters that replace most hand-written index loops:
+
+```rust
+let v = vec![3, 1, 4, 1, 5];
+for (i, x) in v.iter().enumerate() {}            // instead of for i in 0..v.len()
+let pairs: Vec<_> = v.iter().zip(&v[1..]).collect(); // walk two sequences together
+let has_big = v.iter().any(|&x| x > 4);           // also: all
+let first_one = v.iter().position(|&x| x == 1);   // Option<usize>; find gives the item
+let total = v.iter().fold(0, |acc, x| acc + x);   // general reduce
+for x in v.iter().rev() {}                        // backwards
+```
+
+**Sorting.** `v.sort()` needs `Ord`; `sort_by_key(|u| u.age)` sorts by a derived key, and `sort_unstable` is faster when equal elements may swap. Floats are not `Ord` - `NaN` makes `partial_cmp` return `None` - so `vec_of_f64.sort()` fails with "the trait `Ord` is not implemented for `f64`". Use `v.sort_by(|a, b| a.total_cmp(b))`, which gives every float, including `NaN`, a fixed place.
+
 `for x in collection` desugars to `let mut iter = collection.into_iter(); while let Some(x) = iter.next()`. Three iter methods you must distinguish:
 
 | Method | Yields | When |

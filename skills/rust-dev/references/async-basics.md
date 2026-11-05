@@ -236,6 +236,22 @@ select! {
 }
 ```
 
+**`select!` in a loop over a future you keep.** To wait on a long-lived task while handling other events, you pass the handle by reference - `r = &mut handle => ...` - so the branch does not consume it. Once that branch has fired, the next iteration polls the finished handle again, and tokio panics with "JoinHandle polled after completion". Disable the branch with a precondition:
+
+```rust
+let mut handle = tokio::spawn(work());
+let mut done = false;
+loop {
+    tokio::select! {
+        r = &mut handle, if !done => { done = true; handle_result(r); }
+        Some(msg) = rx.recv() => handle_msg(msg),
+        else => break,
+    }
+}
+```
+
+In tokio's words, "If the precondition returns `false`, then the branch is disabled." The same applies to any future you `select!` on by `&mut`, not only `JoinHandle`.
+
 For dynamic-sized concurrency, use `futures::future::join_all` or `tokio::task::JoinSet`:
 
 ```rust
@@ -395,7 +411,7 @@ pub trait Greeter {
 
 An `async fn` compiles to a state machine sized for everything live across every `.await`, and nested futures inline into their parent. A big application's top-level future can reach hundreds of KiB, and `#[tokio::main]` runs it with `block_on` on the **main thread**. On Linux and macOS that thread gets 8 MiB. On Windows the stack reserve comes from the executable, and Microsoft's linker documents "the default stack size is 1 MB" - so the same binary that runs fine everywhere else overflows on Windows before it parses its arguments, and even `--version` crashes.
 
-Two fixes. Shrink the future: `Box::pin` the large sub-futures so they live on the heap (clippy's `large_futures` lint finds them). Or give the runtime a thread whose stack you choose:
+Two fixes. Shrink the future: `Box::pin` the large sub-futures so they live on the heap. Clippy's `large_futures` lint finds them, but it is in the `pedantic` group - off unless you enable it (`large_futures = "warn"` under `[lints.clippy]`), with a default threshold of 16 KiB (`future-size-threshold` in `clippy.toml`). Or give the runtime a thread whose stack you choose:
 
 ```rust
 fn main() -> anyhow::Result<()> {

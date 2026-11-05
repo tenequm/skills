@@ -115,7 +115,7 @@ pub enum LoadError {
 CLI argument parsing. Derive-based; you write a struct, you have a CLI.
 
 ```toml
-clap = { version = "4", features = ["derive"] }
+clap = { version = "4", features = ["derive", "env"] }
 ```
 
 ```rust
@@ -131,6 +131,10 @@ struct Args {
     #[arg(short, long)]
     verbose: bool,
 
+    /// API token (needs clap's "env" feature)
+    #[arg(long, env = "WIDGET_TOKEN", hide_env_values = true)]
+    token: Option<String>,
+
     /// Number of widgets to make
     #[arg(short, long, default_value_t = 1)]
     count: u32,
@@ -141,6 +145,8 @@ fn main() {
     println!("{args:?}");
 }
 ```
+
+`#[arg(env = "...")]` lets each flag fall back to an environment variable, and `--help` lists it as `[env: WIDGET_TOKEN=...]` so users can discover it. That listing includes the variable's **current value**, which is why a secret needs `hide_env_values = true`. It needs `features = ["derive", "env"]`; with `derive` alone the attribute does not compile. Spell the name out per field rather than deriving it - an explicit name is one you can grep for.
 
 Subcommands:
 
@@ -279,6 +285,15 @@ async fn main() -> anyhow::Result<()> {
 ```
 
 Run with `RUST_LOG=info cargo run`. Use `error!`, `warn!`, `info!`, `debug!`, `trace!`. Add structured fields by passing them as named args: `info!(user_id, action = "create", "user created")`.
+
+`EnvFilter::from_default_env()` with `RUST_LOG` unset falls back to ERROR only - its source is literally `.with_default_directive(LevelFilter::ERROR.into())` - so a fresh checkout prints none of your `info!` lines and looks broken. Give it a real default, and quiet the noisy dependencies in it:
+
+```rust
+let filter = EnvFilter::try_from_default_env()
+    .unwrap_or_else(|_| EnvFilter::new("info,hyper=warn,sqlx=warn"));
+```
+
+Directives match targets, which default to the module path, so `RUST_LOG=my_app::db=debug` turns on one module. An explicit `target: "my_app::perf"` on an event gives you a switch you can flip in production with no code change.
 
 **The default writer is stdout, and that is a real hazard.** `SubscriberBuilder`'s writer type parameter defaults to `fn() -> Stdout`, with no TTY detection - so the example above interleaves log lines into stdout. For a service that is merely untidy. For any binary whose **stdout carries data** - a JSON-RPC or MCP server, a CLI that pipes records into another process, anything with a machine-readable stdout contract - it silently corrupts the output stream, and the failure looks like a protocol bug rather than a logging one. Logs belong on stderr; make it explicit:
 
@@ -431,11 +446,12 @@ Migrations: `sqlx migrate add init`, write SQL, `sqlx migrate run`.
 
 ## `chrono` (and `jiff`)
 
-Dates and times. As of Jan 2026 the chrono maintainer announced soft-deprecation and recommends `jiff` (BurntSushi) for new code. Reality in September 2026:
+Dates and times. As of Jan 2026 the chrono maintainer announced soft-deprecation and recommends `jiff` (BurntSushi) for new code. Reality in November 2026:
 
 - `chrono` 0.4 is still production-safe and integrates cleanly with `serde`, `sqlx`, `serde_json`, and the rest of the ecosystem. Note the deprecation notice lives in the maintainer's issue thread, not in chrono's README, so the crate page looks entirely healthy.
-- `jiff` is the recommended successor, but still pre-1.0 (0.2.37 as of September 2026, with the 1.0 tracking issue open), and its author says plainly: "I don't currently have a timeline for a Jiff 1.0 release." Migration across the ecosystem is partial rather than done - kube-rs and k8s-openapi have landed, while the arrow-rs and jj-vcs changes are still open PRs.
-- Two things that lower the risk of picking `jiff` now: `jiff-sqlx` tracks sqlx 0.9, and `jiff-chrono-conversions` gives you `ToJiff`/`ToChrono` traits so a codebase can hold both during a migration. jiff also commits to critical bug fixes on 0.2 for a year after 1.0 ships.
+- `jiff` is the recommended successor, but still pre-1.0 (0.2.39 as of November 2026, with the 1.0 tracking issue open), and its author says plainly: "I don't currently have a timeline for a Jiff 1.0 release." Migration across the ecosystem is partial rather than done - kube-rs and k8s-openapi have landed, while the arrow-rs and jj-vcs changes are still open PRs.
+- blessed.rs has moved the same way: "we weakly recommend jiff as we think it has the nicest API", while noting `chrono` and `time` are "more widely supported" by other crates. `time` is the third option if neither fits.
+- Two things that lower the risk of picking `jiff` now: `jiff-sqlx` tracks sqlx 0.9 (and gained optional `serde` support in 0.2.39), and `jiff-chrono-conversions` gives you `ToJiff`/`ToChrono` traits so a codebase can hold both during a migration. jiff also commits to critical bug fixes on 0.2 for a year after 1.0 ships.
 
 Pick `chrono` if you need ecosystem integration today. Pick `jiff` for new code that can tolerate pre-1.0 churn and where you want correct timezone-aware arithmetic out of the box.
 
@@ -481,6 +497,12 @@ Not on the day-1 list, but you will run into these:
 | Crate | Use |
 |---|---|
 | `rayon` | Parallel iterators. `par_iter()` on a `Vec` and your CPU cores light up |
+| `itertools` | The iterator adapters `std` lacks (`chunk_by`, `sorted`, `join`, `unique`) |
+| `rand` / `fastrand` | Random numbers (`fastrand` when you do not need cryptographic quality or the full API) |
+| `walkdir` / `ignore` | Recursive directory walks (`ignore` also honors `.gitignore`, as ripgrep does) |
+| `indicatif` | Progress bars and spinners for CLIs |
+| `directories` | Per-OS config, cache, and data dirs (`~/.config` vs `%APPDATA%`) |
+| `rusqlite` | Synchronous SQLite, when `sqlx`'s async and compile-time checks are more than you need |
 | `regex` | Regular expressions |
 | `uuid` | UUID generation and parsing |
 | `dotenvy` | Load `.env` into environment variables |
