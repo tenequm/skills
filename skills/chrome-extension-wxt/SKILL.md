@@ -2,7 +2,7 @@
 name: chrome-extension-wxt
 description: Builds cross-browser extensions with WXT - entrypoints, content-script UI, storage, messaging, MV3 rules, testing, publishing. Use for Chrome or browser extension work, wxt.config.ts, Manifest V3, or WXT build and type errors.
 metadata:
-  version: "2.1.0"
+  version: "2.1.1"
   upstream: "wxt@0.21.5, @wxt-dev/module-react@1.2.2, chrome@157"
   categories: "development"
   topics: "chrome-extension, wxt, browser-extension, manifest-v3, typescript"
@@ -61,7 +61,7 @@ cd my-extension
 npm install
 ```
 
-Templates are `vanilla`, `vue`, `react`, `svelte` and `solid` (all TypeScript). `--pm` takes `npm`, `pnpm`, `yarn` or `bun`. There is no `create-wxt` package, so `npm create wxt` fails.
+Templates are `vanilla`, `vue`, `react`, `svelte` and `solid` (all TypeScript). `--pm` takes `npm`, `pnpm`, `yarn` or `bun`. There is no `create-wxt` package, so `npm create wxt` fails. The templates do not list `vite`; npm and pnpm install the peer automatically, so nothing is needed. With Yarn, add `vite` to `devDependencies`.
 
 For an existing project: `npm i -D wxt vite`, then add the scripts the templates use:
 
@@ -104,7 +104,7 @@ my-extension/
   composables/        auto-imported (Vue)
   utils/              auto-imported
   assets/             processed by Vite
-  public/             copied as-is; icon-16.png ... icon-128.png are picked up as icons
+  public/             copied as-is; icons found as icon/16.png (template layout) or icon-16.png
   wxt.config.ts
   web-ext.config.ts   per-developer browser startup, gitignored
   tsconfig.json       { "extends": "./.wxt/tsconfig.json" }
@@ -389,7 +389,7 @@ const length = await sendMessage('getStringLength', 'hello');
 
 ### Knowing which page a tab shows
 
-`browser.tabs.query({ active: true, currentWindow: true })` works with no permission, but `tab.url` and `tab.title` are only filled in when the extension has the `tabs` permission, host permission for that site, or `activeTab` after the user invoked it on that tab. When a content script already runs on the page, avoid the extra permission: the background reads `sender.url` from that script's messages, or asks it for `location.hostname` with `sendMessage(..., tabId)`.
+`browser.tabs.query({ active: true, currentWindow: true })` works with no permission, but `tab.url` and `tab.title` are only filled in when the extension has the `tabs` permission, host permission for that site, or `activeTab` after the user invoked it on that tab. In a popup, `activeTab` is the minimal choice: clicking the toolbar icon grants it for that tab. When a content script already runs on the page, avoid the extra permission: the background reads `sender.url` from that script's messages, or asks it for `location.hostname` with `sendMessage(..., tabId)`.
 
 ## Configuration
 
@@ -447,7 +447,7 @@ wxt build -b edge
 wxt build -b safari       # MV2 by default
 ```
 
-Output goes to `.output/{browser}-mv{2|3}`. Chrome accepts only MV3; WXT still defaults Firefox and Safari to MV2, so pass `--mv3` or set `manifestVersion: 3` when that is what you want.
+Output goes to `.output/{browser}-mv{2|3}`. Chrome accepts only MV3; WXT still defaults Firefox and Safari to MV2, so pass `--mv3` or set `manifestVersion: 3` when that is what you want. For Firefox, keep the MV2 default unless you need MV3: Mozilla has no plans to deprecate MV2, and its MV3 runs the background as an event page, not a service worker.
 
 ```ts
 if (import.meta.env.FIREFOX) {
@@ -464,7 +464,7 @@ if (import.meta.env.MANIFEST_VERSION === 2) {
 
 ## References
 
-- `references/chrome-mv3.md` - `declarativeNetRequest`, offscreen documents, side panel, storage quotas, permission design, and a table of recent Chrome API changes. Read when blocking or rewriting network requests, doing DOM work from the background, building a side panel, sizing stored data, or using an API added in a recent Chrome version.
+- `references/chrome-mv3.md` - `declarativeNetRequest`, offscreen documents, side panel, storage quotas, permission design, and a table of recent Chrome API changes. Read when deciding which permissions to request, blocking or rewriting network requests, doing DOM work from the background, building a side panel, sizing stored data, or using an API added in a recent Chrome version.
 - `references/react.md` - React with WXT: popup setup, shadow-root mounting, Tailwind v4, shadcn, zustand, hooks. Read for any React UI work.
 - `references/testing-publishing.md` - Vitest with `WxtVitest` and `fakeBrowser`, Playwright, zips, `wxt submit`, store requirements. Read when adding tests or shipping.
 

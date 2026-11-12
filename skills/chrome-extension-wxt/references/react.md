@@ -78,7 +78,7 @@ export default function App() {
 }
 ```
 
-Reading `tab.url` needs the `activeTab` or `tabs` permission. A popup is destroyed every time it closes, so keep anything that must survive in `storage`.
+Reading `tab.url` needs `permissions: ['activeTab']`; opening the popup from the toolbar grants it for that tab, so it is the minimal choice. Request `tabs` only to read URLs of tabs the user did not invoke the extension on. A popup is destroyed every time it closes, so keep anything that must survive in `storage`.
 
 Use hash-based routing (`createHashRouter`) inside extension pages; the page URL is `chrome-extension://{id}/popup.html` and there is no server to resolve other paths.
 
