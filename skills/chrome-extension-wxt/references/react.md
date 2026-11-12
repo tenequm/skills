@@ -2,6 +2,17 @@
 
 Verified against `wxt@0.21.5`, `@wxt-dev/module-react@1.2.2`, React 19, Tailwind CSS 4 and zustand 5.
 
+## Contents
+
+- [Setup](#setup)
+- [Popup, options and side panel pages](#popup-options-and-side-panel-pages)
+- [Storage hook](#storage-hook)
+- [Content script UI](#content-script-ui)
+- [Tailwind CSS 4](#tailwind-css-4)
+- [shadcn/ui](#shadcnui)
+- [Shared state with zustand 5](#shared-state-with-zustand-5)
+- [Types](#types)
+
 ## Setup
 
 New project: `npx wxt@latest init my-extension -t react`.
@@ -191,7 +202,58 @@ export default {
 
 ## shadcn/ui
 
-After Tailwind is set up, run `wxt prepare` so `.wxt/tsconfig.json` (which defines the `@/*` alias) exists, then `npx shadcn@latest init` and `npx shadcn@latest add button`. Components are copied into `components/ui/` and import from `@/lib/utils`, which resolves through WXT's built-in `@` alias. Do not add `paths` to `tsconfig.json` for it. If `init` cannot detect the project, write `components.json` by hand following shadcn's manual installation guide.
+`npx shadcn@latest init` does not work in a WXT project: it stops with "We could not detect a supported framework". `add` without `--path` also misreads the `@/*` alias in `.wxt/tsconfig.json` and writes components one directory above the project. Use shadcn's manual setup instead, after Tailwind is configured:
+
+```bash
+npm i shadcn class-variance-authority cn lucide-react tw-animate-css
+```
+
+```css
+/* assets/tailwind.css */
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+```
+
+Then paste the `@theme inline` block and the `:root` / `.dark` colour variables from [shadcn's manual installation page](https://ui.shadcn.com/docs/installation/manual) into the same file. In a content-script UI, change `:root {` to `:root, :host {` so the variables apply inside the shadow root.
+
+```ts
+// lib/utils.ts
+export { cn } from "cn"
+```
+
+```json
+{
+  "$schema": "https://ui.shadcn.com/schema.json",
+  "style": "base-nova",
+  "rsc": false,
+  "tsx": true,
+  "tailwind": {
+    "config": "",
+    "css": "assets/tailwind.css",
+    "baseColor": "neutral",
+    "cssVariables": true,
+    "prefix": ""
+  },
+  "aliases": {
+    "components": "@/components",
+    "utils": "@/lib/utils",
+    "ui": "@/components/ui",
+    "lib": "@/lib",
+    "hooks": "@/hooks"
+  },
+  "iconLibrary": "lucide"
+}
+```
+
+Save that as `components.json` in the project root, then add components with an explicit path:
+
+```bash
+npx shadcn@latest add button --path components/ui
+npm run compile
+```
+
+`add` may not install the component's own dependencies (the `base-nova` button imports `@base-ui/react`). Install whatever `npm run compile` reports as missing. Import components as `@/components/ui/button`; the `@` alias resolves through WXT, so do not add `paths` to `tsconfig.json`.
 
 Components that render through a portal (dialogs, popovers, tooltips) mount on `document.body` by default, outside the shadow root and its styles. In a content script, pass the shadow-root container to the component's portal `container` prop.
 
