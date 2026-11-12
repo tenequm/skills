@@ -2,6 +2,14 @@
 
 Verified against `wxt@0.21.5`.
 
+## Contents
+
+- [Unit tests with Vitest](#unit-tests-with-vitest)
+- [End-to-end tests with Playwright](#end-to-end-tests-with-playwright)
+- [Building zips](#building-zips)
+- [Submitting to stores](#submitting-to-stores)
+- [Before submitting](#before-submitting)
+
 ## Unit tests with Vitest
 
 ```bash
@@ -51,6 +59,7 @@ describe('theme', () => {
 - The `wxt/testing` barrel export was removed in 0.21. Import from `wxt/testing/fake-browser` and `wxt/testing/vitest-plugin`.
 - To mock a WXT API, mock its real module, not `#imports`: `vi.mock('wxt/utils/inject-script', ...)`. The real paths are listed in `.wxt/types/imports-module.d.ts`.
 - A faked `runtime.onMessage` listener cannot answer by returning a promise. Use `sendResponse` and `return true`, the same as production code.
+- `@webext-core/messaging` works under `WxtVitest`: register a handler with `onMessage` and call `sendMessage` in the same test to exercise it.
 - For component tests add `@testing-library/react` and a DOM environment (`environment: 'happy-dom'` or `'jsdom'` under `test` in the Vitest config).
 
 ## End-to-end tests with Playwright
@@ -191,6 +200,7 @@ Add one `env` line and one repository secret for every Chrome and Edge variable 
 - Icons at 16, 32, 48 and 128 px in `public/`.
 - Every permission and host permission is used and explained in the listing; unused ones are a common rejection reason.
 - A privacy policy URL when the extension handles user data.
+- Firefox: a `gecko.id` and `data_collection_permissions` in `browser_specific_settings` (see Configuration in `SKILL.md`). `wxt build -b firefox` prints no Firefox warnings.
 - No remotely hosted code and no secrets in the bundle.
 - Tested from the production build (`wxt build`), loaded unpacked, in each target browser.
 - To test an update path with changed permissions, use Google's [extension update testing tool](https://github.com/GoogleChromeLabs/extension-update-testing-tool).

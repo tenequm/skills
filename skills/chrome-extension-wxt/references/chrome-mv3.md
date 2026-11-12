@@ -1,34 +1,16 @@
 # Chrome MV3 platform rules
 
-Platform behaviour that WXT does not hide. Verified against developer.chrome.com in November 2026 (Chrome stable 157). All examples use WXT's auto-imported `browser`.
+Platform behaviour that WXT does not hide, covering Chrome up to version 157. Service worker lifecycle and messaging rules live in `SKILL.md`. All examples use WXT's auto-imported `browser`.
 
-## Service worker lifecycle
+## Contents
 
-The MV3 background is a service worker. Chrome terminates it:
-
-- after 30 seconds without an event or extension API call,
-- when a single event or API call takes longer than 5 minutes,
-- when a `fetch()` response takes more than 30 seconds to arrive.
-
-Consequences:
-
-- **No state in module variables.** It is lost on shutdown. Use `storage` (`local:` to persist, `session:` for in-memory state that outlives the worker but not a browser restart or extension reload).
-- **Register listeners synchronously at the top of `main()`.** A listener added after an `await` can miss the event that woke the worker.
-- **No DOM.** `window`, `document`, `localStorage` and `DOMParser` do not exist. Use an offscreen document for DOM work.
-- **Use `browser.alarms` instead of long timers.** The minimum period is 30 seconds (Chrome 120+). Alarm names are limited to 1024 bytes (Chrome 150+).
-- An open WebSocket with traffic keeps the worker alive (Chrome 116+). Do not keep it alive artificially.
-
-Short-lived worker processes in the task manager are normal churn, not crashes. `browser.runtime.onSuspend` is an event-page API; do not rely on it for cleanup.
-
-## Messaging
-
-- To answer asynchronously, call `sendResponse` later and return a literal `true` from the listener. This works in every browser and version.
-- From Chrome 148, a listener may return a promise instead. The rollout is gradual, and Firefox and Safari differ, so prefer `return true` or a messaging library.
-- From Chrome 146, an error thrown by a listener (or a rejected promise) rejects the sender's `sendMessage()` with the error message.
-- With several listeners, only the first to respond counts.
-- Chrome serialises messages as JSON, not structured clone: `undefined` becomes `null`, and `Date`, `Map` and `Set` do not survive. Chrome 148 added an opt-in for structured clone; see [the blog post](https://developer.chrome.com/blog/structured-clone-messaging).
-- Maximum message size is 64 MiB.
-- Treat messages from content scripts as untrusted input and validate them in the background.
+- [The `browser` namespace](#the-browser-namespace)
+- [Network requests: `declarativeNetRequest`](#network-requests-declarativenetrequest)
+- [Offscreen documents](#offscreen-documents)
+- [Side panel](#side-panel)
+- [Storage quotas](#storage-quotas)
+- [Permissions and security](#permissions-and-security)
+- [Recent API changes](#recent-api-changes)
 
 ## The `browser` namespace
 
@@ -126,12 +108,12 @@ export default defineBackground(() => {
 | 140 | `sidePanel.getLayout()` |
 | 141-142 | `sidePanel.close()`, `onOpened`, `onClosed` |
 | 146 | Listener errors propagate to `sendMessage()` |
-| 148 | `browser` namespace; promise-returning `onMessage` listeners; opt-in structured clone messaging |
+| 148 | `browser` namespace; promise-returning `onMessage` listeners; opt-in structured clone messaging ([blog post](https://developer.chrome.com/blog/structured-clone-messaging)) |
 | 149 | `userScripts.execute()` validates syntax synchronously; `devtools.inspectedWindow.eval()`, `getResources()` and `network.getHAR()` return promises |
-| 150 | `contextMenus` `"tab"` context for the tab strip; alarm name length limit; `offscreen.hasDocument()` |
+| 150 | `contextMenus` `"tab"` context for the tab strip; alarm names limited to 1024 bytes; `offscreen.hasDocument()` |
 | 153 | `browser.publicSuffix`; experiment pinning new extensions' action icons to the toolbar by default |
 
-Source and newer entries: [What's new in Chrome extensions](https://developer.chrome.com/docs/extensions/whats-new).
+Newer entries: [What's new in Chrome extensions](https://developer.chrome.com/docs/extensions/whats-new).
 
 ## Links
 

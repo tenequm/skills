@@ -7,6 +7,21 @@ and this skill adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.h
 
 ## [Unreleased]
 
+## [2.1.0] - 2026-11-12
+
+### Added
+- "Before you start" (confirm a WXT project and its version), "What WXT recommends" (a sourced outline of WXT's and Chrome's own recommendations) and a "Verify your work" loop.
+- Firefox runtime differences: `browser.action ?? browser.browserAction` for MV2 builds, `gecko.id` and `data_collection_permissions`.
+- Reading a tab's page without the `tabs` permission; the `web_accessible_resources` entry `cssInjectionMode: 'ui'` adds.
+- Tables of contents in all three references.
+
+### Changed
+- Service worker lifecycle and messaging rules moved from `references/chrome-mv3.md` into `SKILL.md`; duplicate troubleshooting rows folded into the rules.
+- Description in third person without a version number; `metadata.upstream` now tracks `chrome@157`.
+
+### Fixed
+- shadcn/ui setup: `init` fails in WXT projects and `add` writes outside the project; replaced with a tested manual recipe.
+
 ## [2.0.0] - 2026-11-12
 
 ### Changed
