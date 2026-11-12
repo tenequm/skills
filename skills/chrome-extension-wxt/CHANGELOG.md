@@ -7,6 +7,15 @@ and this skill adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.h
 
 ## [Unreleased]
 
+## [2.1.1] - 2026-11-12
+
+### Fixed
+- `references/chrome-mv3.md` trigger now covers choosing permissions.
+- Popup example states that `activeTab` is the minimal permission for reading the active tab's URL.
+- Templates' missing `vite` dependency explained (npm and pnpm install the peer).
+- Guidance on keeping Firefox on the MV2 default.
+- Icon file names match the templates' `public/icon/16.png` layout.
+
 ## [2.1.0] - 2026-11-12
 
 ### Added
