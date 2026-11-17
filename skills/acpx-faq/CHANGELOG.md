@@ -4,6 +4,59 @@ All notable changes to this skill are documented in this file, following [Keep a
 
 ## [Unreleased]
 
+## [0.12.0] - 2026-11-17
+
+Re-tested live against acpx 0.22.0: the claude, codex and agy recipes (adapter pins in
+the `--package=` form), `sessions watch`, teardown, the ensure ancestor walk, SIGTERM
+and codex sandbox network. Source-only: fs confinement, `compare` exit order, the
+reconnect fallback rules.
+
+### Fixed
+
+- A flag after the agent (and any subcommand usage error) exits 2, not 1, and reports
+  `acpxCode: USAGE`; `exec` rejects `-s` and `--no-wait`.
+- An adapter installed alongside acpx wins over the npx fallback; PATH is not consulted.
+- codex: network access does not follow the mode - on codex-acp 2.7.0 (macOS)
+  `read-only` and `agent` lanes reached the network although the adapter sends a
+  no-network policy; give network-bound lanes `agent-full-access` and test with `curl`.
+- A project `.acpxrc.json` applies only at its exact `--cwd`; a SIGTERM'd turn keeps
+  the text streamed before the kill.
+- `Session queue owner failed to start` is a slow owner start (~6 s wait), not a
+  launch collision; relaunch, no stagger needed (openclaw/acpx#1001 on main).
+- A failed reconnect falls back to a new conversation only for not-found / unsupported
+  load errors; timeouts never fall back, and imported or explicitly resumed sessions
+  fail instead.
+
+### Changed
+
+- claude: no `permissions.defaultMode` now starts in `auto` (adapter 0.101.0+); pin
+  example 0.107.3 (Claude Code 2.1.325) in the `--package=` form; `claude-fable-5-1`
+  is advertised; unmatched `set model` ids go to Claude Code (0.107.3).
+- codex: four built-in modes plus `permission-profile:<id>`; pin example 2.7.0
+  (`@openai/codex ^0.166.0`); built-in 2.x upgrade deferred upstream (openclaw/acpx#1013).
+  The sandbox also blocks HOME toolchain caches and, on macOS, the login Keychain;
+  commands run in a login shell, so `.zprofile` runs after `.zshenv`.
+- agy server 1.5.0 adds `gemini-4-hydrogen`. Shipped reference is ~45k chars.
+- Session-control errors carry the adapter's reason; match on the stable prefix.
+
+### Added
+
+- `sessions ensure` also walks up to the git root; `ensure --model` on an existing
+  session goes through fuzzy `set model`; a failed resume leaves the record closed.
+- ACP fs callbacks are confined to `--cwd`; `compare` exit precedence, 300s default
+  per-agent timeout and local flags; the 16-deep queue cap.
+- Catalog: Claude spend-limit and login-expiry wordings, `QUEUE_OWNER_OVERLOADED`.
+- Driving from an agent harness: background the launch with the harness's own
+  mechanism; a classifier denial of a full-access launch goes to the user; `| tail`
+  masks the exit code. Proving which claude model ran; sizing a fan-out to the host.
+
+### Removed
+
+- The `--allowed-tools ""` clarification (the shipped reference covers it now).
+
+Verified against: acpx 0.22.0, claude-agent-acp 0.107.3, codex-acp 2.7.0, agy 1.5.0,
+agy_acp_server 1.5.0.
+
 ## [0.11.0] - 2026-11-05
 
 Every row re-tested live against acpx 0.21.1 unless noted.
