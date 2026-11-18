@@ -2,7 +2,7 @@
 
 Swift Testing and XCTest for iOS and macOS code: the test API, its compiler traps, running logic tests without a simulator, UI tests, and the `swift test` / `xcodebuild test` surface.
 
-Verified on Xcode 27.0 (Swift 6.4, iOS 27.0 / macOS 27.0 SDKs), 2026-10-07: every Swift Testing snippet compiled and ran under `swift test` in a scratch package (17 tests incl. exit test, attachments, warnings, cancellation, confirmations, known issues); the `.init` trap reproduced verbatim; a 10-test logic package from a voice-call app run with `swift test` (cold and warm timings below); a scratch XcodeGen iOS app with a Swift Testing unit target and an XCUITest target run on an iOS 27.0 simulator; the same package tests run on the simulator through `xcodebuild`; image attachments, the macOS UI test and the polling helper compiled through SIL (`swiftc -emit-sil`) against both SDKs; interop modes exercised with `SWIFT_TESTING_XCTEST_INTEROP_MODE`. 2026-10-13: re-ran the `.init` trap with and without a second public initializer and the `strict`/empty interop modes under `swift test`; `xcodebuild` timeout flags from `xcodebuild -help`; the AppIntentsTesting API read from its 27.0 `.swiftinterface`; the Simulator toolkit and the UI-test stalls observed in a voice-call app's UI-test suite on the iOS 27.0 Simulator. 2026-10-24 (Xcode 27.1): the custom-trait block run under `swift test`; the interop default re-run at tools versions 6.2 and 6.4; `confirmation(expectedCount: ...5)` compiled to confirm the error.
+Verified on Xcode 27.0 (Swift 6.4, iOS 27.0 / macOS 27.0 SDKs), 2026-10-07: every Swift Testing snippet compiled and ran under `swift test` in a scratch package (17 tests incl. exit test, attachments, warnings, cancellation, confirmations, known issues); the `.init` trap reproduced verbatim; a 10-test logic package from a voice-call app run with `swift test` (cold and warm timings below); a scratch XcodeGen iOS app with a Swift Testing unit target and an XCUITest target run on an iOS 27.0 simulator; the same package tests run on the simulator through `xcodebuild`; image attachments, the macOS UI test and the polling helper compiled through SIL (`swiftc -emit-sil`) against both SDKs; interop modes exercised with `SWIFT_TESTING_XCTEST_INTEROP_MODE`. 2026-10-13: re-ran the `.init` trap with and without a second public initializer and the `strict`/empty interop modes under `swift test`; `xcodebuild` timeout flags from `xcodebuild -help`; the AppIntentsTesting API read from its 27.0 `.swiftinterface`; the Simulator toolkit and the UI-test stalls observed in a voice-call app's UI-test suite on the iOS 27.0 Simulator. 2026-10-24 (Xcode 27.1): the custom-trait block run under `swift test`; the interop default re-run at tools versions 6.2 and 6.4; `confirmation(expectedCount: ...5)` compiled to confirm the error. 2026-11-18 (Xcode 27, iOS 27 Simulator): the missing notification grant in `simctl privacy`, `XCUIProtectedResource` and `devicectl device settings`, and a zero-match `-only-testing:` run exiting 0.
 
 ## Contents
 - Swift Testing essentials
@@ -16,8 +16,8 @@ Verified on Xcode 27.0 (Swift 6.4, iOS 27.0 / macOS 27.0 SDKs), 2026-10-07: ever
 - `swift test` command line
 - XCTest interop and migration
 - UI testing
-- Simulator toolkit: Action Button, lock, intents, microphone
-- UI tests under xcodebuild: stalls, environment, flakes
+- Simulator toolkit: Action Button, lock, intents, microphone, notification permission
+- UI tests under xcodebuild: stalls, empty selectors, environment, flakes
 - macOS only: bundles, TCC and menu-bar apps
 
 ## Swift Testing essentials
@@ -505,6 +505,7 @@ final class SimulatorChecks: XCTestCase {
 - **Element queries into the Lock Screen hang** on its ticking clock; check a Live Activity there with `XCUIScreen.main.screenshot()`. Settings > Action Button's shortcut tile is a remote view: queries see its label, but only a coordinate tap (`element.coordinate(withNormalizedOffset:).tap()`) selects it.
 - **CallKit's "Open in ..." alert** appears in the Simulator when the app claims the `facetime` scheme to keep CallKit calls alive (ios-audio-and-callkit.md); dismiss it through SpringBoard as above.
 - **A real microphone and speaker**: `xcrun devicectl device settings audio --device <sim-udid> --input-device BuiltInMicrophoneDevice --output-device BuiltInSpeakerDevice` routes the Simulator through the Mac's own; `say` on the Mac then talks into the app (`devicectl device info audio` shows the current setting).
+- **Notification permission has no CLI grant**: `xcrun simctl privacy` has no notifications service, `XCUIProtectedResource` (for `resetAuthorizationStatus(for:)`) has no notifications case, and `devicectl device settings` has none either. A test that reads `UNUserNotificationCenter` settings (expects `.authorized`, or a setting other than `.notSupported`) fails on a new Simulator until the prompt is answered. Run a small UI test before the suite: launch the app, trigger `requestAuthorization`, tap `XCUIApplication(bundleIdentifier: "com.apple.springboard").alerts.buttons["Allow"]` (or answer it in an `addUIInterruptionMonitor`). A clone of a Simulator that already granted it keeps the grant. Unofficial: [AppleSimulatorUtils](https://github.com/wix/AppleSimulatorUtils) `applesimutils --byId <sim-udid> --bundle <app-id> --setPermissions notifications=YES` writes the Simulator's BulletinBoard `VersionedSectionInfo.plist` (reported working on iOS 18.2 and 26.5, unverified on 27).
 
 ## UI tests under xcodebuild: stalls, environment, flakes
 
@@ -518,6 +519,10 @@ final class SimulatorChecks: XCTestCase {
     -resultBundlePath "$(mktemp -d)/run.xcresult"
   ```
   Building once and running one test per invocation keeps a hang to one test; run one test at a time per simulator.
+- **A `-only-testing:` selector that matches nothing passes**: `xcodebuild` exits 0 and prints `Test Suite 'Selected tests' passed`, having run no test. Typical causes: a wrapper script that prepends the test target itself (the selector becomes `Target/Target/Class`), or a bare class name parsed as a method. Use `Target/Class` or `Target/Class/testMethod`, and fail the run unless the log shows at least one `Test Case '-[...]' passed` line (or `Executed N tests` with N > 0):
+  ```bash
+  rg -q "Test Case '-\[.+\]' passed" test.log || { echo "selector matched no tests" >&2; exit 1; }
+  ```
 - **Environment**: `TEST_RUNNER_<NAME>` variables in `xcodebuild`'s environment reach the UI-test runner as `<NAME>` (pass them on to the app through `XCUIApplication.launchEnvironment`).
 - **`.xcresult` bundles and build attachments capture the test runner's environment** (observed: credentials passed by env turned up in ignored build artifacts). Write result bundles to a temp dir and delete them, and keep real secrets out of the env of test runs you archive.
 - **Flakes**: a polling helper misses short transient states (one about 2 s long was missed) - read the label right after the tap that causes it. Anchor drags to an element's coordinate, not a fraction of the screen. Before blaming the app, rerun the test N times with per-run logs.

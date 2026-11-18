@@ -7,6 +7,16 @@ and this skill adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.h
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-11-18
+
+### Added
+
+- Testing: notification permission on a new Simulator has no CLI grant (`simctl privacy`,
+  `XCUIProtectedResource`, `devicectl device settings`); grant it from a UI test that taps "Allow"
+  through SpringBoard, or with the unofficial AppleSimulatorUtils.
+- Testing: a `-only-testing:` selector that matches no tests exits 0 and prints `Test Suite 'Selected
+  tests' passed`; selector forms and a guard that fails the run when nothing ran.
+
 ## [0.3.1] - 2026-11-05
 
 ### Removed
