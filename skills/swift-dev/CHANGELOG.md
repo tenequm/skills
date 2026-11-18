@@ -20,6 +20,11 @@ and this skill adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.h
   pins, actionlint labels, zizmor), and debugging a CI-only hang (cooperative-pool starvation on 3 cores).
 - Router rows in SKILL.md and a pointer from `spm-and-builds.md`.
 
+### Fixed
+
+- `references/concurrency-isolation.md`: `@concurrent` is for CPU-heavy work, not blocking work - a
+  blocking call inside it still holds a cooperative-pool thread; bridge it from a dispatch queue.
+
 ## [0.4.0] - 2026-11-18
 
 ### Added
