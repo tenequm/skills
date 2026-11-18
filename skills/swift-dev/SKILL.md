@@ -2,7 +2,7 @@
 name: swift-dev
 description: Native iOS and macOS apps in Swift 6 - SwiftUI, AppKit, SwiftData, concurrency, Swift Testing, XcodeGen, CallKit and audio, App Intents, devices, TestFlight, code signing, notarization. Use for any iPhone or Mac app, helper or CLI work.
 metadata:
-  version: "0.4.0"
+  version: "0.5.0"
   categories: "development"
   topics: "swift, swiftui, ios, macos, xcode"
   upstream: "swift@6.4, xcode@27.1, ios@27.1, macos@27.0, LiveKit@2.18.0, xcodegen@2.46.0"
@@ -28,6 +28,7 @@ This file is the platform-neutral core plus a router. Load a reference only when
 | Logic, models, networking | A local SPM package with `platforms: [.iOS(.v26), .macOS(.v15)]`, tested with `swift test` on the Mac - no simulator |
 | Run on an iPhone | `ios-devices-and-signing.md` (Developer Mode, `devicectl`, automatic signing flags) |
 | Ship | iOS: `ios-distribution.md` (TestFlight, App Store). Mac: `macos-distribution.md` (Developer ID + notarization, Mac App Store) |
+| CI | GitHub Actions: `ci-github-actions.md` (runner and exact Xcode, compilation cache, required-check gate, simulators on runners) |
 
 SPM alone cannot produce an iOS `.app` - an app target needs an Xcode project, which is why XcodeGen generates one. XcodeGen traps (details and fixes in `ios-project-setup.md`):
 
@@ -217,7 +218,7 @@ Traps:
 - `x == .init(a: 1, b: 2)` against a `public` struct from another module that has some other public init (e.g. Decodable's `init(from:)`) fails with a misleading overload error - `cannot convert ... to '(any (~Copyable & ~Escapable).Type)?'` when `x` is optional, an `AttributedStringProtocol` or `'Grant' and '()'` error otherwise (inside or outside `#expect`). The cause: synthesized memberwise initializers are `internal`. Spelling out the type (`Grant(a:b:)`) shows the real error. Fix with `@testable import` (on by default under `swift test`), an explicit `public init`, or by comparing fields.
 - A package target built with `.defaultIsolation(MainActor.self)` makes its API `@MainActor`, so its tests must be `@MainActor` too. Keep logic packages nonisolated by default.
 - An iOS app target's tests need a simulator runtime (36 s warm through `xcodebuild` versus 1.4 s for the same tests under `swift test`). Exit tests are unavailable on iOS.
-- `xcodebuild` UI-test runs can stall for ~10 minutes after a failure (it spawns `simctl diagnose`) or never exit after a pass - wrap them in `timeout` and enable test timeouts (`testing.md`).
+- `xcodebuild` UI-test runs can stall for ~10 minutes after a failure (it spawns `simctl diagnose`) or never exit after a pass - wrap them in `timeout` and enable test timeouts (`testing.md`). Hosted macOS runners may have no `timeout` (it arrived in macOS 27.2) and have only 3 cores, which exposes cooperative-pool deadlocks a dev Mac hides (`ci-github-actions.md`).
 
 Exit tests, attachments, XCTest interop, UI and simulator tests: `testing.md`.
 
@@ -318,5 +319,6 @@ The on-device model has a 4096-token context (read `SystemLanguageModel.default.
 | App structure, controllers, DI | `architecture.md` |
 | Swift Testing, traps, UI and simulator tests (Action Button, lock, App Intents), `xcodebuild` stalls | `testing.md` |
 | Package.swift, plugins, macros, Swift Build, build-breakers, Xcode MCP server | `spm-and-builds.md` |
+| GitHub Actions CI: runners and cost, Xcode pinning, job shape and required checks, compilation cache, cache scoping, simulators and UI tests on runners, signing and notarization in CI, debugging slow runs | `ci-github-actions.md` |
 | Generic-password helper, accessibility classes | `keychain.md` |
 | Foundation Models (on-device and Private Cloud Compute), Core AI | `foundation-models.md` |

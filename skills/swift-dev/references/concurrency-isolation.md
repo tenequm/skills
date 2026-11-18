@@ -53,7 +53,7 @@ Default isolation is per target; there is no per-file switch. Keep logic package
 | `nonisolated(nonsending) func f() async` | the caller's actor, regardless of the flag |
 | `@concurrent func f() async` | the global concurrent pool, always (async only) |
 
-Use `@concurrent` for CPU-heavy or blocking work; do not use it for code that mostly awaits other async calls. Under default isolation every type is MainActor-isolated, including its conformances and computed members. A model decoded or used inside `@concurrent` code must be `nonisolated`:
+Use `@concurrent` for CPU-heavy work; do not use it for code that mostly awaits other async calls. It is no home for blocking work: a `@concurrent` function still runs on the cooperative pool (one thread per core, 3 on a standard CI runner), so a semaphore, a synchronous framework wait or blocking I/O there holds a pool thread and can starve the pool into a hang. Run blocking calls on a dispatch queue and resume a continuation (concurrency-tasks.md); ci-github-actions.md has a CI-only deadlock from exactly this. Under default isolation every type is MainActor-isolated, including its conformances and computed members. A model decoded or used inside `@concurrent` code must be `nonisolated`:
 
 ```swift
 import Foundation

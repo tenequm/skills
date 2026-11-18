@@ -377,6 +377,8 @@ xcodebuild -downloadComponent MetalToolchain
 - Delete the derived-data or `build/` directory after switching Xcode: stale module caches from the other compiler fail in confusing ways.
 - Seed a fresh checkout's resolved packages with an APFS clone (`cp -c -R <old>/build/SourcePackages build/`) to skip a full package fetch; the clone costs no disk until files diverge.
 
+Hosted CI (runner choice, flags that pay, the compilation cache and what not to cache) is in ci-github-actions.md.
+
 ## xcodebuild basics
 
 ```bash
