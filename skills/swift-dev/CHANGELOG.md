@@ -13,11 +13,14 @@ and this skill adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.h
 
 - `references/ci-github-actions.md`: GitHub Actions CI for iOS and macOS apps and packages - runner
   labels and cost (`xcode-27`, no `macos-27`), exact Xcode pinning with `DEVELOPER_DIR`, Linux for
-  platform-neutral packages, job shape with a paths filter and an `if: always()` gate (the required-check
-  trap), build flags, Xcode's compilation cache persisted with `actions/cache` (one measured warm run),
-  what not to cache, cache scoping, simulators and UI tests on hosted runners, permission-gated macOS
-  tests, signing and notarization in CI (`notarytool --wait` exit code), supply chain (lockfiles, SHA
-  pins, actionlint labels, zizmor), and debugging a CI-only hang (cooperative-pool starvation on 3 cores).
+  platform-neutral packages, job shape with a pull-request-only exclusion paths filter and an
+  `if: always()` gate (the required-check trap), build flags, Xcode's compilation cache persisted with
+  `actions/cache` (one measured warm run; package targets and SDK module PCMs cached, verified on Xcode
+  27.2 locally), what not to cache (DerivedData: mtimes, not inodes), cache scoping, simulators and UI
+  tests on hosted runners, permission-gated macOS tests (designated-requirement blob for TCC), the
+  CI-only parts of signing and notarization (keychain, `notarytool --wait` exit code), supply chain
+  (lockfiles, SHA pins, actionlint labels and false reports, zizmor), and debugging a CI-only hang
+  (cooperative-pool starvation on 3 cores).
 - Router rows in SKILL.md and a pointer from `spm-and-builds.md`.
 
 ### Fixed

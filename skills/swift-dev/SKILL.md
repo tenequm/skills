@@ -218,7 +218,7 @@ Traps:
 - `x == .init(a: 1, b: 2)` against a `public` struct from another module that has some other public init (e.g. Decodable's `init(from:)`) fails with a misleading overload error - `cannot convert ... to '(any (~Copyable & ~Escapable).Type)?'` when `x` is optional, an `AttributedStringProtocol` or `'Grant' and '()'` error otherwise (inside or outside `#expect`). The cause: synthesized memberwise initializers are `internal`. Spelling out the type (`Grant(a:b:)`) shows the real error. Fix with `@testable import` (on by default under `swift test`), an explicit `public init`, or by comparing fields.
 - A package target built with `.defaultIsolation(MainActor.self)` makes its API `@MainActor`, so its tests must be `@MainActor` too. Keep logic packages nonisolated by default.
 - An iOS app target's tests need a simulator runtime (36 s warm through `xcodebuild` versus 1.4 s for the same tests under `swift test`). Exit tests are unavailable on iOS.
-- `xcodebuild` UI-test runs can stall for ~10 minutes after a failure (it spawns `simctl diagnose`) or never exit after a pass - wrap them in `timeout` and enable test timeouts (`testing.md`). Hosted macOS runners have no GNU `timeout` and only 3 cores, which exposes cooperative-pool deadlocks a dev Mac hides (`ci-github-actions.md`).
+- `xcodebuild` UI-test runs can stall for ~10 minutes after a failure (it spawns `simctl diagnose`) or never exit after a pass - wrap them in `timeout` and enable test timeouts (`testing.md`). Hosted macOS runners may have no `timeout` (it arrived in macOS 27.2) and have only 3 cores, which exposes cooperative-pool deadlocks a dev Mac hides (`ci-github-actions.md`).
 
 Exit tests, attachments, XCTest interop, UI and simulator tests: `testing.md`.
 
