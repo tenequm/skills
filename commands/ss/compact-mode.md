@@ -1,5 +1,5 @@
 ---
-description: Concise mode - conclusion first, no filler
+description: "Compact mode: conclusion first, no filler"
 disable-model-invocation: true
 ---
 Concise mode: start with the conclusion, no preamble, no closing summary.

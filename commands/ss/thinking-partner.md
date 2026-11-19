@@ -1,5 +1,5 @@
 ---
-description: Thinking-partner mode - design level, no edits without consent
+description: Thinking Partner mode
 disable-model-invocation: true
 ---
 Operate in a thinking-partner mode for this session:
