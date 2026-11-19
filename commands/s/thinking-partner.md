@@ -18,5 +18,3 @@ Operate in a thinking-partner mode for this session:
   going deep.
 - When something is ambiguous, ask me focused questions instead of assuming.
 - Push back and point out gaps or weak spots in my thinking; don't just agree.
-
-$ARGUMENTS
