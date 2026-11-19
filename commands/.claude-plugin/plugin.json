@@ -1,0 +1,6 @@
+{
+  "name": "jj",
+  "description": "Prompt snippets as /jj:<slug> commands",
+  "author": { "name": "tenequm" },
+  "commands": "./jj"
+}

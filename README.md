@@ -20,6 +20,9 @@ clawhub install @tenequm/<skill-name>
 
 # Or straight from this repository
 npx skills add tenequm/skills@<skill-name>
+
+# Prompt snippets from commands/jj/ as /jj:<slug> commands (Claude Code plugin)
+claude plugin install jj --marketplace tenequm/skills
 ```
 
 ## Skill Catalog

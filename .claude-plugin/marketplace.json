@@ -1,0 +1,12 @@
+{
+  "name": "tenequm-skills",
+  "description": "Claude Code plugins from tenequm/skills",
+  "owner": { "name": "tenequm" },
+  "plugins": [
+    {
+      "name": "jj",
+      "source": "./commands",
+      "description": "Prompt snippets as /jj:<slug> commands"
+    }
+  ]
+}
