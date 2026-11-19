@@ -3,7 +3,7 @@ name: journal-update
 description: Updates or creates today's work journal in the current project's docs/journal/, then commits and pushes it. Use when asked to update the journal, log or record today's work, or wrap up a work session. Not for other dated docs.
 argument-hint: "[optional: what to focus on]"
 metadata:
-  version: "0.1.0"
+  version: "0.1.1"
   categories: "productivity"
   topics: "journal, work-log, daily-notes"
   openclaw:
@@ -24,11 +24,10 @@ instructions, which win over anything here.
 ## Today's entry
 
 - The date and weekday are the real current ones, never recalled from memory.
-- Today's file follows the newest files exactly: name, day counter, header,
-  sections. Work continuing past midnight in the same sitting stays in the day it
-  started.
-- A new file starts its open threads fresh from what is actually open, never
-  copied forward.
+- Today's file follows the newest files exactly: name, any day counter, header,
+  sections. Work around midnight goes where the newest files put it.
+- A new file's open threads are rebuilt from what is still open now - each previous
+  item re-checked, not pasted forward.
 - More than one candidate for today: ask which. No `docs/journal/`: stop and say so;
   never invent a format.
 
@@ -36,7 +35,8 @@ instructions, which win over anything here.
 
 - Facts, not framing: what was done, decided, delivered, posted or found. Mark
   anything unconfirmed; no opinions or speculation.
-- Link what can be linked; give timestamps with their timezone.
+- Link what can be linked; timestamps carry their timezone the way the file
+  already states it.
 - Add or extend one section for this session, in the file's own style. Never
   rewrite earlier entries. Never write a secret value.
 - Exactly one open-threads block, always last, rewritten in place.
@@ -44,5 +44,8 @@ instructions, which win over anything here.
 ## Finish
 
 Quote what changed. If nothing warranted an entry, say so and stop. Otherwise the
-journal file - and only it - ends up committed, in the repo's message style, and
-pushed. Never force anything, and leave everyone else's uncommitted work as it is.
+journal entry ends up committed, in the repo's message style, and pushed. The commit
+carries nothing unrelated (files the repo's own hooks regenerate are fine), and
+everyone else's uncommitted work stays as it is. If the journal file already held
+uncommitted changes that are not this session's, ask before committing. A rejected
+push is resolved by integrating upstream, never by force-pushing.
