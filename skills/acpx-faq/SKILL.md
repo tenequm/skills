@@ -2,7 +2,7 @@
 name: acpx-faq
 description: Run coding agents (codex, claude, agy) through the acpx ACP CLI - one-shot dispatch into named sessions you can watch live. Use before launching or prompting a subagent, or when a command fails, a session is missing, or a prompt is lost.
 metadata:
-  version: "0.12.0"
+  version: "0.13.0"
   categories: "agents, operations"
   topics: "acpx, acp, agent-orchestration, troubleshooting, headless-agents"
   upstream: "acpx@0.22.0, @agentclientprotocol/claude-agent-acp@0.107.3, @agentclientprotocol/codex-acp@2.7.0, agy@1.5.0, agy_acp_server@1.5.0"
@@ -574,17 +574,32 @@ Verified end to end with acpx 0.19.4 and claude-agent-acp 0.85.1:
   JSON) is unchanged. After recovery the close is yours to run - the chain already
   skipped it.
 
+## Messaging a running child
+
+Re-tested 2026-11-19 with acpx 0.22.0, claude-agent-acp 0.107.3 (bundling Claude Code
+2.1.325), codex-acp 2.7.0 (codex 0.166.0) and agy_acp_server 1.5.0.
+
+- **A claude child is a full Claude Code session.** It binds its own cross-session inbox
+  socket and registry entry, the launching session's `ListAgents` lists it (as an
+  ordinary peer, with no parent link), and native `SendMessage` works both ways: an idle
+  child starts a turn, a busy one reads the message between tool calls. These turns do
+  not show in `sessions watch` or `sessions history`. A respawn keeps the `sessionId` but
+  changes the pid, socket and derived name, so re-list after a respawn.
+- **Parent and claude child:** put the parent's session name in the first prompt so the
+  child can `SendMessage` back, and subscribe with `SendMessage`'s `notify_when_idle` for
+  a turn-end notice (it arrived about 0.3 s before acpx returned).
+- **A codex child** wakes when idle on `codex queue --thread <acp session id>`; a busy one
+  takes input only at the turn boundary (`codex queue` or `-s <name> --no-wait`). Its
+  default sandbox blocks Unix socket connects from the shell, so it cannot `SendMessage`
+  out; an MCP server it loads runs outside the sandbox.
+- **An agy child** has no inbox and no queue: `-s <name> --no-wait` is the only way in.
+- **The parent's `CLAUDE_*` variables leak into codex and agy shells** (session id, inbox
+  socket, messaging token, `CLAUDE_PID`); with full access a codex shell can post into the
+  parent with them. Never use them for identity.
+
 ## What acpx cannot do
 
 Structural, not bugs. Do not design around them.
-
-- **An ACP session does not wake.** An externally injected message lands in the
-  transcript but starts no turn; the only inbound channel is acpx itself
-  (`-s <name>`, optionally `--no-wait`), plus a file the brief told the agent to poll.
-- **`codex queue --thread` does not reach an acpx-driven codex session** (it does wake
-  a plain interactive codex).
-- **acpx-spawned Claude sessions bind no IPC socket**, so `ListAgents` /
-  `SendMessage` cannot see or reach them.
 - **acpx cannot attach to a live process it did not start** (`--resume-session` loads
   a saved ACP session into a new adapter; see Sessions).
 

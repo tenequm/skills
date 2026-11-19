@@ -4,6 +4,22 @@ All notable changes to this skill are documented in this file, following [Keep a
 
 ## [Unreleased]
 
+## [0.13.0] - 2026-11-19
+
+### Added
+
+- "Messaging a running child": acpx claude children bind a cross-session inbox socket, are
+  listed by the parent's `ListAgents` and wake on native `SendMessage`; a parent-child
+  convention with `notify_when_idle`; codex wake through `codex queue`, its sandbox blocking
+  Unix sockets; agy's only inbound path; parent `CLAUDE_*` variables leaking into codex and
+  agy shells.
+
+### Removed
+
+- From "What acpx cannot do": ACP sessions never wake, `codex queue --thread` cannot reach an
+  acpx-driven codex session, acpx-spawned Claude sessions bind no IPC socket. All three are
+  wrong on acpx 0.22.0 with claude-agent-acp 0.107.3, codex-acp 2.7.0 and codex 0.166.0.
+
 ## [0.12.0] - 2026-11-17
 
 Re-tested live against acpx 0.22.0: the claude, codex and agy recipes (adapter pins in
