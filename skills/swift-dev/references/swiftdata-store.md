@@ -58,6 +58,41 @@ struct ExampleApp: App {
 - `ModelConfiguration(isStoredInMemoryOnly: true)` for previews and tests.
 - The SwiftUI modifier form is fine for simple apps: `.modelContainer(for: [Project.self], isUndoEnabled: true)`.
 
+### Server-owned data: the store as a disposable cache
+
+When a server owns the data, skip `SchemaMigrationPlan`: keep the store in its own directory with a schema-version marker, and wipe and refetch when the marker does not match or the container cannot open the store. Use `cloudKitDatabase: .none`, keep the directory out of backups, and hide the store behind a small protocol so callers never see SwiftData types.
+
+```swift
+import Foundation
+import SwiftData
+
+enum CacheStore {
+    static let schemaVersion = 3   // bump on any @Model change: the cache is wiped and refetched
+
+    static func open(in dir: URL) throws -> ModelContainer {
+        let fm = FileManager.default
+        let marker = dir.appending(path: "schema-version")
+        if (try? String(contentsOf: marker, encoding: .utf8)) != String(schemaVersion) {
+            try? fm.removeItem(at: dir)
+        }
+        try fm.createDirectory(at: dir, withIntermediateDirectories: true)
+        let config = ModelConfiguration(url: dir.appending(path: "cache.store"), cloudKitDatabase: .none)
+        let container: ModelContainer
+        do {
+            container = try ModelContainer(for: CachedThread.self, configurations: config)
+        } catch {                                   // unreadable store: start over
+            try fm.removeItem(at: dir)
+            try fm.createDirectory(at: dir, withIntermediateDirectories: true)
+            container = try ModelContainer(for: CachedThread.self, configurations: config)
+        }
+        try String(schemaVersion).write(to: marker, atomically: true, encoding: .utf8)
+        return container
+    }
+}
+```
+
+`CachedThread` is any `@Model`. To clear a working store without touching files, `try container.erase()` (iOS 18 / macOS 15; it replaces the soft-deprecated `deleteAllData()`). Compiled against the iOS 27.2 Simulator SDK in Swift 6 mode with default MainActor isolation.
+
 ## ModelContext basics
 
 ```swift

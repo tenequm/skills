@@ -2,12 +2,13 @@
 
 Simulator runtimes, `simctl` and `devicectl`, Developer Mode, and headless iOS code signing with `xcodebuild` and an App Store Connect API key.
 
-Verified on Xcode 27.0 (Swift 6.4, iOS 27.0 / macOS 27.0 SDKs), 2026-10-07: flags checked against `xcodebuild -help`, `xcrun devicectl --help` (642.16) and its subcommand help, `xcrun simctl help`; archived a voice-call app unsigned for `generic/platform=iOS`; ran a signed archive with `-allowProvisioningUpdates` against the signed-in Xcode account and recorded the errors; built, installed and launched it on an iOS 27.0 simulator with both `simctl` and `devicectl`; registered a network-paired physical iPhone (iOS 27.2) through `-allowProvisioningDeviceRegistration` and installed and launched a development build on it with the signed-in Xcode account; on a scratch simulator reproduced the partial-install error, the `log show` level filtering and `simctl ui content_size`; reproduced the unreachable-device `xcodebuild` error with the paired iPhone off the network. No API key was used. 2026-10-13: `devicectl device copy from` and `device settings audio`, `simctl ui increase_contrast` checked against their `--help`; the any-address ICE fix, the key-role results (App Manager vs Admin team key) and the device log pull observed while shipping a voice-call app through TestFlight. 2026-10-24 (Xcode 27.1, devicectl 651.13.5): every `devicectl` subcommand used here re-checked against `--help`; `pasteboard`, `capture screenshot` and `simulate location` run on an iOS 27.0 simulator.
+Verified on Xcode 27.0 (Swift 6.4, iOS 27.0 / macOS 27.0 SDKs), 2026-10-07: flags checked against `xcodebuild -help`, `xcrun devicectl --help` (642.16) and its subcommand help, `xcrun simctl help`; archived a voice-call app unsigned for `generic/platform=iOS`; ran a signed archive with `-allowProvisioningUpdates` against the signed-in Xcode account and recorded the errors; built, installed and launched it on an iOS 27.0 simulator with both `simctl` and `devicectl`; registered a network-paired physical iPhone (iOS 27.2) through `-allowProvisioningDeviceRegistration` and installed and launched a development build on it with the signed-in Xcode account; on a scratch simulator reproduced the partial-install error, the `log show` level filtering and `simctl ui content_size`; reproduced the unreachable-device `xcodebuild` error with the paired iPhone off the network. No API key was used. 2026-10-13: `devicectl device copy from` and `device settings audio`, `simctl ui increase_contrast` checked against their `--help`; the any-address ICE fix, the key-role results (App Manager vs Admin team key) and the device log pull observed while shipping a voice-call app through TestFlight. 2026-10-24 (Xcode 27.1, devicectl 651.13.5): every `devicectl` subcommand used here re-checked against `--help`; `pasteboard`, `capture screenshot` and `simulate location` run on an iOS 27.0 simulator. 2026-11-19 (Xcode 27.2): `simctl status_bar`, `ui appearance`, `addmedia`, `keychain`, `get_app_container` and the runtime filter checked against `simctl help` and an iOS 27.2 runtime; the per-lane Simulator, screenshot and log-window recipes observed in an XcodeGen iOS app's agent lanes.
 
 ## Contents
 - SDK vs simulator runtime
 - Simulators from the command line
 - Simulator logs, Dynamic Type and install errors
+- Screenshots, seeding and app data
 - devicectl: simulators and physical devices
 - Developer Mode and pairing
 - The iOS signing model
@@ -32,15 +33,16 @@ xcodebuild -downloadPlatform iOS -exportPath ~/Downloads  # keep the .dmg, then:
 xcodebuild -importPlatform ~/Downloads/<runtime>.dmg
 ```
 
-Manage installed runtimes with `xcrun simctl runtime list`, `xcrun simctl runtime delete --outdated` (or `--unusable`, `--notUsedSinceDays N`, `--dry-run`). Known Xcode 27 issue: some deleted runtimes reappear after a reboot, and a reinstalled runtime can still show as unavailable (both fixed in Xcode 27.2 RC). Also in 27.2 RC: cloning a simulator that runs runtime 27.2 can fail on file permissions (188407822).
+Manage installed runtimes with `xcrun simctl runtime list`, `xcrun simctl runtime delete --outdated` (or `--unusable`, `--notUsedSinceDays N`, `--dry-run`). Known Xcode 27 issue: some deleted runtimes reappear after a reboot, and a reinstalled runtime can still show as unavailable (both fixed in Xcode 27.2). Also in 27.2: cloning a simulator that runs runtime 27.2 can fail on file permissions (188407822); Apple's workaround removes stray sandbox files from the source device first: `find ~/Library/Developer/CoreSimulator/Devices/<SOURCE_UDID>/data -name '*.sb-????????-??????' -delete` ([Xcode 27.2 notes](https://developer.apple.com/documentation/xcode-release-notes/xcode-27_2-release-notes)).
 
 Unverified: `-destination 'generic/platform=iOS Simulator'` compiling with zero runtimes installed (a runtime was present during verification).
 
 ## Simulators from the command line
 
 ```bash
-UDID=$(xcrun simctl create "Dev iPhone" com.apple.CoreSimulator.SimDeviceType.iPhone-17 \
-  com.apple.CoreSimulator.SimRuntime.iOS-27-0)
+RUNTIME=$(xcrun simctl list runtimes available -j | jq -r '[.runtimes[] | select(.platform == "iOS"
+  and (.identifier | test("-iPhone") | not))] | sort_by(.version | split(".") | map(tonumber)) | last | .identifier // empty')
+UDID=$(xcrun simctl create "Dev iPhone" com.apple.CoreSimulator.SimDeviceType.iPhone-17 "$RUNTIME")
 xcrun simctl bootstatus "$UDID" -b          # boots if needed, waits until ready
 xcodebuild -project MyApp.xcodeproj -scheme MyApp -destination "id=$UDID" \
   -derivedDataPath build build
@@ -51,13 +53,15 @@ SIMCTL_CHILD_API_URL=https://staging.example.com \
 ```
 
 - `xcrun simctl list devicetypes` / `list runtimes` give the identifiers; omit the runtime to get the newest compatible one.
+- Never hard-code a runtime identifier in a script: Xcode 27.2 ships no `iOS-27-0`, and a recipe that named it broke. The filter above picks the newest generic iOS runtime; identifiers with an `-iPhone<N>` suffix are device-specific downloads (a beta build for one device type, about 7-8 GB). After an Xcode update, `xcrun simctl delete unavailable` removes the devices whose runtime is gone.
+- **One named Simulator per parallel lane** (an agent lane, a CI job): `MyApp lane-a`, so lanes never share app data, keychain items or permission grants. Keep its UDID and pass `-destination "id=$UDID"`; read its state with `xcrun simctl list devices -j | jq -r --arg u "$UDID" '.devices[][] | select(.udid == $u) | .state'`; shut it down and `xcrun simctl delete "$UDID"` when the lane ends. Each booted Simulator costs real CPU - on a 10-core Mac, three or more booted beside builds pushed the load average past 400 (observed) - so cap booted devices at about two; builds and `swift test` need none.
 - Simulator builds are ad hoc signed ("Sign to Run Locally"): no team, certificate or profile is involved, even when the project sets `DEVELOPMENT_TEAM`.
 - `SIMCTL_CHILD_<NAME>` variables reach the launched process as `<NAME>`; `--console` blocks and streams stdout/stderr.
-- `xcrun simctl pbcopy` exits 0 on iOS 27 but nothing reaches the simulator's pasteboard; use `devicectl device pasteboard copy` (below), or pass test values through `SIMCTL_CHILD_<NAME>` launch environment.
+- `xcrun simctl pbcopy` exits 0 on iOS 27 but nothing reaches the simulator's pasteboard; use `devicectl device pasteboard copy` (below), or pass test values through `SIMCTL_CHILD_<NAME>` launch environment. On a shut-down device `pbcopy` fails outright (`Device must be booted to access its pasteboard`, SimError 405); a script that ignores the exit code runs its tests unseeded.
 - `simctl privacy ... grant` skips the permission alert; `reset` brings it back.
 - More hardware paths run in the iOS 27 Simulator than it seems: CallKit with two app-side stand-ins (ios-audio-and-callkit.md), the Action Button and a lock from UI tests (testing.md), and the Mac's own mic and speaker via `xcrun devicectl device settings audio --device <sim-udid> --input-device BuiltInMicrophoneDevice --output-device BuiltInSpeakerDevice` (`devicectl device info audio` shows the current setting). The Simulator lock never removes protected data, so data-protection and Face ID paths still need a device.
 - Shut simulators down when done (`xcrun simctl shutdown <udid|all>`): one left booted for 8 hours held about 26 GB of memory on a 64 GB Mac (observed).
-- The Simulator app is now **Device Hub** (`open "$(xcode-select -p)/../Applications/DeviceHub.app"`); it shows simulators and paired devices together. Xcode 27.2 RC adds Simulator-only Slow Motion Animation, Simulate Shake, Simulate Fall and Simulate Memory Pressure (and fixes Simulate Memory Warning), plus hidden device bezels.
+- The Simulator app is now **Device Hub** (`open "$(xcode-select -p)/../Applications/DeviceHub.app"`); it shows simulators and paired devices together. Xcode 27.2 adds Simulator-only Slow Motion Animation, Simulate Shake, Simulate Fall and Simulate Memory Pressure (and fixes Simulate Memory Warning), plus hidden device bezels.
 - **iPhone Duo** (Xcode 27.1): the `iPhone Duo` device type is in `simctl list devicetypes`. Its first launch can take several minutes, and running or debugging most app extensions is unavailable in its runtime (Xcode 27.1 known issues) - test extensions on another device type.
 - Xcode 27 adds `simctl reboot` / `devicectl` reboot for simulators, and runtimes ship a prebuilt dyld cache, so first boot is faster.
 
@@ -69,6 +73,12 @@ xcrun simctl spawn "$UDID" log show --last 5m --info --debug \
   --predicate 'subsystem == "com.example.MyApp"' --style compact
 # Live, including Debug messages:
 xcrun simctl spawn "$UDID" log stream --level debug --predicate 'subsystem == "com.example.MyApp"'
+# A window around a failing step (local time; note the wall clock when the step starts):
+xcrun simctl spawn "$UDID" log show --start '2026-11-18 14:50:20' --end '2026-11-18 14:55:30' --info --debug \
+  --style compact --predicate 'subsystem == "com.example.MyApp" OR process == "MyApp"'
+# Why the system ended the app:
+xcrun simctl spawn "$UDID" log show --last 10m --style compact \
+  --predicate 'process == "runningboardd" AND eventMessage CONTAINS "com.example.MyApp"'
 
 xcrun simctl ui "$UDID" content_size accessibility-extra-extra-extra-large
 xcrun simctl io "$UDID" screenshot dynamic-type-xxxl.png
@@ -91,6 +101,31 @@ xcrun simctl spawn "$UDID" defaults write com.apple.Accessibility ReduceMotionEn
   ```
   A failed build (here a Swift compile error, `xcodebuild` exit 65) leaves a `.app` holding only `Frameworks/` and no `Info.plist`. Read the build output above it, and chain build, install and launch with `&&` or `set -e` so a failed build stops the script (reproduced).
 - **The Simulator's WebRTC ignores the Mac's VPN unless ICE gathers on any address.** With a media server reachable only over a VPN interface (`utun`, e.g. Tailscale `100.x`), HTTPS and WebSocket signalling worked, but ICE offered only LAN host, IPv6 and server-reflexive candidates and LiveKit failed with `Primary transport connect timed out` after 10 s - every time. Cause: LiveKit 2.17's factory always installs WebRTC's iOS network monitor, which marks available only the interfaces of the default `NWPath`, and a VPN without an exit node is not on it; TURN binds to the same filtered interfaces, so relay fails too. Fix: `LKRTCConfiguration.enableIceGatheringOnAnyAddressPorts = true` ([webrtc-sdk#110](https://github.com/webrtc-sdk/webrtc/pull/110)) adds candidates on `0.0.0.0` sockets, which the Mac kernel routes through the VPN. LiveKit 2.17 does not expose it, so Simulator builds swizzle `-[LKRTCConfiguration createNativeConfiguration]` to set it; leave device builds alone. The field trial `WebRTC-Network-UseNWPathMonitor/Disabled/` does not help (it gates the other factory init). Even with the fix about 1 in 5 Simulator `room.connect` calls timed out after 10 s while the server showed ICE connected (observed); retry once before suspecting anything else.
+
+## Screenshots, seeding and app data
+
+```bash
+xcrun simctl bootstatus "$UDID" -b
+xcrun simctl status_bar "$UDID" override --time 9:41 --dataNetwork wifi --wifiMode active --wifiBars 3 \
+  --cellularMode active --cellularBars 4 --operatorName '' --batteryState charged --batteryLevel 100
+xcrun simctl ui "$UDID" appearance dark            # no argument prints the current mode; restore it after
+xcrun simctl io "$UDID" screenshot home-dark.png
+xcrun simctl status_bar "$UDID" clear
+
+xcrun simctl addmedia "$UDID" fixture.png          # photos, videos, contacts before a picker test
+xcrun simctl keychain "$UDID" reset                # clean keychain; add-root-cert ca.pem trusts a local CA
+
+APP=build/Build/Products/Debug-iphonesimulator/MyApp.app
+BUNDLE=$(plutil -extract CFBundleIdentifier raw "$APP/Info.plist")
+DATA=$(xcrun simctl get_app_container "$UDID" "$BUNDLE" data)   # also: app (default), groups, <group id>
+tail -50 "$DATA/Library/Caches/app.log"
+sqlite3 "file:$DATA/Library/Application Support/default.store?mode=ro" .tables
+```
+
+- `status_bar override` needs a booted device (`Unable to lookup in current state: Shutdown`, SimError 405) and does not survive a reboot: boot first and re-apply after every boot. A Simulator set to 24-hour time shows `09:41`, and the Lock Screen date is frozen too.
+- Drive screen states inside one launch (a Debug-only fixture mode, testing.md) rather than relaunching per state, and name each capture after the design frame it is compared with.
+- Take the bundle ID from the built app when it comes from an xcconfig: `plutil -extract KEY raw` prints one value and exits 1 when the key is missing (macOS bundles: `Contents/Info.plist`).
+- A log file the Debug build writes into its container keeps the `.debug` lines that drop out of the Simulator's log store; open stores read-only while the app runs.
 
 ## devicectl: simulators and physical devices
 
@@ -149,6 +184,15 @@ Every binary that runs on an iOS device must be signed with an Apple-issued **Ap
 | TestFlight / App Store | Apple Distribution | App Store Connect | None |
 
 With automatic signing (`CODE_SIGN_STYLE: Automatic` + `DEVELOPMENT_TEAM`) Xcode creates all of these. Distribution certificates can be **cloud-managed**: Apple holds the private key and signs during export, so CI machines need no `.p12` ([cloud-managed certificates](https://developer.apple.com/help/account/certificates/cloud-managed-certificates)).
+
+To see what a build is allowed to do, compare the embedded profile with the signature:
+
+```bash
+security cms -D -i MyApp.app/embedded.mobileprovision | plutil -extract Entitlements xml1 -o - -
+codesign -d --entitlements - --xml MyApp.app | plutil -p -    # what the binary was signed with
+```
+
+An entitlement in the binary but not in the profile fails at install or at runtime. Check `aps-environment`, `get-task-allow`, `beta-reports-active` and each capability, and each extension's own profile under `PlugIns/*.appex`. APNs auth keys are separate from both: ios-push-notifications.md.
 
 ## Headless signing with xcodebuild
 

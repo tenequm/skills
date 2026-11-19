@@ -35,9 +35,8 @@ struct NotesApp: App {
         }
         .onChange(of: scenePhase) { _, phase in
             switch phase {
-            case .active: store.resume()
+            case .active, .inactive: store.resume()
             case .background: store.flush()
-            case .inactive: break
             @unknown default: break
             }
         }
@@ -48,6 +47,7 @@ struct NotesApp: App {
 - On iPhone a `WindowGroup` is one full-screen scene; there are no windows to manage (iPad adds multiple scenes from the same group). There is no `Settings` scene, `MenuBarExtra` or termination hook - the macOS lifecycle in macos-app-lifecycle.md does not apply.
 - Read in the `App`, `scenePhase` is an aggregate: `.active` if any scene is active, `.inactive` when none is. Read in a view, it is that view's scene.
 - **Treat `.background` as possibly final.** SwiftUI's own docs: "Expect an app that enters the `background` phase to terminate." Save and close connections there; there is no later callback. `.inactive` also fires for Control Center and the app switcher, so do not tear down on it.
+- **Start foreground work on anything but `.background`.** A system alert over the app (a permission prompt, the paste prompt, CallKit's "Open in ...") holds the scene in `.inactive`, so work started only on `.active` - connecting, loading the first screen - never starts while the alert shows (observed: every UI test that met a permission prompt failed at setup). The example above resumes on both; handle a cold launch into the background separately.
 - An app keeps running in the background only with a background mode doing real work (audio playing, an active CallKit call - see ios-audio-and-callkit.md) or a scheduled background task (below).
 
 ## State in observable controllers
@@ -633,4 +633,4 @@ struct CounterView: View {
 - A `Text` with `.textSelection(.enabled)` now uses the system text-selection UI on iOS.
 - UIKit changes in the same notes: `windowExternalDisplayNonInteractive` scenes are no longer offered automatically - use `UIViewController.registerSceneAccessory(_:)` with `UISceneAccessory.externalNonInteractive`; a presented view controller inherits traits through its superview chain, not straight from the presentation controller (custom `UIPresentationController`s may need updates); Siri can start drag sessions without a gesture, so present no UI in `dragInteraction(_:sessionWillBegin:)`; `UINavigationItem.navigationBarMinimization` replaces `barMinimizeBehavior` and `barMinimizationSafeAreaAdjustment`.
 - Deprecated in 27 (UIKit headers): `supportedInterfaceOrientationsForWindow:` ("Use UIWindowSceneDelegate.supportedInterfaceOrientations(for:) instead") and `UIScreen.displayLink(withTarget:selector:)` ("Use the equivalent display link API on UIWindowScene").
-- **iOS 27.1: a `UIView`'s default layout margins are zero.** View controllers still give their root view `systemMinimumLayoutMargins`; set `preservesSuperviewLayoutMargins = true` on subviews that should inherit them (iOS 27.2 RC release notes).
+- **iOS 27.1: a `UIView`'s default layout margins are zero.** View controllers still give their root view `systemMinimumLayoutMargins`; set `preservesSuperviewLayoutMargins = true` on subviews that should inherit them ([iOS 27.2 release notes](https://developer.apple.com/documentation/ios-ipados-release-notes/ios-ipados-27_2-release-notes)).

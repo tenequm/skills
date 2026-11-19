@@ -108,6 +108,7 @@ Apple's own guidance is to update the existing item, since "the new item can't c
 - **`ThisDeviceOnly`** items are restored only to the same device that made the backup; on a new phone the user has to sign in again. Use it for device-bound secrets (a device key, a token tied to this install), not for credentials the user expects to survive a phone upgrade. `ThisDeviceOnly` classes cannot be combined with `kSecAttrSynchronizable` (iCloud Keychain).
 - Use the most restrictive class that still works. `kSecAttrAccessibleAlways` is deprecated (since iOS 12 / macOS 10.14); for a user-presence check (Face ID / passcode at read time) pass a `SecAccessControl` in `kSecAttrAccessControl` instead of `kSecAttrAccessible` ([Restricting keychain item accessibility](https://developer.apple.com/documentation/security/restricting-keychain-item-accessibility)).
 - Unverified: reading a `WhenUnlocked` item on a locked device surfaces as `errSecInteractionNotAllowed` (-25308); not reproduced on hardware.
+- **Secure Enclave keys work in the Simulator**: `SecureEnclave.P256.Signing.PrivateKey()` with default access control creates a key and signs in the iOS 27.2 Simulator on Apple silicon (`SecureEnclave.isAvailable == true`, observed), so device-key code needs no Simulator stand-in. Biometric access-control flags were not tried.
 
 ## macOS: two keychains
 

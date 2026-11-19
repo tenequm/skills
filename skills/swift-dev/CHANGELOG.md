@@ -7,6 +7,59 @@ and this skill adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.h
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-11-19
+
+### Added
+
+- `references/ios-push-notifications.md`: `aps-environment` and Simulator tokens, APNs auth keys and
+  `BadEnvironmentKeyInToken`, the callback-only Notification Service Extension, communication
+  notifications, `simctl push` skipping service extensions, and the `dasd` restart after every boot.
+- Testing: permission-gated tests fail with `#require` instead of skipping; `-collect-test-diagnostics
+  never`, local build reuse, no video and no animations in UI-test launches; the `testmanagerd` launch
+  stall and boot retry; reading results with `xcresulttool get test-results`; `shlock` across sessions;
+  runtime probes in the Simulator; `swift test --debugger`, `swift build --build-tests`; Xcode 27.3 beta
+  UI tests in Swift Testing (`XCUIAutomation`).
+- Simulators: runtime selection without hard-coded identifiers, per-lane devices, status-bar overrides
+  and seeding, app containers, log windows; profile and entitlement decoding.
+- Builds: SDK `.swiftinterface` lookup (SwiftUICore), toolchain `swift format`, `xcodebuild -quiet`,
+  `xcodegen generate --use-cache`, a public-repo xcconfig, Simulator-only code in device builds,
+  Xcode 27.3 `.aea` delivery, Interface Builder `toolchain` mode fixes.
+- Distribution and CI: clock-stamped build numbers, automatic TestFlight distribution,
+  `REQUIRED_AGREEMENTS_MISSING_OR_EXPIRED`, tag-last releases, plist tools missing on Linux runners,
+  `ubuntu-26.04` and `macos-latest-large` labels.
+- Swift 6.4: the closure forward-reference break, module selectors in library-evolution interfaces,
+  `anyAppleOS` from 26.0; Swift Subprocess 1.0.
+- Platform: ScreenCaptureKit -3815 on display sleep, SwiftData as a disposable cache and its missing
+  full-text index, saved shortcuts pinning intent identifiers, `URL` resource-value caching, logging
+  errors by domain and code, imported `async` delegate variants, Secure Enclave in the Simulator, macOS 27
+  installer architecture and quarantined `launchd` plists.
+
+### Changed
+
+- Xcode 27.2 is final (Swift 6.4.2, iOS and macOS 27.2 SDKs; there is no macOS 27.1); "27.2 RC" citations
+  now point at the final notes, and `GetCodeCoverage` is noted as present in 27.2 but absent from its notes.
+- XcodeGen 2.48.0: experimental `.xcproj` output, the shipped `dstPath` and synced-folder fixes, and
+  `-convert-project 'Xcode Project'` on Xcode 27.2.
+- LiveKit 2.19.0: Release-build crash fixes, the LiveKitFFI package rename, the data-stream source move.
+- Notification permission is granted once by hand and cloned; the SpringBoard UI-test grant is no
+  longer the recommended path.
+- The MenuBarExtra label crash is marked as seen once with an unproven cause.
+- `scenePhase` work starts on `.inactive` too, since system alerts hold the scene there.
+- Mac Catalyst: the 27.2 SDK's phantom 27.1 deployment target and the 27.1 run-destination workaround.
+
+### Fixed
+
+- swift#92915 is closed, but the fix is not in Swift 6.4.2, and it is not limited to generic actors.
+- `--explicit-target-dependency-import-check` misbehaves under Swift Build.
+- `timeout` on macOS 27.2 is observed, not documented.
+
+### Security
+
+- LiveKit 2.19.0 removes the AAA Certificate Services root from its TURN/TLS trust anchors (compromised
+  eMudhra intermediates); the XcodeGen example pins `from: 2.19.0`.
+
+Verified against: swift@6.4.2, xcode@27.2, ios@27.2, macos@27.2, LiveKit@2.19.0, xcodegen@2.48.0
+
 ## [0.5.0] - 2026-11-18
 
 ### Added
