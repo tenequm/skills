@@ -1,13 +1,13 @@
 # Go Correctness Reference
 
-Bug classes that kept recurring in code review of real Go services and CLIs. The linters in SKILL.md catch none of them reliably. Each entry is the failure, then the fix. Verified against go1.27.3.
+Bug classes that kept recurring in code review of real Go services and CLIs. The linters in SKILL.md catch none of them reliably. Each entry is the failure, then the fix. Verified against go1.27.4.
 
 ## Filesystem Confinement
 
 The most recurring security class: a user- or config-supplied name escapes the directory it was meant to stay in.
 
 - **`filepath.Join` cleans `..`.** `filepath.Join("/base", "../../etc")` is `/etc`, so a `--name ../../x` flag that feeds a `RemoveAll` deletes outside the base. Reject the name first with `filepath.IsLocal` (Go 1.20+), which is false for `../../etc`, absolute paths and, on Windows, reserved names.
-- **Lexical checks do not stop symlinks.** `IsLocal` and prefix checks pass for `data/link` even when `link` points at the user's home. For operations inside a directory you do not fully control, use `os.Root` (Go 1.24+): every method resolves the name inside the root and fails if it - or any symlink along the way - escapes.
+- **Lexical checks do not stop symlinks.** `IsLocal` and prefix checks pass for `data/link` even when `link` points at the user's home. For operations inside a directory you do not fully control, use `os.Root` (Go 1.24+; `RemoveAll`, `Chmod`, `Rename` and friends arrived in Go 1.25): every method resolves the name inside the root and fails if it - or any symlink along the way - escapes.
 - **`os.Open` then `Stat()` follows links.** `f.Stat().Mode().IsRegular()` is true for a symlink to a regular file. Use `os.Lstat`, or open with `syscall.O_NOFOLLOW` on Unix.
 - **Archive extraction must check link targets.** A tar entry's name can be local while its `hdr.Linkname` points anywhere; check both, or extract through an `os.Root`.
 - **Compare directories by identity, not by string.** A guard that refuses to touch `$HOME` misses a symlink alias of it. Compare `os.Stat` results with `os.SameFile`.
@@ -102,6 +102,7 @@ func startGroup(ctx context.Context, name string, args ...string) (*exec.Cmd, er
 
 - **An empty flag value is not "use the default" on destructive verbs.** An unset shell variable turned `--name "$NAME"` into `--name ""`, which fell through to the default instance and purged its data. Reject empty values (with cobra, `cmd.Flags().Changed("name")` tells set-but-empty from unset), and run preflight checks such as an image pull or port check before tearing anything down.
 - **Framework middleware wraps only framework routes.** A route mounted directly on the underlying `http.ServeMux` or router, beneath a framework that registers its own operations, skips the framework's middleware chain - authentication included. Mount everything through one path, and test that unauthenticated requests to every route are refused.
+- **Reach for the stdlib before a hand-rolled guard or a new library.** `http.CrossOriginProtection` (Go 1.25) replaces a custom Origin/`Sec-Fetch-Site` check for CSRF; `httputil.ReverseProxy` with a `Rewrite` func (Go 1.20) handles hop-by-hop headers and websocket upgrades; a signed capability token built on `crypto/hmac`, `crypto/subtle` and `crypto/rand` often replaces a JWT library. Check the release notes of the Go versions you support before writing one.
 - **One Prometheus `Collector` per scrape.** A `GaugeFunc` per metric whose callback locks and recomputes the full snapshot multiplies scrape cost by the number of metrics. Implement one `prometheus.Collector` that snapshots once in `Collect` and emits all of them.
 
 ## database/sql and SQLite

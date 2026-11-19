@@ -8,7 +8,7 @@ v4.20.0 is worth upgrading for regardless of the pin mechanics:
 
 - **S3 sources silently truncated at 1000 migrations** - "fix(source/aws_s3): paginate ListObjects to load >1000 migrations".
 - **Quadratic startup cost removed** - "perf(source): build migrations index lazily to avoid quadratic startup".
-- **Security, partial:** migrate's own code moved from `docker/docker` to the `moby/moby/api` and `moby/moby/client` modules, but v4.20.1's `go.mod` still lists `github.com/docker/docker v28.5.2+incompatible // indirect`, pulled in by `dhui/dktest`. Scanners keep flagging it - open issue [golang-migrate/migrate#1444](https://github.com/golang-migrate/migrate/issues/1444) "Dependencies still trigger CVE-2026-41568" (milestone v4.21.0). The released artefacts carry more: open PR [#1458](https://github.com/golang-migrate/migrate/pull/1458) says "`v4.20.1` pins several modules with known vulnerabilities, so Trivy and govulncheck flag the release binary and the `migrate/migrate` Docker image" (x/crypto, x/net, x/text, grpc, klauspost/compress, otel/sdk) and proposes a v4.20.2. `go install ...@v4.20.1` builds with exactly the versions in v4.20.1's `go.mod`, so a self-built CLI inherits them too; scan the binary you actually deploy (`govulncheck -mode=binary`).
+- **Security, partial:** migrate's own code moved from `docker/docker` to the `moby/moby/api` and `moby/moby/client` modules, but v4.20.1's `go.mod` still lists `github.com/docker/docker v28.5.2+incompatible // indirect`, pulled in by `dhui/dktest`. Scanners keep flagging it - open issue [golang-migrate/migrate#1444](https://github.com/golang-migrate/migrate/issues/1444) "Dependencies still trigger CVE-2026-41568" (milestone v4.21.0). The released artefacts carry more: [#1458](https://github.com/golang-migrate/migrate/pull/1458) says "`v4.20.1` pins several modules with known vulnerabilities, so Trivy and govulncheck flag the release binary and the `migrate/migrate` Docker image" (x/crypto, x/net, x/text, grpc, klauspost/compress, otel/sdk). It merged to master on 2026-11-16 ("bump vulnerable dependencies and require go 1.26"), and [#1468](https://github.com/golang-migrate/migrate/pull/1468) then dropped `dhui/dktest` and `docker/docker` from `go.mod` - but neither is released (milestone v4.21.0, which will need Go 1.26), and #1444 stays open. `go install ...@v4.20.1` builds with exactly the versions in v4.20.1's `go.mod`, so a self-built CLI inherits them too; scan the binary you actually deploy (`govulncheck -mode=binary`).
 
 ## Installation
 
@@ -32,7 +32,9 @@ docker run -v $(pwd)/migrations:/migrations --network host migrate/migrate:v4.20
     -path=/migrations/ -database "postgres://localhost:5432/db" up
 ```
 
-Multiple drivers: `-tags 'postgres mysql sqlite3'`
+Multiple drivers: `-tags 'postgres mysql sqlite'`
+
+For SQLite pick the tag deliberately: `sqlite` "Uses the `modernc.org/sqlite` sqlite db driver (pure Go)", while `sqlite3` "Uses the `github.com/mattn/go-sqlite3` sqlite db driver (cgo)" and so breaks `CGO_ENABLED=0` builds such as the template's `build-release`.
 
 ### Library
 
@@ -167,6 +169,9 @@ COMMIT;
 
 ```go
 import (
+    "errors"
+    "log"
+
     "github.com/golang-migrate/migrate/v4"
     _ "github.com/golang-migrate/migrate/v4/database/postgres"
     _ "github.com/golang-migrate/migrate/v4/source/file"
@@ -179,7 +184,7 @@ if err != nil {
     log.Fatal(err)
 }
 
-if err := m.Up(); err != nil && err != migrate.ErrNoChange {
+if err := m.Up(); err != nil && !errors.Is(err, migrate.ErrNoChange) {
     log.Fatal(err)
 }
 ```
@@ -206,7 +211,7 @@ m.Force(3)    // Set version without running
 m.Close()     // Close connections
 ```
 
-Always check for `migrate.ErrNoChange` when calling `Up()` - it means no new migrations exist and is not a real error.
+Always check for `migrate.ErrNoChange` when calling `Up()` - it means no new migrations exist and is not a real error. Compare with `errors.Is`, not `!=`: the template's `errorlint` flags the plain comparison ("comparing with != will fail on wrapped errors"). The other sentinels worth handling: `Version()` returns `migrate.ErrNilVersion` on a database that has never been migrated, lock contention returns `migrate.ErrLocked` or `migrate.ErrLockTimeout`, and a failed migration surfaces as `migrate.ErrDirty` (a struct type, so match it with `errors.As`).
 
 **`Up()` and `Steps(1)` are not interchangeable.** `Up()` applies every pending migration in one call; `Steps(1)` applies exactly one. Automation wired to `Up()` on merge will apply an entire backlog of DDL the first time it runs, which surprises teams who assumed each deploy advanced one version. Decide deliberately which semantics a given entry point has, and name it accordingly.
 
@@ -219,7 +224,7 @@ package main
 
 import (
     "embed"
-    "log"
+    "errors"
 
     "github.com/golang-migrate/migrate/v4"
     _ "github.com/golang-migrate/migrate/v4/database/postgres"
@@ -240,7 +245,7 @@ func runMigrations(databaseURL string) error {
         return err
     }
 
-    if err := m.Up(); err != nil && err != migrate.ErrNoChange {
+    if err := m.Up(); err != nil && !errors.Is(err, migrate.ErrNoChange) {
         return err
     }
 
@@ -258,7 +263,7 @@ URL format: `postgres://user:password@host:port/dbname?query`
 |-----------|-------------|
 | `x-migrations-table` | Custom migrations table name (default: `schema_migrations`) |
 | `x-statement-timeout` | Abort statements exceeding N ms |
-| `x-multi-statement` | Enable multi-statement execution (default: false) |
+| `x-multi-statement` | Enable multi-statement execution (default: false). The file is split on `;` and each statement runs on its own, so the migration is no longer atomic, and a `;` inside a function body or string breaks the split |
 | `x-multi-statement-max-size` | Max statement size in bytes (default: 10MB) |
 | `search_path` | Schema search path |
 | `x-migrations-table-quoted` | Disable quoting of the migrations table name - "By default, migrate quotes the migration table for SQL injection safety reasons. This option disable quoting" |
@@ -276,9 +281,11 @@ For projects already on `jackc/pgx/v5`, use the `pgx5` driver instead of `postgr
 
 ## Transaction Handling
 
-golang-migrate does **NOT** wrap a migration in a transaction at the library level, so the portable advice is to write explicit `BEGIN`/`COMMIT`.
+Transaction handling is per driver, not per library. Most drivers do **not** wrap a migration in a transaction, so explicit `BEGIN`/`COMMIT` is the usual advice - with one hard exception.
 
-One database-specific exception is worth knowing: "In PostgreSQL running multiple SQL statements in one `Exec` executes them inside a transaction." A multi-statement Postgres migration is therefore already atomic in practice - but writing `BEGIN`/`COMMIT` anyway costs nothing, keeps the intent explicit, and stays correct on other engines:
+**SQLite: never write `BEGIN`/`COMMIT`.** "Unlike other migrate database drivers, the sqlite driver will automatically wrap each migration in an implicit transaction by default. Migrations must not contain explicit `BEGIN` or `COMMIT` statements." The same holds for `sqlite3`. To manage transactions yourself, set `x-no-tx-wrap=true` on the database URL, after which "Migrations may, and should, contain explicit `BEGIN` and `COMMIT` statements."
+
+**Postgres:** "In PostgreSQL running multiple SQL statements in one `Exec` executes them inside a transaction." A multi-statement Postgres migration is therefore already atomic in practice (unless `x-multi-statement` is on) - but writing `BEGIN`/`COMMIT` anyway costs nothing and keeps the intent explicit:
 
 ```sql
 BEGIN;
@@ -353,7 +360,7 @@ The up-down-up pattern validates both directions work correctly.
 
 - Keep migrations small and focused - one logical change per migration
 - Always test up-down-up before merging
-- Use transactions for multi-statement migrations (when database supports it)
+- Use transactions for multi-statement migrations where the driver does not already wrap them (not on SQLite)
 - Embed migrations for production binaries (`embed.FS` + `iofs`)
 - Run migrations at app startup or as a separate step in the deploy pipeline
 - Use `migrate.ErrNoChange` check in programmatic usage

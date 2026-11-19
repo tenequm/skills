@@ -4,7 +4,9 @@ Latest: **v2.2.2** (2026-10-13). Single Go binary, no runtime dependency. `go in
 
 The config has a JSON schema - "The JSON schema for the config is published at `https://lefthook.dev/schema.json`" - so a `# yaml-language-server: $schema=https://lefthook.dev/schema.json` first line gives editor completion and validation.
 
-Config is discovered at the repo root or in `.config/`, and read fresh on every hook run - "Reinstall is not required when you modify `lefthook.yml`, the configuration file is read every time a git hook is run." Only adding or removing a *hook section* requires `lefthook install`.
+Config is discovered at the repo root or in `.config/`, and read fresh on every hook run - "Reinstall is not required when you modify `lefthook.yml`, the configuration file is read every time a git hook is run." Keep exactly one config file: "If there are more than 1 file in the project, only one will be used, and you'll never know which one."
+
+**Hooks re-sync themselves.** "By default, lefthook automatically installs and updates hooks when you run `lefthook run` if the configuration has changed" (v2.2.2 `internal/command/run.go:100`): the next hook run after a config change rewrites every configured shim and installs newly added hook sections, baking in the current `assert_lefthook_installed` and `lefthook:` values (live on 2.2.2: `sync hooks: (pre-push, pre-commit)`). Hooks removed from config are still not pruned. Opt out with `no_auto_install: true` or `lefthook run --no-auto-install`. Auto-sync needs one installed hook to fire, so a clone that never ran `lefthook install` stays dormant.
 
 ## v2.1.15 - v2.2.2 Notes
 
@@ -125,7 +127,19 @@ min_version: 2.2.2               # refuse to run under an older lefthook
 
 `assert_lefthook_installed` is the fix for the dormancy failure mode - "fail (with exit status 1) if `lefthook` executable can't be found in $PATH, under node_modules/, as a Ruby gem, or other supported method."
 
-**But it is not a runtime guard.** The flag is only a template argument, baked into the generated `.git/hooks/<hook>` script at `lefthook install` time (`internal/command/install.go:332`, `internal/templates/hook.tmpl:103-108`); nothing in `lefthook run` ever reads it. Flipping it in config changes nothing until you reinstall, and it does nothing at all for a CI job that invokes `lefthook run` directly.
+**But it is not a runtime guard.** The flag is only a template argument, baked into the generated `.git/hooks/<hook>` script when the shims are written (`internal/command/install.go:332`, `internal/templates/hook.tmpl:103-108`); `lefthook run` never checks it itself. Flipping it in config takes effect only when the shims are rewritten - on `lefthook install`, or at the next hook run through auto-sync (above) unless `no_auto_install` is set - and it does nothing at all for a CI job that invokes `lefthook run` directly.
+
+**Turn a missing tool into a message.** A hook whose tool is absent fails with a bare `exit 127`; `fail_text` names the fix - "You can specify a text to show when the command or script fails":
+
+```yaml
+pre-commit:
+  commands:
+    lint:
+      run: golangci-lint run ./...
+      fail_text: "install golangci-lint v2.15.0: see CONTRIBUTING.md"
+```
+
+GUI git clients (VS Code, for one) run hooks without your shell's `PATH`, which hides tools installed by a version manager. A per-developer `rc: ~/.lefthookrc` in `lefthook-local.yml` points at "a simple `sh` script" that lefthook sources first, for example `PATH=$PATH:$HOME/go/bin`.
 
 If you add a secret scanner, give it `priority: 1` so it runs before any formatter - otherwise a fixer can rewrite the file holding a credential before the scan ever reads it:
 
@@ -173,7 +187,7 @@ Named jobs merge across `extends` and local config; unnamed jobs append in defin
 |---------|---------|
 | `lefthook install` | Write the git hook shims; `install <hook>...` for specific hooks |
 | `lefthook uninstall` | Remove shims and restore any `.old` hooks |
-| `lefthook run <hook>` | Run a hook manually (this is what CI should call); `--job <name>` / `--tag <tag>` select jobs, `--file <path>` (repeatable) or `--all-files` replace the staged list |
+| `lefthook run <hook>` | Run a hook manually (this is what CI should call); `--job <name>`, `--command <name>` (singular and repeatable; `--commands` fails with `flag provided but not defined`) and `--tag <tag>` select jobs, `--file <path>` (repeatable) or `--all-files` replace the staged list, `--no-auto-install` skips the hook re-sync |
 | `lefthook validate` | Check the config is well-formed |
 | `lefthook dump` | Print the merged effective config |
 | `lefthook add <hook>` | Scaffold a hook and its script directory |
@@ -201,7 +215,7 @@ go tool lefthook install
 lefthook: go tool lefthook
 ```
 
-The value is baked into the shim at install time and tried before any PATH lookup, with only `LEFTHOOK_BIN` ahead of it (`internal/templates/hook.tmpl:18-24`), so every clone runs the version pinned in `go.mod`. It is not merged from `remotes` or `extends`. `go tool` resolves against the current module and git runs hooks from the worktree root, so this form assumes `go.mod` (or a `go.work` that includes the module tracking lefthook) sits at the root. Tracking v2.2.x this way raises your module's `go` line to `1.27.0`.
+The value is baked into the shim whenever it is written (install, or auto-sync after a config change) and tried before any PATH lookup, with only `LEFTHOOK_BIN` ahead of it (`internal/templates/hook.tmpl:18-24`), so every clone runs the version pinned in `go.mod`. It is not merged from `remotes` or `extends`. `go tool` resolves against the current module and git runs hooks from the worktree root, so this form assumes `go.mod` (or a `go.work` that includes the module tracking lefthook) sits at the root. Tracking v2.2.x this way raises your module's `go` line to `1.27.0`.
 
 The same applies to the jobs themselves: hook commands resolve tools from the caller's PATH, so a developer without the binary gets a commit that fails with a bare `exit 127`. Run small tools through `go tool` to make them reproducible - but not golangci-lint, which upstream says not to install as a tool directive (see SKILL.md); pin its binary in the repo's version-manager config (`.mise.toml`, `.tool-versions`) instead:
 

@@ -2,10 +2,10 @@
 name: go-dev
 description: Opinionated Go setup with golangci-lint v2, gofumpt, gotestsum, golang-migrate, and just. Use when starting a Go project, configuring lint, format, test, coverage or CI, writing a Justfile, wiring migrations, or leaving a Makefile workflow.
 metadata:
-  version: "0.7.0"
+  version: "0.8.0"
   categories: "development"
   topics: "go, golangci-lint, gofumpt, testing, just"
-  upstream: "go@1.27.3, golangci-lint@v2.15.0, gofumpt@v0.12.0, gotestsum@v1.13.0, golang-migrate@v4.20.1, just@1.59.0, lefthook@v2.2.2"
+  upstream: "go@1.27.4, golangci-lint@v2.15.0, gofumpt@v0.12.0, gotestsum@v1.13.0, golang-migrate@v4.20.1, just@1.59.0, lefthook@v2.2.2"
   openclaw:
     homepage: https://github.com/tenequm/skills/tree/main/skills/go-dev
     emoji: "🐹"
@@ -76,8 +76,9 @@ go install -tags 'postgres' github.com/golang-migrate/migrate/v4/cmd/migrate@v4.
 Two Go-command behaviours worth knowing before the first commit:
 
 - `go mod init` under a 1.N toolchain writes `go 1.(N-1).0`, not `1.N` - "Running `go mod init` using a toolchain of version `1.N.X` will create a `go.mod` file specifying the Go version `go 1.(N-1).0`." Bump the directive deliberately if you want 1.N language features.
-- Set a `toolchain go1.27.3` line in `go.mod`, but know it is a floor, not a pin: under the default `GOTOOLCHAIN=auto` the `go` command switches only "if ... `<tname>` is newer than the default Go toolchain", so a newer local `go` wins. For an exact toolchain set `GOTOOLCHAIN=go1.27.3` (CI or `go env -w`); `GODEBUG=toolchaintrace=1 go version` shows which one was picked. Keep the line at the current patch, not the `.0`: it selects the `go` that `govulncheck` scans stdlib advisories against on any machine whose own `go` is older, so a stale patch red-lights CI on its own - see Footguns below. Live example: go1.27.2 and go1.27.3 fixed 16 stdlib and toolchain advisories, so a module still on `toolchain go1.27.1` that imports `crypto/x509` or `net/http` gets nine findings from govulncheck v1.9.0 (first: `GO-2026-6809`, "Fixed in: crypto/x509@go1.27.3") and exit 3.
-- Bumping the `go` directive also flips GODEBUG defaults, not only the removed settings listed below. Each setting carries the release that changed its default (`{Name: "urlstrictcolons", Package: "net/url", Changed: 26, Old: "0"}` means that once the module says `go 1.26`, "`Parse` now rejects malformed URLs containing colons in the host subcomponent", which breaks multi-host DSNs such as `postgres://h1:5432,h2:5432/db`). List what a bump to 1.N flips with `rg 'Changed: N,' $(go env GOROOT)/src/internal/godebugs/table.go`, and pin an old value with a `godebug` line while you migrate.
+- Set a `toolchain go1.27.4` line in `go.mod`, but know it is a floor, not a pin: under the default `GOTOOLCHAIN=auto` the `go` command switches only "if ... `<tname>` is newer than the default Go toolchain", so a newer local `go` wins. For an exact toolchain set `GOTOOLCHAIN=go1.27.4`, once per repo rather than per command: `export GOTOOLCHAIN := "go1.27.4"` at the top of the Justfile (or an `.envrc`), kept in step with `go.mod` and CI. A version prefixed onto every command or agent brief goes stale on the next security release, and `go env -w` is machine-wide. The Justfile export also overrides setup-go's `GOTOOLCHAIN=local` wherever CI runs `just`. `GODEBUG=toolchaintrace=1 go version` shows which toolchain was picked. Keep the line at the current patch, not the `.0`: it selects the `go` that `govulncheck` scans stdlib advisories against on any machine whose own `go` is older, so a stale patch red-lights CI on its own - see Footguns below. Live example: go1.27.4 fixed 12 security issues, so a module still on `toolchain go1.27.3` that imports `net/http` gets `GO-2026-6859` ("Fixed in: net/http@go1.27.4") from govulncheck v1.10.0 and exit 3. `go get toolchain@patch` bumps the line to the latest patch.
+- A Go bump moves every place the version is written, in one change: each `go.mod` (nested modules too), `.tool-versions` or mise, the Dockerfile's `FROM golang:` tag, CI's `go-version`, and the Justfile `GOTOOLCHAIN`. A partial bump is the usual way CI and local runs diverge, and the image tag - not the `toolchain` line - compiles the binary you ship (see the [Go Toolchain Reference](references/go-toolchain-reference.md)). A CI step that fails when these disagree catches it.
+- Bumping the `go` directive also flips GODEBUG defaults, not only the removed settings listed below. Each setting carries the release that changed its default (`{Name: "urlstrictcolons", Package: "net/url", Changed: 26, Old: "0"}` means that once the module says `go 1.26`, "`Parse` now rejects malformed URLs containing colons in the host subcomponent" - `http://h1:80:80/` becomes a parse error; the rule covers only `http` and `https`, so a multi-host DSN such as `postgres://h1:5432,h2:5432/db` still parses). List what a bump to 1.N flips with `rg 'Changed: N,' $(go env GOROOT)/src/internal/godebugs/table.go`, and pin an old value with a `godebug` line while you migrate.
 
 ## .golangci.yml
 
@@ -151,7 +152,7 @@ linters:
     presets:
       - comments
       - std-error-handling
-      - common-false-positives
+      - common-false-positives   # also silences gosec G304 (file path from a variable)
     rules:
       - path: _test\.go
         linters:
@@ -190,6 +191,8 @@ output:
 ```
 
 Two template choices are deliberate. revive's `unhandled-error` needs no override: standalone revive flags `fmt.Println` with it, but golangci-lint loads revive in syntax mode (`goanalysis.LoadModeSyntax`), and on v2.14.0 and v2.15.0 the rule reported nothing - not even an unchecked call to a same-package function - although the v2.15.0 changelog lists it among rules now "working (less randomly)". errcheck is what catches unchecked errors here. `confusing-results` is off because it flags `func f() (string, string)` while `nonamedreturns` flags `func f() (a, b string)` - with both on, a same-typed pair of results has no passing form.
+
+Keep `run.build-tags` listing every build tag the repo uses, and drop standalone `go vet` recipes once lint is in the gate: `govet` is in the standard set and runs over the tagged files too. Repo-specific rules (import boundaries, banned calls) belong in this file as `depguard` and `forbidigo` settings rather than in shell checks - see the [golangci-lint Reference](references/golangci-lint-reference.md).
 
 ## Justfile
 
@@ -234,8 +237,9 @@ vuln:
 
 # Run all tests with race detection
 [group('test')]
+[positional-arguments]
 test *args="./...":
-    gotestsum --format testname -- -race {{ args }}
+    gotestsum --format testname -- -race "$@"
 
 # Run tests with coverage
 [group('test')]
@@ -248,7 +252,7 @@ test-cov:
 coverage: test-cov
     go tool cover -html=coverage.out
 
-# Run integration tests
+# Run tests that need an environment the machine may lack
 [group('test')]
 test-integration:
     gotestsum --format testname -- -race -tags=integration ./...
@@ -325,6 +329,8 @@ clean:
 ```
 
 `check` deliberately leaves out `vuln`: govulncheck calls the network, and a vulnerability-database update can turn the gate red on a change that touched nothing. Run it as its own CI job instead. The `-test -tags=integration` flags matter: govulncheck documents `-test` as "analyze test files (only valid for source mode, default false)", and like `go build` it skips files behind an unset build tag, so a bare `govulncheck ./...` never scans the test-only dependencies or the integration suite the linter covers. `golangci-lint run` also runs the enabled formatters and reports their issues, so `fmt-check` duplicates that check - keep it anyway for the readable diff.
+
+`test` passes its arguments through `[positional-arguments]` and `"$@"`. With `{{ args }}`, just pastes them into the shell line, so `just test -run 'TestA|TestB' ./pkg` pipes into a command named `TestB` and fails with exit 127. No recipe passes `-count=1`: Go's test cache already reruns exactly the packages a change can affect, so forcing it turns every gate into a full run. Keep `-count=1` for a deliberate fresh run (a release, a flake check, confirming a fix). `test-integration` is for suites that need something the machine may lack, such as a database or a running stack; slow but hermetic tests belong behind `testing.Short()` instead - see the [Go Testing Reference](references/go-testing-reference.md).
 
 ## Lefthook Config
 
@@ -417,6 +423,8 @@ myapp/
 - `pkg/` - only add when another repo actually imports it today, not "maybe someday"
 - `testdata/` - test fixtures, golden files, fuzz corpus
 - `migrations/` - SQL migration files (timestamp or sequential versioned)
+- No pass-through layers: a hand-written repository, service, handler and DTO chain over sqlc-generated queries turned one new boolean field into a six-file diff. Add a layer when it holds logic, not for symmetry
+- A polyglot monorepo keeps language-neutral top-level directories (`apps/`, `packages/`), one `go.mod` per Go module and a root `go.work`, rather than a root-level `cmd/` and `internal/`
 
 ## Daily Workflow
 
@@ -436,7 +444,7 @@ Both `go fix` and `go vet` take `-diff`: "instead of applying each fix, print th
 
 Other Go 1.27 changes that touch this stack directly:
 
-- **Generic methods.** "Go 1.27 now supports generic methods: a method declaration may declare its own type parameters."
+- **Generic methods.** "Go 1.27 now supports generic methods: a method declaration may declare its own type parameters." Build them with go1.27.4 or later: export data from go1.27.0-1.27.3 lets analysis facts attach to the wrong methods, which crashed staticcheck ([golang/go#82106](https://github.com/golang/go/issues/82106)).
 - **`encoding/json/v2`.** "The encoding/json package is now backed by the v2 implementation" - "Marshaling and unmarshaling behavior is preserved, but the exact text of error messages may differ", so tests that assert on JSON error strings break. The escape hatch is `GOEXPERIMENT=nojsonv2` at build time.
 - **`go test -json` gained an `OutputType` field**, annotating `"Action":"output"` lines. gotestsum v1.13.0 does not use it yet ([gotestsum#571](https://github.com/gotestyourself/gotestsum/issues/571)).
 - **`go mod tidy` reshapes `go.mod`** to "at most two require blocks". The first tidy after the bump rewrites the file, and the lefthook `mod-tidy` job stages that rewrite into whatever you commit next.
@@ -451,9 +459,9 @@ Eight failure modes that cost real debugging time, none of which produce an obvi
 
 **lefthook is dormant until installed.** The binary being absent from PATH, or `lefthook install` never having run, both present as "hooks just don't fire" with no warning. Set `assert_lefthook_installed: true` so this fails loudly, pin lefthook as a repo tool, and make `lefthook install` part of onboarding. A leftover `core.hooksPath` (husky, pre-commit) is a third cause: `lefthook install` stops when it is set, until you run `lefthook install --reset-hooks-path`.
 
-**A stale lint cache invents issues.** golangci-lint can report failures in files that no longer exist on disk - typically after a branch switch or a deleted worktree. The costlier variant is nolintlint reporting a load-bearing `//nolint` directive as unused, which tempts you to delete a real suppression. Its main root cause was lost analyzer facts after an interrupted run, a changed linter set, or a partly cleaned cache ([#6807](https://github.com/golangci/golangci-lint/issues/6807)), fixed in v2.14.0 - so upgrade before debugging. The same bug can also *hide* real issues that CI then catches. Prove which side is lying with `GL_DEBUG=nolint_filter` before touching the code. If a phantom persists, move that suppression into `linters.exclusions.rules` rather than running `golangci-lint cache clean` before every gate, which turns a warm run of seconds into a cold one ten times longer. `cache clean` empties whatever `GOLANGCI_LINT_CACHE` resolves to in *that* shell, so running it outside a recipe that sets the variable cleans the wrong directory. When several worktrees share a checkout, give each its own cache with `GOLANGCI_LINT_CACHE=<worktree>/.golangci-cache` ("the path must be absolute") - and note the cache does not reliably invalidate on config, tool, or dependency changes, so fold those into the cache key if a phantom keeps returning.
+**A stale lint cache invents issues.** golangci-lint can report failures in files that no longer exist on disk - typically after a branch switch or a deleted worktree. The costlier variant is nolintlint reporting a load-bearing `//nolint` directive as unused, which tempts you to delete a real suppression. Its main root cause was lost analyzer facts after an interrupted run, a changed linter set, or a partly cleaned cache ([#6807](https://github.com/golangci/golangci-lint/issues/6807)), fixed in v2.14.0 - so upgrade before debugging. The same bug can also *hide* real issues that CI then catches. Prove which side is lying with `GL_DEBUG=nolint_filter` before touching the code. If a phantom persists, move that suppression into `linters.exclusions.rules` rather than running `golangci-lint cache clean` before every gate, which turns a warm run of seconds into a cold one ten times longer. `cache clean` empties whatever `GOLANGCI_LINT_CACHE` resolves to in *that* shell, so running it outside a recipe that sets the variable cleans the wrong directory. When several worktrees share a checkout, give each its own cache with `GOLANGCI_LINT_CACHE=<worktree>/.golangci-cache` ("the path must be absolute"). On v2.15.0 the cache key covers the golangci-lint version, `linters.settings`, `run.build-tags` and the current directory's `go.mod` (`pkg/commands/run.go`), so any settings or `go.mod` edit makes the next run cold - batch config edits before one run. It does not cover `GOOS`, `GOARCH`, `CGO_ENABLED`, or a sibling workspace module's `go.mod`: a shared cache reports `0 issues.` for `GOOS=darwin` after a `GOOS=linux` run that a cold darwin run fails ([#6917](https://github.com/golangci/golangci-lint/issues/6917); fixed on main, unreleased). Give each target its own `GOLANGCI_LINT_CACHE`.
 
-**Concurrent golangci-lint runs fail rather than queue.** The lock is a single file in the system temp dir, *not* per-`GOLANGCI_LINT_CACHE`, so per-worktree cache isolation does not prevent it. A second run waits five seconds, then exits with `parallel golangci-lint is running`. This bites hardest in a `just` recipe with `[parallel]` that runs `fmt` and `run` together, on green code. Set `run.allow-serial-runners: true` to wait indefinitely instead of failing, or `run.allow-parallel-runners: true` to drop the lock entirely.
+**Concurrent golangci-lint runs fail rather than queue.** The lock is a single file in the system temp dir, *not* per-`GOLANGCI_LINT_CACHE`, so per-worktree cache isolation does not prevent it. A second run waits five seconds, then exits with `parallel golangci-lint is running`. This bites hardest in a `just` recipe with `[parallel]` that runs `fmt` and `run` together, on green code. Set `run.allow-serial-runners: true` to wait indefinitely instead of failing, or `run.allow-parallel-runners: true` to drop the lock entirely. Once each worktree has its own `GOLANGCI_LINT_CACHE`, prefer `allow-parallel-runners`: serial runners queued a one-package pre-commit lint for 49.6 s behind other worktrees' runs, and it took 2.7 s after the switch.
 
 **Don't run two formatters against one gate.** Standalone `gofumpt -w` and `golangci-lint fmt` do not always agree on the same file, so a repo that fixes with one and gates with the other fails CI on code it just formatted. It recurs whenever gofumpt releases ahead of golangci-lint: v2.13.2 bundled gofumpt v0.11.0 against a standalone v0.12.0 (which changed how imports carrying comments and blank lines are laid out), and only v2.14.0 caught up. gofumpt master already carries a batch of unreleased output-changing fixes, so expect the next gap. Pick one as both fixer and gate - the Justfile and the hook above both use `golangci-lint fmt`.
 
@@ -461,7 +469,7 @@ Eight failure modes that cost real debugging time, none of which produce an obvi
 
 **Sandboxed and agent runs fail in the build cache, not in your code.** An agent sandbox or a read-only `HOME` cannot write the default `GOCACHE`, and the run fails as `FAIL <pkg> [setup failed]` with `open .../go-build/...: operation not permitted` - or a generator emits nothing and a later diff fails. Point `GOCACHE` (and `GOLANGCI_LINT_CACHE`) at one persistent, absolute, writable directory rather than a fresh temp dir per run: "The cache is safe for concurrent invocations of the go command", while a new dir is a full cold rebuild every time (`-race` included). `httptest` failing with `bind: operation not permitted` is the same sandbox, not a test bug. And settings exported only inside the Justfile (`GOFLAGS=-trimpath`, cache paths) do not reach an ad-hoc `go test` or `golangci-lint run` from a shell, which then builds a second cache - and can share and poison the lint cache the recipe uses.
 
-**`govulncheck` fails on stdlib advisories, not just your code.** It scans against "the Go version specified by the `go` command found on the PATH". Locally, under `GOTOOLCHAIN=auto`, that is the newer of your installed `go` and the `toolchain` line in `go.mod`. In CI, setup-go exports `GOTOOLCHAIN=local`, so it is whatever `go-version` installed unless you use `go-version-file: go.mod`. Either way, a lagging toolchain red-lights CI on commits that touch zero Go code - and a failed test-and-lint job typically skips the release job downstream. When `govulncheck` reports vulnerabilities "in the Go standard library" all marked fixed in a patch you don't have, the fix is bumping the toolchain, not editing code. The scanner binary has a floor too: a govulncheck built with Go 1.26 fails on Go 1.27 code with "Loading packages failed, possibly due to a mismatch between the Go version used to build govulncheck and the Go version on PATH" (`file requires newer Go version go1.27 (application built with go1.26)`). Reinstall it with the current toolchain after every Go minor bump.
+**`govulncheck` fails on stdlib advisories, not just your code.** It scans against "the Go version specified by the `go` command found on the PATH". Locally, under `GOTOOLCHAIN=auto`, that is the newer of your installed `go` and the `toolchain` line in `go.mod`. In CI, setup-go exports `GOTOOLCHAIN=local`, so it is whatever `go-version` installed unless you use `go-version-file: go.mod`. Either way, a lagging toolchain red-lights CI on commits that touch zero Go code - and a failed test-and-lint job typically skips the release job downstream. When `govulncheck` reports vulnerabilities "in the Go standard library" all marked fixed in a patch you don't have, the fix is bumping the toolchain, not editing code. Findings cannot be silenced - "There is no support for silencing vulnerability findings" - so the only responses are a bump or a deliberate non-blocking job. A clean scan does not prove the toolchain is patched either: advisories filed against the `toolchain` module itself, such as go1.27.4's eleven cgo fixes (`GO-2026-6848` through `GO-2026-6858`), show up in neither source nor `-scan module` output. They matter whenever third-party cgo code is built, `go install` and `go get -tool` included, so track Go security releases directly. The scanner binary has a floor too: a govulncheck built with Go 1.26 fails on Go 1.27 code with "Loading packages failed, possibly due to a mismatch between the Go version used to build govulncheck and the Go version on PATH" (`file requires newer Go version go1.27 (application built with go1.26)`). Reinstall it with the current toolchain after every Go minor bump.
 
 ## CI/CD Pipeline (GitHub Actions)
 
@@ -509,22 +517,26 @@ jobs:
 
   security:
     runs-on: ubuntu-latest
+    # Blocks PRs; on main it can only fail on an advisory published after the PR ran
+    continue-on-error: ${{ github.event_name == 'push' }}
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
-      - run: go install golang.org/x/vuln/cmd/govulncheck@v1.9.0
+      - run: go install golang.org/x/vuln/cmd/govulncheck@v1.10.0
       - run: govulncheck -test -tags=integration ./...
 ```
 
 Three `setup-go` behaviours decide whether this workflow is fast or pathologically slow:
 
 - **It hashes a repo-root `go.mod`.** Caching is on by default, but a module in a subdirectory never matches, so every run logs a restore failure and cold-compiles the whole dependency tree. Point `cache-dependency-path` at the real file.
-- **It restores only the exact key, and that key hashes `go.mod`.** "By default, the cache key for Go modules is based on `go.mod`. To use `go.sum`, configure the `cache-dependency-path` input." There is no `restore-keys` prefix fallback, so every change to the hashed file is a fully cold run. If that hurts, set `cache: false` and use one `actions/cache` step with a `restore-keys` prefix, keyed per job so parallel jobs do not race on save - and end the key with something unique such as `-${{ github.sha }}`: cache entries are immutable, so a key built only from `go.sum` is saved once and every later save fails with `Unable to reserve cache`. In a vendored repo the module cache buys nothing; cache `~/.cache/go-build` instead.
+- **It restores only the exact key, and that key hashes `go.mod`.** "By default, the cache key for Go modules is based on `go.mod`. To use `go.sum`, configure the `cache-dependency-path` input." There is no `restore-keys` prefix fallback, so every change to the hashed file is a fully cold run. If that hurts, set `cache: false` and use one `actions/cache` step with a `restore-keys` prefix, keyed per job so parallel jobs do not race on save - and end the key with something unique such as `-${{ github.sha }}`: cache entries are immutable, so a key built only from `go.sum` is saved once and every later save fails with `Unable to reserve cache`. Put the Go version (or a bumpable `CACHE_VERSION` env) at the front of every key and `restore-keys` prefix: otherwise a toolchain bump restores the previous toolchain's build cache by prefix, which is useless, fills the disk, and leaves a cold lint that can blow the job timeout. Share one module cache keyed on `go.sum` across jobs, give each job its own build cache (an exact-key hit never saves, and lint, `-race` tests and image builds compile different things), save only from `main`, and restore-only on PRs with `actions/cache/restore`. Take the paths from setup-go v7.1's `GOCACHE` and `GOMODCACHE` step outputs rather than hardcoding `~/.cache/go-build`, which is wrong on macOS and Windows runners. In a vendored repo the module cache buys nothing; cache only the build cache.
 - **The cache is saved in a post step declared `post-if: success()`.** A job that fails saves nothing, so a cold run that times out stays cold forever and raising the timeout never breaks the loop. Split lint and test into separate jobs so one slow gate cannot starve the other's cache. The template's `run.timeout: 5m` is tight for a cold lint on a private repo's 2-vCPU `ubuntu-latest`.
 
-setup-go also exports `GOTOOLCHAIN=local`, so the `go.mod` `toolchain` line is ignored unless you use `go-version-file`. Even then it reads the `toolchain` line only while `GOTOOLCHAIN` is not already `local` (`src/installer.ts`: "use version from go directive if 'GOTOOLCHAIN' has been explicitly set"), so a workflow-level `env: GOTOOLCHAIN: local`, or a second setup-go step in the same job, silently falls back to the `go` directive's older version. A `go.work` workspace takes `go-version-file: go.work`. The same rule breaks the `oldstable` matrix leg once you bump the `go` directive past it: the older `go` fails with `go.mod requires go >= ...` instead of downloading a newer toolchain. Drop `oldstable` at that point, or keep the directive one minor behind.
+setup-go also exports `GOTOOLCHAIN=local`, so the `go.mod` `toolchain` line is ignored unless you use `go-version-file`. Even then it reads the `toolchain` line only while `GOTOOLCHAIN` is not already `local` (`src/installer.ts`: "use version from go directive if 'GOTOOLCHAIN' has been explicitly set"), so a workflow-level `env: GOTOOLCHAIN: local`, or a second setup-go step in the same job, silently falls back to the `go` directive's older version. A `go.work` workspace takes `go-version-file: go.work`. The same rule breaks the `oldstable` matrix leg once you bump the `go` directive past it: the older `go` fails with `go.mod requires go >= ...` instead of downloading a newer toolchain. Drop `oldstable` at that point, or keep the directive one minor behind. setup-go v7.1 also accepts the toolchain spelling in `go-version`, with one trap: "`go1.21` resolves to exactly `1.21.0`, unlike `1.21`, which matches patch releases."
+
+The `security` job blocks PRs but not pushes to `main`: a PR already had to pass it, so on `main` it fails only when an advisory was published between the PR run and the merge, and blocking there stops every deploy, hotfixes included, over a dependency nobody touched. Make branch protection require one `if: always()` job that `needs` all the others and fails if any of them failed, so adding or renaming a job never needs a ruleset edit. Treat jobs as isolation boundaries, not a parallelism tool: `go test ./...` already fills the runner's cores, and a matrix of small jobs that each check out and recompile the same graph costs runner minutes without cutting wall time.
 
 The action runs `golangci-lint config verify` itself before linting whenever a config file exists (input `verify`, default `true`), so a config the pinned binary rejects fails fast without an extra step. For incremental adoption with `only-new-issues: true`, grant `pull-requests: read`. Note that CI never runs your Justfile unless you install just (`extractions/setup-just`) - the template calls the tools directly. Action inputs for monorepos and `go.work` are in the [golangci-lint Reference](references/golangci-lint-reference.md).
 
@@ -568,7 +580,7 @@ Not part of the core stack, but the gaps most projects fill next:
 |------|------|-----|
 | Structured logging | `log/slog` (stdlib) | The default since Go 1.21; the `sloglint` linter enforces a consistent call style. Install a handler in `main` (`slog.SetDefault(slog.New(slog.NewJSONHandler(os.Stderr, nil)))`), or `slog.Info` writes the old `log` text format that log pipelines can only regex-parse |
 | Hot reload for a running service | [air](https://github.com/air-verse/air) or [wgo](https://github.com/bokwoon95/wgo) | `just test-watch` covers tests; neither `go run` nor gotestsum restarts a server on save |
-| Release binaries + changelog | [GoReleaser](https://goreleaser.com/) | Cross-compile, checksum, sign, and publish from one config |
+| Release binaries + changelog | [GoReleaser](https://goreleaser.com/) | Cross-compile, checksum, sign, and publish from one config; CI and release ordering in the [Go Toolchain Reference](references/go-toolchain-reference.md) |
 | Type-safe SQL from schema | [sqlc](https://sqlc.dev/) | Generates Go from the same SQL your migrations define, so `storage/` stays hand-written-free |
 
 ## Reference Docs
@@ -580,8 +592,8 @@ Not part of the core stack, but the gaps most projects fill next:
 - [golang-migrate Reference](references/go-migrate-reference.md) - CLI, library, embed.FS, transactions, pitfalls
 - [Justfile Reference](references/justfile-reference.md) - Go-specific recipes, task groups, lefthook integration
 - [Lefthook Reference](references/lefthook-reference.md) - job filtering, monorepo roots, remote configs, CLI, env vars
-- [Go Toolchain Reference](references/go-toolchain-reference.md) - `go.work` workspaces, build and test caches, version stamping, container builds
-- [Go Correctness Reference](references/go-correctness-reference.md) - recurring bugs in reviewed Go code: filesystem confinement, context lifetimes, processes, concurrency, SQLite
+- [Go Toolchain Reference](references/go-toolchain-reference.md) - `go.work` workspaces, tools and dependencies, build and test caches, version stamping and inspecting binaries, container builds, releases
+- [Go Correctness Reference](references/go-correctness-reference.md) - recurring bugs in reviewed Go code: filesystem confinement, context lifetimes, processes, concurrency, SQLite, stdlib before hand-rolled code
 
 ## Resources
 

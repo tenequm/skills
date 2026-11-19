@@ -1,6 +1,6 @@
 # Go Testing Reference
 
-Covers Go testing best practices, patterns, and tooling as of Go 1.27.3 (November 2026).
+Covers Go testing best practices, patterns, and tooling as of Go 1.27.4 (November 2026).
 
 ## Table-Driven Tests
 
@@ -266,7 +266,7 @@ func TestService(t *testing.T) {
 | Library | Approach | Best For |
 |---------|----------|----------|
 | **go.uber.org/mock** (v0.6.0) | Code gen via `mockgen` | Precise expectations, call ordering |
-| **vektra/mockery** (v3.9.0) | Batch code gen, templates | Large codebases (5-30x faster than sequential mockgen) |
+| **vektra/mockery** (v3.9.1) | Batch code gen, templates | Large codebases (5-30x faster than sequential mockgen) |
 | **matryer/moq** | Function-field based mocks | Lightweight, simple mocks |
 | **testify/mock** | Runtime (no codegen) | Quick mocking without generators |
 | **Hand-written** | Interface implementation | Full control, no dependencies |
@@ -364,9 +364,24 @@ benchstat old.txt new.txt
 
 Always use `-benchmem` - allocations per op often matter more than raw speed.
 
-## Build Tags for Test Separation
+## Test Modes: `-short` First, Build Tags for Environments
 
-Use `//go:build` (not the old `// +build`):
+Choose test modes with `testing.Short()`, not build tags, test-name lists or `-skip` regexes. `go test -race -short ./...` is the gate; long mode (`go test ./...`, no race) adds the statistical and real-time tests, and each of those skips itself under `-short`:
+
+```go
+func TestSlow(t *testing.T) {
+    if testing.Short() {
+        t.Skip("skipping in short mode")
+    }
+    // expensive test
+}
+```
+
+Make integration tests hermetic so they need no tag at all and run under `-race`: `testing/synctest` with an in-memory network injected through an `*http.Client` or dial option (see synctest below), and an embedded or per-test database (see the Postgres patterns below).
+
+### Build tags for tests that need an environment
+
+Keep a build tag for tests that need something the machine may not have - a running stack, cloud credentials, a device. Use `//go:build` (not the old `// +build`):
 
 ```go
 //go:build integration
@@ -381,18 +396,7 @@ func TestUserRepository_Integration(t *testing.T) {
 
 Run: `go test -tags=integration ./...`
 
-### Alternative: testing.Short()
-
-```go
-func TestSlow(t *testing.T) {
-    if testing.Short() {
-        t.Skip("skipping in short mode")
-    }
-    // expensive test
-}
-```
-
-Run unit tests only: `go test -short ./...`
+A smoke check against a running local stack is such a test, written in Go rather than bash with `curl` and inline Python: the JSON is typed, it imports the seed constants, and the recipe becomes one line - `go test -tags smoke -count=1 -run TestSmoke ./...` (`-count=1` because the stack is state Go cannot hash).
 
 ### Alternative: Custom Flags
 
@@ -447,6 +451,8 @@ go test -race ./...
 - Only detects races on actually executed paths
 - **Always use `-race` in CI** - the single most important testing flag - but keep wall-clock, latency and load assertions out of the race run (see Lessons from Real Suites below)
 - Combine with `-count=N` for better detection: before calling a race fixed, rerun the touched test with `-race -count=30` or more. Stress also exposes races in the test itself, such as reading output before a goroutine finishes draining it - fix those by polling with a deadline, not by sleeping
+- Stress a flaky concurrency test the way CI hurts it: `go test -race -count=50 -run '^TestX$' -cpu 1,2,4 ./pkg` while a second full `-race` run loads the machine. In one case the `-cpu` matrix failed on its second iteration before the fix and passed 200 times after. A timing-bound test that passes under load may only be hiding the bug, so pair this with reverting the fix (see Lessons below)
+- Point the detector at your own code, not at C-translated dependencies. A pure-Go SQLite driver is millions of lines of transpiled C; `go test -race -gcflags='modernc.org/...=-race=false -d=checkptr=0' ./...` leaves every first-party package instrumented and cut one suite's CPU from 257 s to 49 s. You lose race detection inside that driver only. With that driver, also reuse prepared statements: it re-parses an unprepared query on every call (44% of one package's CPU under `-race`)
 - Set `-timeout` explicitly for heavy packages under `-race` - the default is "10 minutes (10m)", and a large package on a busy CI machine can hit it and panic. The limit covers the whole test binary, not one test, and the panic names whichever test happened to be running, which is often not the slow one
 
 ### Goroutine Leak Profile (Go 1.27)
@@ -596,7 +602,7 @@ func TestClient(t *testing.T) {
 
 ## testcontainers-go
 
-Latest: **v0.44.0**. Spin up ephemeral infrastructure for integration tests.
+Latest: **v0.45.0** (requires Go 1.26). Spin up ephemeral infrastructure for integration tests.
 
 Use the module-specific `Run` constructor, not `GenericContainer` - "`GenericContainer` is the old way to create a container, and we recommend using `Run` instead, as it could be deprecated in the future." Note also that v0.43.0 changed `wait.ForSQL`: "Users of `wait.ForSQL` need to follow the new API contract, using Moby's `network.Port` instead of `string`".
 
@@ -645,7 +651,16 @@ Why each piece:
 - **`testcontainers.CleanupContainer(t, container)`** right after `Run`, before the error check - "This should be the first call after [GenericContainer](...) or a module's Run(...) in a test before any error check. If container is nil, it's a no-op." Do not write `t.Cleanup(func() { container.Terminate(ctx) })` with `ctx := t.Context()`: that context "is canceled just before Cleanup-registered functions are called", so `Terminate` gets a dead context. `CleanupContainer` terminates with `context.Background()`.
 - **Migrate once, `Snapshot`, then `Restore` per test** instead of re-running migrations for every test, which can dominate suite time. `Snapshot(ctx, ...SnapshotOption)` copies the database into a template (default name `migrated_template`, override with `postgres.WithSnapshotName`); `Restore(ctx, ...SnapshotOption)` drops and recreates the database from it. Restore mutates the shared database, so tests using it cannot run in parallel. Both connect through `database/sql` with the driver name from `postgres.WithSQLDriver` (default `"postgres"`, i.e. `lib/pq`); if that driver is not registered they log and fall back to `docker exec psql`.
 - **The same trick works without a container for SQLite and other file-backed databases.** Run golang-migrate once per test binary (`sync.Once`, or `TestMain`) into a template file under `os.MkdirTemp`, then copy that file into each test's `t.TempDir()`. Copying a file is far cheaper than replaying every migration, which can otherwise be most of the suite's wall time. Keep the migration tests themselves on a fresh, unmigrated database, and expect an import cycle if a package's own in-package tests import the shared helper - give them a local copy.
-- **Ephemeral CI runners:** set `TESTCONTAINERS_RYUK_DISABLED=true`. Ryuk's reaper has nothing to collect on a runner that is thrown away, and many packages starting containers in parallel can time out waiting for it.
+- **Ephemeral CI runners:** set `TESTCONTAINERS_RYUK_DISABLED=true`. Ryuk's reaper has nothing to collect on a runner that is thrown away, and many packages starting containers in parallel can time out waiting for it. Keep Ryuk on everywhere else: a harness that starts one shared container per package and never stops it relies on the reaper, and an interrupted `go test` left 19 Postgres containers behind. Clean leftovers with `docker rm -f $(docker ps -aq --filter label=org.testcontainers=true)`.
+
+### Postgres without a container per package
+
+`Snapshot`/`Restore` is serial, and a container per test package multiplies startup and migrations by the package count. Two patterns stay fast under `t.Parallel()` and need no setup outside `go test`:
+
+- **One server, one database per test, cloned from a migrated template.** Migrate a template database once, then give every test its own `CREATE DATABASE ... TEMPLATE` copy - tens of milliseconds each, dropped in cleanup, no truncate or DELETE helpers. [pgtestdb](https://github.com/peterldowns/pgtestdb) packages this, keyed on a hash of the migrations. One repo's warm CI went from about 11 minutes to 2m41s.
+- **An embedded Postgres started by the test helper** ([embedded-postgres](https://github.com/fergusstrange/embedded-postgres)) when no server is available. In CI, cache its downloaded binaries under a fixed key, not one hashed from `go.mod`: otherwise every `go.mod` change sends every package's test process to download Postgres at once, and some time out.
+
+Never start the database from a shell script or a CI step before the tests - the suite then fails for anyone who runs `go test` directly.
 
 ## synctest (Go 1.25+)
 
@@ -687,7 +702,14 @@ Patterns that recurred across real Go suites, usually after a flake or a slow CI
 - A `TestMain` or `sync.Once` setup runs once *per package*, not once per suite - 22 packages that each start a database container start 22 containers and run the migrations 22 times. Share by building fixtures before `go test` (a Justfile dependency), or by a cross-process lock.
 - Shared on-disk artefacts race across processes. Two packages that both build the same helper binary into one path can execute it mid-write (`text file busy`). Build it once before `go test`, or write to a temp name and `os.Rename` it into place under a file lock.
 - Heavy per-package fixtures (embedded databases, browsers) can exhaust host resources such as shared memory under the default `-p`. Lower `-p` for those suites rather than retrying.
-- Tests inside one package run one after another unless they call `t.Parallel()`, so one slow package sets the wall time. Shard it: list its tests with `go test -list '.*' ./pkg` and run disjoint `-run` patterns in separate processes (one suite went from 166s to 65s). Pass the same build tags to `go test -list` and `go list`, or tagged tests silently drop out of the shards.
+- Tests inside one package run one after another unless they call `t.Parallel()`, so one slow package sets the wall time. Fix it with `t.Parallel()` inside the package, not by sharding it into disjoint `-run` patterns in concurrent processes: each shard process sizes itself to `GOMAXPROCS`, so 13 race shards on 10 cores overloaded the machine while one `go test -race ./...` stays bounded by the core count. Split by `-run` across separate CI jobs only when one package's serial tests cannot fit the budget alone - and then pass the same build tags to `go test -list` and the shards, or tagged tests silently drop out.
+
+**Making a package parallel.** Put `t.Parallel()` first in each top-level test, except where the test - or any helper it calls - touches process-wide state or asserts on load:
+
+- Process-wide state: `slog.SetDefault`, `t.Setenv`/`os.Setenv`, `t.Chdir`, package-level variables and hooks, `http.DefaultClient`/`DefaultTransport`/`DefaultServeMux`, the default Prometheus registry, `os.Args`, flags, signal handlers, fixed ports or paths.
+- Load assertions: wall-clock bounds, and goroutine, heap or file-descriptor counts.
+
+Those stay serial; Go runs a package's serial tests before releasing the parallel ones. To free one, turn the package-level knob into a struct field with a const default and inject the `*http.Client`. Verify one package at a time with `go test -race -shuffle=on -count=3 ./pkg` (`-shuffle` randomises test order, so hidden order dependence fails now rather than later). Tests that each start a real server against one test database can exhaust its connections - one suite peaked at 96 Postgres connections, 63 with a cap of five concurrent servers - so bound that fan-out with a semaphore in the helper.
 
 **Keep timing assertions out of `-race`.** The race detector multiplies CPU and memory (one 3s loop took 24-37s and memory went from about 500 MB to 7 GB), so absolute wall-clock limits that hold in a normal run fail under race. Gate timing and load tests with a `//go:build !race` file pair (or a `raceEnabled` const set in `race`/`!race` files), compare a long case against a short case in the same process (work, allocations, elapsed time) instead of asserting absolute durations, and keep only a loose absolute backstop. A common split is two modes: `-race -short` with smaller workloads as the gate, and full-size runs without race on a schedule.
 
@@ -703,6 +725,10 @@ Patterns that recurred across real Go suites, usually after a flake or a slow CI
 
 **Use cheap settings for expensive primitives.** Production-strength password hashing (Argon2id, bcrypt at a high cost) under `-race` made one package take 175s. Expose the cost parameters and set minimal values in tests, keeping one test at production settings.
 
+**Size the test to the layer of the bug.** An argument-parsing bug gets one more case in the existing parse table, which runs in milliseconds - not a shell-entrypoint patch plus a CI step that starts a second container and polls for 90 s. Fix the bug where it lives, and test it there.
+
+**Do not test what a linter or schema already enforces.** A `depguard` or `forbidigo` rule (see the [golangci-lint Reference](golangci-lint-reference.md)) is cheaper and harder to bypass than a test that greps imports. When no stock linter can express a repo convention - "a generated sqlc field whose column ends in `_id` must be `int64`" - write it as a Go test that parses the source with `go/parser`, in an `internal/architecture` package; a custom analyzer would be the same code plus plugin setup, and golangci-lint skips generated files by default.
+
 **Test what `main` actually wires.** Tests that cover only helpers miss the production dispatch. Extract `main`'s body into `run(ctx, args, env, stdout) error` and test that, so flag parsing, config loading and command selection are exercised too.
 
 **Separate compile time from run time before optimising.** `go test` prints results in package order, so its log cannot tell slow compiles from slow tests. Time a cold `go test -race -run '^$' ./...` (compiles everything, runs nothing), then `go clean -testcache` and time the run alone. Large generated dependencies - a pure-Go SQLite driver brings millions of generated lines - often dominate the cold build.
@@ -713,7 +739,9 @@ Patterns that recurred across real Go suites, usually after a flake or a slow CI
 go test ./...                          # Run all tests
 go test -v ./...                       # Verbose
 go test -race ./...                    # Race detection
-go test -short ./...                   # Skip slow tests
+go test -race -short ./...             # The gate: race on, long tests skip themselves
+go test -shuffle=on ./...              # Randomise test order (prints the seed)
+go test -race -count=50 -cpu 1,2,4 -run '^TestX$' ./pkg  # Stress one flaky test
 go test -run TestFoo ./...             # Run matching tests
 go test -run TestFoo/subcase ./...     # Run specific subtest
 go test -count=1 ./...                 # Disable test cache
@@ -731,6 +759,8 @@ go test -artifacts -outputdir=./out ./...  # Keep it under ./out instead of CWD
 
 **Go 1.27 annotates the JSON stream.** `go test -json` "now annotates `"Action":"output"` lines with an optional new field `"OutputType"`", distinguishing framework output from a test's own writes. Anything parsing `go test -json` - gotestsum, CI report generators, custom tooling - sees this field appear after a toolchain bump; consumers that validate the schema strictly may need updating.
 
-**A cached green run proves nothing.** `go test` caches results for unchanged packages and replays them, so a passing run may not have executed a single test. When a result matters - before a release, after a dependency bump, when confirming a fix - pass `-count=1` to force real execution. This is why the CI recipes in this skill use it.
+**Keep the test cache on, and know when it lies.** `go test` replays results for packages a change cannot affect, which is exactly the "run only what changed" behaviour a gate wants - so the default `test`, `check` and CI recipes in this skill leave it on, and CI restores `GOCACHE` so untouched packages print `(cached)`. A cached green run did not execute those tests, though. When a result matters - before a release, when confirming a fix, for tests that read state Go cannot hash (network, the clock, binaries fetched at test time) - pass `-count=1` to force real execution.
+
+**Files outside the module are never rechecked.** `cmd/go/internal/test/test.go`: "Do not recheck files outside the module, GOPATH, or GOROOT root." In a `go.work` repo, a test that reads a sibling module's source or `testdata/` keeps replaying a cached pass after those files change. Run such packages with `-count=1`, from a list kept in the Justfile.
 
 The cache key for files a test opens is their metadata, not their content: "Tests that open files within the package's module or that consult environment variables only match future runs in which the files and environment variables are unchanged", and "unchanged" is checked with `fmt.Fprintf(h, "stat %d %x %v %v\n", info.Size(), uint64(info.Mode()), info.ModTime(), info.IsDir())` (`cmd/go/internal/test/test.go`). A fresh CI checkout gives every file a new mtime, so packages whose tests read `testdata/` never hit the cache even with a restored `GOCACHE`. `GODEBUG=gocachetest=1` "causes the go command to print details of its decisions about whether to reuse a cached test result". To get hits in CI anyway, set each tracked file's mtime from its last commit time (or its content hash mapped to a fixed time) right after checkout.

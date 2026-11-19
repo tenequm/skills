@@ -149,6 +149,8 @@ go test -json -short ./... | gotestsum tool slowest --skip-stmt "testing.Short" 
 
 ### CI Matrix Partitioning
 
+Reach for this last. `go test ./...` already fills a runner's cores, and every matrix job checks out, sets up and recompiles the same graph, so partitioning usually adds runner minutes without cutting wall time. Prefer one larger runner plus `t.Parallel()` inside slow packages; partition only when one package's serial tests cannot fit the budget alone.
+
 ```bash
 # Partition tests across CI jobs based on timing data
 echo -n "matrix=" >> $GITHUB_OUTPUT
@@ -253,7 +255,7 @@ test-ci:
     gotestsum --format github-actions \
       --junitfile unit-tests.xml \
       --junitfile-hide-empty-pkg \
-      -- -race -count=1 ./...
+      -- -race ./...
 
 # Watch mode
 test-watch:
