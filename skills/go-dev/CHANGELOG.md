@@ -7,6 +7,36 @@ and this skill adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.h
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-11-19
+
+### Changed
+- Go `1.27.3` -> `1.27.4`: 12 security fixes, so `toolchain go1.27.3` now fails govulncheck (GO-2026-6859 in `net/http`). govulncheck `v1.9.0` -> `v1.10.0`, testcontainers-go `v0.44.0` -> `v0.45.0`, mockery `v3.9.0` -> `v3.9.1`.
+- **Breaking:** the `test` recipe takes arguments through `[positional-arguments]` and `"$@"`; `{{ args }}` re-split them in the shell, so `just test -run 'TestA|TestB'` piped into `TestB` (exit 127).
+- **Breaking:** no recipe passes `-count=1` any more; Go's test cache already reruns the affected packages. `-count=1` is reserved for deliberate fresh runs.
+- Slow packages get `t.Parallel()` inside them instead of `-run` shards in concurrent processes, which oversubscribe the host; CI matrix partitioning is a last resort.
+- Test modes are chosen with `-short` (`go test -race -short` as the gate); build tags are kept for tests that need an environment.
+- The CI `security` job blocks PRs but not pushes to `main`; cache keys carry the Go version; one aggregate required check.
+- The toolchain is pinned once per repo (`export GOTOOLCHAIN` in the Justfile), and a Go bump moves every version site in one change.
+
+### Fixed
+- `urlstrictcolons` applies only to http/https: multi-host Postgres DSNs still parse.
+- SQLite migrations must not contain `BEGIN`/`COMMIT` (the `sqlite` and `sqlite3` drivers wrap each migration) unless `x-no-tx-wrap=true`; `x-multi-statement` is not atomic.
+- golang-migrate examples compared `err != migrate.ErrNoChange`, which the template's errorlint rejects; the embed example imported an unused `log`.
+- lefthook v2.2.2 re-syncs hooks on the next run after a config change (`no_auto_install` opts out); `lefthook run` takes `--command`, not `--commands`.
+- golangci-lint cache key: covers settings, build tags and the cwd `go.mod`, but not GOOS/GOARCH (#6917); one cache per target.
+- govulncheck-action cannot pass `-test` or `-tags`; the action reads `version` from `go.mod` when unset; module plugins must be declared under `linters.settings.custom`; five more linters autofix; `common-false-positives` hides gosec G304.
+- `Root.RemoveAll` needs Go 1.25; `go get -u` skips test dependencies without `-t`; `set dotenv-path` fails on a missing file; just 1.59.0 `--fmt` deletes trailing comments on attribute lines; golang-migrate #1458 is merged but unreleased.
+
+### Added
+- govulncheck misses advisories filed against the `toolchain` module (go1.27.4's cgo fixes); go1.27.4 rejects `#cgo CFLAGS: -target`; generic methods need go1.27.4 for staticcheck; findings cannot be silenced.
+- Testing: making a package parallel, `-shuffle=on`, `-cpu` stress runs, excluding C-translated dependencies from `-race`, a stale test cache for files outside the module, Postgres per-test template databases and embedded-postgres, Ryuk cleanup, smoke tests in Go, structural rules as `go/parser` tests.
+- golangci-lint: repo rules as `depguard`/`forbidigo` config with probe files and `text:`-narrowed exclusions, `warn-unused`, `--new` unsafe in CI, pre-v2.12 schema downloads in `config verify`, action `args` and annotation caveats, gosec vs CodeQL.
+- Toolchain: tools added one at a time, `go get toolchain@patch`, `-tool ...@none`, the `ignore` directive, `go version -m`, `go -C`, `GOAUTH`, workspace `godebug` lines, vendoring trade-offs, build flags in the cache key, `GOTOOLCHAIN=local` container builds, one image per codebase, GoReleaser check and release ordering.
+- just: `generate-check`, the mise `dotenv-command` setup, `just --yes`, the Justfile's scope, capping concurrent gates with `GOMAXPROCS`. lefthook: `fail_text`, `rc`, one config file only.
+- Correctness: stdlib before hand-rolled guards (`http.CrossOriginProtection`, `ReverseProxy.Rewrite`); project structure without pass-through layers and for polyglot monorepos.
+
+Verified against: go@1.27.4
+
 ## [0.7.0] - 2026-11-05
 
 ### Changed
