@@ -14,6 +14,7 @@ Verified on Xcode 27.0 (Swift 6.4, iOS 27.0 / macOS 27.0 SDKs), 2026-10-07: buil
 - Macros
 - Swift Build is the default engine
 - Conditional compilation
+- Formatting with swift format
 - CI and headless traps
 - xcodebuild basics
 - Xcode 27 build-breakers
@@ -297,6 +298,7 @@ In SwiftPM 6.4, `--build-system` defaults to `swiftbuild` (Xcode's open-source b
 
 - **Products live in `.build/out/Products/Debug|Release`**, not `.build/arm64-apple-macosx/release`. `.build/debug` and `.build/release` are symlinks to them. Scripts should always ask: `BIN=$(swift build -c release --show-bin-path)`.
 - Modules are built explicitly, with caches inside the scratch path.
+- Each test target gets its own test runner; the native engine linked one runner for the whole package.
 - Universal binaries come from SwiftPM directly. `--arch` is a hidden flag (only in `swift build --help-hidden`):
 
 ```bash
@@ -306,7 +308,7 @@ lipo -info "$(swift build -c release --arch arm64 --arch x86_64 --show-bin-path)
 
 This prints `warning: The x86_64 architecture is deprecated for your deployment target (macOS 27.0)` even when the package's real minimum is lower (seen with `.macOS(.v15)`; both slices have `minos 15.0`). The universal binary is still produced; the warning is noise below a macOS 27 deployment target.
 
-Other useful flags: `--explicit-target-dependency-import-check error` (fails a target that imports a module it does not declare), `--sbom-spec cyclonedx|spdx` (SBOM generation), `swift package add-dependency|add-target|add-product|add-setting` (edit the manifest from the CLI).
+Other useful flags: `--sbom-spec cyclonedx|spdx` (SBOM generation), `swift package add-dependency|add-target|add-product|add-setting` (edit the manifest from the CLI), `swift test --debugger` (tests in an LLDB session). `--explicit-target-dependency-import-check error` is a known issue under Swift Build ([SwiftPM 6.4 notes](https://docs.swift.org/latest/documentation/packagemanagerdocs/6.4)): the default engine already fails an undeclared in-package import with `unable to resolve module dependency: 'B'`, and the flag's own diagnostic (`Target A imports another target (B) in the package without declaring it a dependency`) appears only under the deprecated `--build-system native` (verified on Swift 6.4.2).
 
 ## Conditional compilation
 
@@ -337,6 +339,18 @@ let isSimulator = false
 ```
 
 `canImport` answers "is the module in this SDK", not "is it available at runtime" - pair it with `if #available` for OS-gated APIs. `#if DEBUG` is set by SwiftPM debug builds and by Xcode's Debug configuration.
+
+## Formatting with swift format
+
+The toolchain ships the formatter (Swift 6+), so neither Homebrew nor a package plugin is needed:
+
+```bash
+swift format --recursive --in-place Sources Tests        # local rewrite
+swift format lint --recursive --strict Sources Tests     # CI: --strict turns findings into errors
+swift format dump-configuration > .swift-format          # start a config; without one the defaults apply
+```
+
+An in-place run never fails a job, so CI runs `lint --strict`. Call the same binary in both places: a Homebrew `swift-format` earlier in `PATH` is a separate build (604.0.0 next to the toolchain's 6.4.4 on Xcode 27.2) and can disagree.
 
 ## CI and headless traps
 
@@ -373,6 +387,7 @@ xcodebuild -downloadComponent MetalToolchain
 **Several Xcodes on one Mac** (a beta next to the release, observed on a multi-lane iOS project):
 
 - Select per command with `DEVELOPER_DIR=/Applications/Xcode-beta.app/Contents/Developer xcodebuild ...`; never `sudo xcode-select -s` in scripts - it switches every other shell and agent on the machine.
+- From Xcode 27.3 (beta) Xcode also ships as an Apple Encrypted Archive (`.aea`), extracted with `archiveutil extractXcodeAEA`; 27.3 is the last release offered as `.xip`, so install scripts built on `xip -x` need the new path ([Xcode 27.3 notes](https://developer.apple.com/documentation/xcode-release-notes/xcode-27_3-release-notes)).
 - There is one CoreSimulatorService per Mac. Do not drive simulators from two `DEVELOPER_DIR`s at the same time; finish one lane before the other touches a simulator.
 - Delete the derived-data or `build/` directory after switching Xcode: stale module caches from the other compiler fail in confusing ways.
 - Seed a fresh checkout's resolved packages with an APFS clone (`cp -c -R <old>/build/SourcePackages build/`) to skip a full package fetch; the clone costs no disk until files diverge.
@@ -393,14 +408,22 @@ xcodebuild build -scheme MyMacApp -destination 'platform=macOS'
 
 - `generic/platform=iOS` compile-checks for devices with no device attached and no simulator runtime needed; `CODE_SIGNING_ALLOWED=NO` skips signing for a pure compile check. A generic iOS build of a small SwiftUI app took 7 s.
 - `-derivedDataPath build` keeps products in the repo-local `build/` for scripts and CI caches.
+- `-quiet` prints only warnings and errors (`-json` implies it), which keeps agent transcripts and CI logs readable without `xcbeautify`. A quiet run prints no `** BUILD SUCCEEDED **` or `** TEST SUCCEEDED **`, so check the exit status (or a result bundle's test count, testing.md) rather than grepping for success lines.
+- **Check an SDK API before writing it from memory**: read the shipped interface. Many SwiftUI view modifiers are declared in `SwiftUICore`, not `SwiftUI` (`func padding`: no hits in SwiftUI's interface, 3 in SwiftUICore's, Xcode 27.2), so grep both:
+  ```bash
+  F=$(xcrun --sdk iphoneos --show-sdk-path)/System/Library/Frameworks        # or iphonesimulator, macosx
+  rg -n 'struct IntentModes' "$F/AppIntents.framework/Modules/AppIntents.swiftmodule/arm64e-apple-ios.swiftinterface"
+  rg -n 'func padding' "$F"/SwiftUI{,Core}.framework/Modules/*.swiftmodule/arm64e-apple-ios.swiftinterface
+  ```
+  Interface names: `arm64e-apple-ios` (device SDK), `arm64-apple-ios-simulator`, `arm64e-apple-macos`; Objective-C frameworks (AVFAudio) have `Headers/*.h` instead. When the deployment target already covers the newest OS, use its APIs where they fit and confirm each against the interface instead of avoiding them as unverified; an API added in a point release (27.1, 27.2) needs that Xcode, not only a phone on that version.
 - Repeating and flake hunting: `-test-iterations N`, `-retry-tests-on-failure`, `-run-tests-until-failure`. Enumerate without running: `-enumerate-tests`.
-- Interface Builder documents for UIKit now compile in a `toolchain` mode by default, without a simulator runtime; `IBC_COCOATOUCH_COMPILER_MODE = simulator` restores the old behavior.
+- Interface Builder documents for UIKit now compile in a `toolchain` mode by default, without a simulator runtime; `IBC_COCOATOUCH_COMPILER_MODE = simulator` restores the old behavior. On Xcode 27.0 and 27.1 that mode encoded standard `UIStackView.spacing` as `0` and dropped `UIButtonConfiguration.contentInsets` with no build error (fixed in 27.2, [notes](https://developer.apple.com/documentation/xcode-release-notes/xcode-27_2-release-notes)); rebuild storyboards with 27.2.
 - Signing, archiving and export are in ios-distribution.md and macos-distribution.md.
 
 ### Xcode 27 tooling for agents and profiling
 
 - **Xcode MCP server.** Xcode exposes build, test, preview, debugger and build-setting tools over MCP; `mcpbridge` is the stdio entry point an agent configures. Xcode 27 adds a headless preview that runs without an open workspace: `sudo xcrun mcp-server enable` turns it on, `xcrun mcp-server status` (`--format json`) shows permissions and pending request ids, `sudo xcrun mcp-server approve <id> --always` (or `--for-24-hours`) / `deny <id>` answer requests, `sudo xcrun mcp-server allow-folder /path/to/Projects --always` (or `--for-24-hours`) pre-authorizes a directory tree, and `xcrun mcp-server open <project>` loads a workspace. `stop` ends the server, `sudo ... disable` turns headless mode off, `show-logs` dumps the agent activity log and prints its path, `sudo ... clear-permissions` drops all grants and `sudo ... reset-all` wipes permission state and kills the server (Xcode 27.1 `xcrun mcp-server --help`). `enable --unsafe-always-allow-all-agents` is for unattended machines only. Apple calls it an early preview whose settings may need an Xcode relaunch or reboot to apply.
-- **MCP tools.** `RenderPreview` renders preview groups and returns the preview's name and line (27.0); 27.2 RC adds `GetCodeCoverage` (coverage from the latest test result, filterable by target or file) and lets `RenderPreview` list and pick render destinations.
+- **MCP tools.** `RenderPreview` renders preview groups and returns the preview's name and line (27.0); 27.2 lets it list and pick render destinations. 27.2 also has `GetCodeCoverage` (coverage from the latest test result, filterable by target or file): named in the 27.2 RC notes and present in the 27.2 (27B52) binaries, but absent from the final notes.
 - **Agents inside Xcode 27.** Agents can boot simulators, install and launch apps, synthesize touches and take screenshots; plug-ins bundle skills (run as slash commands), MCP servers and ACP agent configurations; LLDB ships its own MCP server, `lldb-mcp` ([LLDB docs](https://lldb.llvm.org/use/mcp.html)).
 - **`xctrace` options from the CLI.** `xcrun xctrace record --template 'Time Profiler' --show-recording-options` prints an instrument's options as JSON; edit it and pass it back with `--recording-options <file>`, plus `--time-limit 30s --output run.trace --launch -- <cmd>` or `--attach <pid|name>`.
 - **MetricKit, Swift-first (iOS 27 / macOS 27).** `MetricManager()` exposes `metricReports` and `diagnosticReports` as async sequences - the Swift alternative to an `MXMetricManager` subscriber:

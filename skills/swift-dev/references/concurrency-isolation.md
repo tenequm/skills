@@ -318,6 +318,30 @@ extension CallController: RoomDelegate {
 
 Ordering: tasks created with an explicit `@MainActor` closure from one serial thread start on the main actor in creation order ([SE-0431](https://github.com/swiftlang/swift-evolution/blob/main/proposals/0431-isolated-any-functions.md); 20,000 mixed-priority tasks from one serial queue arrived in order). Nothing orders them against callbacks from other queues, an `await` inside a handler lets later ones interleave, a plain `Task {}` without the explicit `@MainActor` has no guarantee, and the callback's arguments are stale by the time the task runs. Make the handler idempotent: ignore the arguments, guard that the object is still current (`room === self.room`), and re-read the live state in one `refresh()`. Pass only `Sendable` values (IDs, `Bool`s, the `Sendable` object itself) into the task. Exception to "re-read the live state": state the SDK resets or moves past (LiveKit's `room.metadata` after a disconnect, `connectionState == .reconnecting` during a reconnect) must be read synchronously in the `nonisolated` callback and passed in as a value.
 
+### Imported async delegate variants complete wherever the body ends
+
+Objective-C delegate methods with a completion handler are also imported as `async` methods, and Swift lets you implement either. In a MainActor-default app, `nonisolated func userNotificationCenter(_:didReceive:) async` crashed on a notification tap inside `-[UIApplication _updateSnapshotAndStateRestorationWithAction:windowScene:]`: the implicit completion ran off the main thread (observed, iOS 27.2). Implement the completion-handler form, copy Sendable values out of the non-Sendable argument, and call the handler on the main actor:
+
+```swift
+import UserNotifications
+
+final class AppDelegate: NSObject, UNUserNotificationCenterDelegate {
+    private(set) var openedThread: String?
+
+    nonisolated func userNotificationCenter(_ center: UNUserNotificationCenter,
+                                            didReceive response: UNNotificationResponse,
+                                            withCompletionHandler completionHandler: @escaping @Sendable () -> Void) {
+        let thread = response.notification.request.content.threadIdentifier   // copy Sendable values out first
+        Task { @MainActor in
+            self.openedThread = thread
+            completionHandler()
+        }
+    }
+}
+```
+
+Compiled with `-swift-version 6 -default-isolation MainActor` against the iOS 27.2 SDK. The same applies to other UIKit and SDK delegates whose `async` variant UIKit awaits before it updates state.
+
 ## Typed throws
 
 `throws(E)` (Swift 6.0+) fits closed, caller-handled failure sets: domain errors that map to UI messages, pure decoders, embedded code. Keep `throws` (`any Error`) at framework boundaries and wherever new failure kinds may appear. Convert untyped errors at the boundary:

@@ -290,6 +290,8 @@ productbuild --distribution Distribution.xml --package-path build build/MyApp.pk
 productsign --sign "Developer ID Installer: Your Name (TEAMID)" build/MyApp.pkg build/MyApp-signed.pkg
 ```
 
+macOS 27 changes for installers and helpers ([macOS 27 notes](https://developer.apple.com/documentation/macos-release-notes/macos-27-release-notes)): packages that specify no `hostArchitecture` now default to arm64, so an installer that must run on Intel says so in `Distribution.xml` (`<options hostArchitectures="arm64,x86_64"/>`); and `launchd` no longer loads property lists that carry the quarantine extended attribute, so an installer or updater that writes a LaunchAgent plist from a downloaded archive clears it (`xattr -d com.apple.quarantine <plist>`).
+
 Notarize and staple the signed `.pkg` like a DMG.
 
 **Homebrew cask** as a second channel for a notarized app:

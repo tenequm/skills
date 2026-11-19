@@ -156,6 +156,7 @@ final class Enrollment {
 - `#Unique<T>([\.a, \.b], [\.c])` declares several independent constraints.
 - Compound index order matters: `[\.courseID, \.enrolledAt]` serves "filter by course, sort by date", not the reverse. Index only what you filter and sort on.
 - Unique constraints are unsupported with CloudKit sync; a synced model cannot declare them.
+- There is no full-text index: `Schema.Index` has only `.binary` and `.rtree` (iOS 27.2 SDK), so text search is a substring predicate (`localizedStandardContains`, see #Predicate). Ranked search over a large history needs SQLite FTS5 or similar beside the store.
 
 ## Relationships
 

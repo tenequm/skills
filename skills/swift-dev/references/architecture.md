@@ -114,6 +114,7 @@ struct StartSessionIntent: AppIntent {
 - Long-running work is a stored `Task` you can cancel; re-check state after every `await` (another call may have changed `phase` meanwhile).
 - System and SDK delegates call back on arbitrary queues: implement them `nonisolated` and hop with `MainActor.assumeIsolated` (when the SDK guarantees the main queue) or `Task { @MainActor in ... }`. See concurrency-isolation.md.
 - Split by domain when a controller passes a few hundred lines; controllers may reference each other's `shared`, but keep the dependency direction one-way.
+- **`URL` caches resource values per instance.** After the file at a `URL` changes, `url.resourceValues(forKeys: [.fileSizeKey])` on the same value returns the old size, so a size limit checked that way passes a file that grew past it (reproduced on Swift 6.4.2). Call `url.removeAllCachedResourceValues()` first (it is `mutating`), or read the current length with `try FileHandle(forReadingFrom: url).seekToEnd()`.
 
 ## Logic in a local package
 

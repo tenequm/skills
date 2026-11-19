@@ -1,11 +1,11 @@
 ---
 name: swift-dev
-description: Native iOS and macOS apps in Swift 6 - SwiftUI, AppKit, SwiftData, concurrency, Swift Testing, XcodeGen, CallKit and audio, App Intents, devices, TestFlight, code signing, notarization. Use for any iPhone or Mac app, helper or CLI work.
+description: Native iOS and macOS apps in Swift 6 - SwiftUI, AppKit, SwiftData, concurrency, Swift Testing, XcodeGen, CallKit and audio, App Intents, push, devices, TestFlight, code signing, notarization. Use for any iPhone or Mac app, helper or CLI work.
 metadata:
-  version: "0.5.0"
+  version: "0.6.0"
   categories: "development"
   topics: "swift, swiftui, ios, macos, xcode"
-  upstream: "swift@6.4, xcode@27.1, ios@27.1, macos@27.0, LiveKit@2.18.0, xcodegen@2.46.0"
+  upstream: "swift@6.4.2, xcode@27.2, ios@27.2, macos@27.2, LiveKit@2.19.0, xcodegen@2.48.0"
   openclaw:
     homepage: https://github.com/tenequm/skills/tree/main/skills/swift-dev
     emoji: "🍎"
@@ -15,7 +15,7 @@ metadata:
 
 # Swift Apple Development (iOS + macOS)
 
-Native apps for iPhone and Mac with Swift 6.4 and Xcode 27.1 (iOS 27.1 and macOS 27.0 SDKs; Xcode 27.2 is at RC). Xcode 27 runs only on Apple silicon and needs macOS 26.6 or later. Deployment targets: iOS 17 / macOS 14 for `@Observable` and SwiftData; iOS 26 / macOS 26 for Liquid Glass, Foundation Models, `IntentModes` and `Observations`.
+Native apps for iPhone and Mac with Swift 6.4 and Xcode 27.2 (Swift 6.4.2; iOS 27.2 and macOS 27.2 SDKs - there is no macOS 27.1; Xcode 27.3 is at beta 2). Xcode 27 runs only on Apple silicon and needs macOS 26.6 or later. Deployment targets: iOS 17 / macOS 14 for `@Observable` and SwiftData; iOS 26 / macOS 26 for Liquid Glass, Foundation Models, `IntentModes` and `Observations`.
 
 This file is the platform-neutral core plus a router. Load a reference only when the task needs it - the [Platform](#platform) tables say which.
 
@@ -32,7 +32,7 @@ This file is the platform-neutral core plus a router. Load a reference only when
 
 SPM alone cannot produce an iOS `.app` - an app target needs an Xcode project, which is why XcodeGen generates one. XcodeGen traps (details and fixes in `ios-project-setup.md`):
 
-- Files added after `xcodegen generate` are silently left out of the build (even with syntax errors) until you regenerate - use the `syncedFolder` source type or regenerate before every build.
+- Files added after `xcodegen generate` are silently left out of the build (even with syntax errors) until you regenerate - use the `syncedFolder` source type or regenerate before every build; `xcodegen generate --use-cache` makes that cheap (it skips the write when the spec and file list are unchanged).
 - The generated Info.plist hardcodes version 1.0 (1) and ignores `MARKETING_VERSION` / `CURRENT_PROJECT_VERSION` unless you map them in `info.properties`.
 - Gitignoring all of `*.xcodeproj/` also drops `Package.resolved`, so clean clones float to the newest dependency versions. Keep that one file committed.
 - XcodeGen's defaults are `SWIFT_VERSION 5.0` and iPhone+iPad; set both explicitly.
@@ -51,7 +51,9 @@ xcodebuild -downloadPlatform iOS                    # installs the iOS simulator
 xcrun devicectl list devices                        # simulators and paired iPhones
 ```
 
-Simulator.app is called DeviceHub.app in Xcode 27. CallKit runs in the iOS 27 Simulator only with two Simulator-only stand-ins - claim the `facetime` URL scheme and activate the audio session yourself (`ios-audio-and-callkit.md`). UI tests in the Simulator can also press the Action Button, lock the screen and run App Intents out of process (`testing.md`). Starting a CallKit call or Live Activity from an App Intent while the app sits in the background needs the iOS 27 `.phone.startCall` App Schema; a plain `AppIntent` is refused (`app-intents.md`).
+Before writing a new-in-27 API from memory, read its declaration in the SDK's `.swiftinterface` - many SwiftUI modifiers live in `SwiftUICore` (`spm-and-builds.md`, xcodebuild basics).
+
+Simulator.app is called DeviceHub.app in Xcode 27. `simctl push` never runs a Notification Service Extension, and notification calls can hang after a boot until `dasd` is restarted (`ios-push-notifications.md`). CallKit runs in the iOS 27 Simulator only with two Simulator-only stand-ins - claim the `facetime` URL scheme and activate the audio session yourself (`ios-audio-and-callkit.md`). UI tests in the Simulator can also press the Action Button, lock the screen and run App Intents out of process (`testing.md`). Starting a CallKit call or Live Activity from an App Intent while the app sits in the background needs the iOS 27 `.phone.startCall` App Schema; a plain `AppIntent` is refused (`app-intents.md`).
 
 ## Concurrency (Swift 6 language mode)
 
@@ -218,7 +220,8 @@ Traps:
 - `x == .init(a: 1, b: 2)` against a `public` struct from another module that has some other public init (e.g. Decodable's `init(from:)`) fails with a misleading overload error - `cannot convert ... to '(any (~Copyable & ~Escapable).Type)?'` when `x` is optional, an `AttributedStringProtocol` or `'Grant' and '()'` error otherwise (inside or outside `#expect`). The cause: synthesized memberwise initializers are `internal`. Spelling out the type (`Grant(a:b:)`) shows the real error. Fix with `@testable import` (on by default under `swift test`), an explicit `public init`, or by comparing fields.
 - A package target built with `.defaultIsolation(MainActor.self)` makes its API `@MainActor`, so its tests must be `@MainActor` too. Keep logic packages nonisolated by default.
 - An iOS app target's tests need a simulator runtime (36 s warm through `xcodebuild` versus 1.4 s for the same tests under `swift test`). Exit tests are unavailable on iOS.
-- `xcodebuild` UI-test runs can stall for ~10 minutes after a failure (it spawns `simctl diagnose`) or never exit after a pass - wrap them in `timeout` and enable test timeouts (`testing.md`). Hosted macOS runners may have no `timeout` (it arrived in macOS 27.2) and have only 3 cores, which exposes cooperative-pool deadlocks a dev Mac hides (`ci-github-actions.md`).
+- `xcodebuild` UI-test runs can stall for ~10 minutes after a failure (it spawns `simctl diagnose`) or never exit after a pass - pass `-collect-test-diagnostics never`, wrap them in `timeout` and enable test timeouts (`testing.md`). Hosted macOS runners may have no `timeout` (Apple's `/usr/bin/timeout` is present from macOS 27.2, observed) and have only 3 cores, which exposes cooperative-pool deadlocks a dev Mac hides (`ci-github-actions.md`).
+- Tests that need a permission or hardware fail with a `#require` message instead of skipping behind an env var: a skip reads as green for code that never ran.
 
 Exit tests, attachments, XCTest interop, UI and simulator tests: `testing.md`.
 
@@ -279,7 +282,7 @@ The on-device model has a 4096-token context (read `SystemLanguageModel.default.
 - **Launch screen required**: iOS apps built with the 27 SDK need `UILaunchScreen` (or `UILaunchStoryboardName`, `UILaunchStoryboards`, `UILaunchScreens`) in Info.plist; App Store submission rejects them otherwise.
 - **On-Demand Resources** and `NSBundleResourceRequest` are deprecated; use Background Assets.
 - **Previews**: `PreviewProvider` is deprecated in favor of `#Preview`, whose body now runs on the main actor.
-- **Mac Catalyst (Xcode 27.1/27.2 known issue)**: iOS 27.1-only APIs fail to compile for Catalyst ("cannot find", "has no member") - guard them with `#if !targetEnvironment(macCatalyst)`.
+- **Mac Catalyst (Xcode 27.1/27.2 known issue)**: iOS 27.1-only APIs fail to compile for Catalyst ("cannot find", "has no member") - guard them with `#if !targetEnvironment(macCatalyst)`. The 27.2 macOS SDK also offers 27.1 as a deployment target although no macOS 27.1 exists - do not pick it - and Catalyst builds with a 27.1 or 27.2 deployment target may not see newly introduced API (187160501). An iOS 27.1 target can leave no Mac Catalyst run destination: add a Mac Catalyst 27.0 minimum deployment (Xcode 27.1 notes).
 
 ## Platform
 
@@ -289,10 +292,11 @@ The on-device model has a 4096-token context (read `SystemLanguageModel.default.
 |-------|-----------|
 | XcodeGen project, Info.plist keys, local package, build commands | `ios-project-setup.md` |
 | WindowGroup, scenePhase, NavigationStack, sheets, toolbars, Settings deep link, Liquid Glass | `ios-swiftui.md` |
-| Simulator runtimes, `simctl`/`devicectl`, Developer Mode, CLI signing, ASC API keys | `ios-devices-and-signing.md` |
+| Simulator runtimes, `simctl`/`devicectl`, per-lane Simulators, status bar and screenshots, app containers, logs, Developer Mode, CLI signing, ASC API keys | `ios-devices-and-signing.md` |
 | Dev install, ad hoc, TestFlight, App Store, certificates | `ios-distribution.md` |
 | `AVAudioSession`, mic permission, interruptions, CallKit outgoing calls, LiveKit, screen-locked audio | `ios-audio-and-callkit.md` |
 | App Intents, App Shortcuts, Action Button, Siri, App Schemas (background call start), Live Activities, Control Center controls (also macOS) | `app-intents.md` |
+| Push: `aps-environment` and tokens, APNs keys, Notification Service Extension, communication notifications, `simctl push` and the `dasd` hang | `ios-push-notifications.md` |
 
 ### macOS
 
@@ -301,7 +305,7 @@ The on-device model has a 4096-token context (read `SystemLanguageModel.default.
 | Scenes, windows, Settings, MenuBarExtra, documents, termination, `LSUIElement` | `macos-app-lifecycle.md` |
 | Table, sidebar, inspector, menus and commands, forms, popovers, 27-SDK SwiftUI changes | `macos-swiftui.md` |
 | `NSViewRepresentable`, hosting, AppKit Liquid Glass, pasteboard, `NSPanel` HUDs | `macos-appkit-interop.md` |
-| Shortcuts, drag and drop, bookmarks, AXUIElement (read it before using `kAXTrustedCheckOptionPrompt`, which Swift 6 rejects as shared mutable state), login items, XPC, logging, privacy strings | `macos-system-integration.md` |
+| Shortcuts, drag and drop, bookmarks, AXUIElement (read it before using `kAXTrustedCheckOptionPrompt`, which Swift 6 rejects as shared mutable state), login items, XPC, Subprocess, logging, privacy strings | `macos-system-integration.md` |
 | ScreenCaptureKit (`SCStream`, filters, audio-only capture, TCC) | `macos-screencapturekit.md` |
 | Recording pipeline: AVAudioEngine, AVAssetWriter, SpeechAnalyzer, silent-recording traps | `macos-audio-pipeline.md` |
 | Per-process audio with Core Audio taps | `macos-core-audio-tap.md` |
@@ -317,8 +321,8 @@ The on-device model has a 4096-token context (read `SystemLanguageModel.default.
 | `@Model`, relationships, predicates, `@Query` | `swiftdata-models.md` |
 | Container, contexts, observers, migrations, CloudKit | `swiftdata-store.md` |
 | App structure, controllers, DI | `architecture.md` |
-| Swift Testing, traps, UI and simulator tests (Action Button, lock, App Intents), `xcodebuild` stalls | `testing.md` |
-| Package.swift, plugins, macros, Swift Build, build-breakers, Xcode MCP server | `spm-and-builds.md` |
+| Swift Testing, traps, permission-gated tests, UI and simulator tests (Action Button, lock, App Intents), `xcodebuild` stalls and speed, `xcresulttool` | `testing.md` |
+| Package.swift, plugins, macros, Swift Build, `swift format`, SDK interface lookup, build-breakers, Xcode MCP server | `spm-and-builds.md` |
 | GitHub Actions CI: runners and cost, Xcode pinning, job shape and required checks, compilation cache, cache scoping, simulators and UI tests on runners, signing and notarization in CI, debugging slow runs | `ci-github-actions.md` |
 | Generic-password helper, accessibility classes | `keychain.md` |
 | Foundation Models (on-device and Private Cloud Compute), Core AI | `foundation-models.md` |

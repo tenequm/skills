@@ -2,7 +2,7 @@
 
 Swift Testing and XCTest for iOS and macOS code: the test API, its compiler traps, running logic tests without a simulator, UI tests, and the `swift test` / `xcodebuild test` surface.
 
-Verified on Xcode 27.0 (Swift 6.4, iOS 27.0 / macOS 27.0 SDKs), 2026-10-07: every Swift Testing snippet compiled and ran under `swift test` in a scratch package (17 tests incl. exit test, attachments, warnings, cancellation, confirmations, known issues); the `.init` trap reproduced verbatim; a 10-test logic package from a voice-call app run with `swift test` (cold and warm timings below); a scratch XcodeGen iOS app with a Swift Testing unit target and an XCUITest target run on an iOS 27.0 simulator; the same package tests run on the simulator through `xcodebuild`; image attachments, the macOS UI test and the polling helper compiled through SIL (`swiftc -emit-sil`) against both SDKs; interop modes exercised with `SWIFT_TESTING_XCTEST_INTEROP_MODE`. 2026-10-13: re-ran the `.init` trap with and without a second public initializer and the `strict`/empty interop modes under `swift test`; `xcodebuild` timeout flags from `xcodebuild -help`; the AppIntentsTesting API read from its 27.0 `.swiftinterface`; the Simulator toolkit and the UI-test stalls observed in a voice-call app's UI-test suite on the iOS 27.0 Simulator. 2026-10-24 (Xcode 27.1): the custom-trait block run under `swift test`; the interop default re-run at tools versions 6.2 and 6.4; `confirmation(expectedCount: ...5)` compiled to confirm the error. 2026-11-18 (Xcode 27, iOS 27 Simulator): the missing notification grant in `simctl privacy`, `XCUIProtectedResource` and `devicectl device settings`, and a zero-match `-only-testing:` run exiting 0.
+Verified on Xcode 27.0 (Swift 6.4, iOS 27.0 / macOS 27.0 SDKs), 2026-10-07: every Swift Testing snippet compiled and ran under `swift test` in a scratch package (17 tests incl. exit test, attachments, warnings, cancellation, confirmations, known issues); the `.init` trap reproduced verbatim; a 10-test logic package from a voice-call app run with `swift test` (cold and warm timings below); a scratch XcodeGen iOS app with a Swift Testing unit target and an XCUITest target run on an iOS 27.0 simulator; the same package tests run on the simulator through `xcodebuild`; image attachments, the macOS UI test and the polling helper compiled through SIL (`swiftc -emit-sil`) against both SDKs; interop modes exercised with `SWIFT_TESTING_XCTEST_INTEROP_MODE`. 2026-10-13: re-ran the `.init` trap with and without a second public initializer and the `strict`/empty interop modes under `swift test`; `xcodebuild` timeout flags from `xcodebuild -help`; the AppIntentsTesting API read from its 27.0 `.swiftinterface`; the Simulator toolkit and the UI-test stalls observed in a voice-call app's UI-test suite on the iOS 27.0 Simulator. 2026-10-24 (Xcode 27.1): the custom-trait block run under `swift test`; the interop default re-run at tools versions 6.2 and 6.4; `confirmation(expectedCount: ...5)` compiled to confirm the error. 2026-11-18 (Xcode 27, iOS 27 Simulator): the missing notification grant in `simctl privacy`, `XCUIProtectedResource` and `devicectl device settings`, and a zero-match `-only-testing:` run exiting 0. 2026-11-19 (Xcode 27.2): `-collect-test-diagnostics`, `xcresulttool get test-results` / `export attachments`, `swift test --debugger` and `swift build --build-tests` from their `--help`; the XcodeGen scheme capture keys from ProjectSpec 2.48.0; the Simulator speed, launch-stall and notification-grant findings observed in an XcodeGen iOS app's UI-test suite on the iOS 27.2 Simulator.
 
 ## Contents
 - Swift Testing essentials
@@ -17,12 +17,12 @@ Verified on Xcode 27.0 (Swift 6.4, iOS 27.0 / macOS 27.0 SDKs), 2026-10-07: ever
 - XCTest interop and migration
 - UI testing
 - Simulator toolkit: Action Button, lock, intents, microphone, notification permission
-- UI tests under xcodebuild: stalls, empty selectors, environment, flakes
+- UI tests under xcodebuild: stalls, speed, empty selectors, results, environment, flakes
 - macOS only: bundles, TCC and menu-bar apps
 
 ## Swift Testing essentials
 
-Swift Testing ships in the toolchain; use it for all new unit tests. XCTest remains for UI tests and performance (`measure`) tests. Both can live in one target.
+Swift Testing ships in the toolchain; use it for all new unit tests. XCTest remains for UI tests and performance (`measure`) tests through Xcode 27.2 (Xcode 27.3 beta adds UI tests written in Swift Testing, see UI testing). Both can live in one target.
 
 | XCTest | Swift Testing |
 |---|---|
@@ -181,7 +181,7 @@ Rules that keep it working:
 Test bundles for an iOS app target (unit tests hosted in the app, and every UI test) run only on a simulator or device. That needs an installed iOS Simulator runtime: check `xcrun simctl list runtimes`; installing one is covered in ios-devices-and-signing.md.
 
 ```bash
-xcrun simctl create "Test iPhone" "iPhone 17" com.apple.CoreSimulator.SimRuntime.iOS-27-0
+xcrun simctl create "Test iPhone" "iPhone 17"   # no runtime argument: the newest installed one
 
 xcodebuild test -project Tiny.xcodeproj -scheme Tiny \
   -destination 'platform=iOS Simulator,name=Test iPhone' \
@@ -189,7 +189,7 @@ xcodebuild test -project Tiny.xcodeproj -scheme Tiny \
   CODE_SIGNING_ALLOWED=NO
 ```
 
-Verified with a scratch XcodeGen app (Swift Testing unit target with `@testable import Tiny`, plus an XCUITest target): cold run including simulator boot 85 s, warm `-only-testing:TinyTests` 36 s. `CODE_SIGNING_ALLOWED=NO` is fine for the simulator. A dedicated, named simulator per project or CI lane avoids two jobs fighting over one booted device.
+Verified with a scratch XcodeGen app (Swift Testing unit target with `@testable import Tiny`, plus an XCUITest target): cold run including simulator boot 85 s, warm `-only-testing:TinyTests` 36 s. `CODE_SIGNING_ALLOWED=NO` is fine for the simulator. A dedicated, named simulator per project or CI lane avoids two jobs fighting over one booted device; address it by UDID, and shut it down and delete it when the lane ends (scripted runtime and device selection: ios-devices-and-signing.md).
 
 A Swift package can also be tested on the simulator directly - `xcodebuild` treats the package directory as a workspace with a scheme named after the package:
 
@@ -198,6 +198,15 @@ cd AppCore && xcodebuild test -scheme AppCore -destination 'platform=iOS Simulat
 ```
 
 Use it in CI to catch iOS-only compile problems in the package that `swift test` on the Mac never sees.
+
+To see what an iOS API does at runtime without building an app (an error code, `SecureEnclave.isAvailable`), compile a command-line probe for the Simulator and spawn it in a booted device:
+
+```bash
+xcrun --sdk iphonesimulator swiftc -swift-version 6 -target arm64-apple-ios27.0-simulator probe.swift -o probe
+xcrun simctl spawn "$SIM" "$PWD/probe"
+```
+
+With several files, name the entry file `main.swift`, or mark the entry type `@main` and pass `-parse-as-library` (otherwise: `statements are not allowed at the top level`).
 
 ## Exit tests (not on iOS)
 
@@ -334,7 +343,7 @@ struct SharedResourceTests {
 
 - `.timeLimit` takes minutes only; `.seconds` and `.milliseconds` are `unavailable` with "Time limit must be specified in minutes".
 - Tests run in parallel by default. Apply `.serialized` to every suite whose tests share a resource - the microphone, an audio tap, a TCC prompt, a keychain item, a fixed file path, a launched app. Two such tests in parallel produce silent buffers, a spurious `false` from a permission request, or inconsistent process state, and look flaky rather than wrong. Tests outside the suite still run in parallel with it.
-- Gate tests that need live permissions or hardware behind an env var so `swift test` skips them by default: `.enabled(if: ProcessInfo.processInfo.environment["RUN_HARDWARE_SMOKE"] == "1")`, and add a `just`/`make` recipe that sets it.
+- Tests that need a live permission run in the everyday suite and fail with a sentence, not a skip: put the precondition first, `try #require(CGPreflightScreenCaptureAccess(), "Grant Screen Recording in System Settings > Privacy & Security, then rerun")`. An env-var gate that no recipe sets means the test runs nowhere, and a skip reads as green (`Test run with N tests ... passed` counts skipped tests). Give only tests that need hardware the machine may lack (a second output device, Bluetooth) their own `just`/`make` recipe, failing hard too (`try #require(outputs.count >= 2, "Connect a second output device")`), and run it before a release that touches that path. On CI runners see ci-github-actions.md (permission-gated tests).
 
 ### Custom traits, issue filters and assertion helpers
 
@@ -405,7 +414,11 @@ swift test --attachments-path ./test-output   # keep Attachment.record(...) outp
 swift test --maximum-repetitions 50 --repeat-until fail   # hunt a flaky test (Swift Testing only)
 swift test --xunit-output results.xml         # JUnit-style report for CI
 swift test --enable-code-coverage && swift test --show-codecov-path
+swift test --debugger                         # run the tests in an LLDB session (SwiftPM 6.4)
+swift build --build-tests                     # compile tests without running them (hardware or slow suites)
 ```
+
+- Under Swift Build (the 6.4 default) each test target gets its own test runner; the native engine built one runner for the whole package.
 
 - Swift Testing parallelizes in-process regardless of `--parallel` (whose default is `--no-parallel`); `--parallel` spreads XCTest across worker processes.
 - When `swift test` runs inside a pipe (`swift test | tee log`, `| xcbeautify`), the pipeline's exit status is the last command's. Use `set -o pipefail` in CI scripts or a failing suite reports green.
@@ -438,7 +451,7 @@ Never set `none`. Migrate assertions as you touch tests:
 
 ## UI testing
 
-UI tests use XCTest (`XCUIApplication`); Swift Testing has no UI testing API. On iOS use `tap()`, on macOS `click()`. Prefer `accessibilityIdentifier` over visible text for lookups.
+UI tests use XCTest (`XCUIApplication`) through Xcode 27.2; the UI-test API is its own framework, `XCUIAutomation`, which `import XCTest` brings in. Xcode 27.3 (beta) adds UI tests written in Swift Testing with `XCUIAutomation`, and `XCUIHinge` for iPhone Duo hinge angles ([Xcode 27.3 notes](https://developer.apple.com/documentation/xcode-release-notes/xcode-27_3-release-notes)). On iOS use `tap()`, on macOS `click()`. Prefer `accessibilityIdentifier` over visible text for lookups.
 
 ```swift
 import XCTest
@@ -458,6 +471,12 @@ final class TinyUITests: XCTestCase {
 Use `waitForExistence(timeout:)` rather than sleeps for anything that appears asynchronously. Xcode 27 adds `XCUIVoiceOverService` for driving VoiceOver from UI tests and test-plan control over how target-app crashes are reported (off / warning / failure / fatal) - see the [Xcode 27 release notes](https://developer.apple.com/documentation/xcode-release-notes/xcode-27-release-notes).
 
 A UI test target in XcodeGen is `type: bundle.ui-testing` with a dependency on the app target; it must be in the scheme's `test.targets`.
+
+Faster, steadier UI tests (measured on an XcodeGen iOS app: 35 screenshot states in 124 s inside one launch, against more than 12 minutes relaunching per state with animations on):
+
+- **No video.** Xcode records UI tests by default. Turn it off in the scheme's test action in `project.yml` (`captureScreenshotsAutomatically: false`, `preferredScreenCaptureFormat: screenshots`) and take the screenshots you want with `XCTAttachment(screenshot:)`; result bundles get smaller and faster to write.
+- **No animations in test launches, Debug only.** The test sets `app.launchEnvironment["APP_UITEST"] = "1"`; the app reads it under `#if DEBUG`, calls `UIView.setAnimationsEnabled(false)` in `App.init` (UIKit, sheets, navigation pushes) and adds `.transaction { if uiTest { $0.disablesAnimations = true; $0.animation = nil } }` on the root view (SwiftUI). Release never reads the variable.
+- **Fixture mode.** A second Debug-only variable that swaps in a fake service lets checks and screenshots run with no server, and drives screen states inside one launch instead of relaunching per state.
 
 ## Simulator toolkit: Action Button, lock, intents, microphone
 
@@ -505,7 +524,8 @@ final class SimulatorChecks: XCTestCase {
 - **Element queries into the Lock Screen hang** on its ticking clock; check a Live Activity there with `XCUIScreen.main.screenshot()`. Settings > Action Button's shortcut tile is a remote view: queries see its label, but only a coordinate tap (`element.coordinate(withNormalizedOffset:).tap()`) selects it.
 - **CallKit's "Open in ..." alert** appears in the Simulator when the app claims the `facetime` scheme to keep CallKit calls alive (ios-audio-and-callkit.md); dismiss it through SpringBoard as above.
 - **A real microphone and speaker**: `xcrun devicectl device settings audio --device <sim-udid> --input-device BuiltInMicrophoneDevice --output-device BuiltInSpeakerDevice` routes the Simulator through the Mac's own; `say` on the Mac then talks into the app (`devicectl device info audio` shows the current setting).
-- **Notification permission has no CLI grant**: `xcrun simctl privacy` has no notifications service, `XCUIProtectedResource` (for `resetAuthorizationStatus(for:)`) has no notifications case, and `devicectl device settings` has none either. A test that reads `UNUserNotificationCenter` settings (expects `.authorized`, or a setting other than `.notSupported`) fails on a new Simulator until the prompt is answered. Run a small UI test before the suite: launch the app, trigger `requestAuthorization`, tap `XCUIApplication(bundleIdentifier: "com.apple.springboard").alerts.buttons["Allow"]` (or answer it in an `addUIInterruptionMonitor`). A clone of a Simulator that already granted it keeps the grant. Unofficial: [AppleSimulatorUtils](https://github.com/wix/AppleSimulatorUtils) `applesimutils --byId <sim-udid> --bundle <app-id> --setPermissions notifications=YES` writes the Simulator's BulletinBoard `VersionedSectionInfo.plist` (reported working on iOS 18.2 and 26.5, unverified on 27).
+- **Notification permission has no CLI grant**: `xcrun simctl privacy` has no notifications service, `XCUIProtectedResource` (for `resetAuthorizationStatus(for:)`) has no notifications case, and `devicectl device settings` has none either. A test that reads `UNUserNotificationCenter` settings (expects `.authorized`, or a setting other than `.notSupported`) fails on a new Simulator until the prompt is answered. Answer it once by hand on a template Simulator (run the app, tap Allow), then `xcrun simctl clone` that device for each run - a clone keeps the grant - and write the one-time step into the repo's agent instructions. On a device that never saw the prompt (CI), skip the dependent tests by name with `-skip-testing:Target/Class/testMethod`. A UI test that taps `XCUIApplication(bundleIdentifier: "com.apple.springboard").alerts.buttons["Allow"]` before the suite failed after 9 s on a never-booted clone (iOS 27.2, cause not found) and was dropped; keep it out of required gates unless it passes on a brand-new device. Unofficial: [AppleSimulatorUtils](https://github.com/wix/AppleSimulatorUtils) `applesimutils --byId <sim-udid> --bundle <app-id> --setPermissions notifications=YES` writes the Simulator's BulletinBoard `VersionedSectionInfo.plist` (reported working on iOS 18.2 and 26.5, unverified on 27).
+- **Push notifications** - `simctl push` skips service extensions, and notification calls can hang after a boot until `dasd` is restarted: ios-push-notifications.md.
 
 ## UI tests under xcodebuild: stalls, environment, flakes
 
@@ -515,17 +535,31 @@ final class SimulatorChecks: XCTestCase {
     -destination "id=$SIM" -derivedDataPath build
   timeout 600 xcodebuild test-without-building -project VoiceApp.xcodeproj -scheme VoiceApp \
     -destination "id=$SIM" -derivedDataPath build -only-testing:VoiceAppUITests/SimulatorChecks/testActionButton \
-    -test-timeouts-enabled YES -default-test-execution-time-allowance 180 \
+    -test-timeouts-enabled YES -default-test-execution-time-allowance 180 -maximum-test-execution-time-allowance 300 \
+    -collect-test-diagnostics never -enableCodeCoverage NO \
     -resultBundlePath "$(mktemp -d)/run.xcresult"
   ```
-  Building once and running one test per invocation keeps a hang to one test; run one test at a time per simulator.
+  Building once and running one test per invocation keeps a hang to one test; run one test at a time per simulator. `-collect-test-diagnostics never` turns off the verbose post-failure collection (`on-failure` by default, "like a sysdiagnose"); with it off, failing runs stopped stalling (observed). `timeout` still covers runs that hang after a pass.
+- **Reuse the test build locally**, not only in CI: key the build products on `git rev-parse HEAD`, `git diff --binary HEAD`, the untracked files and `xcrun --show-sdk-build-version --sdk iphonesimulator`; rebuild on a mismatch, otherwise go straight to `test-without-building`. Measured on an XcodeGen iOS app: app tests 84 s cold, 16 s on an unchanged tree. Iterate with `swift test` and single test methods; run whole classes and the full gate once at the end.
 - **A `-only-testing:` selector that matches nothing passes**: `xcodebuild` exits 0 and prints `Test Suite 'Selected tests' passed`, having run no test. Typical causes: a wrapper script that prepends the test target itself (the selector becomes `Target/Target/Class`), or a bare class name parsed as a method. Use `Target/Class` or `Target/Class/testMethod`, and fail the run unless the log shows at least one `Test Case '-[...]' passed` line (or `Executed N tests` with N > 0):
   ```bash
   rg -q "Test Case '-\[.+\]' passed" test.log || { echo "selector matched no tests" >&2; exit 1; }
   ```
+  `Executed N tests` counts XCTest only (a Swift Testing target reads `Executed 0 tests` next to its own `Test run with 1 test ... passed`), and `xcodebuild -quiet` prints none of these lines - with `-quiet`, guard on the result bundle's `totalTestCount` (below).
 - **Environment**: `TEST_RUNNER_<NAME>` variables in `xcodebuild`'s environment reach the UI-test runner as `<NAME>` (pass them on to the app through `XCUIApplication.launchEnvironment`).
 - **`.xcresult` bundles and build attachments capture the test runner's environment** (observed: credentials passed by env turned up in ignored build artifacts). Write result bundles to a temp dir and delete them, and keep real secrets out of the env of test runs you archive.
 - **Flakes**: a polling helper misses short transient states (one about 2 s long was missed) - read the label right after the tap that causes it. Anchor drags to an element's coordinate, not a fraction of the screen. Before blaming the app, rerun the test N times with per-run logs.
+- **`Failed to get background assertion for target app with pid N`**, or any failure on the `app.launch()` line after about 60 s, is the Simulator, not the app: `testmanagerd` stalls inside one boot, so the runner never learns the app is running (observed 3 runs in a row in one boot on a loaded Mac; every run after a reboot passed). `xcrun simctl shutdown "$SIM"`, boot it again and rerun before bisecting app code. Under heavy host load a fresh Simulator can also fail to boot (`Failed to start launchd_sim: could not bind to session`); retry the boot once, bounded, before failing the run.
+- **Read results from the bundle, not the log**:
+  ```bash
+  R=build/run.xcresult
+  xcrun xcresulttool get test-results summary --path "$R" \
+    | jq -r '.result, .totalTestCount, (.testFailures[]? | "\(.testIdentifierString): \(.failureText)")'
+  xcrun xcresulttool get test-results test-details --path "$R" --test-id 'SimulatorChecks/testActionButton()'
+  xcrun xcresulttool get test-results activities --path "$R" --test-id 'SimulatorChecks/testActionButton()'   # tap/wait/assert tree
+  xcrun xcresulttool export attachments --path "$R" --output-path out --only-failures                      # plus out/manifest.json
+  ```
+  `--test-id` takes a failure's `testIdentifierString`. The older `get object` and `graph` subcommands need `--legacy`. A bundle from a killed run holds only `Data/` and `Staging/`, and xcresulttool refuses it (`Failed to create a new result bundle reader ... Info.plist ... does not exist`) - read that run's log instead.
 
 ## macOS only: bundles, TCC and menu-bar apps
 
@@ -550,7 +584,13 @@ if CommandLine.arguments.contains("--ui-test-mode") {
 }
 ```
 
-**TCC-gated tests** (microphone, screen recording, accessibility): gate them behind an env var as above and serialize them.
+**TCC-gated tests** (microphone, screen recording, accessibility): precondition them with `#require` as above (Traits and parallelism) and serialize them - across processes too, since two sessions running the suite share one microphone, one capture session and one bundle ID (observed: a peer run's `Timed out waiting for ...`). macOS has no `flock(1)`; `/usr/bin/shlock` is PID-based and takes over a stale lock:
+
+```bash
+until /usr/bin/shlock -f /tmp/myapp-hw-tests.lock -p $$; do sleep 5; done   # write $$$$ in a Makefile
+trap 'rm -f /tmp/myapp-hw-tests.lock' EXIT INT TERM
+swift test --filter HardwareTests
+```
 
 TCC attributes a test process's permission check to the responsible process - the app hosting the shell (the terminal or multiplexer) for `swift test` started there - so a grant made to the shipped app does not cover the test run (observed). A host app that moves to a new bundle identity (a rename, a different build) is a new app to TCC and loses its old grants.
 

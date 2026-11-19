@@ -230,10 +230,13 @@ if ns.domain == SCStreamErrorDomain, let code = SCStreamError.Code(rawValue: ns.
     case .userStopped: break                               // user intent: save and stop
     case .failedToStartAudioCapture, .failedToStartMicrophoneCapture: break // restart without that track
     case .systemStoppedStream: break                       // wait ~1 s, restart with a NEW stream
+    case .noCaptureSource: break                           // display asleep: wait for a display, then a NEW stream
     default: break
     }
 }
 ```
+
+**Display sleep stops audio-only streams too** (observed, macOS 26): idle display sleep ends an audio-only stream with `-3815 Failed to find any displays`, and an immediate restart finds no display and gives up, losing the rest of a call. While recording, hold `ProcessInfo.processInfo.beginActivity(options: [.userInitiated, .idleDisplaySleepDisabled], reason:)` (macos-system-integration.md, Preventing sleep). A lid close still stops the stream, so keep the recovery path: on -3815 wait for `NSWorkspace.screensDidWakeNotification`, or poll `SCShareableContent` until `displays` is non-empty (bounded, cancelled by stop), then start a new stream.
 
 Rate-limit automatic restarts (for example at most 3 in 30 s) so a persistent failure cannot loop. Keep the start-time and stop-time error mappings in one function: in practice they drift (one shipping app mapped -3801/-3802/-3821 at stop but only -3801 at start) and users get misleading messages.
 

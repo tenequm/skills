@@ -182,7 +182,7 @@ final class ElapsedClock {
 }
 ```
 
-**Crash: high-frequency label updates.** A per-second timer driving the `MenuBarExtra` *label* (elapsed time, a live meter) can crash intermittently with `EXC_BREAKPOINT` in `-[NSWindow _postWindowNeedsUpdateConstraints]`: the `NSHostingView` behind the status item is pushed into an AppKit constraint-update exception by repeated re-layout. It compiles, usually runs, and crashes in the field. Keep the SwiftUI label static and put the live readout in an AppKit-owned status item with monospaced digits (which also stops the width oscillation that drives the churn):
+**Crash: high-frequency label updates (seen once, cause unproven).** One `EXC_BREAKPOINT` in `-[NSWindow _postWindowNeedsUpdateConstraints]` happened while a per-second elapsed-time label ticked in the `MenuBarExtra` *label*, with a backtrace entirely inside AppKit and SwiftUI; repeated re-layout of the `NSHostingView` behind the status item is a hypothesis, not a reproduction. A 4 Hz glyph swap (`waveform.low` / `.mid` / `waveform`) in the same app's label ran for months with no recorded crash. Do not remove or flatten a working live indicator on this basis, and check any change in the real menu bar (an opacity-only replacement did not visibly respond to speech). To reduce churn, keep the label's width fixed with monospaced digits (a SwiftUI `.frame(width:)` limits the label's layout, not the status item's length). If the crash does recur, an AppKit-owned status item is the fallback:
 
 ```swift
 @MainActor

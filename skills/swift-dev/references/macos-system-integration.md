@@ -14,6 +14,7 @@ Verified on Xcode 27.0 (Swift 6.4, iOS 27.0 / macOS 27.0 SDKs), 2026-10-07: ever
 - Which processes use audio (CoreAudio per-process)
 - Login items (SMAppService)
 - XPC helpers
+- Running subprocesses
 - Preventing sleep
 - Logging and signposts
 - Privacy usage strings
@@ -372,6 +373,10 @@ func runHelper() throws -> XPCListener {
 - `sendSync` blocks the calling thread - call it off the main actor, or use `send(_:replyHandler:)`.
 - `XPCPeerRequirement` also offers `.hasEntitlement(_:)`, `.entitlement(_:matches:)` (a `Bool`, `String` or `Int` value), `.isPlatformCode(...)`, `isFromSameTeam(andMatchesSigningIdentifier:)` and `init(lightweightCodeRequirements:)` (an `XPCDictionary` of lightweight code requirement keys) for a stricter match.
 
+## Running subprocesses
+
+For a Mac CLI or helper that runs other tools, [Swift Subprocess](https://github.com/swiftlang/swift-subprocess) (1.0, a package from the Swift project) is the async replacement for `Process`: it is built on Swift concurrency, collects output without pipe deadlocks, and works the same on macOS and Linux. `Process` remains fine for fire-and-forget launches; a sandboxed app can launch only binaries inside its own bundle either way.
+
 ## Preventing sleep
 
 ```swift
@@ -394,7 +399,8 @@ private let log = Logger(subsystem: "com.example.MyApp", category: "capture")
 
 func logExamples(index: Int, error: any Error, userEmail: String) {
     log.debug("frame \(index, privacy: .public) queued")
-    log.error("stream stopped: \(error.localizedDescription, privacy: .public)")
+    let ns = error as NSError
+    log.error("stream stopped: \(ns.domain, privacy: .public) \(ns.code, privacy: .public)")
     log.notice("signed in as \(userEmail, privacy: .private(mask: .hash))")
 }
 
@@ -408,6 +414,7 @@ func renderFrame() {
 ```
 
 - **Interpolated dynamic values are private by default** and show as `<private>` outside a debugger. Mark diagnostic values `.public`, keep user data private (`.private(mask: .hash)` still lets you correlate).
+- **Log errors as domain and code, never `localizedDescription` or `"\(error)"`**: a URL loading error's text includes the request URL, and with it any token in the query. Build log lines from IDs, states, codes and durations only, so every field can be `.public` (iOS apps too).
 - **Levels persist differently.** `.debug` is memory-only, `.info` is kept only when collected; `.notice` (default), `.error` and `.fault` go to the on-disk store. Use `.notice`+ for anything you need from a user's sysdiagnose.
 - Stream your app's logs: `/usr/bin/log stream --predicate 'subsystem == "com.example.MyApp"' --level debug`. In zsh, `log` is a shell builtin, so a bare `log show` / `log stream` fails with `log:1: too many arguments`; spell out `/usr/bin/log`.
 - Log archives written on macOS 27 cannot be read on macOS 26.1 or earlier (need 26.2+).

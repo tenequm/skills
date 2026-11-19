@@ -2,7 +2,7 @@
 
 How to stand up an iOS app from the command line: an XcodeGen `project.yml`, a local Swift package for logic and fast tests, the Info.plist keys and build settings that matter, and the build/test commands.
 
-Verified on Xcode 27.0 (Swift 6.4, iOS 27.0 / macOS 27.0 SDKs), 2026-10-07: generated the project below with XcodeGen 2.46.0, built it unsigned for `generic/platform=iOS` and `generic/platform=iOS Simulator`, ran its app-target tests on an iOS 27.0 simulator and `swift test` in the local package, and read the compiler flags Xcode passed from the build log; added two OFL fonts (one static, one variable) to a copy, built it for the simulator, inspected the `.app` and checked `UIFont(name:)` at launch, and reproduced the build error without `excludes`. 2026-10-13: the `.v27` tools-version gate reproduced with `swift package dump-package`; XcodeGen's unreleased fixes and the Xcode 27.2 project format read from the XcodeGen changelog/PRs and Apple's docs. 2026-10-24 (Xcode 27.1): the `.xcproj` status re-read from Apple's article and the 27.2 RC release notes, `xcodebuild -convert-project` run on a generated project, XcodeGen master (`783a19e`) changelog re-read.
+Verified on Xcode 27.0 (Swift 6.4, iOS 27.0 / macOS 27.0 SDKs), 2026-10-07: generated the project below with XcodeGen 2.46.0, built it unsigned for `generic/platform=iOS` and `generic/platform=iOS Simulator`, ran its app-target tests on an iOS 27.0 simulator and `swift test` in the local package, and read the compiler flags Xcode passed from the build log; added two OFL fonts (one static, one variable) to a copy, built it for the simulator, inspected the `.app` and checked `UIFont(name:)` at launch, and reproduced the build error without `excludes`. 2026-10-13: the `.v27` tools-version gate reproduced with `swift package dump-package`; XcodeGen's unreleased fixes and the Xcode 27.2 project format read from the XcodeGen changelog/PRs and Apple's docs. 2026-10-24 (Xcode 27.1): the `.xcproj` status re-read from Apple's article and the 27.2 RC release notes, `xcodebuild -convert-project` run on a generated project, XcodeGen master (`783a19e`) changelog re-read. 2026-11-19 (Xcode 27.2, 27B52): the final 27.2 notes and Apple's article re-read; `-convert-project` to `Xcode Project` run on XcodeGen 2.46.0 projects (a plain app converts and builds; a `bundle:` dependency fails); XcodeGen 2.47.0/2.48.0 changelog, ProjectSpec and `GenerateCommand.swift` read at the 2.48.0 tag.
 
 ## Contents
 - Why a generator
@@ -20,11 +20,13 @@ Verified on Xcode 27.0 (Swift 6.4, iOS 27.0 / macOS 27.0 SDKs), 2026-10-07: gene
 
 ## Why a generator
 
-SwiftPM cannot produce an iOS `.app` (no app bundle, Info.plist, entitlements, asset catalog or signing), and a hand-maintained `.xcodeproj` is unreviewable XML that merges badly. Generate it instead: **[XcodeGen](https://github.com/yonaskolb/XcodeGen)** reads one `project.yml` and writes the `.xcodeproj`, which stays out of git. Install with `mise use -g xcodegen@2.46.0` (or `brew install xcodegen`).
+SwiftPM cannot produce an iOS `.app` (no app bundle, Info.plist, entitlements, asset catalog or signing), and a hand-maintained `.xcodeproj` is unreviewable XML that merges badly. Generate it instead: **[XcodeGen](https://github.com/yonaskolb/XcodeGen)** reads one `project.yml` and writes the `.xcodeproj`, which stays out of git. Install with `mise use -g xcodegen@2.48.0` (or `brew install xcodegen`); 2.48.0 needs macOS 14 and Swift 6.1 to build and run.
 
 [Tuist](https://tuist.dev) is the alternative (Swift `Project.swift` manifests, `tuist generate`). XcodeGen is the default here because it is a single YAML file with no manifest-compilation step or extra toolchain, and the generated project is disposable.
 
-Xcode 27.2 (RC) adds a smaller, hierarchical JSON `project.xcproj` project file. Apple's article calls it the default in 27.2 and later ([Apple](https://developer.apple.com/documentation/xcode/updating-your-xcode-project-configuration-file-format)), while the [27.2 RC release notes](https://developer.apple.com/documentation/xcode-release-notes/xcode-27_2-release-notes) say "Enable it in the File inspector" - check which one shipped. Projects using `.xcproj` also open in earlier Xcode 27 releases. Xcode 27.1's `xcodebuild -convert-project <format>` converts only between pbxproj versions (it rejects `json`). XcodeGen 2.46.0 still writes `project.pbxproj` (JSON output is an open PR, [#1653](https://github.com/yonaskolb/XcodeGen/pull/1653)), and its "Copy Bundle Resources" phases lack `dstPath`, which makes Xcode 27.2's conversion fail (fixed on master, unreleased, [#1654](https://github.com/yonaskolb/XcodeGen/pull/1654)) - keep a generated project in pbxproj form. The `.gitignore` below covers either, since both live inside `.xcodeproj/`.
+Xcode 27.2 adds a smaller, hierarchical JSON `project.xcproj` project file. The two Apple sources still disagree after release: the article calls it the default in 27.2 and later ([Apple](https://developer.apple.com/documentation/xcode/updating-your-xcode-project-configuration-file-format)), while the final [27.2 release notes](https://developer.apple.com/documentation/xcode-release-notes/xcode-27_2-release-notes) keep "Enable it in the File inspector". Projects using `.xcproj` also open in earlier Xcode 27 releases. On 27.2, `xcodebuild -convert-project 'Xcode Project'` (or `xcproj`) writes `project.xcproj`; `json` is rejected (`Could not find requested format 'json'`), and Xcode 27.1 converted only between pbxproj versions. Apple publishes the format as a Swift package with a formatter, [apple/xcode-project-format](https://github.com/apple/xcode-project-format) (`xcprojformatter`).
+
+XcodeGen writes `project.pbxproj` by default. 2.48.0 adds experimental JSON output, `options.projectFileFormat: xcproj` (needs Xcode 27; some custom `attributes` cannot be stored and are dropped; [#1653](https://github.com/yonaskolb/XcodeGen/pull/1653) closed unmerged). Before 2.47.0, the "Copy Bundle Resources" phase XcodeGen emits for a `bundle:` dependency lacked `dstPath`, so 27.2's conversion failed and left the project untouched (`A copy build phase is missing a required value for destination path`); a plain app converted and built. 2.47.0 fixes that ([#1654](https://github.com/yonaskolb/XcodeGen/pull/1654)), 2.47.0 and 2.48.0 fix two layouts Xcode 27.2 refused to open, and 2.47.0 makes schemes default to `buildArchitectures: matchRunDestination` and `xcodeVersion` to 16.0 ([2.48.0 changelog](https://github.com/yonaskolb/XcodeGen/blob/2.48.0/CHANGELOG.md)). The `.gitignore` below covers either format, since both live inside `.xcodeproj/`.
 
 ## Layout
 
@@ -60,7 +62,7 @@ settings:
 packages:
   LiveKit:
     url: https://github.com/livekit/client-sdk-swift
-    from: 2.17.0
+    from: 2.19.0
   VoiceCore:
     path: VoiceCore
 targets:
@@ -100,7 +102,20 @@ targets:
         GENERATE_INFOPLIST_FILE: YES
 ```
 
-Key reference: [XcodeGen ProjectSpec](https://github.com/yonaskolb/XcodeGen/blob/2.46.0/Docs/ProjectSpec.md). Remote packages take `from:` / `majorVersion:`, `minorVersion:`, `exactVersion:`, `branch:` or `revision:`; local ones take `path:`. A `package:` dependency names the key under `packages`; add `product:` when the library product name differs from the package key. `bundleIdPrefix` names targets without an explicit `PRODUCT_BUNDLE_IDENTIFIER` (here the test bundle becomes `com.example.VoiceAppTests`).
+Key reference: [XcodeGen ProjectSpec](https://github.com/yonaskolb/XcodeGen/blob/2.48.0/Docs/ProjectSpec.md). Remote packages take `from:` / `majorVersion:`, `minorVersion:`, `exactVersion:`, `branch:` or `revision:`; local ones take `path:`. A `package:` dependency names the key under `packages`; add `product:` when the library product name differs from the package key. `bundleIdPrefix` names targets without an explicit `PRODUCT_BUNDLE_IDENTIFIER` (here the test bundle becomes `com.example.VoiceAppTests`).
+
+### Team and bundle ID out of a public repo
+
+For a repo others clone and build, commit a `Config.xcconfig` with placeholders and pull the real values from a gitignored file:
+
+```
+// Config.xcconfig (committed)
+APP_BUNDLE_ID = com.example.VoiceApp
+DEVELOPMENT_TEAM =
+#include? "Local.xcconfig"
+```
+
+Point both configurations at it (`configFiles: {Debug: Config.xcconfig, Release: Config.xcconfig}` on the target), ship a `Local.xcconfig.example`, and derive every other identifier from the one variable: `PRODUCT_BUNDLE_IDENTIFIER: $(APP_BUNDLE_ID)`, extensions `$(APP_BUNDLE_ID).Widget`, the App Group `group.$(APP_BUNDLE_ID)` (also through an Info.plist key, so code can read it). With the empty team, Simulator and `CODE_SIGNING_ALLOWED=NO` builds still work. Scripts take the effective bundle ID from the built app (`plutil -extract CFBundleIdentifier raw`, ios-devices-and-signing.md), not from a hard-coded string.
 
 ## Build settings that are not obvious
 
@@ -196,14 +211,14 @@ xcodebuild -project VoiceApp.xcodeproj -scheme VoiceApp \
   CODE_SIGNING_ALLOWED=NO build
 ```
 
-`generic/platform=iOS` compile-checks for devices with no device attached, no simulator runtime installed and no signing. A generic Simulator destination builds every simulator architecture; to compile-check faster, name a concrete simulator (`platform=iOS Simulator,name=iPhone 17`), which builds only the active one. App-target tests need an installed iOS simulator runtime; installing runtimes, running on a device and signing are in ios-devices-and-signing.md, TestFlight in ios-distribution.md.
+`generic/platform=iOS` compile-checks for devices with no device attached, no simulator runtime installed and no signing. It never compiles `#if targetEnvironment(simulator)` code (the CallKit stand-ins in ios-audio-and-callkit.md, test hooks), and a Simulator build never compiles the device branch, so gate on both destinations. A generic Simulator destination builds every simulator architecture; to compile-check faster, name a concrete simulator (`platform=iOS Simulator,name=iPhone 17`), which builds only the active one. App-target tests need an installed iOS simulator runtime; installing runtimes, running on a device and signing are in ios-devices-and-signing.md, TestFlight in ios-distribution.md.
 
 ## justfile
 
 ```just
 # VoiceApp.xcodeproj is generated from project.yml and not committed.
 gen:
-    xcodegen generate
+    xcodegen generate --use-cache
 
 open: gen
     open VoiceApp.xcodeproj
@@ -221,7 +236,7 @@ build: gen
     xcodebuild -project VoiceApp.xcodeproj -scheme VoiceApp -destination 'generic/platform=iOS' -derivedDataPath build CODE_SIGNING_ALLOWED=NO build
 ```
 
-`build` and `test-app` depend on `gen` on purpose - see the first failure mode below.
+`build` and `test-app` depend on `gen` on purpose - see the first failure mode below. `--use-cache` (`-c`) makes that cheap: XcodeGen hashes its version, the resolved spec and the tracked file list into `~/.xcodegen/cache/<spec path hash>` and skips writing the project when nothing changed, so an unchanged tree also skips `xcodebuild`'s re-planning. A new file changes the list, and a missing project file always regenerates (2.48.0 source).
 
 ## .gitignore
 
@@ -242,7 +257,7 @@ xcuserdata/
 .DS_Store
 ```
 
-Xcode writes the SwiftPM pins to `VoiceApp.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved`. Ignoring the whole `*.xcodeproj/` drops them, so every fresh clone resolves the newest versions allowed by `from:` - including transitive packages like `webrtc-xcframework`. The negation chain above commits only that file; `xcodegen generate` leaves an existing `Package.resolved` untouched, so a fresh clone builds the pinned versions.
+Xcode writes the SwiftPM pins to `VoiceApp.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved`. A dependency bump can rewrite it beyond the version line (LiveKit 2.19.0 swaps its Rust core package, LiveKitUniFFI for LiveKitFFI at a new URL); commit the regenerated file, or builds that pass `-disableAutomaticPackageResolution` fail. Ignoring the whole `*.xcodeproj/` drops them, so every fresh clone resolves the newest versions allowed by `from:` - including transitive packages like `webrtc-xcframework`. The negation chain above commits only that file; `xcodegen generate` leaves an existing `Package.resolved` untouched, so a fresh clone builds the pinned versions.
 
 ## Opening in Xcode
 
@@ -250,7 +265,7 @@ Xcode writes the SwiftPM pins to `VoiceApp.xcodeproj/project.xcworkspace/xcshare
 
 ## Failure modes
 
-- **New files silently missing from the build.** XcodeGen lists source files at generate time. A file created on disk afterwards (by an agent, a script, `git pull`) is not compiled - a file containing a syntax error still gave `BUILD SUCCEEDED` until the next `xcodegen generate`. Regenerate before every build (the justfile does). Escape hatch: `sources: [{path: VoiceApp, type: syncedFolder}]` makes an Xcode 16+ synchronized folder that picks up new files without regenerating (verified; XcodeGen adds the Info.plist membership exception itself). In 2.46.0 it breaks when the spec's directory differs from `options.projectDirectory`: the folder path is written relative to the spec, and Xcode treats the synced folder as empty (fixed on master, unreleased, [#1636](https://github.com/yonaskolb/XcodeGen/pull/1636)) - keep `project.yml` next to the generated project.
+- **New files silently missing from the build.** XcodeGen lists source files at generate time. A file created on disk afterwards (by an agent, a script, `git pull`) is not compiled - a file containing a syntax error still gave `BUILD SUCCEEDED` until the next `xcodegen generate`. Regenerate before every build (the justfile does). Escape hatch: `sources: [{path: VoiceApp, type: syncedFolder}]` makes an Xcode 16+ synchronized folder that picks up new files without regenerating (verified; XcodeGen adds the Info.plist membership exception itself). Before 2.47.0 it broke when the spec's directory differed from `options.projectDirectory`: the folder path was written relative to the spec, and Xcode treated the synced folder as empty ([#1636](https://github.com/yonaskolb/XcodeGen/pull/1636)). Otherwise regenerate cheaply with `--use-cache` (justfile).
 - **Test bundle won't sign:** `Cannot code sign because the target does not have an Info.plist file and one is not being generated automatically` - add `GENERATE_INFOPLIST_FILE: YES` to the test target.
 - **`... is not available due to missing import of defining module`** - `MemberImportVisibility`; add the `import` to that file.
 - **Build-setting overrides on the `xcodebuild` command line hit every target, packages included.** `xcodebuild ... SWIFT_STRICT_CONCURRENCY=complete` recompiled LiveKit's Swift 5 modules with `-enable-upcoming-feature StrictConcurrency`. Put settings in `project.yml`, which only reaches project targets.

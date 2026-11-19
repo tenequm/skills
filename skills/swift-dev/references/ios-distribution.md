@@ -2,7 +2,7 @@
 
 Getting an iOS build onto phones: development install, ad hoc, TestFlight and App Store from the command line, and why a macOS Developer ID certificate cannot sign any of it.
 
-Verified on Xcode 27.0 (Swift 6.4, iOS 27.0 / macOS 27.0 SDKs), 2026-10-07: archived a voice-call app unsigned for `generic/platform=iOS` and ran `-exportArchive` on it with `app-store-connect`, `release-testing`, `debugging` and `developer-id` to record the real errors; ExportOptions keys and `method` values from `xcodebuild -help`; upload flags from `xcrun altool --help` (27.0.5). Development build, install and launch on a physical iPhone with the signed-in Xcode account (sequence below); the device-selection `jq` filter run against real `devicectl list devices` JSON v5 output with the paired iPhone unreachable. Nothing was signed for distribution or uploaded (no API key used). 2026-10-13: the device-selection filter re-run on `devicectl --json-output -` (JSON on stdout, the table on stderr); the TestFlight path below - Admin team key, cloud signing, upload, processing to `VALID`, the ITMS-90683 rejection, the dSYM warning and the stray build records - observed while shipping a LiveKit voice-call app.
+Verified on Xcode 27.0 (Swift 6.4, iOS 27.0 / macOS 27.0 SDKs), 2026-10-07: archived a voice-call app unsigned for `generic/platform=iOS` and ran `-exportArchive` on it with `app-store-connect`, `release-testing`, `debugging` and `developer-id` to record the real errors; ExportOptions keys and `method` values from `xcodebuild -help`; upload flags from `xcrun altool --help` (27.0.5). Development build, install and launch on a physical iPhone with the signed-in Xcode account (sequence below); the device-selection `jq` filter run against real `devicectl list devices` JSON v5 output with the paired iPhone unreachable. Nothing was signed for distribution or uploaded (no API key used). 2026-10-13: the device-selection filter re-run on `devicectl --json-output -` (JSON on stdout, the table on stderr); the TestFlight path below - Admin team key, cloud signing, upload, processing to `VALID`, the ITMS-90683 rejection, the dSYM warning and the stray build records - observed while shipping a LiveKit voice-call app. 2026-11-19: clock-stamped build numbers reaching `VALID` (four uploads, 2026-10-07 to 2026-11-18), the agreement error and automatic group distribution observed on the same app; the automatic-distribution option read from Apple's [Add internal testers](https://developer.apple.com/help/app-store-connect/test-a-beta-version/add-internal-testers) page.
 
 ## Contents
 - Channels
@@ -63,7 +63,7 @@ Keys worth knowing (full list in `xcodebuild -help`):
 - `method`: `app-store-connect`, `release-testing`, `debugging`, `enterprise`, `validation` for iOS archives. `app-store`, `ad-hoc` and `development` are deprecated aliases.
 - `destination`: `export` (default) writes an `.ipa` to `-exportPath`; `upload` sends the build to App Store Connect during export.
 - `testFlightInternalTestingOnly`: the build can never go to external TestFlight or the App Store - use it for branch and PR builds.
-- `manageAppVersionAndBuildNumber` (default YES): Xcode bumps the build number on upload, so repeated uploads of the same `CURRENT_PROJECT_VERSION` do not collide.
+- `manageAppVersionAndBuildNumber` (default YES): Xcode bumps the build number on upload, so repeated uploads of the same `CURRENT_PROJECT_VERSION` do not collide. Alternative that needs no stored counter and tells the script the number up front: archive with `CURRENT_PROJECT_VERSION=$(date -u +%y%m%d%H%M)` and set this key to `NO`, then poll `buildUploads` / `builds` for exactly that `cfBundleVersion` (below). Ten-digit values such as `2611181644` were accepted and reached `VALID`; bump `MARKETING_VERSION` only for releases.
 - `signingStyle` `automatic` on a manually signed archive creates profiles and cloud-managed certificates as needed but never registers devices or App IDs.
 - `uploadSymbols` (default YES), `stripSwiftSymbols` (default YES), `thinning` for non-store exports.
 
@@ -109,6 +109,8 @@ Prerequisites (once per app):
 3. The app is built with Xcode 26 or later and targets iOS 13 or later ([upcoming requirements](https://developer.apple.com/news/upcoming-requirements/)).
 4. An App Store Connect API key with a role that can cloud-sign and create the App Store profile - Admin for a fully headless run (see `ios-devices-and-signing.md`).
 5. A usage string for every protected API the binary links, not only the ones the app calls. An audio-only app on LiveKit was rejected during processing with ITMS-90683 (missing `NSCameraUsageDescription`) because WebRTC links the camera capture APIs; add the key with text saying the camera is never used.
+
+When every App Store Connect API call answers `REQUIRED_AGREEMENTS_MISSING_OR_EXPIRED`, an updated agreement is pending: uploads and `-exportArchive` dry runs fail until the Account Holder accepts it in the developer account (the same cause as notarytool's 403 in macos-distribution.md; observed, the next dry run passed with `No errors validating archive`).
 
 Unverified: App Store Connect rejecting an iOS build that has no app icon asset (the scratch project has none; this was not uploaded).
 
@@ -157,6 +159,8 @@ The account's App Store Connect role, a missing app record, or an export that ne
   done
   ```
   Compare UUIDs with `xcrun dwarfdump --uuid <binary-or-dSYM>` (`UUID: 6739... (arm64) ...`). Keep the `xcrun`: a Homebrew `dwarfdump` (libdwarf) earlier in `PATH` shadows Apple's and rejects `--uuid` with `invalid long option '--uuid'`.
+
+Select "Enable automatic distribution" on the internal group (App Store Connect > TestFlight > the group): every build uploaded from Xcode or `xcodebuild -exportArchive` then reaches its testers once processed, so a command-line release needs no browser step (observed); Xcode Cloud builds must still be added by hand ([Add internal testers](https://developer.apple.com/help/app-store-connect/test-a-beta-version/add-internal-testers)). Testers roll back from the TestFlight app's previous builds.
 
 After processing (an email arrives), the build is immediately available to internal testers in a TestFlight group; external groups trigger Beta App Review for the first build. Internal testers must first accept an App Store Connect team invitation (Developer is the most limited role that qualifies) and are invited by email only; public links exist only for external groups.
 

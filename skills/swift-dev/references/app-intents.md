@@ -331,6 +331,7 @@ struct CreateProjectIntent: AppIntent {
 
 - Return values with `ReturnsValue<T>` so Shortcuts can chain the result into the next action.
 - `SnippetIntent` (iOS/macOS 26) renders interactive SwiftUI as the result; the system calls its `perform()` again after each button/toggle in the snippet, so re-fetch state every time.
+- **Saved shortcuts pin your identifiers.** An Action Button or Shortcuts shortcut stores the parameter name, the entity type, the `@UnionValue` case and the entity id. Renaming or deleting any of them - or an `entities(for:)` that drops ids it no longer knows - makes every existing shortcut fail before `perform` runs, with Shortcuts' message instead of yours. Keep shipped type, case and parameter names, and map unknown ids to a fallback entity (the default) in `entities(for:)`.
 
 ## App Schemas and newer intent protocols
 
