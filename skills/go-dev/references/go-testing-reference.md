@@ -266,7 +266,7 @@ func TestService(t *testing.T) {
 | Library | Approach | Best For |
 |---------|----------|----------|
 | **go.uber.org/mock** (v0.6.0) | Code gen via `mockgen` | Precise expectations, call ordering |
-| **vektra/mockery** (v3.9.1) | Batch code gen, templates | Large codebases (5-30x faster than sequential mockgen) |
+| **vektra/mockery** (v3.9.2) | Batch code gen, templates | Large codebases (5-30x faster than sequential mockgen) |
 | **matryer/moq** | Function-field based mocks | Lightweight, simple mocks |
 | **testify/mock** | Runtime (no codegen) | Quick mocking without generators |
 | **Hand-written** | Interface implementation | Full control, no dependencies |
@@ -277,7 +277,7 @@ func TestService(t *testing.T) {
 go install go.uber.org/mock/mockgen@v0.6.0
 ```
 
-mockgen has two supported modes: **source mode** (`-source=repository.go`, shown below) and **package mode** (`-destination=... <import path> <interfaces>`). Package mode replaced reflect mode - "Deprecated reflect mode and replaced it with the new package mode." Do not write new `-reflect`-style invocations.
+mockgen has two supported modes: **source mode** (`-source=repository.go`, shown below) and **package mode** (`-destination=... <import path> <interfaces>`). Package mode replaced reflect mode - "Deprecated reflect mode and replaced it with the new package mode." Do not write new `-reflect`-style invocations. Stay on the released v0.6.0: mockgen from `@main` fails package mode on Go 1.27.3+ modules with `export data version 5 is greater than maximum supported version 4` ([uber-go/mock#331](https://github.com/uber-go/mock/issues/331), fix unmerged in [#332](https://github.com/uber-go/mock/pull/332)), while v0.6.0 generates in both modes on go1.27.4.
 
 ```go
 //go:generate mockgen -source=repository.go -destination=mock_repository.go -package=user
@@ -577,7 +577,8 @@ Appear in `go doc` output and run during `go test`.
 func TestHandler(t *testing.T) {
     handler := NewHandler(mockService)
 
-    req := httptest.NewRequest("GET", "/users/123", nil)
+    // noctx rejects httptest.NewRequest; usestdlibvars wants http.MethodGet
+    req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/users/123", nil)
     w := httptest.NewRecorder()
 
     handler.ServeHTTP(w, req)
@@ -719,6 +720,8 @@ Those stay serial; Go runs a package's serial tests before releasing the paralle
 
 **A `-run` that matches nothing passes.** `go test -run TestTypo ./...` reports `ok` with zero tests run, and an untagged `go test ./...` reports `ok` for packages whose tests sit behind `//go:build integration`. Validate a filter with `go test -list`, and diff the test inventory (`go test -list '.*' -tags=integration ./...`) before and after a refactor that moves tests or tags.
 
+**Unix socket paths have a length cap.** macOS allows 104 bytes for the whole path (`RawSockaddrUnix.Path [104]int8`), and `t.TempDir()` under macOS's long `$TMPDIR` plus the test name can exceed it, so `Listen("unix", ...)` fails with `invalid argument`. Create socket directories with `dir, err := os.MkdirTemp("/tmp", "sock") //nolint:usetesting // socket path length`, then `t.Cleanup(func() { os.RemoveAll(dir) })`: the template's usetesting flags `os.MkdirTemp` in tests by default.
+
 **Pass the listener, not the port.** "Pick a free port, close it, hand the number to the server" races: another process can take the port in between (one suite lost it 18 times in 100 runs). Create the `net.Listener` in the test and pass it to the server's `Serve`.
 
 **Make tests hermetic beyond git.** Tests inherit the developer's environment: `HOME`, `XDG_CONFIG_HOME`, `XDG_STATE_HOME`, `XDG_CACHE_HOME`, database variables such as `PGPASSWORD`, and the app's own config variables. A test that reads the real config fails "environmentally", and one that writes to the real cache pollutes the machine. Point them at `t.TempDir()` with `t.Setenv` (which rules out `t.Parallel()` for that test).
@@ -759,7 +762,7 @@ go test -artifacts -outputdir=./out ./...  # Keep it under ./out instead of CWD
 
 **Go 1.27 annotates the JSON stream.** `go test -json` "now annotates `"Action":"output"` lines with an optional new field `"OutputType"`", distinguishing framework output from a test's own writes. Anything parsing `go test -json` - gotestsum, CI report generators, custom tooling - sees this field appear after a toolchain bump; consumers that validate the schema strictly may need updating.
 
-**Keep the test cache on, and know when it lies.** `go test` replays results for packages a change cannot affect, which is exactly the "run only what changed" behaviour a gate wants - so the default `test`, `check` and CI recipes in this skill leave it on, and CI restores `GOCACHE` so untouched packages print `(cached)`. A cached green run did not execute those tests, though. When a result matters - before a release, when confirming a fix, for tests that read state Go cannot hash (network, the clock, binaries fetched at test time) - pass `-count=1` to force real execution.
+**Keep the test cache on, and know when it lies.** `go test` replays results for packages a change cannot affect, which is exactly the "run only what changed" behaviour a gate wants - so the default `test`, `check` and CI recipes in this skill leave it on, and CI restores `GOCACHE` so untouched packages print `(cached)`. A cached green run did not execute those tests, though. When a result matters - before a release, when confirming a fix, for tests that read state Go cannot hash (network, the clock, binaries fetched at test time) - pass `-count=1` to force real execution. Results cache only when every flag is in "a restricted set of 'cacheable' test flags, defined as -benchtime, -coverprofile, -cpu, -failfast, -fullpath, -list, -outputdir, -parallel, -run, -short, -skip, -timeout and -v" (`go help test`), so `-shuffle`, `-count`, `-benchmem` or a custom test flag in a gate recipe silently disables caching; `-race` and `-tags` are build flags and only change the key.
 
 **Files outside the module are never rechecked.** `cmd/go/internal/test/test.go`: "Do not recheck files outside the module, GOPATH, or GOROOT root." In a `go.work` repo, a test that reads a sibling module's source or `testdata/` keeps replaying a cached pass after those files change. Run such packages with `-count=1`, from a list kept in the Justfile.
 
