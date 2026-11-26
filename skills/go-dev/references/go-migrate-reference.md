@@ -8,7 +8,7 @@ v4.20.0 is worth upgrading for regardless of the pin mechanics:
 
 - **S3 sources silently truncated at 1000 migrations** - "fix(source/aws_s3): paginate ListObjects to load >1000 migrations".
 - **Quadratic startup cost removed** - "perf(source): build migrations index lazily to avoid quadratic startup".
-- **Security, partial:** migrate's own code moved from `docker/docker` to the `moby/moby/api` and `moby/moby/client` modules, but v4.20.1's `go.mod` still lists `github.com/docker/docker v28.5.2+incompatible // indirect`, pulled in by `dhui/dktest`. Scanners keep flagging it - open issue [golang-migrate/migrate#1444](https://github.com/golang-migrate/migrate/issues/1444) "Dependencies still trigger CVE-2026-41568" (milestone v4.21.0). The released artefacts carry more: [#1458](https://github.com/golang-migrate/migrate/pull/1458) says "`v4.20.1` pins several modules with known vulnerabilities, so Trivy and govulncheck flag the release binary and the `migrate/migrate` Docker image" (x/crypto, x/net, x/text, grpc, klauspost/compress, otel/sdk). It merged to master on 2026-11-16 ("bump vulnerable dependencies and require go 1.26"), and [#1468](https://github.com/golang-migrate/migrate/pull/1468) then dropped `dhui/dktest` and `docker/docker` from `go.mod` - but neither is released (milestone v4.21.0, which will need Go 1.26), and #1444 stays open. `go install ...@v4.20.1` builds with exactly the versions in v4.20.1's `go.mod`, so a self-built CLI inherits them too; scan the binary you actually deploy (`govulncheck -mode=binary`).
+- **Security, partial:** migrate's own code moved from `docker/docker` to the `moby/moby/api` and `moby/moby/client` modules, but v4.20.1's `go.mod` still lists `github.com/docker/docker v28.5.2+incompatible // indirect`, pulled in by `dhui/dktest`. Scanners keep flagging it - open issue [golang-migrate/migrate#1444](https://github.com/golang-migrate/migrate/issues/1444) "Dependencies still trigger CVE-2026-41568" (milestone v4.21.0). The released artefacts carry more: [#1458](https://github.com/golang-migrate/migrate/pull/1458) says "`v4.20.1` pins several modules with known vulnerabilities, so Trivy and govulncheck flag the release binary and the `migrate/migrate` Docker image" (x/crypto, x/net, x/text, grpc, klauspost/compress, otel/sdk). [#1468](https://github.com/golang-migrate/migrate/pull/1468) dropped `dhui/dktest` and `docker/docker` from `go.mod` on 2026-11-13, and #1458 ("bump vulnerable dependencies and require go 1.26") followed on 2026-11-16 - but neither is released: the next tag (v4.21.0, or the v4.20.2 patch #1458 asks for) will need Go 1.26, and #1444 stays open. `go install ...@v4.20.1` builds with exactly the versions in v4.20.1's `go.mod`, so a self-built CLI inherits them too; scan the binary you actually deploy (`govulncheck -mode=binary`).
 
 ## Installation
 
@@ -76,7 +76,7 @@ migrations/
   20240405123456_create_users_table.down.sql
 ```
 
-Eliminates version conflicts when multiple developers create migrations simultaneously.
+Timestamps stop two developers from claiming the same number, but not out-of-order merges. migrate stores one current version and `up` walks forward from it (`readUp` calls `sourceDrv.Next(from)`, `migrate.go:532`), so a migration created on a long-lived branch and merged after a newer one sorts below the database's version and is never applied - with no error. Upstream: "two developers can create conflicting migrations, and the developer that created their migration later gets it merged to the repository first" ([#179](https://github.com/golang-migrate/migrate/issues/179)). Gate it in CI (see CI/CD Patterns below), and keep shared databases on `main`'s migrations only.
 
 For unix-epoch versions pass `-format unix` - "If the string `"unix"` or `"unixNano"` is specified, then the seconds or nanoseconds since January 1, 1970 UTC respectively will be used." Combining `-seq` with any non-default `-format` fails with "the seq and format options are mutually exclusive".
 
@@ -128,7 +128,7 @@ Handles `SIGINT` gracefully, stopping at a safe point. Programmatically the same
 
 **Up migration** (`000001_create_users.up.sql`):
 ```sql
-CREATE TABLE IF NOT EXISTS users (
+CREATE TABLE users (
     id          SERIAL PRIMARY KEY,
     email       VARCHAR(255) UNIQUE NOT NULL,
     name        VARCHAR(100) NOT NULL,
@@ -140,8 +140,10 @@ CREATE INDEX idx_users_email ON users (email);
 
 **Down migration** (`000001_create_users.down.sql`):
 ```sql
-DROP TABLE IF EXISTS users;
+DROP TABLE users;
 ```
+
+Leave out `IF NOT EXISTS` / `IF EXISTS` here: the up-down-up test below relies on the error. Upstream: "let's say you forgot to drop the table in down migration ... `CREATE TABLE` would return an error, helping you find an issue in down migration, while `CREATE TABLE IF NOT EXISTS` would not."
 
 **Multi-statement with transaction** (`000002_add_status.up.sql`):
 ```sql
@@ -344,10 +346,33 @@ steps:
 
 The up-down-up pattern validates both directions work correctly.
 
+### Reject Out-of-Order Migrations
+
+A PR whose new migration sorts at or below the newest one on the base branch would be skipped on every database already past it (see Timestamp above). Fail it before merge:
+
+```yaml
+- uses: actions/checkout@v7
+  with:
+    fetch-depth: 0   # the three-dot diff needs the merge base
+- name: New migrations sort above the base branch
+  env:
+    BASE: origin/${{ github.base_ref }}
+  run: |
+    newest=$(git ls-tree --name-only "$BASE" migrations/ | sed -n 's|^migrations/\([0-9]*\)_.*\.up\.sql$|\1|p' | sort -n | tail -1)
+    git diff --name-only --diff-filter=A "$BASE...HEAD" -- 'migrations/*.up.sql' | sed -n 's|^migrations/\([0-9]*\)_.*|\1|p' | while read -r v; do
+      if [ "$v" -le "${newest:-0}" ]; then
+        echo "migration $v does not sort above $newest on $BASE"
+        exit 1
+      fi
+    done
+```
+
+It handles both sequential (`000010`) and timestamp names; a PR rebased onto a newer base needs its migration renamed with a fresh version.
+
 ## Common Pitfalls
 
 1. **Dirty state after failure** - most common issue. Must `force` correct version after manual fix
-2. **Version conflicts in teams** - use timestamp versioning for larger teams
+2. **Out-of-order merges** - a migration merged after a newer one is silently skipped; timestamps avoid number clashes, not this. Gate PRs with the check above
 3. **Missing down migrations** - always write both directions, even if down is a no-op (add a SQL comment)
 4. **Non-transactional DDL** - `CREATE INDEX CONCURRENTLY` needs its own migration without `BEGIN`/`COMMIT`
 5. **URL encoding** - special characters in passwords must be percent-encoded

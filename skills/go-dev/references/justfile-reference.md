@@ -180,7 +180,7 @@ This is a catalog, not a copy-pasteable header - `dotenv-command` and `dotenv-lo
 
 Write boolean settings bare (`set dotenv-load`, `set export`): `just --fmt` rewrites `set x := true` to that form, so a Justfile written the long way fails `just --fmt --check`.
 
-**`just --fmt` in 1.59.0 deletes a trailing comment on a recipe or attribute line**, so `just --fmt --check` fails on any Justfile that has one (fixed on master, [casey/just#3775](https://github.com/casey/just/pull/3775), unreleased). Put comments on their own line above.
+**`just --fmt` in 1.59.0 deletes a trailing comment on a recipe or attribute line**, so `just --fmt --check` fails on any Justfile that has one (fixed on master - [casey/just#3775](https://github.com/casey/just/pull/3775) for recipe lines, [#3776](https://github.com/casey/just/pull/3776) for attribute lines - both unreleased). Put comments on their own line above.
 
 `set minimum-version` (1.55.0+) is worth adding to any Justfile that uses recent attributes: without it, an older `just` fails with a confusing parse error instead of a version message. A `just` older than 1.55.0 does not know the setting either, so it still gets a parse error - just a more obvious one.
 
@@ -501,7 +501,7 @@ Under a `go.work` workspace the trap disappears - "In workspace mode, you can us
 
 **Fail fast on a missing tool with `require()`** (1.39.0) - it returns the executable's full path "or halt[s] with an error if no executable with `name` exists". Call it inside the recipe body, `{{ require("golangci-lint") }} run ./...`, so only that recipe fails; a top-level `tool := require(...)` assignment is evaluated for every recipe. The error names the missing binary instead of a bare `exit 127`.
 
-**A version-manager shim is a fourth install path**, alongside binary, Homebrew, and `go install`. If a tool is on PATH via mise, asdf, or similar and no version is pinned for the project, the recipe fails inside the shim rather than in the tool - `mise ERROR No version is set for shim: golangci-lint` - which reads like a Justfile bug. Pin the tool version in the version manager's config, or call an absolute path. just's manual gives the mise fix - "To load the `mise` environment within `just`: set dotenv-command := 'mise env' / set dotenv-override" (`dotenv-override` "is required, since `mise env` returns a value for the `PATH` variable") - but `dotenv-command` cannot be combined with the template's `set dotenv-load`, so pick one.
+**A version-manager shim is a fourth install path**, alongside binary, Homebrew, and `go install`. If a tool is on PATH via mise, asdf, or similar and no version is pinned for the project, the recipe fails inside the shim rather than in the tool - `mise ERROR No version is set for shim: golangci-lint` - which reads like a Justfile bug. Pin the tool version in the version manager's config, or call an absolute path. just's master manual (a mise section added after 1.59.0, [#3751](https://github.com/casey/just/pull/3751)) gives the fix - `set dotenv-command := 'mise env'` plus `set dotenv-override`, which "is required, since `mise env` returns a value for the `PATH` variable, which is always already set". It adds "In non-interactive environments, `mise trust` should be run first." and notes that "`mise env` does not install missing tools", hence `set dotenv-command := 'mise install -q && mise env'`. `dotenv-command` cannot be combined with the template's `set dotenv-load`, so pick one.
 
 **One `GOTOOLCHAIN` for every recipe.** The `toolchain` line in `go.mod` is a floor, so a newer local `go` silently runs the gates on a different toolchain than CI (JSON error text, linter export-data floors, stdlib advisories all differ). `export GOTOOLCHAIN := "go1.27.4"` at the top of the Justfile pins every recipe in one place; bump it with `go.mod` and CI. To reproduce an older CI lint pin exactly, build that golangci-lint under CI's Go into a scratch `GOBIN` (`GOBIN=$tmp/bin GOTOOLCHAIN=go1.27.4 go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.15.0`) rather than adding it to `go.mod`.
 
@@ -511,7 +511,7 @@ Under a `go.work` workspace the trap disappears - "In workspace mode, you can us
 export GOFLAGS := "-trimpath"
 ```
 
-Set it at the top of the Justfile so `build`, `test`, and the linter's own package loading all share cache entries across worktrees.
+Set it at the top of the Justfile so `build`, `test`, and the linter's own package loading all share cache entries across worktrees. Grep for `runtime.Caller` first: `-trimpath` also rewrites the file names it reports to module and import paths, so a test helper that finds `testdata/` through `runtime.Caller(0)` breaks (see the [Go Toolchain Reference](go-toolchain-reference.md)).
 
 ## Tips
 

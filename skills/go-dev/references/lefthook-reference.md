@@ -1,19 +1,23 @@
 # Lefthook Reference
 
-Latest: **v2.2.2** (2026-10-13). Single Go binary, no runtime dependency. `go install github.com/evilmartians/lefthook/v2@v2.2.2` needs Go 1.27 - "The minimum Go version required is 1.27" (its `go.mod` says `go 1.27.0`); Homebrew, npm, and the GitHub release binaries avoid that floor. A `go get -tool` of v2.2.x raises your own module's `go` line to `1.27.0`.
+Latest: **v2.2.4** (2026-11-26). Single Go binary, no runtime dependency. `go install github.com/evilmartians/lefthook/v2@v2.2.4` needs go1.27.4: v2.2.3 raised its `go.mod` to `go 1.27.4` ("deps: bump Go to 1.27.4", [#1634](https://github.com/evilmartians/lefthook/pull/1634)), while upstream's install page still says "The minimum Go version required is 1.27", so an older 1.27 patch fails under `GOTOOLCHAIN=local` with `requires go >= 1.27.4`. Homebrew, npm, and the GitHub release binaries avoid that floor. A `go get -tool` of v2.2.3 or later raises your own module's `go` line to `1.27.4`.
 
 The config has a JSON schema - "The JSON schema for the config is published at `https://lefthook.dev/schema.json`" - so a `# yaml-language-server: $schema=https://lefthook.dev/schema.json` first line gives editor completion and validation.
 
 Config is discovered at the repo root or in `.config/`, and read fresh on every hook run - "Reinstall is not required when you modify `lefthook.yml`, the configuration file is read every time a git hook is run." Keep exactly one config file: "If there are more than 1 file in the project, only one will be used, and you'll never know which one."
 
-**Hooks re-sync themselves.** "By default, lefthook automatically installs and updates hooks when you run `lefthook run` if the configuration has changed" (v2.2.2 `internal/command/run.go:100`): the next hook run after a config change rewrites every configured shim and installs newly added hook sections, baking in the current `assert_lefthook_installed` and `lefthook:` values (live on 2.2.2: `sync hooks: (pre-push, pre-commit)`). Hooks removed from config are still not pruned. Opt out with `no_auto_install: true` or `lefthook run --no-auto-install`. Auto-sync needs one installed hook to fire, so a clone that never ran `lefthook install` stays dormant.
+**Hooks re-sync themselves.** "By default, lefthook automatically installs and updates hooks when you run `lefthook run` if the configuration has changed" (v2.2.2 `internal/command/run.go:100`): the next hook run after a config change rewrites every configured shim and installs newly added hook sections, baking in the current `assert_lefthook_installed` and `lefthook:` values (live on 2.2.2: `sync hooks: (pre-push, pre-commit)`). Hooks removed from config are still not pruned. Opt out with `no_auto_install: true`, `lefthook run --no-auto-install`, or (v2.2.3+) `LEFTHOOK_NO_AUTO_INSTALL=1` on one git command - "Unlike the `no_auto_install` configuration option, it applies only to the commands that have it set." - which suits wrappers and CI helpers that run git on someone's behalf. Auto-sync needs one installed hook to fire, so a clone that never ran `lefthook install` stays dormant.
 
-## v2.1.15 - v2.2.2 Notes
+## v2.1.15 - v2.2.4 Notes
+
+- **Interrupted hooks restore hidden changes** (v2.2.3) - "fix: stop hooks on SIGTERM and SIGHUP like on SIGINT" ([#1615](https://github.com/evilmartians/lefthook/pull/1615)), so an IDE cancel or a closed terminal no longer leaves partially staged work stashed.
+- **Parallel `use_stdin` jobs each get the full stdin** (v2.2.3) - "fix: give each stdin consumer an independent reader" ([#1622](https://github.com/evilmartians/lefthook/pull/1622)); before, jobs sharing one reader saw empty or truncated pre-push ref lines. A file matching several `glob` patterns is also no longer listed twice ([#1630](https://github.com/evilmartians/lefthook/pull/1630)).
+- **lefthook's own `git status` no longer takes `.git/index.lock`** (v2.2.4) - "fix: run git status with --no-optional-locks" ([#1655](https://github.com/evilmartians/lefthook/pull/1655)), which made concurrent git processes fail under `fail_on_changes`. Parallel jobs in nested groups also stopped overwriting each other's names and `exclude` lists ([#1654](https://github.com/evilmartians/lefthook/pull/1654)).
 
 - **Worktree backups no longer collide** (v2.2.1, v2.2.2) - "fix: generate different patch names when in a worktree" ([#1582](https://github.com/evilmartians/lefthook/pull/1582)) and "fix: cleanup only current stash hash" ([#1597](https://github.com/evilmartians/lefthook/pull/1597)). See the worktree hazard under `stage_fixed`.
 - **AI hook files lost the absolute path** (v2.2.0) - "fix: don't write an install-time lefthook path into AI hook configs" ([#1544](https://github.com/evilmartians/lefthook/pull/1544)). See Agent Hooks below.
 - **The shim fix needs a reinstall.** "fix: quote paths in the generated hook shim" ([#1509](https://github.com/evilmartians/lefthook/pull/1509)) shell-escapes the lefthook binary path baked into `.git/hooks/<hook>` (`internal/templates/hook.tmpl:36-38`). Upgrading the binary alone changes nothing; the fix lands only once `lefthook install` rewrites the shims.
-- **Forced colours reach your jobs.** "feat: propagate forced colors to hook commands via CLICOLOR_FORCE" ([#1547](https://github.com/evilmartians/lefthook/pull/1547)): with colours explicitly on, lefthook sets `CLICOLOR_FORCE=1` for the commands it runs - "An existing `CLICOLOR_FORCE` is never overwritten."
+- **Forced colours reach your jobs.** "feat: propagate forced colors to hook commands via CLICOLOR_FORCE" ([2388dde](https://github.com/evilmartians/lefthook/commit/2388dde2b31dc9a782e967764046b41b404cece9)): with colours explicitly on, lefthook sets `CLICOLOR_FORCE=1` for the commands it runs - "An existing `CLICOLOR_FORCE` is never overwritten."
 - **Upgrade past v2.1.15 if lefthook is in your `go.mod`.** v2.1.15 pins `golang.org/x/mod v0.37.0` and `golang.org/x/text v0.38.0`, which carry [GO-2026-6179](https://pkg.go.dev/vuln/GO-2026-6179) and [GO-2026-6180](https://pkg.go.dev/vuln/GO-2026-6180) (x/mod, fixed in 0.40.0) and [GO-2026-5970](https://pkg.go.dev/vuln/GO-2026-5970) (x/text, fixed in 0.39.0), so a lefthook tracked with `go get -tool` pulls them into your module graph and module-level scanners (`govulncheck -scan module`, Dependabot, osv-scanner) flag it. v2.1.16 fixes this - "deps: bump mod and text deps to resolve CVEs" ([#1560](https://github.com/evilmartians/lefthook/pull/1560)) - moving to x/mod v0.41.0 and x/text v0.42.0.
 - **A conflicting re-apply no longer wipes unrelated files** (v2.1.16) - "fix: preserve unrelated unstaged changes on conflict" ([#1483](https://github.com/evilmartians/lefthook/pull/1483)). See the worktree hazard under `stage_fixed`.
 - **`{push_files}` on a first push** (v2.1.17) - "fix: diff push files against the merge base with the default branch" ([#1565](https://github.com/evilmartians/lefthook/pull/1565)). Before, a branch with no `@{push}` used a two-dot diff, so files changed only upstream after branching showed up in `{push_files}` and woke `glob`-gated pre-push jobs.
@@ -38,8 +42,10 @@ pre-commit:
 
 **Rule of thumb: a job that checks the project carries no `glob`; a job that consumes `{staged_files}` keeps one.** For `go mod tidy` the glob is right - a commit touching no `.go`, `.mod`, or `.sum` file genuinely has nothing to tidy - but that should be a decision, not an accident.
 
-Three more filtering surprises:
+More filtering surprises:
 
+- **A pre-push job with no file template skips empty pushes, `glob` or not.** "This command does not reference `{push_files}`, so lefthook skips it when a push has no file changes (for example a push of an empty commit)." - a whole-project `go test` included. `lefthook run --force` ("do not skip if no files changed") overrides it.
+- **`root` gates the job too** - see Monorepos below.
 - **`exclude` gates the job exactly like `glob`.** "If you've specified `exclude` but don't have a files template in `run` option, lefthook will check `{staged_files}` for `pre-commit` hook and `{push_files}` for `pre-push` hook and apply filtering. If no files left, the command will be skipped."
 - **`**` matches one or more directories, not zero or more.** `glob: "src/**/*.go"` does *not* match `src/file.go`. Use separate patterns, or opt into standard semantics with `glob_matcher: doublestar` - but that flips the meaning of `*` too. The default (gobwas) matcher lets `*` cross `/`, so `glob: "*.go"` matches `internal/user/user.go`; under doublestar `*` stops at a separator and `*.go` matches only root-level files (`internal/run/controller/filter/filter.go:113-133`). Rewrite every glob as `**/*.go` in the same commit that sets `glob_matcher`.
 - **Globs ignore `root`.** "Globs are still calculated from the actual root of the git repo."
@@ -88,7 +94,7 @@ pre-merge-commit:
 
 ## Monorepos: `root`
 
-`root` changes the working directory for the job - "You can change the CWD for the command you execute using `root` option." Without it, `go mod tidy` and `go tool` run at the repo root and fail against a module that lives deeper:
+`root` changes the working directory for the job - "You can change the CWD for the command you execute using `root` option." Without it, `go mod tidy` and `go tool` run at the repo root and fail against a module that lives deeper. It also filters, exactly like `glob`: "For `pre-push` and `pre-commit` hooks and for the custom `files` command `root` option is used to filter file paths. If all files are filtered the command will be skipped." So a module's job never runs on a commit that touches only another module - right for `go mod tidy`, wrong for a check that must always run:
 
 ```yaml
 pre-commit:
@@ -110,7 +116,7 @@ pre-commit:
 
 ## `stage_fixed`
 
-Re-stages files after a fixer rewrote them. Since v2.1.12 a failed re-stage fails the hook - "If the `git add` call fails, the hook fails too. Otherwise the commit would silently go through with the unfixed content."
+Re-stages files after a fixer rewrote them - "Works **only** for the `pre-commit` hook.", so a `pre-merge-commit` or `pre-push` fixer leaves its rewrite unstaged. Since v2.1.12 a failed re-stage fails the hook - "If the `git add` call fails, the hook fails too. Otherwise the commit would silently go through with the unfixed content."
 
 **It re-stages the substituted file list, not the files the command actually touched.** Lefthook stages the same list it handed the job - the filtered `{staged_files}` expansion, or the filtered staged set when the job used no file template (`internal/run/controller/job.go:154-180`). A file the command *created*, or fixed while absent from that list, is left unstaged and the commit goes through without the fix.
 
@@ -122,7 +128,7 @@ Re-stages files after a fixer rewrote them. Since v2.1.12 a failed re-stage fail
 
 ```yaml
 assert_lefthook_installed: true   # bake an exit-1-if-missing check into the installed hook script
-min_version: 2.2.2               # refuse to run under an older lefthook
+min_version: 2.2.4               # refuse to run under an older lefthook
 ```
 
 `assert_lefthook_installed` is the fix for the dormancy failure mode - "fail (with exit status 1) if `lefthook` executable can't be found in $PATH, under node_modules/, as a Ruby gem, or other supported method."
@@ -187,11 +193,11 @@ Named jobs merge across `extends` and local config; unnamed jobs append in defin
 |---------|---------|
 | `lefthook install` | Write the git hook shims; `install <hook>...` for specific hooks |
 | `lefthook uninstall` | Remove shims and restore any `.old` hooks |
-| `lefthook run <hook>` | Run a hook manually (this is what CI should call); `--job <name>`, `--command <name>` (singular and repeatable; `--commands` fails with `flag provided but not defined`) and `--tag <tag>` select jobs, `--file <path>` (repeatable) or `--all-files` replace the staged list, `--no-auto-install` skips the hook re-sync |
+| `lefthook run <hook>` | Run a hook manually (this is what CI should call); `--job <name>`, `--command <name>` (singular and repeatable; `--commands` fails with `flag provided but not defined`) and `--tag <tag>` select jobs, `--file <path>` (repeatable) or `--all-files` replace the staged list, `--force` runs jobs that would skip for lack of files, `--fail-on-changes` exits 1 if a job changed files, `--no-stage-fixed` ignores `stage_fixed`, `--no-auto-install` skips the hook re-sync |
 | `lefthook validate` | Check the config is well-formed |
 | `lefthook dump` | Print the merged effective config |
-| `lefthook add <hook>` | Scaffold a hook and its script directory |
-| `lefthook check-install` | Report whether hooks are installed |
+| `lefthook add <hook>` | Install a hook; `--dirs` also creates its script directory `.git/hooks/<hook>/` |
+| `lefthook check-install` | Exit 0 if hooks are installed and synchronized, 1 "if hooks not installed or need a sync" |
 | `lefthook self-update` | Update the binary in place - GitHub-release and source builds only; package-manager builds such as Homebrew compile it out (build tag `no_self_update`) |
 | `lefthook version` | Print the version (`--full` includes the commit) |
 
@@ -206,7 +212,7 @@ Three install behaviours worth knowing:
 Track lefthook in `go.mod` (`docs/installation/go.md`) and point the shim at it with the `lefthook:` key - "Provide a full path to lefthook executable or a command to run lefthook. Bourne shell (`sh`) syntax is supported."
 
 ```bash
-go get -tool github.com/evilmartians/lefthook/v2@v2.2.2
+go get -tool github.com/evilmartians/lefthook/v2@v2.2.4
 go tool lefthook install
 ```
 
@@ -215,7 +221,7 @@ go tool lefthook install
 lefthook: go tool lefthook
 ```
 
-The value is baked into the shim whenever it is written (install, or auto-sync after a config change) and tried before any PATH lookup, with only `LEFTHOOK_BIN` ahead of it (`internal/templates/hook.tmpl:18-24`), so every clone runs the version pinned in `go.mod`. It is not merged from `remotes` or `extends`. `go tool` resolves against the current module and git runs hooks from the worktree root, so this form assumes `go.mod` (or a `go.work` that includes the module tracking lefthook) sits at the root. Tracking v2.2.x this way raises your module's `go` line to `1.27.0`.
+The value is baked into the shim whenever it is written (install, or auto-sync after a config change) and tried before any PATH lookup, with only `LEFTHOOK_BIN` ahead of it (`internal/templates/hook.tmpl:18-24`), so every clone runs the version pinned in `go.mod`. It is not merged from `remotes` or `extends`. `go tool` resolves against the current module and git runs hooks from the worktree root, so this form assumes `go.mod` (or a `go.work` that includes the module tracking lefthook) sits at the root. Tracking v2.2.3 or later this way raises your module's `go` line to `1.27.4`.
 
 The same applies to the jobs themselves: hook commands resolve tools from the caller's PATH, so a developer without the binary gets a commit that fails with a bare `exit 127`. Run small tools through `go tool` to make them reproducible - but not golangci-lint, which upstream says not to install as a tool directive (see SKILL.md); pin its binary in the repo's version-manager config (`.mise.toml`, `.tool-versions`) instead:
 
@@ -234,7 +240,8 @@ pre-commit:
 | Variable | Effect |
 |----------|--------|
 | `LEFTHOOK=0` / `LEFTHOOK=false` | Disable lefthook entirely for this command |
-| `LEFTHOOK_EXCLUDE=job1,job2` | Skip named jobs |
+| `LEFTHOOK_EXCLUDE=lint,security` | Skip commands or scripts by tag or name - "{list of tags or command names to be excluded}" |
+| `LEFTHOOK_NO_AUTO_INSTALL=1` | Skip the hook re-sync for this command only (v2.2.3+) |
 | `LEFTHOOK_OUTPUT` | Control which output sections print |
 | `LEFTHOOK_VERBOSE=1` | Verbose logging |
 | `LEFTHOOK_BIN` | Path to the lefthook binary to use |
@@ -258,9 +265,9 @@ Since v2.2.0 the generated command is not an absolute install path: "Generated h
 
 ## CI
 
-Run hooks in CI through `lefthook run`, and validate the config so a malformed file cannot silently disable every rule:
+Run hooks in CI through `lefthook run`, and validate the config so a malformed file cannot silently disable every rule. Add `--fail-on-changes`: without it a fixer job (`golangci-lint fmt`, `stage_fixed`) rewrites the checkout and the step still passes:
 
 ```yaml
 - run: lefthook validate
-- run: lefthook run pre-commit --all-files
+- run: lefthook run pre-commit --all-files --fail-on-changes
 ```

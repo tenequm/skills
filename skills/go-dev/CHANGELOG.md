@@ -7,6 +7,27 @@ and this skill adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.h
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-11-26
+
+### Changed
+- lefthook `v2.2.2` -> `v2.2.4`: `go install` and `go get -tool` need go1.27.4, and `go get -tool` raises the module's `go` line to `1.27.4`. New `LEFTHOOK_NO_AUTO_INSTALL`; SIGTERM/SIGHUP restore hidden changes; parallel `use_stdin` jobs each get full stdin. mockery `v3.9.1` -> `v3.9.2`.
+- SKILL.md trimmed under 40 KB so one capped tool read holds it; Go 1.27 upgrade notes, setup-go cache tuning and linter-bump triage moved to references.
+- One golangci-lint cache per build target is the rule, not a stopgap: main salts GOOS/GOARCH/CGO_ENABLED (#6918, unreleased), but upstream does not support cross-GOOS linting.
+
+### Fixed
+- golangci-lint reads a config from the working directory first, then from the first analyzed path upward.
+- golang-migrate timestamps prevent filename collisions, not missed migrations: an older version merged after a newer one is never applied; a CI check now rejects it. `IF NOT EXISTS` removed from the up example.
+- lefthook `root` skips jobs like `glob`; pre-push jobs without a file template skip pushes with no file changes; `stage_fixed` is pre-commit only.
+- The `httptest.NewRequest` example failed the template's noctx; upload-artifact runs on `!cancelled()`; `-trimpath` breaks `runtime.Caller` testdata lookups.
+- golangci-lint exit 2 under `FAIL_ON_WARNINGS=1`; `legacy` preset hides gosec G104/G301/G302/G307; v2.15.0's `.golangci.reference.yml` lists rejected exhaustive names; migrate #1468/#1458 order; just #3776 and the unreleased mise section; gofumpt generated-file handling; lefthook `LEFTHOOK_EXCLUDE`, `add --dirs`, a dead PR link.
+
+### Added
+- go1.27.4 rejects cgo static libraries with embedded LLVM bitcode (Rust staticlibs); mockgen `@main` fails on Go 1.27.3+.
+- The test cache keeps only cacheable flags; macOS Unix-socket path limit; SIGPIPE in CLIs; strict JSON decoding vs rollbacks; stdlib `uuid`; musttag and gosec G703 fixes.
+- CI: merge queue or up-to-date branches; `lefthook run --fail-on-changes`; `go build -o bin/ ./cmd/...`; tag-triggered releases restore main's caches; tags pushed with `GITHUB_TOKEN` start no workflow.
+
+Verified against: lefthook@v2.2.4
+
 ## [0.8.0] - 2026-11-19
 
 ### Changed

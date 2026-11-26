@@ -46,7 +46,7 @@ cat main.go | gofumpt         # Format from stdin
 - `-modpath` - module path (affects import grouping)
 - `-s` - hidden, always enabled (simplification). Note "the `-r` rewrite flag is removed in favor of `gofmt -r`, and the `-s` flag is hidden as it is always enabled"
 
-**Skipped automatically:** `vendor/`, `testdata/`, generated files (unless given as explicit args). Obeys `ignore` directives in go.mod (Go 1.25+).
+**Skipped automatically:** "`vendor` and `testdata` directories are skipped unless given as explicit arguments." Generated files are not skipped - they still get gofmt's formatting, and only gofumpt's own rules leave them alone: "the added rules do not apply to generated Go files unless they are given as explicit arguments." Obeys `ignore` directives in go.mod (Go 1.25+).
 
 ## Default Rules (always applied)
 
@@ -223,7 +223,7 @@ Since golangci-lint v2.13.0 (which bundles gofumpt 0.11.0) the extra rules are s
 Insert `//gofumpt:diagnose` in any Go file and run gofumpt - it rewrites the comment with version and config info:
 
 ```go
-//gofumpt:diagnose version: v0.12.0 flags: -lang=go1.27 -modpath=github.com/org/project
+//gofumpt:diagnose version: v0.12.0 (go1.27.4) flags: -lang=go1.27 -modpath=github.com/org/project
 ```
 
 ## Go API
