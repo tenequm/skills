@@ -505,7 +505,7 @@ Under a `go.work` workspace the trap disappears - "In workspace mode, you can us
 
 **One `GOTOOLCHAIN` for every recipe.** The `toolchain` line in `go.mod` is a floor, so a newer local `go` silently runs the gates on a different toolchain than CI (JSON error text, linter export-data floors, stdlib advisories all differ). `export GOTOOLCHAIN := "go1.27.4"` at the top of the Justfile pins every recipe in one place; bump it with `go.mod` and CI. To reproduce an older CI lint pin exactly, build that golangci-lint under CI's Go into a scratch `GOBIN` (`GOBIN=$tmp/bin GOTOOLCHAIN=go1.27.4 go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.15.0`) rather than adding it to `go.mod`.
 
-**`GOFLAGS=-trimpath` lets worktrees share one warm cache.** `-trimpath` "remove[s] all file system paths from the resulting executable", which also makes the build and test cache keys path-independent. Without it, every git worktree recompiles the whole dependency tree (with `-race`, expensively) because its absolute paths differ:
+**`GOFLAGS=-trimpath` lets worktrees share one warm cache.** `-trimpath` "remove[s] all file system paths from the resulting executable", which also makes the build and test cache keys path-independent. Without it, every git worktree compiles and caches its own copy of the main module's packages, and of every test binary that links them (with `-race`, expensively), because the compile key hashes each package's absolute directory (`fmt.Fprintf(h, "dir %s\n", p.Dir)` in `cmd/go/internal/work/exec.go`). Dependencies are already shared: they build from the one `GOMODCACHE`, whose path is the same in every worktree:
 
 ```just
 export GOFLAGS := "-trimpath"

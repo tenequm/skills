@@ -7,6 +7,15 @@ and this skill adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.h
 
 ## [Unreleased]
 
+## [0.10.0] - 2026-11-28
+
+### Fixed
+- Without `-trimpath` each worktree duplicates only the main module's packages and the test binaries linking them, not the whole dependency tree: dependencies build from the shared `GOMODCACHE`.
+
+### Added
+- Adding a build flag to a CI job needs an `actions/cache` key bump, or an exact-hit key never re-saves and the job compiles cold until `go.sum` changes.
+- `go vet -trimpath` reuses cgo entries across worktrees and fails once the source worktree is removed (golang/go#81805).
+
 ## [0.9.0] - 2026-11-26
 
 ### Changed
